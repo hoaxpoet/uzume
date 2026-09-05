@@ -66,8 +66,38 @@ extension SessionPreparer {
         hopSeconds: Double = 2.0
     ) throws -> StemFeatureSeries {
         let hop = Self.seriesAnalysisHop
+        guard sampleRate > 0, hopSeconds > 0 else { return .empty }
+
+        // BUG-116 — work in the SEPARATOR's time base, not the caller's.
+        //
+        // `separate` resamples any input to its own model rate and pads to a fixed sample
+        // count, so its output is in that rate whatever it was handed. Every offset below is
+        // an index into that output, so feeding it audio at some other rate makes the two
+        // disagree: at 48 kHz a 440,320-sample window holds 9.17 s of audio, which resamples
+        // to 404,544 samples, and the remaining 35,776 are ZERO PADDING. The kept span sits
+        // at the window's tail by design, so it landed squarely in that padding — all four
+        // stems reading 0.000 for ~0.4 s out of every 2 s, on every non-44.1 kHz local file
+        // since LFSTEM.1 (2026-08-26). Matt saw it as Ferrofluid Ocean going dark on a beat.
+        //
+        // Resampling once here makes the separator's internal resample a no-op and every
+        // offset exact. `hopSeconds` then reports the frame grid in the working rate, which
+        // is what `sample(atPlaybackSeconds:)` divides by, so playback alignment is unchanged.
+        let workingSamples: [Float]
+        let workingRate: Int
+        if let outputRate = separator.outputSampleRate,
+           abs(Double(outputRate) - Double(sampleRate)) > 1 {
+            workingSamples = BeatThisPreprocessor.resample(
+                samples, from: Double(sampleRate), to: Double(outputRate))
+            workingRate = Int(outputRate.rounded())
+        } else {
+            workingSamples = samples
+            workingRate = sampleRate
+        }
+        let samples = workingSamples
+        let sampleRate = workingRate
+
         let sampleCount = samples.count
-        guard sampleCount >= hop, sampleRate > 0, hopSeconds > 0 else { return .empty }
+        guard sampleCount >= hop else { return .empty }
 
         let fps = Float(sampleRate) / Float(hop)
         let hopSamples = max(hop, Int(hopSeconds * Double(sampleRate)))

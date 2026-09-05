@@ -10,6 +10,31 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-05-232010] BUG-116 — the stem series was dead 0.4 s in every 2 s on any non-44.1 kHz local file
+
+Matt, mid-test: *"Now there are issues with Ferrofluid Ocean - screen goes dark every few seconds."* All four stems decayed to exactly 0.000 and snapped back, 68 times in one session, 2.00 s apart, ~0.37 s each. Any stem-driven preset went dark on that rhythm; Ferrofluid Ocean was just the one on screen.
+
+**Root cause — a time base, not a renderer.** `StemSeparator.separate` resamples any input to its own 44.1 kHz and pads to a fixed 440,320 samples, so its output is ALWAYS in the model's time base. `SessionPreparer.analyzeStemSeries` sliced that output at offsets computed in the INPUT's rate. At 48 kHz a 440,320-sample window holds 9.17 s of audio, which resamples to 404,544 samples — and the remaining **35,776 are zero padding**. The function places each kept 2 s span at the window's tail by design, so every read landed squarely in the padding. `DRAWABLE_LIFECYCLE` showed zero failures and zero unpresented frames throughout: the renderer was drawing exactly what it was given.
+
+**Matt's follow-up — "it was not always like this, so something broke" — has two answers.** The code broke at **LFSTEM.1a (2026-08-26)**, which switched local files from live separation, whose slicing is correct, to the pre-analysed series. It became *visible* on 2026-09-05 because of the album: *Low* is 44,100 Hz — the one rate at which input and model rate agree and the defect cannot occur — and Broken Social Scene is 48,000 Hz on all thirteen tracks. Ten days broken, first 48 kHz album played tonight.
+
+**The sibling path had it right all along.** `runPerFrameStemAnalysis` slices the live separator's output with `StemSeparator.modelSampleRate` under a comment citing D-079: *"Stem waveforms are at the model rate, not the tap rate — the separator resamples internally before iSTFT."* The rule was written down one function away.
+
+**Fix.** `StemSeparating` gained `outputSampleRate: Float?` — `nil` means "my output is in the caller's time base", which is what every test double returns; the production separator declares its model rate. `analyzeStemSeries` resamples the input once up front when they differ, which makes the separator's internal resample a no-op and every offset exact. Rate-agnostic, so 88.2 and 96 kHz are covered as well.
+
+| input rate | before | after |
+|---|---:|---:|
+| 44,100 | 0 of 1722 near-zero | 0 of 1722 (bit-identical — the branch does not fire) |
+| 48,000 | **279 of 1875** | **0 of 1722** |
+
+**Cache invalidated, schema v10 → v11.** The holes are DATA, baked into `stem_series.bin`, so a code fix alone would replay them forever on every already-analysed track. The cost is one re-analysis pass over the cached library.
+
+**Regression parameterised over 44.1 / 48 / 96 kHz**, plus a gate that the frame grid does not depend on the input rate. **Both were run against the un-fixed code and fail there** (48 kHz arm reads silence; grid 258 vs 281 frames) — the adversarial check, not just a green tick. The existing `FixedWindowSeparator` double pads to a fixed window but does not RESAMPLE, so it could never see this; a new `ResamplingWindowSeparator` reproduces the property that matters. Every fixture in the repo is 44.1 kHz, the one rate that proves nothing here.
+
+1915 engine tests green, swiftlint 0. **Outstanding: Matt's live confirmation on a 48 kHz album.** Evidence: `docs/diagnostics/BUG116_STEM_SERIES_HOLES_2026-09-05.md`.
+
+---
+
 ### [dev-2026-09-05-151248] PR.5 — Dragon Bloom's white-out is inverted emptiness, not a missing tone-map
 
 Matt's roster note was *"washed out, extreme brightness… reds look gorgeous, would like the same saturated colour across the visible spectrum."* The scoping hypothesis was a missing tone-map; PR.5's diagnosis increment falsified that (the accumulator is dark and saturated, with no HDR to compress). This increment measured the two levers it left open — **on Matt's own album, through the real `direct + mv_warp` dispatch**.

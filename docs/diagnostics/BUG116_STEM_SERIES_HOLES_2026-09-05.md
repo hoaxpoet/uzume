@@ -5,6 +5,28 @@ Ocean - screen goes dark every few seconds."* · **Session:** `2026-09-05T18-17-
 
 ---
 
+## 0. What broke it, and why it appeared tonight
+
+Matt's question — *"Ferrofluid Ocean was not always like this, so something broke. why?"* — has two
+answers, and the second is the one that explains the timing.
+
+**The code that broke it: LFSTEM.1a, 2026-08-26** (`dea021d8`). Before that increment local files
+ran on LIVE stem separation, which slices the separator's output at the model rate and has none of
+this. LFSTEM.1 switched them to the pre-analysed series, which slices at the input's rate.
+
+**Why it only appeared on 2026-09-05: the album.**
+
+| album | source rate | affected |
+|---|---:|---|
+| Bowie, *Low* (FLAC) | **44,100 Hz** | no — input rate and model rate agree |
+| Broken Social Scene, *You Forgot It in People* (MP3, all 13 tracks) | **48,000 Hz** | **yes** |
+
+44.1 kHz is the one rate at which this defect cannot occur, and it is the rate of *Low* and of every
+committed fixture. So it has been broken for ten days on any non-44.1 kHz local file, and tonight was
+the first time one was played.
+
+---
+
 ## 1. It is not the renderer, and it is not today's merges
 
 Two things worth ruling out before anything else, because both were plausible.
@@ -109,6 +131,12 @@ and fixing the offset arithmetic (right).
 leaves every already-analysed track broken, so the fix must invalidate or version the persistent
 stem cache.
 
+**The sibling path already had this right.** `VisualizerEngine+Audio.runPerFrameStemAnalysis`
+slices the live separator's output with `StemSeparator.modelSampleRate` under a comment that states
+the contract exactly — *"Stem waveforms are at the model rate, not the tap rate — the separator
+resamples internally before iSTFT"* (D-079 / QR.1). The rule was known and written down in the
+neighbouring function; the series path did not consult it.
+
 **Verification criteria, written before the fix:**
 
 1. `analyzeStemSeries` at 48 kHz produces zero near-zero frames on real audio, and its frame count
@@ -116,3 +144,35 @@ stem cache.
    test cannot see this defect, which is precisely how it shipped.
 2. A poisoned cache entry is not reused after the fix.
 3. **Manual:** Matt watches Ferrofluid Ocean on a 48 kHz local file and the periodic darkening is gone.
+
+---
+
+## 7. The fix
+
+**`analyzeStemSeries` now works in the separator's time base.** `StemSeparating` gained
+`outputSampleRate: Float?` — `nil` means "my output is in the caller's time base", which is what
+every test double returns; `StemSeparator` declares its model rate. When they differ, the series
+resamples the input once up front, which makes the separator's own internal resample a no-op and
+every offset exact.
+
+| input rate | before | after |
+|---|---:|---:|
+| 44,100 | 0 of 1722 near-zero | 0 of 1722 (**bit-identical path** — the branch does not fire) |
+| 48,000 | **279 of 1875** | **0 of 1722** |
+
+Both rates now produce the same frame count and the same `hopSeconds`, because the grid belongs to
+the separator rather than to whatever the file happened to be encoded at.
+
+**The cache is invalidated: schema v10 → v11.** The holes are DATA, baked into `stem_series.bin`, so
+a code fix alone would replay them forever on every already-analysed track. The cost is one
+re-analysis pass over the cached library; the alternative is silently keeping the defect.
+
+**Regression, parameterised by rate (44.1 / 48 / 96 kHz).** A continuous tone must produce a
+continuous series at every input rate, and the frame grid must not depend on the input rate. Both
+tests were run against the un-fixed code and both fail there — the 48 kHz arm reads silence, and the
+grid comes out 258 frames versus 281.
+
+**Why the existing tests could not catch it:** `FixedWindowSeparator`, the double the series tests
+use, pads to a fixed window but does not RESAMPLE, so its output is in the caller's time base and
+the two rates never disagree. A new `ResamplingWindowSeparator` reproduces the property that
+matters. Every fixture in the repo is 44.1 kHz — the one rate that proves nothing here.
