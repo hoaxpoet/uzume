@@ -53,6 +53,50 @@ private final class FixedWindowSeparator: StemSeparating, @unchecked Sendable {
     }
 }
 
+
+// MARK: - ResamplingWindowSeparator (BUG-116)
+
+/// A separator double that reproduces the SECOND property of `StemSeparator` this code
+/// depends on, and the one `FixedWindowSeparator` does not have: `separate()` resamples its
+/// input to the model's own rate BEFORE padding to the fixed window, so its output is in the
+/// model's time base rather than the caller's.
+///
+/// Without this, a 44.1 kHz-only fixture can never see BUG-116 — which is exactly why the
+/// defect shipped. Every committed fixture is 44.1 kHz, the one rate at which input rate and
+/// model rate agree and the bug cannot occur.
+private final class ResamplingWindowSeparator: StemSeparating, @unchecked Sendable {
+
+    let windowSamples: Int
+    let modelRate: Float
+
+    init(windowSamples: Int, modelRate: Float) {
+        self.windowSamples = windowSamples
+        self.modelRate = modelRate
+    }
+
+    var stemLabels: [String] { ["vocals", "drums", "bass", "other"] }
+    var stemBuffers: [UMABuffer<Float>] { [] }
+    var outputSampleRate: Float? { modelRate }
+
+    func separate(audio: [Float], channelCount: Int, sampleRate: Float) throws -> StemSeparationResult {
+        // Nearest-neighbour is enough: the test asserts WHERE energy lands, not its fidelity.
+        let ratio = Double(modelRate) / Double(sampleRate)
+        let resampledCount = Int(Double(audio.count) * ratio)
+        var padded = [Float](repeating: 0, count: windowSamples)
+        for i in 0..<min(windowSamples, resampledCount) {
+            let source = Int(Double(i) / ratio)
+            if source < audio.count { padded[i] = audio[source] }
+        }
+        let frame = AudioFrame(sampleRate: modelRate,
+                               sampleCount: UInt32(windowSamples), channelCount: 1)
+        return StemSeparationResult(
+            stemData: StemData(vocals: frame, drums: frame, bass: frame, other: frame),
+            sampleCount: windowSamples,
+            stemWaveforms: [padded, padded, padded, padded]
+        )
+    }
+}
+
 // MARK: - StemFeatureSeriesTests
 
 @Suite("Stem feature series (LFSTEM.1)")
@@ -194,5 +238,76 @@ struct StemFeatureSeriesTests {
         #expect(s.sample(atPlaybackSeconds: -1) == s.frames.first, "negative clamps to the start")
         #expect(StemFeatureSeries.empty.sample(atPlaybackSeconds: 1) == nil,
                 "an empty series reports absence, so callers fall back to live separation")
+    }
+
+    // MARK: - BUG-116 — the separator's time base is not the caller's
+
+    /// A continuous tone must produce a continuous series at EVERY input rate.
+    ///
+    /// The defect: `separate()` resamples to its own rate and pads to a fixed sample count, so
+    /// its output is in the model's time base. Slicing it at input-rate offsets read past the
+    /// resampled audio into the zero padding — and because each kept span is placed at the
+    /// window's TAIL by design, that is exactly where the reads landed. On a 48 kHz local file
+    /// all four stems sat at 0.000 for ~0.4 s out of every 2 s.
+    ///
+    /// Parameterised by rate on purpose. At 44.1 kHz input rate and model rate agree and the
+    /// bug cannot occur, so a 44.1 kHz-only test — which is every fixture in the repo — proves
+    /// nothing. That is how this shipped on 2026-08-26 and stayed until Matt played a 48 kHz
+    /// album on 2026-09-05.
+    @Test("A continuous tone yields a continuous series at any input rate",
+          arguments: [44_100, 48_000, 96_000])
+    func stemSeries_hasNoHolesAtAnyInputRate(inputRate: Int) throws {
+        let seconds = 12.0
+        let total = Int(seconds * Double(inputRate))
+        let tone = (0..<total).map { i in
+            Float(0.9 * sin(2 * Double.pi * 220 * Double(i) / Double(inputRate)))
+        }
+        // The model window is a fixed SAMPLE COUNT at the model's rate, as in production.
+        let separator = ResamplingWindowSeparator(
+            windowSamples: Int(10.0 * 44_100), modelRate: 44_100)
+        let series = try SessionPreparer.analyzeStemSeries(
+            samples: tone,
+            sampleRate: inputRate,
+            separator: separator,
+            analyzer: StemAnalyzer(sampleRate: 44_100),
+            hopSeconds: 2.0
+        )
+        #expect(!series.isEmpty, "series built at \(inputRate) Hz")
+
+        // The tone never stops, so no frame may read silence. Skip the first few frames: the
+        // analyzer's band-energy AGC starts cold, which is real and present in the live path.
+        let settled = series.frames.dropFirst(8)
+        let dead = settled.filter { $0.drumsEnergy < 0.01 && $0.otherEnergy < 0.01 }
+        let detail = "\(dead.count) of \(settled.count) frames read silence at \(inputRate) Hz"
+            + " — the separator's output was sliced in the wrong time base (BUG-116)"
+        #expect(dead.isEmpty, "\(detail)")
+    }
+
+    /// The series' frame grid is the SEPARATOR's, so the same audio produces the same series
+    /// whatever rate it arrived at. This is what makes `sample(atPlaybackSeconds:)` correct.
+    @Test("The frame grid follows the separator's rate, not the input's")
+    func stemSeries_gridIsInTheSeparatorsTimeBase() throws {
+        func grid(inputRate: Int) throws -> (Int, Double) {
+            let total = Int(6.0 * Double(inputRate))
+            let tone = (0..<total).map { i in
+                Float(0.9 * sin(2 * Double.pi * 220 * Double(i) / Double(inputRate)))
+            }
+            let series = try SessionPreparer.analyzeStemSeries(
+                samples: tone,
+                sampleRate: inputRate,
+                separator: ResamplingWindowSeparator(
+                    windowSamples: Int(10.0 * 44_100), modelRate: 44_100),
+                analyzer: StemAnalyzer(sampleRate: 44_100),
+                hopSeconds: 2.0
+            )
+            return (series.frames.count, series.hopSeconds)
+        }
+        let at441 = try grid(inputRate: 44_100)
+        let at480 = try grid(inputRate: 48_000)
+        #expect(at441.0 == at480.0, "frame counts differ: \(at441.0) vs \(at480.0)")
+        #expect(abs(at441.1 - at480.1) < 1e-9, "hopSeconds differ: \(at441.1) vs \(at480.1)")
+        // And six seconds of audio still describes six seconds of playback.
+        let covered = Double(at480.0) * at480.1
+        #expect(abs(covered - 6.0) < 0.3, "series covers \(covered) s, expected ~6 s")
     }
 }

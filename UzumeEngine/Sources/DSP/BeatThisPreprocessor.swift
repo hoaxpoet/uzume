@@ -359,7 +359,7 @@ public final class BeatThisPreprocessor: @unchecked Sendable {
     /// `static` + `internal` since PR.3 so `BarLineEstimator` can reuse it rather than
     /// carry a second AVAudioConverter path. Behaviour is unchanged — it never read
     /// instance state.
-    static func resample(
+    public static func resample(
         _ samples: [Float],
         from srcRate: Double,
         to dstRate: Double

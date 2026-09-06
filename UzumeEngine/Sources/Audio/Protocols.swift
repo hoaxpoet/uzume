@@ -106,6 +106,21 @@ public protocol StemSeparating: AnyObject, Sendable {
 
     /// Four UMA output buffers, one per stem (same order as `stemLabels`).
     var stemBuffers: [UMABuffer<Float>] { get }
+
+    /// Sample rate of the returned stem waveforms, when it differs from the input's.
+    ///
+    /// `nil` means "my output is in the caller's time base" — true of every test double,
+    /// which echoes what it was handed. The production separator resamples to its own model
+    /// rate and pads to a fixed sample count, so its output is NOT in the caller's time base,
+    /// and a caller that slices it at input-rate offsets reads the wrong samples. At 48 kHz
+    /// that put every read in the zero padding past the resampled audio (BUG-116).
+    var outputSampleRate: Float? { get }
+}
+
+extension StemSeparating {
+    /// Defaults to the input's time base, which is what a separator that does not resample
+    /// (every test double) actually returns.
+    public var outputSampleRate: Float? { nil }
 }
 
 // MARK: - StemSeparationResult

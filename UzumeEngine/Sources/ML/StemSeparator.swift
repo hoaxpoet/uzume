@@ -50,6 +50,12 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     public static let nBins = nFFT / 2 + 1  // 2049
     public static let modelSampleRate: Float = 44100
 
+    /// BUG-116 — `separate` resamples any input to `modelSampleRate` and pads to
+    /// `requiredMonoSamples`, so the stems it returns are ALWAYS in the model's time base,
+    /// never the caller's. Stating that through the protocol is what stops a caller slicing
+    /// the output at input-rate offsets.
+    public var outputSampleRate: Float? { Self.modelSampleRate }
+
     /// Number of output stems.
     public static let stemCount = 4
 

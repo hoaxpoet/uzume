@@ -201,7 +201,13 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       measured over the full decode. v8 entries decode with it at 0,
     ///                       which silently falls back to the live τ45 s EMA — the DYN.2b
     ///                       defect. Re-analyse rather than replay them.
-    public static let currentSchemaVersion: Int = 10
+    ///   v11 (BUG-116) — `stemFeatureSeries` was written with the separator's output sliced at
+    ///                       INPUT-rate offsets. On any non-44.1 kHz file that read the zero
+    ///                       padding past the resampled audio, so every v10 entry for a 48 kHz
+    ///                       track has all four stems at 0.000 for ~0.4 s out of every 2 s,
+    ///                       baked in. The holes are DATA, not code — a v10 hit would replay
+    ///                       them forever — so those entries must be re-analysed.
+    public static let currentSchemaVersion: Int = 11
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).
