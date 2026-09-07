@@ -885,10 +885,26 @@ public final class LiveBeatDriftTracker: @unchecked Sendable {
         // downbeat. Falls back to 0 when no downbeats are present.
         // BUG-007.4 dev shortcut: rotate by `_barPhaseOffset` so the user can
         // confirm the Spotify-clip-phase hypothesis via Shift+B.
+        // BUG-117 — a grid with no bar information must not emit a bar phase.
+        //
+        // With `beatsPerBar == 1` this arithmetic reduces to `barPhase01 == beatPhase01`: a
+        // full bar ramp on EVERY beat. And 1 is not a meter — it is what the resolver reports
+        // when the model's downbeat head fired on nearly every beat, i.e. when it knows
+        // nothing about bars. So the one case that means "no bars" produced the fastest
+        // possible bar motion, four times over on 4/4 material. That is what broke Witchlight,
+        // Aurora Veil, Fractal Tree and Ferrofluid Ocean on 2026-09-05.
+        //
+        // No bar information now yields a held phase of 0 — no bar motion at all, which is
+        // what a preset should get when there is nothing to sync a bar to.
         let bpb = max(grid.beatsPerBar, 1)
-        let rotatedBeatsSinceDB = (timing.beatsSinceDownbeat + _barPhaseOffset) % bpb
-        let barPhaseRaw = (Double(rotatedBeatsSinceDB) + Double(phase01)) / Double(bpb)
-        let barPhase01 = Float(barPhaseRaw - floor(barPhaseRaw))
+        let barPhase01: Float
+        if grid.hasBarInformation {
+            let rotatedBeatsSinceDB = (timing.beatsSinceDownbeat + _barPhaseOffset) % bpb
+            let barPhaseRaw = (Double(rotatedBeatsSinceDB) + Double(phase01)) / Double(bpb)
+            barPhase01 = Float(barPhaseRaw - floor(barPhaseRaw))
+        } else {
+            barPhase01 = 0
+        }
 
         return PhaseTriple(
             beatPhase01: phase01,

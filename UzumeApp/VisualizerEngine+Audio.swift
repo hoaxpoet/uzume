@@ -601,11 +601,17 @@ extension VisualizerEngine {
         let bpb = max(1, Int(fv.beatsPerBar.rounded()))
         let rawBeatIndex = Int(fv.barPhase01 * Float(bpb)) + 1
         let beatInBar = max(1, min(rawBeatIndex, bpb))
+        // BUG-117 — `beatsPerBar == 1` means the grid found NO bar structure, not a
+        // one-beat bar. Read as a meter it makes `beatInBar` permanently 1 and every beat a
+        // downbeat, which is what drove bar-locked motion four times too fast across the
+        // roster (91 % of frames in session 2026-09-06T00-17-00Z). A grid that does not know
+        // where the bars are reports no downbeat rather than claiming every beat is one.
+        let knowsBars = bpb > 1
         let snapshot = BeatSyncSnapshot(
             barPhase01: fv.barPhase01,
             beatsPerBar: bpb,
             beatInBar: beatInBar,
-            isDownbeat: beatInBar == 1,
+            isDownbeat: knowsBars && beatInBar == 1,
             sessionMode: sessionMode,
             lockState: lockStateInt,
             gridBPM: bpm,

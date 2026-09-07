@@ -61,6 +61,21 @@ struct BeatBenchCommand: ParsableCommand {
     @Option(name: .long, help: "With --audio: analyse only the first N seconds (0 = whole file).")
     var seconds: Double = 0
 
+    /// BUG-118 — score every arm over the SAME window.
+    ///
+    /// By default a row is scored over its own grid's span, with the reference trimmed to
+    /// match, so a grid is not penalised for music it was never shown. That is right for a
+    /// single baseline and INVALID for an A/B between arms whose spans differ: a 30 s grid
+    /// gets graded on 30 s and a whole-track grid on six minutes, and the two numbers are
+    /// not comparable. That artifact has produced two wrong conclusions in this repo —
+    /// FT.4.1's "full-track decode is worse" and BUG-118's own revert.
+    ///
+    /// With `--span-seconds N` both the estimate AND the reference are trimmed to [0, N]
+    /// before scoring, so any two arms describe the same music. The scored span is printed
+    /// with the results so a number cannot be quoted without it.
+    @Option(name: .long, help: "Score all arms over a common [0, N] second window (0 = each grid's own span).")
+    var spanSeconds: Double = 0
+
     @Option(name: .long, help: "Recorded session directory (required for --mode session-replay).")
     var session: String?
 
@@ -201,6 +216,11 @@ struct BeatBenchCommand: ParsableCommand {
 
     private func runOfflineGrid() throws {
         let truths = try GroundTruthStore.load(dir: beatbenchDir, filter: trackFilter())
+        if spanSeconds > 0 {
+            print("scoring every arm over a COMMON span: 0 – \(spanSeconds) s")
+        } else {
+            print("scoring each arm over ITS OWN span — not comparable across arms (BUG-118)")
+        }
         guard !truths.isEmpty else {
             throw ValidationError("no ground truth found — run GT.2 reconciliation first")
         }
@@ -222,14 +242,20 @@ struct BeatBenchCommand: ParsableCommand {
 
             // Ground truth may extend past the analyzer's window; score only where both
             // exist, otherwise the grid is penalised for beats it was never shown.
-            let gridSpan = (grid.beats.first ?? 0, grid.beats.last ?? 0)
+            //
+            // `--span-seconds` overrides that with a FIXED window applied to both sides, so
+            // two arms with different coverage are scored on the same music (BUG-118).
+            let window = ScoringWindow(grid: grid, spanSeconds: spanSeconds)
+            let estBeats = window.beats
+            let estDownbeats = window.downbeats
+            let gridSpan = (window.from, window.to)
             let refInSpan = truth.beats.filter { $0 >= gridSpan.0 - 1 && $0 <= gridSpan.1 + 1 }
-            let scores = Metrics.score(reference: refInSpan, estimate: grid.beats)
-            let downbeatF = truth.downbeats.isEmpty || grid.downbeats.isEmpty
+            let scores = Metrics.score(reference: refInSpan, estimate: estBeats)
+            let downbeatF = truth.downbeats.isEmpty || estDownbeats.isEmpty
                 ? nil
                 : Metrics.fMeasure(reference: truth.downbeats.filter {
                     $0 >= gridSpan.0 - 1 && $0 <= gridSpan.1 + 1
-                }, estimate: grid.downbeats).score
+                }, estimate: estDownbeats).score
 
             rows.append(BaselineRow(
                 trackID: truth.trackID,
