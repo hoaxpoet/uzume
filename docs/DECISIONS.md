@@ -5520,7 +5520,7 @@ strictly stronger than a human looking at a still.
 
 ## D-243: Bar position is recorded per window, and a declined window emits no bars
 
-**Date:** 2026-09-05 · **Increment:** PR.17 · **Status:** Accepted; **default ON for local files from 2026-09-05** (Matt: *"Flip it"*), `UZUME_BARLINE_LOCAL=0` opts out
+**Date:** 2026-09-05 · **Increment:** PR.17 · **Status:** Accepted as a mechanism; **default REVERTED to OFF on 2026-09-07** — see §Amendment. Opt in with `UZUME_BARLINE_LOCAL=1`
 
 ### The decision
 
@@ -5574,3 +5574,28 @@ revert if it reads wrong.
 contract); [D-210]; PR.12/PR.15/PR.16;
 `docs/diagnostics/PR17_LOCAL_BARS_2026-09-05.md`;
 `UzumeEngine/Sources/DSP/BarLineEstimator+Windowed.swift`.
+
+### Amendment — the default is reverted (2026-09-07)
+
+Default-ON lasted one session. Matt, after it: *"Ferrofluid Ocean … the beat sync is worse not
+better. Fractal Tree is too animated. Witchlight has no pulse. The pulse of Aurora Veil is no longer
+in sync with music. Everything is worse."*
+
+**The estimator was not the problem; the decline path was.** A declined track reports
+`beatsPerBar = 1` with empty `downbeats`, and `beatsSinceDownbeat` falls back to
+`idx % max(beatsPerBar, 1)` — zero for every beat. "No bar information" was encoded as "every beat
+is bar one", which is the opposite of declining, and every bar-locked preset fired four times too
+often. Session `2026-09-06T00-17-00Z`: `beatsPerBar == 1` on 91 % of frames.
+
+The windowed measurement stands — take_five decodes 5/4 and money 7/4, 20 correct and 0 incorrect
+across 68 windows. What changed is which path is common: the model's downbeat head almost always
+answered, so the decline encoding was rarely exercised; the estimator declines about two thirds of
+the time, so it became the norm.
+
+**What was actually wrong with the decision.** The choice put to Matt was sparse-versus-dense bars,
+and he was told the cost was *"bar-locked events fire correctly in some sections and go quiet in
+others."* That was not what sparse did. It made them fire on every beat. The option he accepted was
+never the option that shipped, so his answer cannot carry the weight of this outcome.
+
+Tracked as BUG-117. Do not re-enable the default until a declined track reports no bars in a way
+consumers can read as no bars.

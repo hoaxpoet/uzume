@@ -235,12 +235,24 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
 
     // MARK: - PR.17 windowed bar line
 
-    /// Whether the windowed bar line is active. Default ON; `UZUME_BARLINE_LOCAL=0` opts
-    /// out. Pure and testable because the DEFAULT is the load-bearing part — an inverted
-    /// comparison here silently reverts every local track to the over-firing downbeat head
-    /// with no test failing.
+    /// Whether the windowed bar line is active. **Default OFF, reverted 2026-09-07.**
+    ///
+    /// It shipped default-ON on 2026-09-05 and broke bar-locked motion across the roster
+    /// within hours: Witchlight lost its pulse, Aurora Veil drifted out of sync, Fractal Tree
+    /// over-animated, Ferrofluid Ocean's sync degraded. Matt: *"Everything is worse."*
+    ///
+    /// The mechanism is sound — take_five decodes 5/4 and money 7/4 for the first time — and
+    /// the DECLINE PATH is what broke. `applyWindowedBarLine` returns `beatsPerBar = 1` with
+    /// empty `downbeats` when every window declines, and `BeatGrid.beatsSinceDownbeat` falls
+    /// back to `idx % max(beatsPerBar, 1)` — which is 0 for EVERY beat. So "no bar information"
+    /// was encoded as "every beat is bar one", the exact opposite of declining. Measured on
+    /// Matt's session `2026-09-06T00-17-00Z`: `beatsPerBar == 1` on 18,040 of 19,833 frames
+    /// (91 %), `is_downbeat == 1` on 94 %.
+    ///
+    /// Do NOT flip this back on until a declined track reports "no bars" in a way consumers
+    /// can read as no bars. See [D-243] §Amendment and BUG-117.
     static func usesWindowedBarLine(environment: [String: String]) -> Bool {
-        environment["UZUME_BARLINE_LOCAL"] != "0"
+        environment["UZUME_BARLINE_LOCAL"] == "1"
     }
 
     /// Lay downbeats from the per-window estimator: bars where a window answers, and

@@ -10,6 +10,22 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-07-142316] REVERT — the windowed bar line is OFF again; a declined track was calling every beat a downbeat
+
+Matt, after one session on the 2026-09-05 build: *"Ferrofluid Ocean … the beat sync is worse not better. Fractal Tree is too animated. Witchlight has no pulse. The pulse of Aurora Veil is no longer in sync with music. Everything is worse."*
+
+**Cause: the decline path, not the estimator.** `applyWindowedBarLine` returns `beatsPerBar = 1` with empty `downbeats` when every window declines, and `BeatGrid.beatsSinceDownbeat` falls back to `idx % max(beatsPerBar, 1)` — **zero for every beat**. So "no bar information" was encoded as "every beat is bar one": bar-locked events fired four times too often and bar-phase readers got a constant. Session `2026-09-06T00-17-00Z`: **`beatsPerBar == 1` on 18,040 of 19,833 frames (91 %)**, `is_downbeat == 1` on 94 %.
+
+**The default is reverted to OFF.** The mechanism stays behind `UZUME_BARLINE_LOCAL=1` and its measurement stands — take_five decodes 5/4 across 11 of 11 windows and money 7/4, 20 correct and 0 incorrect over 68 labelled windows. What changed is which path is common: the model's downbeat head almost always answered, so the decline encoding was rarely exercised; the windowed estimator declines about two thirds of the time, so it became the norm. Filed as **BUG-117**; the encoding predates PR.17 (FT.4 wrote it) and needs its own increment, because fixing it means deciding what "no bars" looks like on the wire and touching every consumer.
+
+**Two process failures, both mine.** `beatsPerBar = 1` was sitting in the 18:17 session during the BUG-116 investigation, was noted, and was not followed up. And the PR.17 commit asserts a declined track is *"the same shape a track with no detected bars already produces, so consumers need no new case"* — a claim about a specific function, never checked against that function, and false.
+
+**The option Matt accepted was not the option that shipped.** He was asked to choose sparse-versus-dense bars and told sparse meant *"bar-locked events fire correctly in some sections and go quiet in others."* Sparse did not go quiet; it fired on every beat. His answer cannot carry the weight of that outcome.
+
+Dragon Bloom's warm tint and the BUG-116 stem fix are untouched — the first is a look change he has an opinion about rather than a regression, the second is unambiguous.
+
+---
+
 ### [dev-2026-09-05-232010] BUG-116 — the stem series was dead 0.4 s in every 2 s on any non-44.1 kHz local file
 
 Matt, mid-test: *"Now there are issues with Ferrofluid Ocean - screen goes dark every few seconds."* All four stems decayed to exactly 0.000 and snapped back, 68 times in one session, 2.00 s apart, ~0.37 s each. Any stem-driven preset went dark on that rhythm; Ferrofluid Ocean was just the one on screen.

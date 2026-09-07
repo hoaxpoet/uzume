@@ -116,10 +116,14 @@ struct WholeTrackGridWiringTests {
         #expect(applied.bpm == grid.bpm)
     }
 
-    @Test("the windowed bar line is ON by default, and UZUME_BARLINE_LOCAL=0 opts out")
-    func windowedBarLineDefaultsOn() {
-        #expect(DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: [:]))
-        #expect(DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: ["UZUME_BARLINE_LOCAL": "1"]))
+    /// Reverted 2026-09-07. Default-ON broke bar-locked motion across the roster within hours
+    /// because a declined track reports `beatsPerBar = 1`, which makes EVERY beat a downbeat
+    /// (91 % of frames in session `2026-09-06T00-17-00Z`). The default is the load-bearing
+    /// part, so it is asserted rather than left to a code read.
+    @Test("the windowed bar line is OFF by default, and UZUME_BARLINE_LOCAL=1 opts in")
+    func windowedBarLineDefaultsOff() {
+        #expect(!DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: [:]))
         #expect(!DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: ["UZUME_BARLINE_LOCAL": "0"]))
+        #expect(DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: ["UZUME_BARLINE_LOCAL": "1"]))
     }
 }
