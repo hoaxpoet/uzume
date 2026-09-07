@@ -41,24 +41,32 @@ struct SessionDrivenMultiPassReplay {
         var clipped: Double
         var saturation: Double
         var meanLuma: Double
+        /// Fraction of the frame that is near-WHITE. Under Dragon Bloom's `bInvert` that is
+        /// the fraction of the accumulator that is EMPTY — the quantity the live butterchurn
+        /// oracle holds at 0.000 and ours does not.
+        var nearWhite: Double
     }
 
     private static func stats(_ bgra: [UInt8]) -> FrameStats {
-        var clipped = 0, bright = 0
+        var clipped = 0, bright = 0, white = 0
         var sat = 0.0, lum = 0.0
         let count = bgra.count / 4
-        guard count > 0 else { return FrameStats(clipped: 0, saturation: 0, meanLuma: 0) }
+        guard count > 0 else {
+            return FrameStats(clipped: 0, saturation: 0, meanLuma: 0, nearWhite: 0)
+        }
         for i in stride(from: 0, to: bgra.count, by: 4) {
             let b = Int(bgra[i]), g = Int(bgra[i + 1]), r = Int(bgra[i + 2])
             let mx = max(r, max(g, b)), mn = min(r, min(g, b))
             lum += (0.2126 * Double(r) + 0.7152 * Double(g) + 0.0722 * Double(b)) / 255
             if mx >= 254 { clipped += 1 }
+            if mn >= 235 { white += 1 }
             if mx >= 200 { bright += 1; sat += Double(mx - mn) / Double(mx) }
         }
         return FrameStats(
             clipped: Double(clipped) / Double(count),
             saturation: bright > 0 ? sat / Double(bright) : 0,
-            meanLuma: lum / Double(count))
+            meanLuma: lum / Double(count),
+            nearWhite: Double(white) / Double(count))
     }
 
     @Test("replay a recorded session through MultiPassRenderHarness (REPLAY_MULTIPASS=1)")
@@ -135,6 +143,7 @@ struct SessionDrivenMultiPassReplay {
           clipped    mean \(String(format: "%.3f", mean(clip)))  max \(String(format: "%.3f", clip.max() ?? 0))
           saturation mean \(String(format: "%.3f", mean(sat)))  min \(String(format: "%.3f", sat.min() ?? 0))
           meanLuma   mean \(String(format: "%.3f", mean(lum)))  max \(String(format: "%.3f", lum.max() ?? 0))
+          nearWhite  mean \(String(format: "%.3f", mean(measured.map(\.nearWhite))))  (= EMPTY accumulator; oracle holds 0.000)
         """)
         // PR.5: the TRAJECTORY, not just the mean. Dragon Bloom's fill is documented as a
         // feedback attractor that develops over ~20 s (DRAGON_BLOOM_PLAN.md L4 item 3), so

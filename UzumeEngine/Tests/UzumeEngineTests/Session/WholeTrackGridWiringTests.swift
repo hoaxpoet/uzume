@@ -126,4 +126,15 @@ struct WholeTrackGridWiringTests {
         #expect(!DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: ["UZUME_BARLINE_LOCAL": "0"]))
         #expect(DefaultBeatGridAnalyzer.usesWindowedBarLine(environment: ["UZUME_BARLINE_LOCAL": "1"]))
     }
+
+    @Test("the tiled whole-track grid is OFF by default, and UZUME_WHOLETRACK_GRID=1 opts in")
+    func wholeTrackGridDefaultsOff() {
+        // BUG-118. It shipped default-ON at PR.12 without the five-suite BeatBench table the
+        // program requires, and that table shows the tiled grid is worse — bleed's BPM
+        // 115.00 -> 123.62 against a truth of 114.67, beat F regressing on 5 of 9 fixtures.
+        // The default is the load-bearing part, so it is asserted rather than read.
+        #expect(!DefaultBeatGridAnalyzer.usesWholeTrackGrid(environment: [:]))
+        #expect(!DefaultBeatGridAnalyzer.usesWholeTrackGrid(environment: ["UZUME_WHOLETRACK_GRID": "0"]))
+        #expect(DefaultBeatGridAnalyzer.usesWholeTrackGrid(environment: ["UZUME_WHOLETRACK_GRID": "1"]))
+    }
 }
