@@ -115,7 +115,8 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
             // the 30 s grid was graded on 30 s and the full-track grid on six minutes.
             // Scored over an identical span, beat F is equal or better on 8 of 9 fixtures
             // and bleed itself goes 0.99 -> 1.00 (PR12_BEAT_ANALYZER_RETHINK_2026-09-04.md).
-            let fullTrack = both || wholeTrack || env["UZUME_FULLTRACK_DECODE"] == "1"
+            let fullTrack = both || env["UZUME_FULLTRACK_DECODE"] == "1"
+                || (wholeTrack && Self.usesWholeTrackGrid(environment: env))
             // NOT adopted. Default-on was tried at PR.3d and REVERTED the same day
             // (Matt: "the failure rate here is too high"). It was recommended off nine
             // benchmark fixtures without measuring the album Matt actually reviewed; on
@@ -231,6 +232,33 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
             frameRate: grid.frameRate,
             frameCount: grid.frameCount
         )
+    }
+
+    /// Whether a local file's whole-track grid is used. **Default OFF from 2026-09-07
+    /// (BUG-118).**
+    ///
+    /// PR.12 switched local files to `BeatThisTiledInference` — 1500-frame windows at 50 %
+    /// overlap, averaged with UNIFORM weight — and shipped on a partial measurement: one
+    /// metric, nine fixtures, both arms trimmed to a common span. The five-suite BeatBench
+    /// table the program requires for any `dsp.beat` change was never run on the shipping
+    /// configuration. Run at BUG-118 it shows the tiled grid is worse, and the BPM column
+    /// is span-independent so no scoring artifact excuses it:
+    ///
+    ///     track          truth    clamped   tiled whole-track
+    ///     bleed          114.67   115.00    123.62
+    ///     money          121.06   116.19    129.32
+    ///     pyramid_song    66.60    65.08     82.47
+    ///     yyz            272.27   233.61    145.85
+    ///     bohemian        71.10    78.18     94.23
+    ///
+    /// Beat F regresses on 5 of 9 (bleed 0.99 → 0.76, money 0.44 → 0.24), continuity with
+    /// it (bleed CMLt 1.00 → 0.56), and billie_jean's downbeat F falls 0.90 → 0.37.
+    ///
+    /// The CAPABILITY is still wanted — a 30 s grid extrapolated across a whole track is
+    /// BUG-065's drift, and that is real. It is the tiling that is wrong, not the goal.
+    /// `UZUME_WHOLETRACK_GRID=1` opts back in for A/B work.
+    static func usesWholeTrackGrid(environment: [String: String]) -> Bool {
+        environment["UZUME_WHOLETRACK_GRID"] == "1"
     }
 
     // MARK: - PR.17 windowed bar line
