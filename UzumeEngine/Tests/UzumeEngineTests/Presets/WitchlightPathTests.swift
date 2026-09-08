@@ -452,6 +452,11 @@ struct WitchlightPathTests {
             f.bass = 0.3; f.mid = 0.3; f.treble = 0.2
             f.beatsPerBar = 4
             f.barPhase01 = (t * barHz).truncatingRemainder(dividingBy: 1)
+            // A real grid publishes BOTH phases, and WL.9's pulse tier rides the beat one.
+            // This helper only set the bar phase, which was invisible while the pulse was
+            // derived by subdividing the bar — and became a false failure the moment the
+            // pulse started riding the beat grid it was always documented to ride.
+            f.beatPhase01 = (t * barHz * 4).truncatingRemainder(dividingBy: 1)
             var s = StemFeatures()
             s.drumsEnergy = 0.3; s.bassEnergy = 0.3; s.otherEnergy = 0.2; s.vocalsEnergy = 0.1
             path.advance(deltaTime: frameSeconds, features: f, stems: s)
