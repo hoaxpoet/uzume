@@ -302,9 +302,14 @@ struct BeatGridResolverGoldenTests {
         let metered = BeatGrid(beats: beats, downbeats: [], bpm: 120,
                                beatsPerBar: 4, barConfidence: 0.9, frameRate: 50, frameCount: 800)
         #expect(metered.hasBarInformation)
-        let withDownbeats = BeatGrid(beats: beats, downbeats: [0, 2, 4], bpm: 120,
-                                     beatsPerBar: 1, barConfidence: 0.5,
-                                     frameRate: 50, frameCount: 800)
-        #expect(withDownbeats.hasBarInformation)
+        // Downbeats PRESENT with meter 1 is the over-firing head, not knowledge: the head
+        // fires on nearly every beat, so the array is fullest exactly when it knows least.
+        // The first live session after this shipped showed the cost — 2,549 frames held no
+        // bar information yet still ramped bar phase to 0.99, because an `||` let them past.
+        let overFiring = BeatGrid(beats: beats, downbeats: beats, bpm: 120,
+                                  beatsPerBar: 1, barConfidence: 0.1,
+                                  frameRate: 50, frameCount: 800)
+        #expect(!overFiring.hasBarInformation,
+                "a downbeat on every beat is the head saying nothing, not a one-beat bar")
     }
 }
