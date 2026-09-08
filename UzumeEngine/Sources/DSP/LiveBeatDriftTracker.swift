@@ -302,6 +302,11 @@ public final class LiveBeatDriftTracker: @unchecked Sendable {
     /// at the current time. Consumed by `BeatPulseClock` via `MIRPipeline` (BUG-119).
     public private(set) var lastLocalBeatPeriod: Double?
 
+    /// Signed residual of the most recent MATCHED onset, in milliseconds: how far it fell
+    /// from the corrected grid position (BUG-065). This is the sync ERROR — `driftMs` is the
+    /// correction. Nil until an onset matches, and it holds its last value between onsets.
+    public private(set) var lastOnsetResidualMs: Double?
+
     public var currentLockState: LockState {
         lock.lock(); defer { lock.unlock() }
         return computeLockState()
@@ -554,6 +559,14 @@ public final class LiveBeatDriftTracker: @unchecked Sendable {
             // ping the time gate. Acquisition path uses the floor (30 ms)
             // until ≥ `driftDeviationMinSamples` deviations have accumulated.
             let signedDeviation = instantDrift - drift
+            // BUG-065 — this is the RESIDUAL: how far this onset landed from where the
+            // corrected grid said it would. `drift` is the correction being applied
+            // (`displayTime = pt + drift + shift`), so `drift_ms` measures how hard the
+            // tracker is working, not how wrong the result is. Every diagnosis of this defect
+            // so far — including "0 → 119 ms across a track" — read the correction as the
+            // error, because the error was never recorded. It is computed here already and
+            // was thrown away after the tight-gate check.
+            lastOnsetResidualMs = signedDeviation * 1000
             pushDriftDeviationLocked(signedDeviation)
             let acquired = matchedOnsets >= Self.lockThreshold
             let window = acquired ? effectiveTightWindowLocked() : Self.strictMatchWindow

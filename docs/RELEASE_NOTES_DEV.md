@@ -10,6 +10,22 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-08-181826] BUG-065 — the drift evidence has always measured the correction, not the error
+
+Matt: *"Work on drift first."* The first thing to look at was what `drift_ms` actually is, and it is not what every diagnosis of this defect has assumed.
+
+**`drift_ms` is the CORRECTION, not the error.** `LiveBeatDriftTracker` applies it: `displayTime = pt + drift + displayShift`, and that is the time the phase presets consume is computed at. So a large `drift_ms` says the tracker is working hard, not that the visuals are late. The snapshot field's own doc comment says so — *"Drift-tracker correction in milliseconds"* — and it was still read as error, by BUG-065's original diagnosis (*"0 → 119 ms across a track"*) and by me two days ago (*"34 ms mean, 77 ms p90, outside the perceptual window"*).
+
+**The actual error was computed and thrown away.** `processOnsetLocked` derives `signedDeviation = instantDrift - drift` — how far a matched onset fell from the CORRECTED grid position — uses it for the variance-adaptive tight gate, and discards it. In a defect whose entire subject is timing accuracy, the quantity that measures timing accuracy has never been recorded.
+
+**Instrumented, not fixed.** `onset_residual_ms` now sits beside `drift_ms` in features.csv, carried on `BeatSyncSnapshot`. Two tests encode the distinction so it cannot be confused again: against a steadily offset track the correction absorbs the offset while the residual settles near zero, and with no grid the residual is absent rather than a confident zero.
+
+**No fix is proposed.** D-206 parked this pending a changed GRID premise; whole-track grids supply that (coverage 18 % → 98 %). But the premise change is not evidence, and there is still no measurement of the real error. The next session Matt records will produce the first one.
+
+1925 engine tests green, 466 app tests green, swiftlint 0.
+
+---
+
 ### [dev-2026-09-08-173808] BUG-121 — one quiet window condemned the session and nudged the listener
 
 Matt: *"in the last few sessions, I was seeing notifications that the signal source was low… this has been a problem historically, and I would like to resolve it once and for all."*

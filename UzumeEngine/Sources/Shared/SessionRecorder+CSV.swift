@@ -93,6 +93,26 @@ extension SessionRecorder {
     /// `test_featuresHeader_includesFrameTimingColumns` for the canonical column
     /// layout and the increments that added each block. (QG.1: promoted from a
     /// `makeFileHandles` local so offline generators share the exact literal.)
+    /// The beat-sync columns. Split out at BUG-065 to keep `csvRow` inside its budget.
+    ///
+    /// `drift_ms` is the CORRECTION the tracker applies (`displayTime = pt + drift + shift`);
+    /// `onset_residual_ms` is what is left over — the actual sync error. Every diagnosis of
+    /// BUG-065 so far read the first as the second, because the second was never recorded.
+    /// The residual cell is empty until the first matched onset.
+    static func syncColumns(_ bs: BeatSyncSnapshot) -> String {
+        let residual = bs.onsetResidualMs.map { String(format: "%.3f", $0) } ?? ""
+        return String(format: ",%d,%d,%d,%d,%d,%d,%.3f,%.4f,%.3f",
+                      Int(bs.barPhase01 * 1000),  // barPhase01 as integer permille
+                      bs.beatsPerBar,
+                      bs.beatInBar,
+                      bs.isDownbeat ? 1 : 0,
+                      bs.sessionMode,
+                      bs.lockState,
+                      bs.gridBPM,
+                      bs.playbackTimeS,
+                      bs.driftMs) + ",\(residual)"
+    }
+
     public static let featuresCSVHeader = """
         frame,wallclock_s,time,deltaTime,bass,mid,treble,\
         subBass,lowBass,lowMid,midHigh,highMid,high,\
@@ -100,7 +120,7 @@ extension SessionRecorder {
         spectralCentroid,spectralFlux,valence,arousal,accumulatedAudioTime,\
         beatPhase01,bassRel,bassDev,bassAttRel,\
         barPhase01_permille,beatsPerBar,beat_in_bar,is_downbeat,\
-        beat_sync_mode,lock_state,grid_bpm,playback_time_s,drift_ms,\
+        beat_sync_mode,lock_state,grid_bpm,playback_time_s,drift_ms,onset_residual_ms,\
         frame_cpu_ms,frame_gpu_ms,track_elapsed_s,cached_bass_proportion,\
         mir_pipeline_ms,stem_analyzer_ms,beat_detector_ms,pitch_tracker_ms,mood_classifier_ms,\
         encode_cpu_ms,renderframe_cpu_ms,\
@@ -169,16 +189,7 @@ extension SessionRecorder {
                           fv.spectralCentroid, fv.spectralFlux, fv.valence, fv.arousal,
                           fv.accumulatedAudioTime,
                           fv.beatPhase01, fv.bassRel, fv.bassDev, fv.bassAttRel)
-        let sync = String(format: ",%d,%d,%d,%d,%d,%d,%.3f,%.4f,%.3f",
-                          Int(bs.barPhase01 * 1000),  // barPhase01 as integer permille
-                          bs.beatsPerBar,
-                          bs.beatInBar,
-                          bs.isDownbeat ? 1 : 0,
-                          bs.sessionMode,
-                          bs.lockState,
-                          bs.gridBPM,
-                          bs.playbackTimeS,
-                          bs.driftMs)
+        let sync = syncColumns(bs)
         // DM.3a — frame_cpu_ms,frame_gpu_ms. Empty cells until the first
         // GPU completion handler fires (cold-start frames) or whenever
         // gpuMs is unavailable (cb.gpuEndTime <= cb.gpuStartTime).
