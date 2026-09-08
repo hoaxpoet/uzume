@@ -114,7 +114,13 @@ struct PresetLoaderCompileFailureTest {
     /// `certified:false`, and `exclude_from_cycling:true` so it never lands in the
     /// manual cycle; it is a harness fixture in the same class as Staged Sandbox,
     /// not aesthetic content. See docs/DECISIONS.md D-244.)
-    static let expectedProductionPresetCount = 30
+    /// 30 → 31 at ALFVEN.2 (Alfvén added — driven 2D incompressible MHD in vorticity /
+    /// flux-function form on the ALFVEN.1 persistent+iterated staged surface. Physics
+    /// ported from the pseudo-spectral CPU spike; PLACEHOLDER exposure until a
+    /// reduction/mip surface exists for film.py's percentile auto-exposure. `certified:
+    /// false`, `exclude_from_cycling: true` while the look is a placeholder, no audio
+    /// routing until ALFVEN.3. See docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
+    static let expectedProductionPresetCount = 31
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

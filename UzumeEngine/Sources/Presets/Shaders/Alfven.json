@@ -1,0 +1,42 @@
+{
+  "name": "Alfvén",
+  "description": "Driven 2D incompressible MHD in vorticity / flux-function form: broad opposed-colour magnetic lobes separated by thin bright current sheets, re-seeded before the box-scale condensate forms. Physics ported from the pseudo-spectral CPU spike (docs/presets/alfven_spike/); solved on the persistent + iterated staged surface added at ALFVEN.1 (D-244). ALFVEN.2 lands the physics with a PLACEHOLDER exposure — film.py's percentile auto-exposure and seam bloom need a reduction/mip surface that does not exist yet. No audio routing until ALFVEN.3.",
+  "author": "Uzume engine",
+  "family": "hypnotic",
+  "passes": ["staged"],
+  "stages": [
+    {
+      "name": "phi",
+      "fragment_function": "alfven_phi_fragment",
+      "samples": ["state"],
+      "persistent": true,
+      "iterations": 24,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "state",
+      "fragment_function": "alfven_state_fragment",
+      "samples": ["phi"],
+      "persistent": true,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "compose",
+      "fragment_function": "alfven_compose_fragment",
+      "samples": ["state"]
+    }
+  ],
+  "vertex_function": "fullscreen_vertex",
+  "fragment_function": "alfven_compose_fragment",
+  "duration": 30,
+  "visual_density": 0.55,
+  "motion_intensity": 0.35,
+  "color_temperature_range": [0.30, 0.70],
+  "fatigue_risk": "high",
+  "transition_affordances": ["crossfade"],
+  "section_suitability": ["ambient", "comedown"],
+  "complexity_cost": { "tier1": 2.2, "tier2": 1.5 },
+  "certified": false,
+  "rubric_profile": "lightweight",
+  "exclude_from_cycling": true
+}
