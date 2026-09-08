@@ -5673,3 +5673,29 @@ frames. **The iteration count buys per-frame responsiveness; persistence buys th
 - ALFVEN.2's open risk (§11 — whether a Jacobi projection reproduces the CPU spectral spike's
   filament sharpness) is **not** resolved by this increment and is not made easier by it. See the
   ALFVEN.1 closeout.
+
+### Iteration count: 24 stands, and the real lever is the grid (Matt, 2026-09-08)
+
+The ALFVEN.1 prompt asked how sharp the seams should be, framing 12 / 24 / 40 sweeps as a
+sharpness-against-frame-budget trade. **The measurement changed the question.** Jacobi's
+domain-scale damping is `cos(h)` per sweep, so the sweep count does not buy sharpness — it buys
+**settling time**, and settling scales as **N²**:
+
+| Sweeps/frame | Time to converge at 256² | At true 1080p |
+|---|---|---|
+| 12 | ~32 s | minutes |
+| 24 | ~16 s | minutes |
+| 40 | ~10 s | minutes |
+
+Against the design's ~35 s re-seed ceiling, 12 is effectively never settled and 40 buys 6 s for
+1.7× the passes. None of the three works at full resolution, so **more iterations cannot fix an N²
+problem** — the lever is a fixed coarse solver grid with an upsample, which is an ALFVEN.2
+decision. Matt's call: **keep 24 as the shipped default and settle it in ALFVEN.2 alongside the
+grid resolution**, because the two parameters sit on the same axis and fixing one blind of the
+other is how a tuning round starts.
+
+Note this also relocates the risk: the slow scale is the **lobes**, not the seams. Seam softness
+is explicitly NOT a fidelity target (`docs/VISUAL_REFERENCES/alfven/README.md` §PROVENANCE
+CAVEAT names chasing spectral sharpness on a projection solver as the FA #64 trap), while
+`06_anti_static_quilt.png` makes box-scale condensation the failure mode — and box scale is
+exactly what an under-converged Jacobi under-resolves.

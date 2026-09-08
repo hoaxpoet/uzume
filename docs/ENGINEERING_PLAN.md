@@ -9032,3 +9032,8 @@ format; non-finite watchdog) plus a new persistent-harness-template row.
 
 **Next:** ALFVEN.2 — `Alfven.metal` + sidecar, MHD advance, silence state, re-seed cycle. **No audio
 routing.** Its first task is the §11 look comparison against the reference set, before any tuning.
+Open it by deciding the **solver grid resolution** — [D-244] §Iteration count records why sweep
+count cannot be set independently of it (settling scales as N²; 24 sweeps stands until then).
+Its compose stage is a **port of `docs/presets/alfven_spike/film.py`**, not an authoring exercise:
+that spike's README is explicit that the Metal fragment "should reproduce THIS, not invent its own
+look" — same FA #73 discipline that governed the projection port at ALFVEN.1.
