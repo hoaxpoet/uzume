@@ -49,7 +49,7 @@ struct GlazeSpring {
     var drumsPunchEMA: Float = 0, vocalsGlowEMA: Float = 0
 
     mutating func step(anchorX x1: Float, anchorY y1: Float) {
-        let spring: Float = 18, grav: Float = 1, dt: Float = 0.0003, bounce: Float = 0.9
+        let spring: Float = 18, grav: Float = kGlazeGravity, dt: Float = 0.0003, bounce: Float = 0.9
         let damp: Float = 1 - 5 * dt   // resist = 5
         vx2 = vx2 * damp + dt * (x1 + x3 - 2 * x2) * spring
         vy2 = vy2 * damp + dt * ((y1 + y3 - 2 * y2) * spring - grav)
@@ -75,6 +75,11 @@ struct GlazeSpring {
 /// tail held inside [0.22, 0.78] keeps the band on-screen with margin.
 private let kGlazeAnchorYLo: Float = 0.30
 private let kGlazeAnchorYHi: Float = 0.70
+/// Spring gravity. The source's 1.0 makes the WALLS the attractor: simulated to steady state the
+/// tail rests at y 0.05 in silence and 0.97 under energy — "jumping between the top and bottom" is
+/// the tail flipping between those two rests. At 0.3 the tail follows the anchor inside the band
+/// instead: silence rests ≈ 0.36, energy lifts to ≈ 0.55, nothing pinned (1800-frame simulation).
+private let kGlazeGravity: Float = 0.3
 /// Vertical walls the masses bounce off (was the canvas edge, 0/1 — the source's `above`/`below`).
 private let kGlazeWallLo: Float = 0.22
 private let kGlazeWallHi: Float = 0.78

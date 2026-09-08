@@ -766,7 +766,7 @@ each built to his exact words, no design invention:
   the canvas"*: the lift term could push the spring anchor to ≈1.7, so the tail slammed the top wall
   and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
   bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
-  margin; x is untouched. Motion gate run before commit (a hard wall could read as a bump).
+  margin; x is untouched. **And the cause, not just the symptom:** simulated to steady state the source's gravity (1.0) makes the WALLS the attractor — the tail rests at y 0.05 in silence and 0.97 under energy, so the jump is the tail flipping between two rests. The first cut bounded the anchor alone and the GLAZE.3 lift test caught it (both cases pinned at the upper wall — lift removed, not bounded). Gravity 0.3 lets the tail follow the anchor inside the band: silence ≈ 0.36, energy ≈ 0.55, nothing pinned; GLAZE.3 passes; motion gate on 600 frames: 0 spikes, 0 frozen.
 **Done-when unchanged:** Matt approves each sheet. The PR.4 hang is queued behind a fresh capture —
 no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to root-cause yet.
 
