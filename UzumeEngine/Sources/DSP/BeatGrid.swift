@@ -46,7 +46,14 @@ public struct BeatGrid: Sendable, Hashable, Codable {
     /// "No bar information" has to be expressible, and this is it. A grid with real downbeats,
     /// or a meter of 2 or more, knows; anything else does not and must not be asked for a bar
     /// position.
-    public var hasBarInformation: Bool { !downbeats.isEmpty || beatsPerBar > 1 }
+    /// Corrected 2026-09-08 from `!downbeats.isEmpty || beatsPerBar > 1`. Non-empty
+    /// downbeats do NOT mean the bars are known: the model's downbeat head over-fires — 78 %
+    /// of beats on money — so the array is full precisely when it knows least, and
+    /// `computeMeter` then counts one beat per bar and returns 1. The first live session
+    /// after the fix showed it: 2,549 frames reported no bar information and correctly
+    /// claimed no downbeat, while bar phase still ramped to 0.99 on every one of them,
+    /// because the `||` let them through. The meter is the whole test.
+    public var hasBarInformation: Bool { beatsPerBar > 1 }
 
     /// Fraction of inter-downbeat intervals consistent with `beatsPerBar`. Range 0–1.
     /// 0 when there are fewer than 2 downbeat pairs or when bpm == 0.

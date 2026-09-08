@@ -1311,7 +1311,7 @@ because the correlation is expected to improve, but so the claim is checked rath
 
 **Severity:** P1. It reaches every preset that consumes bar position, on every track where the estimator declines.
 **Domain tag:** `dsp.beat` · failure class **`api-contract`**.
-**Status:** **Open.** The default that exposed it is reverted; the encoding itself is unfixed.
+**Status:** **Fixed 2026-09-08** — pending Matt's live confirm. `BeatGrid.hasBarInformation` makes the state expressible; bar phase holds and `isDownbeat` stays false without it. ⚠ **Shipped once with a hole:** the predicate was `!downbeats.isEmpty || beatsPerBar > 1`, and non-empty downbeats do NOT mean the bars are known — the over-firing head fills that array precisely when it knows least. Matt's session `2026-09-08T13-58-15Z` proved it in the field: 2,549 frames correctly claimed no downbeat while bar phase still ramped to 0.99 on every one of them. Corrected to `beatsPerBar > 1` — the meter is the whole test.
 **Introduced:** the encoding dates to FT.4 (`applyBarLineEstimate`); PR.17 (2026-09-05) made it reachable by default on local files.
 **Resolved:** —
 
