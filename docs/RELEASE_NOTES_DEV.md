@@ -10,6 +10,40 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-08-135334] BUG-119 — the beat pulse held one average BPM for a whole track; that was Ferrofluid Ocean's grain
+
+Matt, 2026-09-07: *"Ferrofluid Ocean is pixelated / grainy - doesn't look like it used to look."* Then, after the reverts: *"Yes, FFO's grain is back to normal."* That second message is what identified it — only the beat-grid changes could reach FFO, so the grain had to come from one of them.
+
+**Cause.** `MIRPipeline.setBeatGrid` called `beatPulseClock.setTempo(bpm: grid?.bpm)` once per track. The pulse period is `(60 / bpm) x 4` and nothing revisited it for the rest of the song, so a single median BPM governed the pulse for an entire track. PR.12 changed which median got computed — bleed 115.0 → 123.6, money 116.2 → 129.3, bohemian 78.2 → 94.2 — and a pulse running 7–20 % off drifts against the music. Ferrofluid Ocean's `spike_punch_region` accents then fire off the beat, which reads as spatial incoherence rather than a pulse: the grain.
+
+**This was Matt's own instruction, still unimplemented.** 2026-09-04: *"you should not be averaging BPM / tempo, you should be recording it over the duration of the track so that visuals are better synced."* PR.12 widened the analysis window and then collapsed the result back into one number at track change, so the averaging survived the change meant to remove it. Widening the window was never the point; not averaging was.
+
+**Fix.** `BeatPulseClock.trackLocalBeatPeriod(_:at:)` follows the grid's LOCAL seconds-per-beat from `BeatGrid.localTiming`, published each frame by `LiveBeatDriftTracker.lastLocalBeatPeriod` — read from the tracker rather than the grid because the tracker owns the mapping from the live clock onto track time. Two properties, both tested: it must not JUMP the phase (phase is `(time − anchor) / period`, so the anchor is rewritten to preserve elapsed BEATS through a rate change), and it must not WOBBLE (smoothed at α = 0.02/frame, anchor only rewritten past a 0.5 % change — one stray beat does not move the pulse, a sustained change is followed).
+
+**What this unblocks.** BUG-118's whole-track default stays off until Matt confirms live, but the reason it hurt is now removed: a better grid no longer means a worse pulse. The remaining blocker for re-enabling it is the downbeat side — billie_jean's beats are flat at 8–9 ms error across a whole track while its downbeat F falls 0.90 → 0.37 over the same span. Beats extend; the model's downbeat head does not.
+
+1919 engine tests green, swiftlint 0. **Outstanding: Matt's live confirmation on a local file.**
+
+---
+
+### [dev-2026-09-07-153851] REVERT — the tiled whole-track grid and the Dragon Bloom tint; everything I broke, back off
+
+Matt, after the BUG-117 revert did not restore the presets: *"There are still issues with FFO due to changes you introduced. You haven't reverted enough if presets are still broken."* Correct. Then, on scope: *"we need whole-track grids and counted meters. But perhaps they were not implemented correctly."* Also correct — and the distinction matters, because the capability is not the defect.
+
+**BUG-118 — the tiled whole-track grid is worse than the 30 s clamp it replaced.** Five-suite BeatBench, finally run on the shipping configuration. The BPM column is span-independent, so no scoring artifact excuses it: bleed truth 114.67, clamped **115.00**, tiled **123.62**; money 121.06 / **116.19** / 129.32; pyramid_song 66.60 / **65.08** / 82.47; yyz 272.27 / **233.61** / 145.85. Beat F regresses on 5 of 9 (bleed 0.99 → 0.76, money 0.44 → 0.24), continuity with it (bleed CMLt 1.00 → 0.56), and billie_jean's downbeat F falls 0.90 → 0.37. Default reverted to the clamped grid; `UZUME_WHOLETRACK_GRID=1` opts back in.
+
+**How it shipped.** PR.12's closeout claimed "beat F equal or better on 8 of 9". That measurement trimmed both arms to a common span — correct as far as it went — and was then treated as sufficient. The program requires a five-suite BeatBench table for any behavioural change to a beat signal. It was never produced for the shipping configuration, through PR.12, PR.17 and two closeouts that quoted beat numbers. Running it took fifteen minutes and would have stopped all of this before Matt ever saw it.
+
+**PR.5 reverted — the Dragon Bloom invert tint.** Matt: *"you did not fix the issue - you just chose a different color."* True. The defect is that the feedback field never fills, and tinting the empty part is a change of colour standing in for a fix. `bInvert` is back to Milkdrop's literal `1 - c`.
+
+**Not reverted, deliberately.** `computeMeter` counting beats stays: it reports the mode of beats-between-downbeats faithfully, and the `meter = 1` that did the damage comes from the model's over-firing downbeat head, which predates all of this. BUG-116's stem fix stays: it repaired a defect with a measured before/after (48 kHz local files reading silence 15 % of the time) and is not part of Phase PR.
+
+**Still unexplained and still open:** Ferrofluid Ocean's grainy appearance, Dragon Bloom's unfilled field (BUG-118 is not its cause — eleven hypotheses tested against a live butterchurn oracle, all dead), and why `treble` reaches presets as 0.003 on material whose source file measures the same as the tap.
+
+1916 engine tests green, swiftlint 0.
+
+---
+
 ### [dev-2026-09-07-142316] REVERT — the windowed bar line is OFF again; a declined track was calling every beat a downbeat
 
 Matt, after one session on the 2026-09-05 build: *"Ferrofluid Ocean … the beat sync is worse not better. Fractal Tree is too animated. Witchlight has no pulse. The pulse of Aurora Veil is no longer in sync with music. Everything is worse."*

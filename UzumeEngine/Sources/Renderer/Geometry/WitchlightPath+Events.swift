@@ -294,3 +294,25 @@ extension WitchlightPath {
         turnCandidateBeadIndex = nil
     }
 }
+
+extension WitchlightPath {
+
+    /// WL.9's pulse tier rides the BEAT grid, as its comment always claimed.
+    ///
+    /// It derived beat edges by SUBDIVIDING the bar — `Int(barPhase * beatsPerBar)` — so both
+    /// tiers actually rode bar position. With no meter there is one slot, it never changes,
+    /// and the pulse never fires at all. That stayed hidden while a meterless grid ramped bar
+    /// phase at BEAT rate: the ACCENT fired on every beat, so Witchlight read as over-eager
+    /// rather than dead. Correcting that (BUG-117) silenced the accent and took the pulse with
+    /// it — Matt, 2026-09-08, on a session where 57 % of frames carry no meter: *"Witchlight
+    /// does not appear to be working."*
+    ///
+    /// Beat phase exists whenever a grid does, meter or not, so the pulse now survives a
+    /// meterless track and only the bar ACCENT is withheld — which is the two-tier design as
+    /// written: the strong signal carries the pulse, the weak one only the emphasis.
+    func detectBeatEdge(features: FeatureVector) {
+        let rawBeat = features.beatPhase01
+        beatEdgeNow = previousBeatPhase > 0.85 && rawBeat < 0.15
+        previousBeatPhase = rawBeat
+    }
+}

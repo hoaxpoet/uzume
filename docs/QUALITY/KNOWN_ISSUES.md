@@ -61,6 +61,8 @@ reads" are not reads — see the entry.)*
 | BUG-087 | P2 · **partial fix 2026-08-13 (10 → 16.4 Hz); ≥40 Hz NOT met — audio arrival rate is the ceiling, not slicing** | audio.capture / calibration | **Local-file playback runs the whole MIR chain at 10 Hz where streaming runs it at 51 Hz — a 5.1× rate loss on the primary development session type.** `LocalFilePlaybackProvider` asks for `installTap(bufferSize: 1024)` (≈47 Hz) and AVAudioEngine ignores it, delivering **0.1-second** buffers instead — 4414 frames measured at 44.1 kHz, 4808/4810 at 48 kHz. `processAnalysisFrame` runs once per audio callback with no time gate, so the callback rate *is* the analysis rate: every `FeatureVector` field — bands, deviation primitives, `beatPhase01`, centroid, flux, mood inputs — updates at 10 Hz on local files. Proven a fixed *duration* rather than a frame count by the rate-independence discriminator (both sample rates land on 0.1 s). This is the same 10 Hz the FTR program hit from the preset side. Diagnosis only — no fix code. Detail below |
 | BUG-084 | P3 | dsp.stem | **`StemAnalyzer` deviation reaches 35 where the primitive's real ceiling is ~3.4** — suspected divide-by-near-zero against a not-yet-converged per-track EMA baseline (the stem-side twin of the BUG-027 / AGC2.4.1 cold-start family). No product impact today: FFO's aurora is defended by the FBS.S3.2 soft knee (35 → 1.64), which is what let BUG-041 close. Filed 2026-08-03 (RECON.2) so it survives that closure — the *input* is wrong even though the output is defended. Unreproduced; fixtures retained |
 | BUG-070 | P2 | audio.capture / resource-management | **Fix landed 2026-07-12 (PUB.6), pending live validation** — a FAILED device-change tap reinstall left `_isCapturing=true` with zero callbacks: engine health detectors starved (SignalHealthMonitor.evaluate is sample-driven → deadTap never confirms) and the router's recovery restart blocked at the alreadyCapturing guard; only the app-layer poll-based stall card surfaced it. Fix: the catch now clears `_isCapturing` (recovery unblocked) and keeps the monitor as a diagnostic beacon; the false "create steps stopped the monitor" comment corrected. Residual OPEN half: the 3-queue lifecycle interleave (device-change reinstall vs silence-recovery vs user stop) stays unserialized — static-only evidence; restructuring the G1-validated (12/12) path without a reproduced artifact is the BUG-063 pattern. Existing breadcrumbs (per-step diagnostics + install generation) are the instrumentation; serialize only if a live session shows an interleave |
+| BUG-119 | **P1** · **FIXED 2026-09-08**, pending Matt's live confirm | dsp.beat / preset.routing | **The beat pulse held one whole-track average BPM for a whole track, so a wrong average put every pulse-driven preset off the music.** `BeatPulseClock.setTempo` was called once per track from `grid.bpm` and never revisited; the period is `(60/bpm) x 4`. PR.12's whole-track grid changed that average substantially on real material (bleed 115.0 -> 123.6, money 116.2 -> 129.3, bohemian 78.2 -> 94.2), and a pulse running 7-20 % off drifts against the track — which is what Matt saw as **Ferrofluid Ocean looking "pixelated / grainy"**: its spike-punch regions fire off the music rather than with it. Confirmed by his own report that the grain cleared when the whole-track grid was reverted. **Fix:** the pulse now follows the grid's LOCAL period (`BeatGrid.localTiming`, published by `LiveBeatDriftTracker.lastLocalBeatPeriod`), smoothed over a few beats, re-anchoring on elapsed BEATS so the phase is continuous through a rate change. This is Matt's 2026-09-04 instruction applied where it was still being ignored: *"you should not be averaging BPM / tempo, you should be recording it over the duration of the track."* |
+| BUG-118 | **RESOLVED 2026-09-08** — the revert's premise was wrong; whole-track grids are back ON | dsp.beat / measurement | **The tiled whole-track grid is WORSE than the 30 s clamp it replaced, and shipped without the five-suite table the program requires.** PR.12 switched local files to `BeatThisTiledInference` (1500-frame windows, 50 % overlap, averaged at UNIFORM weight) on a partial measurement — one metric, nine fixtures, both arms trimmed to a common span. Run properly at BUG-118 the BPM column is span-independent and damning: bleed truth 114.67, clamped **115.00**, tiled **123.62**; money 121.06 / **116.19** / 129.32; pyramid_song 66.60 / **65.08** / 82.47; yyz 272.27 / **233.61** / 145.85; bohemian 71.10 / **78.18** / 94.23. Beat F regresses on 5 of 9 (bleed 0.99 → 0.76, money 0.44 → 0.24, pyramid 0.52 → 0.22), continuity with it (bleed CMLt 1.00 → 0.56), and billie_jean's downbeat F falls 0.90 → 0.37. **The capability is still wanted** — a 30 s grid extrapolated across a whole track is BUG-065's drift — so this is a defect in the TILING, not a reason to abandon whole-track analysis. `UZUME_WHOLETRACK_GRID=1` opts back in for A/B. Prime suspect: uniform-weight averaging gives a window's poorly-conditioned EDGE frames the same weight as another window's well-conditioned middle; the standard remedy is a tapered cross-fade. Not yet confirmed. |
 | BUG-117 | **P1** · open · **default reverted 2026-09-07** | dsp.beat / api-contract | **A declined bar estimate reports `beatsPerBar = 1`, which makes EVERY beat a downbeat.** `BeatGrid.beatsSinceDownbeat` falls back to `idx % max(beatsPerBar, 1)` when `downbeats` is empty, so "no bar information" is encoded as "every beat is bar one" — the exact opposite of declining. PR.17 shipped the windowed bar line default-ON on 2026-09-05 and this broke bar-locked motion across the roster within hours (Matt, 2026-09-07: Witchlight *"has no pulse"*, Aurora Veil *"no longer in sync"*, Fractal Tree *"too animated"*, Ferrofluid Ocean *"beat sync is worse"* — *"Everything is worse."*). Measured on session `2026-09-06T00-17-00Z`: **`beatsPerBar == 1` on 18,040 of 19,833 frames (91 %), `is_downbeat == 1` on 94 %.** The windowed estimator itself is sound (take_five 5/4 and money 7/4 decode for the first time); the DECLINE PATH is the defect, and it predates PR.17 — `applyBarLineEstimate` has encoded a decline the same way since FT.4. **Default reverted to OFF**; the mechanism stays behind `UZUME_BARLINE_LOCAL=1`. Do not re-enable until a declined track reports no bars in a way consumers can read as no bars. |
 | BUG-116 | **P1** · **FIXED 2026-09-05** (`a5330b9c`+, pending Matt's live confirm) | dsp.stem / sample-rate | **On any local file that is not 44.1 kHz, the pre-analysed stem series is DEAD for ~0.4 s out of every 2 s — all four stems decay to exactly 0.000 and snap back.** Matt saw it as Ferrofluid Ocean's *"screen goes dark every few seconds"* (session `2026-09-05T18-17-12Z`, 48 kHz local files). `StemSeparator.separate` always resamples to its own 44.1 kHz and pads to 440,320 samples, so its OUTPUT is in the model's time base; `SessionPreparer.analyzeStemSeries` slices that output at offsets computed in the INPUT's rate. At 48 kHz the resampled audio fills only 404,544 of the 440,320 returned samples and the rest is zero padding — and the kept 2 s span sits at the window's tail, squarely in the padding. **A/B on the same file: 44.1 kHz → 0 of 1722 frames near-zero; 48 kHz → 279 of 1875 (14.9 %), holes at 9.62–10.01 s, 11.63–12.01 s, 13.65–14.02 s — the same frame indices as the cached series that fed Matt's session.** ⚠ **Cached entries are poisoned:** the holes are baked into `stem_series.bin` on disk, so any fix must invalidate the cache. Not caused by the 2026-09-05 merges — `SessionPreparer+StemSeries.swift` was last touched at RN.2 (a rename). **Fix:** `analyzeStemSeries` works in the separator's time base — `StemSeparating` gained `outputSampleRate` and the input is resampled once up front. 48 kHz goes 279 of 1875 near-zero frames → **0**; 44.1 kHz is bit-identical (the branch does not fire). **Cache invalidated, schema v10 → v11**, because the holes are baked into `stem_series.bin` and a v10 hit would replay them forever. Regression is parameterised over 44.1/48/96 kHz and both new tests were confirmed to FAIL against the un-fixed code. Evidence: `docs/diagnostics/BUG116_STEM_SERIES_HOLES_2026-09-05.md`. |
 | BUG-115 | P3 | preset.routing | **Dragon Bloom's bass breathing is an absolute threshold on AGC-normalised `f.bass` — the pattern D-026 and FA #31 ban.** `mvWarpPerVertex` reads `clamp(1.0 + 0.06*(f.bass*6.0 - 1.0), 0.97, 1.07)`; the term is only neutral at `f.bass == 1/6`, so on Bowie's *Low* (median 0.236) it sits at **1.024 median / 1.070 at p90** — a 2.4–7 % outward warp every frame against the source's 0.99951 baseline, and the response is a function of the AGC's running mean rather than of the music. **Not fixed at PR.5, deliberately:** converting the route to the signed deviation primitive `bass_rel` was measured through the production path on a real *Low* capture and made the render WORSE (clipped 0.836 → 0.868, saturation 0.265 → 0.099) — the outward push is the conveyor carrying strand colour out from the centre before the warp transfer's B-fade extinguishes it, so slowing it shrinks coverage. A correct fix has to address the fill dynamics and the routing together. Evidence: `docs/diagnostics/PR5_DRAGON_BLOOM_FIX_2026-09-05.md` §3. |
@@ -1231,11 +1233,105 @@ explain BUG-086's weak local-file correlation is **refuted** (see Impact). A fix
 still re-run `Scripts/measure_stem_latency.py` on a local-file capture before and after — not
 because the correlation is expected to improve, but so the claim is checked rather than assumed.
 
+### BUG-119 — the beat pulse held one average BPM for a whole track (2026-09-08)
+
+**Severity:** P1. It reaches every preset driven by the pulse primitives, on every track.
+**Domain tag:** `dsp.beat` / `preset.routing` · failure class **`algorithm`**.
+**Status:** **Fixed 2026-09-08 — pending Matt's live confirmation.**
+**Introduced:** FBS Stage 1 (D-153) — the pulse has always been seeded this way; PR.12 made it visible by changing which average got installed.
+**Resolved:** 2026-09-08, branch `claude/bug118-tiled-grid-regression`.
+
+**Reported.** Matt, 2026-09-07: *"Ferrofluid Ocean is pixelated / grainy - doesn't look like it used to look."* Then, after the reverts: *"Yes, FFO's grain is back to normal"* — which is what identified the cause, because only the beat-grid changes could reach FFO.
+
+**Expected.** The pulse's period tracks the music.
+
+**Actual.** `MIRPipeline.setBeatGrid` called `beatPulseClock.setTempo(bpm: grid?.bpm)` once per track. `setTempo` computes `periodS = (60 / bpm) * 4` and nothing revisits it for the rest of the song. A single median BPM therefore governed the pulse for an entire track — and when PR.12 changed which median was computed, the pulse moved with it: bleed 115.0 → 123.6 BPM, money 116.2 → 129.3, bohemian 78.2 → 94.2. Ferrofluid Ocean's `spike_punch_region` accents then fire 7–20 % off the beat, which reads as spatial incoherence rather than a pulse.
+
+**Fix.** `BeatPulseClock.trackLocalBeatPeriod(_:at:)` follows `BeatGrid.localTiming`'s LOCAL seconds-per-beat, published each frame by `LiveBeatDriftTracker.lastLocalBeatPeriod` (read from the tracker, not the grid, because the tracker owns the mapping from the live clock onto track time). Two properties it has to have, both tested:
+
+- **No phase jump.** Phase is `(time − anchor) / period`, so changing the period without re-anchoring rewrites history. The anchor is rewritten to preserve elapsed **beats**, which keeps `phase01` and `beatIndex` continuous through a rate change.
+- **No wobble.** A raw beat-to-beat period is noisy, so it is smoothed (α = 0.02/frame) and the anchor is only rewritten past a 0.5 % relative change. One stray beat does not move the pulse; a sustained change is followed.
+
+**This is the instruction that was still being ignored.** Matt, 2026-09-04: *"you should not be averaging BPM / tempo, you should be recording it over the duration of the track so that visuals are better synced."* PR.12 widened the analysis window and then collapsed the result back into one number at track change, so the averaging survived the fix that was supposed to remove it.
+
+**Verification criteria.**
+1. ✅ Automated: phase continuity through a 10 % tempo change; a single outlier period does not move the pulse while a sustained one does.
+2. ⏳ Manual: Matt watches Ferrofluid Ocean on a local file and the grain does not return when whole-track grids are re-enabled. **Outstanding — this is the gate for turning BUG-118's default back on.**
+
+### BUG-118 — the tiled whole-track grid is worse than the 30 s clamp it replaced (2026-09-07)
+
+> ⚠ **CORRECTION, same day.** The table below scored each arm over ITS OWN span — a 30 s grid
+> graded on 30 s against a whole-track grid graded on six minutes. That is the artifact this
+> repo already knew about (PR.12 identified it in FT.4.1's numbers) and it invalidates the
+> comparison. **Re-run span-matched, the whole-track grid is equal or better on every track:**
+> bleed's headline "0.99 → 0.76" is **0.98 → 0.98** with CMLt 1.00 either way; yyz improves
+> 0.57 → 0.63; money's CMLt improves 0.43 → 0.47. Nothing regresses.
+>
+> **What IS real, and is not a span artifact:** billie_jean's beats are uniformly good across
+> the whole track (|IOI − median| flat at 8–9 ms in every tenth) while its downbeat F falls
+> **0.90 over the first 30 s → 0.37 across the full track**, against the same full-track
+> reference. Whole-track BEATS extend correctly; the model's downbeat head does not.
+>
+> The lasting fix is the instrument: `BeatBench --span-seconds N` now trims estimate and
+> reference to the same window, and every run states which mode it used. This artifact has
+> produced two wrong conclusions here — FT.4.1's and this entry's — and should not produce a
+> third.
+>
+> **RESOLVED 2026-09-08 — whole-track grids are ON again** (Matt: *"turn it on"*). Every
+> objection to them was a measurement artifact, and Matt caught both. The second one: the
+> claim that whole-track analysis degrades DOWNBEATS rested on billie_jean's dbF 0.90 → 0.37,
+> and its downbeat reference stops at **69 s of a 286 s track** (librosa extended the beats
+> and emits no downbeats), so every correct downbeat past 69 s counted as a false positive —
+> precision 34/139. Scored inside the reference's real coverage the same comparison is
+> **0.90 → 0.97**, and whole-track wins on 6 of 7 fixtures. `DownbeatScore` now trims to the
+> downbeat reference's own extent.
+>
+> On 17 plain-4/4 tracks (Matt's Bowie album plus the suite-1 rock/disco fixtures) coverage
+> goes **18.2 % → 97.8 %** with meter unchanged at 13/17; Giorgio by Moroder covers **0 %**
+> clamped because its opening 30 s are spoken word. His session `2026-09-08T14-34-06Z` shows
+> why coverage is what he feels: drift is flat inside the first 30 s (15 ms) and ramps past it
+> (67 ms at 50–60 s) — the grid's edge.
+>
+> The two things that made it HURT are fixed separately and verified in that same session:
+> BUG-119 (the pulse held one average BPM — FFO's grain) and BUG-117 (a meterless grid faked
+> bar position — the roster breakage). Cache schema v13 forces re-analysis, because a clamped
+> grid is data and turning the analysis back on does not reach it.
+
+**Severity:** P1. It is the default for every local file, and it degrades the signal every beat-driven preset consumes.
+**Domain tag:** `dsp.beat` · failure class **`algorithm`**.
+**Status:** **Open.** Default reverted to the clamped grid; the tiler is unfixed.
+**Introduced:** PR.12 (2026-09-04, PR #197).
+**Resolved:** —
+
+**Reported.** Matt, 2026-09-07, after the BUG-117 revert did not restore the presets: *"There are still issues with FFO due to changes you introduced. You haven't reverted enough if presets are still broken."* Then, on scope: *"we need whole-track grids and counted meters. But perhaps they were not implemented correctly."* He was right on both.
+
+**Expected.** Analysing the whole track instead of its first 30 s gives a grid at least as good as the clamp, over the whole track.
+
+**Actual.** Five-suite BeatBench, clamped arm vs whole-track arm:
+
+| suite | track | truth BPM | clamped | tiled | F clamped | F tiled | CMLt clamped | CMLt tiled |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | billie_jean | 117.44 | 116.88 | 117.13 | 0.97 | 0.99 | 0.97 | 0.97 |
+| 2 | pyramid_song | 66.60 | **65.08** | 82.47 | 0.52 | **0.22** | 0.75 | **0.21** |
+| 2 | solsbury_hill | 102.44 | 102.68 | 104.80 | 0.97 | 0.98 | 1.00 | 0.94 |
+| 2 | take_five | 167.07 | 169.24 | 171.44 | 0.99 | 1.00 | 1.00 | 1.00 |
+| 2 | yyz | 272.27 | **233.61** | 145.85 | 0.58 | **0.41** | 0.21 | **0.05** |
+| 3 | bohemian_rhapsody | 71.10 | **78.18** | 94.23 | 0.47 | 0.52 | 0.48 | 0.36 |
+| 3 | money | 121.06 | **116.19** | 129.32 | 0.44 | **0.24** | 0.43 | **0.17** |
+| 4 | bleed | 114.67 | **115.00** | 123.62 | 0.99 | **0.76** | 1.00 | **0.56** |
+| 5 | clair_de_lune | 49.91 | 128.63 | 96.44 | 0.14 | 0.06 | 0.00 | 0.01 |
+
+**The BPM column is span-independent** — a tempo estimate is not affected by how much of the reference a scorer trims — and it is worse on 5 of the 6 tracks where the two differ. billie_jean's downbeat F also falls **0.90 → 0.37**.
+
+**How it shipped.** PR.12's closeout claimed "beat F equal or better on 8 of 9 fixtures". That measurement trimmed both arms to a common span to remove a real scoring artifact, which was correct as far as it went — and then it was treated as sufficient. The program requires a **five-suite BeatBench table for any behavioural change to a beat signal**, and that table was never produced for the shipping configuration, through PR.12, PR.17, and two closeouts that cited beat numbers.
+
+**Prime suspect, not yet confirmed.** `BeatThisTiledInference` averages overlapping windows with uniform weight, so frames at a window's EDGE — where the model has little context — are averaged in at the same weight as frames from another window's well-conditioned middle. The standard remedy for overlap-add inference is a tapered cross-fade. A first probe looking for periodic IOI irregularity at the 15 s seam found only 1.11× pooled, which is too weak to call; tempo accuracy rather than IOI regularity is the better place to look next.
+
 ### BUG-117 — a declined bar estimate says "every beat is a downbeat" (2026-09-07)
 
 **Severity:** P1. It reaches every preset that consumes bar position, on every track where the estimator declines.
 **Domain tag:** `dsp.beat` · failure class **`api-contract`**.
-**Status:** **Open.** The default that exposed it is reverted; the encoding itself is unfixed.
+**Status:** **Fixed 2026-09-08** — pending Matt's live confirm. `BeatGrid.hasBarInformation` makes the state expressible; bar phase holds and `isDownbeat` stays false without it. ⚠ **Shipped once with a hole:** the predicate was `!downbeats.isEmpty || beatsPerBar > 1`, and non-empty downbeats do NOT mean the bars are known — the over-firing head fills that array precisely when it knows least. Matt's session `2026-09-08T13-58-15Z` proved it in the field: 2,549 frames correctly claimed no downbeat while bar phase still ramped to 0.99 on every one of them. Corrected to `beatsPerBar > 1` — the meter is the whole test.
 **Introduced:** the encoding dates to FT.4 (`applyBarLineEstimate`); PR.17 (2026-09-05) made it reachable by default on local files.
 **Resolved:** —
 

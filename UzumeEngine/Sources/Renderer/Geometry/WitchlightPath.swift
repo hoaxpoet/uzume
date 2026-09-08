@@ -115,7 +115,6 @@ public final class WitchlightPath: AudioResponseMetrics {
     /// `barPhase01` rather than read from `beatPhase01`, which measured stalled (24 wraps in
     /// 215 s where 614 were due). Subdividing also handles odd meters for free.
     var beatEdgeNow = false
-    var previousBeatSlot = -1
     /// Seconds between the last two bar wraps — the runtime tempo estimate the off-beat
     /// tier is gated on. No `bpm` field is needed on FeatureVector.
     var barPeriod: Float = 0
@@ -133,6 +132,9 @@ public final class WitchlightPath: AudioResponseMetrics {
     /// signal — no separate confidence field needed, and D-154's "beat-irregular tracks
     /// excluded" falls out for free: no grid, no bar pulse.
     var gridSilentFor: Float = 0
+
+    /// Previous `beatPhase01` — WL.9 pulse-tier wrap detection.
+    var previousBeatPhase: Float = 0
     /// Downbeat beads set since `reset()`.
     public internal(set) var promotionCount: Int = 0
 
@@ -263,7 +265,8 @@ public final class WitchlightPath: AudioResponseMetrics {
         offBeatCount = 0; offBeatRefractoryRemaining = 0
         previousBarPhase = 0; promoteNextBead = false; promotionCount = 0
         barDownbeatNow = false; gridSilentFor = 0; beatDriftSeconds = 0
-        beatEdgeNow = false; previousBeatSlot = -1; barPeriod = 0; timeSinceWrap = 0
+        previousBeatPhase = 0
+        beatEdgeNow = false; barPeriod = 0; timeSinceWrap = 0
         previousSectionIndex = nil; contractGoal = 0; contractHold = 0; contraction = 0
         sectionEventCount = 0; contractionPeak = 0
         centroidX = 0; centroidY = 0; viewScale = 1; rmsRadius = 0.4; cameraX = 0; cameraY = 0
@@ -376,12 +379,7 @@ public final class WitchlightPath: AudioResponseMetrics {
         gridSilentFor = rawBar > 0 ? 0 : gridSilentFor + clockDt
         timeSinceWrap += clockDt
         if barDownbeatNow { barPeriod = timeSinceWrap; timeSinceWrap = 0 }
-        // WL.9 — beat edges by subdividing the bar. `beatsPerBar` carries the meter, so 7/8
-        // subdivides into 7 and the pulse stays musical without a special case.
-        let perBar = max(1, Int(features.beatsPerBar.rounded()))
-        let slot = min(perBar - 1, Int(bar * Float(perBar)))
-        beatEdgeNow = slot != previousBeatSlot && previousBeatSlot >= 0
-        previousBeatSlot = slot
+        detectBeatEdge(features: features)
 
         advanceHarmonicPhase(dt: dt, features: features)
         updateEnergyBreath(features: features, silentNow: silent)

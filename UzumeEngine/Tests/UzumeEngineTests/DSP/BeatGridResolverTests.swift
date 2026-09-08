@@ -287,4 +287,29 @@ struct BeatGridResolverGoldenTests {
                 A confident meter must be a correct one (D-207).
                 """)
     }
+
+    // MARK: - BUG-117 — "no bar information" must be expressible
+
+    @Test("a grid with no downbeats and meter 1 reports that it does not know the bars")
+    func test_noBarInformationIsExpressible() {
+        let beats = (0..<32).map { Double($0) * 0.5 }
+        let blind = BeatGrid(beats: beats, downbeats: [], bpm: 120,
+                             beatsPerBar: 1, barConfidence: 0, frameRate: 50, frameCount: 800)
+        #expect(!blind.hasBarInformation,
+                "meter 1 with no downbeats is the resolver saying it found NO bar structure")
+
+        // Either a real meter or real downbeats counts as knowing.
+        let metered = BeatGrid(beats: beats, downbeats: [], bpm: 120,
+                               beatsPerBar: 4, barConfidence: 0.9, frameRate: 50, frameCount: 800)
+        #expect(metered.hasBarInformation)
+        // Downbeats PRESENT with meter 1 is the over-firing head, not knowledge: the head
+        // fires on nearly every beat, so the array is fullest exactly when it knows least.
+        // The first live session after this shipped showed the cost — 2,549 frames held no
+        // bar information yet still ramped bar phase to 0.99, because an `||` let them past.
+        let overFiring = BeatGrid(beats: beats, downbeats: beats, bpm: 120,
+                                  beatsPerBar: 1, barConfidence: 0.1,
+                                  frameRate: 50, frameCount: 800)
+        #expect(!overFiring.hasBarInformation,
+                "a downbeat on every beat is the head saying nothing, not a one-beat bar")
+    }
 }

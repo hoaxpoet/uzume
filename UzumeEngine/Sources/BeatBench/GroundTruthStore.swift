@@ -6,6 +6,7 @@
 // a silently absent row reads as "nothing to see" when it is in fact the finding.
 
 import Foundation
+import DSP
 
 // MARK: - Ground truth
 
@@ -266,5 +267,64 @@ enum LiveReport {
             lines.append("- `\(row.trackID ?? "(unidentified)")` — \(row.groundTruthNote)")
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+}
+
+// MARK: - ScoringWindow (BUG-118)
+
+/// Which beats to score, and over what span.
+///
+/// Default: the grid's own span, with the reference trimmed to match, so a grid is not
+/// penalised for music it was never shown. That is right for a single baseline and INVALID
+/// for an A/B between arms whose coverage differs — a 30 s grid graded on 30 s against a
+/// whole-track grid graded on six minutes are not comparable numbers, and that artifact has
+/// produced two wrong conclusions in this repo (FT.4.1's, and BUG-118's own revert).
+///
+/// `--span-seconds N` fixes the window for BOTH sides so two arms describe the same music.
+struct ScoringWindow {
+    let beats: [Double]
+    let downbeats: [Double]
+    let from: Double
+    let to: Double
+
+    init(grid: BeatGrid, spanSeconds: Double) {
+        guard spanSeconds > 0 else {
+            self.beats = grid.beats
+            self.downbeats = grid.downbeats
+            self.from = grid.beats.first ?? 0
+            self.to = grid.beats.last ?? 0
+            return
+        }
+        self.beats = grid.beats.filter { $0 <= spanSeconds }
+        self.downbeats = grid.downbeats.filter { $0 <= spanSeconds }
+        self.from = 0
+        self.to = spanSeconds
+    }
+}
+
+// MARK: - DownbeatScore (BUG-118)
+
+/// Downbeat F inside the DOWNBEAT reference's own extent, intersected with the scoring span.
+///
+/// A downbeat reference routinely covers less than the beat reference: billie_jean has 557
+/// beats over 286 s but only 34 downbeats over 69 s, because librosa extended the beats and
+/// emits no downbeats at all. Trimming the estimate to the BEAT span therefore penalised a
+/// whole-track grid for every correct downbeat in the 217 s the reference never covered —
+/// precision 34/139, F 0.39, against a clamped grid's 0.90. That reads as "whole-track
+/// analysis ruins downbeats" and is purely reference coverage: scored inside the real
+/// coverage the same comparison runs 0.95 against 0.59, the other way round.
+///
+/// A reference that stops early is not evidence that later downbeats are wrong.
+enum DownbeatScore {
+    static func f(reference: [Double], estimate: [Double], span: (Double, Double)) -> Double? {
+        guard let first = reference.first, let last = reference.last, !estimate.isEmpty else {
+            return nil
+        }
+        let from = max(span.0, first) - 1
+        let to = min(span.1, last) + 1
+        let ref = reference.filter { $0 >= from && $0 <= to }
+        let est = estimate.filter { $0 >= from && $0 <= to }
+        guard !ref.isEmpty, !est.isEmpty else { return nil }
+        return Metrics.fMeasure(reference: ref, estimate: est).score
     }
 }
