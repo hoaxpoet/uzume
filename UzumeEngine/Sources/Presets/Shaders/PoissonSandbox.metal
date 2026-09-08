@@ -70,6 +70,15 @@ constant constexpr sampler poisson_grid_sampler(filter::nearest,
 // very thing this diagnostic exists to show. At 0.25 the converged field sits in
 // the middle of the ramp, and the early frames read as a faint, unfinished field —
 // which is what an unconverged solve honestly looks like.
+//
+// KNOWN LIMITATION, not worth engineering away: this gain is calibrated at 256^2.
+// Staged textures are drawable-sized, and both the converged pressure amplitude
+// and the time to reach it grow with resolution, so at 1080p the field brightens
+// over minutes rather than seconds and would eventually clip again. Normalising
+// it would mean adding a reduction pass to the diagnostic, which would prove
+// nothing about the engine surface this preset exists to prove. If a future
+// consumer needs a resolution-independent readout, normalise then — and measure
+// the scaling rather than deriving it.
 constant constexpr float kPoissonDisplayGain = 0.25;
 
 // ─── Stage 1: VELOCITY ───────────────────────────────────────────────────────
