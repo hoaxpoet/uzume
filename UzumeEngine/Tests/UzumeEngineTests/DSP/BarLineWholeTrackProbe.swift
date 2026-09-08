@@ -424,4 +424,68 @@ struct BarLineWholeTrackProbe {
             print("  \(name)\(pad)|IOI-med| ms by tenth:  \(line)")
         }
     }
+
+    /// Plain 4/4, strong pulse — Matt, 2026-09-08: *"Can you test on tracks that are not
+    /// strange time signatures or that have tempo changes within the track?"*
+    ///
+    /// The benchmark is deliberately stacked with hard cases (odd meters, rubato, mid-track
+    /// tempo changes), so it says little about the material most listening actually is. This
+    /// runs the suite-1 fixtures plus whatever album directory is pointed at, and reports the
+    /// two things that decide whether a preset can sync: does the grid find a METER, and how
+    /// much of the track does it COVER.
+    ///
+    /// UZUME_44_PROBE=1 [UZUME_44_DIR="<album>"] swift test --filter BarLineWholeTrackProbe
+    @Test("plain 4/4: meter and coverage, clamped vs whole-track",
+          .enabled(if: ProcessInfo.processInfo.environment["UZUME_44_PROBE"] == "1"))
+    func plainFourFour() throws {
+        let fixtures = URL(fileURLWithPath: (NSHomeDirectory() as NSString)
+            .appendingPathComponent("uzume_beatbench_fixtures"))
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let analyzer = try DefaultBeatGridAnalyzer(device: device)
+
+        var urls: [URL] = []
+        for name in ["billie_jean", "stayin_alive", "superstition", "around_the_world",
+                     "love_rehab", "there_there", "giorgio_by_moroder"] {
+            for ext in ["mp3", "wav", "m4a", "flac"] {
+                let u = fixtures.appendingPathComponent("\(name).\(ext)")
+                if FileManager.default.fileExists(atPath: u.path) { urls.append(u); break }
+            }
+        }
+        if let dir = ProcessInfo.processInfo.environment["UZUME_44_DIR"], !dir.isEmpty {
+            let extra = (try? FileManager.default.contentsOfDirectory(
+                at: URL(fileURLWithPath: dir), includingPropertiesForKeys: nil)) ?? []
+            urls += extra.filter { ["flac", "mp3", "m4a", "wav"].contains($0.pathExtension.lowercased())
+                                   && !$0.lastPathComponent.hasPrefix("._") }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+
+        print("\n  track                              len    CLAMPED           WHOLE-TRACK")
+        print("                                            meter  cover     meter  cover")
+        var clampMeter4 = 0, wholeMeter4 = 0, total = 0
+        var clampCover = 0.0, wholeCover = 0.0
+        for url in urls {
+            guard let (audio, rate) = try? Self.decodeMono(url: url), !audio.isEmpty else { continue }
+            let len = Double(audio.count) / rate
+            let clamped = analyzer.analyzeBeatGrid(samples: audio, sampleRate: rate, wholeTrack: false)
+            let whole = analyzer.analyzeBeatGrid(samples: audio, sampleRate: rate, wholeTrack: true)
+            func cover(_ g: BeatGrid) -> Double {
+                guard let a = g.beats.first, let b = g.beats.last, len > 0 else { return 0 }
+                return (b - a) / len * 100
+            }
+            total += 1
+            if clamped.beatsPerBar == 4 { clampMeter4 += 1 }
+            if whole.beatsPerBar == 4 { wholeMeter4 += 1 }
+            clampCover += cover(clamped); wholeCover += cover(whole)
+            let name = String(url.deletingPathExtension().lastPathComponent.prefix(32))
+            let pad = String(repeating: " ", count: max(0, 34 - name.count))
+            print(String(format: "  %@%@%5.0fs   %2d   %5.1f%%     %2d   %5.1f%%",
+                         name, pad, len, clamped.beatsPerBar, cover(clamped),
+                         whole.beatsPerBar, cover(whole)))
+        }
+        guard total > 0 else { return }
+        print(String(format: "\n  meter == 4:  clamped %d/%d,  whole-track %d/%d",
+                     clampMeter4, total, wholeMeter4, total))
+        print(String(format: "  mean coverage: clamped %.1f %%,  whole-track %.1f %%",
+                     clampCover / Double(total), wholeCover / Double(total)))
+    }
 }

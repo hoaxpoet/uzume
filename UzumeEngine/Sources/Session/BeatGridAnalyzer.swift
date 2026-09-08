@@ -234,8 +234,32 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
         )
     }
 
-    /// Whether a local file's whole-track grid is used. **Default OFF from 2026-09-07
-    /// (BUG-118).**
+    /// Whether a local file's whole-track grid is used. **Default ON again from 2026-09-08**
+    /// (Matt: *"turn it on"*), after every objection to it turned out to be a measurement
+    /// artifact and the two things that made it HURT were fixed separately.
+    ///
+    /// On 17 plain-4/4 tracks — Matt's Bowie album plus the suite-1 rock and disco fixtures —
+    /// grid coverage goes **18.2 % → 97.8 %** with meter detection unchanged at 13/17.
+    /// Giorgio by Moroder covers **0 %** clamped, because its first 30 s are spoken word, and
+    /// 95.4 % whole-track: that track has no beat sync at all today. Coverage is what Matt
+    /// feels — his session `2026-09-08T14-34-06Z` shows drift flat inside the first 30 s and
+    /// ramping past it (15 ms at 0–10 s, 67 ms at 50–60 s), which is the grid's edge.
+    ///
+    /// **What made it hurt, and why that is gone.** The pulse held one whole-track average
+    /// BPM for a whole track, so changing which average was computed moved it 7–20 % off the
+    /// music — Ferrofluid Ocean's grain (BUG-119, now follows local period). And a meterless
+    /// grid reported `beatsPerBar = 1`, which made every beat a downbeat and bar phase ramp at
+    /// beat rate — the roster breakage (BUG-117, now says it has no bars).
+    ///
+    /// **What the earlier revert was based on, and why it was wrong.** BUG-118 read the tiled
+    /// grid as a regression from a comparison that scored a 30 s grid over 30 s against a
+    /// whole-track grid over six minutes. Span-matched it is equal or better everywhere, and
+    /// at 60 s it is dramatically better (billie_jean beat F 0.64 → 0.98, downbeat F
+    /// 0.59 → 0.95). The "whole track ruins downbeats" claim was the same artifact again:
+    /// billie_jean's downbeat reference stops at 69 s of a 286 s track, so every correct
+    /// downbeat past it counted as a false positive.
+    ///
+    /// `UZUME_WHOLETRACK_GRID=0` opts out.
     ///
     /// PR.12 switched local files to `BeatThisTiledInference` — 1500-frame windows at 50 %
     /// overlap, averaged with UNIFORM weight — and shipped on a partial measurement: one
@@ -258,7 +282,7 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
     /// BUG-065's drift, and that is real. It is the tiling that is wrong, not the goal.
     /// `UZUME_WHOLETRACK_GRID=1` opts back in for A/B work.
     static func usesWholeTrackGrid(environment: [String: String]) -> Bool {
-        environment["UZUME_WHOLETRACK_GRID"] == "1"
+        environment["UZUME_WHOLETRACK_GRID"] != "0"
     }
 
     // MARK: - PR.17 windowed bar line
