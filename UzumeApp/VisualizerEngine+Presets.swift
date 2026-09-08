@@ -464,7 +464,10 @@ extension VisualizerEngine {
                         name: stage.name,
                         pipelineState: stage.pipelineState,
                         samples: stage.samples,
-                        writesToDrawable: stage.writesToDrawable
+                        writesToDrawable: stage.writesToDrawable,
+                        persistent: stage.persistent,
+                        iterations: stage.iterations,
+                        pixelFormat: stage.pixelFormat
                     )
                 }
                 guard !stageSpecs.isEmpty else {
