@@ -1225,4 +1225,42 @@ struct LiveBeatDriftTrackerTests {
         }
         // Any other state (.locking or .unlocked) is the expected pre-fix behaviour.
     }
+
+    // MARK: - BUG-065 — the residual is the ERROR; drift is the correction
+
+    /// Every diagnosis of BUG-065 so far read `drift_ms` as the sync error. It is not: the
+    /// tracker applies it (`displayTime = pt + drift + shift`), so it measures how hard the
+    /// tracker is WORKING. The error is what is left over, and it was computed for the
+    /// tight-gate check and then discarded — never recorded, never measured, in a defect
+    /// whose whole subject is timing accuracy.
+    ///
+    /// This asserts the distinction directly: against a steadily offset track the correction
+    /// grows toward the offset while the residual settles near zero.
+    @Test("a steady offset moves the CORRECTION, not the residual")
+    func test_residualIsTheErrorNotTheCorrection() {
+        let tracker = LiveBeatDriftTracker()
+        tracker.setGrid(makeUniformGrid(bpm: 120, beats: 64))
+        let period = 0.5
+        let shift = 0.030
+        _ = drive(tracker, durationSeconds: 12.0) { t in
+            let nearestOnset = round((t + shift) / period) * period - shift
+            return abs(t - nearestOnset) < 0.005
+        }
+        let residual = tracker.lastOnsetResidualMs
+        #expect(residual != nil, "no onset ever matched — the drive is wrong, not the tracker")
+        // The correction has absorbed the offset, so onsets now land where the corrected grid
+        // says. A residual near the full 30 ms would mean the correction was NOT being applied.
+        let detail = "residual \(residual ?? 999) ms — a converged tracker sits near zero;"
+            + " a residual near the 30 ms offset would mean drift is measured, not applied"
+        #expect(abs(residual ?? 999) < 12, "\(detail)")
+    }
+
+    /// And the other direction: with no grid there is nothing to be wrong against, so the
+    /// residual must stay absent rather than reading as a confident zero.
+    @Test("no grid means no residual, not a residual of zero")
+    func test_noGridNoResidual() {
+        let tracker = LiveBeatDriftTracker()
+        _ = tracker.update(subBassOnset: true, playbackTime: 1.0, deltaTime: 0.01)
+        #expect(tracker.lastOnsetResidualMs == nil)
+    }
 }

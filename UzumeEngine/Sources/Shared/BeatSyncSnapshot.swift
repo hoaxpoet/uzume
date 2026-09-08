@@ -28,11 +28,15 @@ public struct BeatSyncSnapshot: Sendable {
     public var playbackTimeS: Float
     /// Drift-tracker correction in milliseconds. 0 when no grid.
     public var driftMs: Float
+    /// Signed residual of the last MATCHED onset, in ms — how far it landed from the
+    /// CORRECTED grid position (BUG-065). This is the sync error; `driftMs` is the
+    /// correction. Nil before the first match, and between matches it holds its last value.
+    public var onsetResidualMs: Float?
 
     public init(
         barPhase01: Float, beatsPerBar: Int, beatInBar: Int, isDownbeat: Bool,
         sessionMode: Int, lockState: Int, gridBPM: Float,
-        playbackTimeS: Float, driftMs: Float
+        playbackTimeS: Float, driftMs: Float, onsetResidualMs: Float? = nil
     ) {
         self.barPhase01 = barPhase01
         self.beatsPerBar = beatsPerBar
@@ -43,6 +47,7 @@ public struct BeatSyncSnapshot: Sendable {
         self.gridBPM = gridBPM
         self.playbackTimeS = playbackTimeS
         self.driftMs = driftMs
+        self.onsetResidualMs = onsetResidualMs
     }
 
     /// Zero snapshot for frames where no BeatGrid data is available.

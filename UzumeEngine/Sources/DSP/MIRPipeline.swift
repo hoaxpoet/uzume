@@ -572,6 +572,10 @@ extension MIRPipeline {
         fv.beatsPerBar    = Float(result.beatsPerBar)
     }
 
+    /// Signed residual of the last matched onset, in ms — the sync ERROR after the drift
+    /// correction is applied (BUG-065). Recorded beside `drift_ms`, which is the correction.
+    public var lastOnsetResidualMs: Double? { liveDriftTracker.lastOnsetResidualMs }
+
     /// BUG-119 — keep the pulse on the track's LOCAL tempo.
     ///
     /// The pulse period was installed once per track from `grid.bpm`, a single whole-track

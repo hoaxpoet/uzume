@@ -619,7 +619,10 @@ extension VisualizerEngine {
             // resolution loss at 30 min ≈ 240 µs is irrelevant for diagnostic
             // viewing. The Double accumulator prevents long-session drift.
             playbackTimeS: Float(mir.elapsedSeconds),
-            driftMs: driftMs
+            driftMs: driftMs,
+            // BUG-065 — the sync ERROR, beside the correction. `driftMs` is how hard the
+            // tracker is working; this is how wrong the result still is.
+            onsetResidualMs: mir.lastOnsetResidualMs.map(Float.init)
         )
         beatSyncLock.withLock { latestBeatSyncSnapshot = snapshot }
     }
