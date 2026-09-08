@@ -161,6 +161,11 @@ constant float kTumbleRate    = 11.0;
 // deviation (D-026). Accent on top of the continuous volume ramp; kept modest so
 // continuous energy stays the primary driver (Audio Data Hierarchy).
 constant float kStrandFlare   = 0.60;
+// Bloom breathing (PR.5.3). Amplitude matches the pre-BUG-115 zoom spread that Matt
+// approved (0.0741 measured; 0.0710 here); the knee is where tanh saturates, set so the
+// p99 bass deviation lands at +6 % rather than running away with the spike.
+constant float kBreathAmp     = 0.06;
+constant float kBreathKnee    = 0.12;
 
 struct DragonStrandVertexOut {
     float4 position [[position]];
@@ -355,7 +360,16 @@ float2 mvWarpPerVertex(
     // `bass_att_rel` is ~0 at nominal, so the baseline is now the source's; tanh caps the
     // ~3× real-music spikes (project_deviation_primitive_real_range — saturate vs p99,
     // never vs 1.0), matching the Nacre pattern.
-    z *= 1.0 + 0.06 * tanh(max(0.0, f.bass_att_rel));           // breathing (bass deviation)
+    //
+    // PR.5.3 — the first cut of this fix ALSO killed the coupling, and Matt felt it
+    // ("less connection between visuals and music"). It was `0.06 * tanh(max(0, rel))`:
+    // `bass_att_rel` is ≤ 0 on 64 % of frames, so the clamp pinned the breathing flat at
+    // 1.0 for two-thirds of the track and cut the zoom's dynamic range 14× (p90−p10
+    // spread 0.0741 → 0.0053). Removing the runaway BASELINE was right; removing the
+    // MODULATION with it was not. The signed form below restores the old spread (0.0710)
+    // about a 1.0 centre, and the knee bounds the p99 spike at +6 % instead of the +30 %
+    // an un-kneed gain would give. It now breathes IN as well as out (0.965–1.036).
+    z *= 1.0 + kBreathAmp * tanh(f.bass_att_rel / kBreathKnee);  // breathing (bass deviation)
 
     float2 centre = float2(0.5, 0.5);
     float2 p      = uv - centre;
