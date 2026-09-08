@@ -650,6 +650,50 @@ tone-map operator, on a full-track *Low* capture rather than a still, establishe
 the cause; if it is, the four presets share the operator and each gets its exposure set where Matt
 puts it; if it is not, that negative result is recorded before any brightness parameter is touched.
 
+**PR.5.1 — Dragon Bloom: the dither and the post-invert brighten ✅ (2026-09-08, `762e8862`).**
+**The tone-map candidate above was not the cause, and the A/B PR.5 asked for was run the other way
+round:** the butterchurn oracle was set to comp-identity (`invert 0, echo_alpha 0, gammaadj 1` — the
+preset carries no custom comp shader, so those baseVals genuinely disable it) and compared against
+our *accumulator*, read back through `HARNESS_DUMP_ACCUMULATOR`, on the same track and the same
+statistic. That is the comparison eleven earlier hypotheses lacked: every one of them reasoned about
+the field *through* a comp that is not invertible.
+
+The field was already at the oracle's luma (0.294 vs 0.26–0.57) and short on saturation (0.634 vs
+0.74–0.89) **before any comp ran** — so the wash-out started upstream of the tone-map question. Two
+defects, both fixed:
+
+1. **The source's `warp_18..19` dither was load-bearing, not polish.** D-137 deferred it as
+   "anti-banding polish, not the fill" — a first-principles claim with no rendering proof, the exact
+   FA #65 pattern. The R→G→B transfer above it is hard-gated at `(ret - 0.05)·99`, so pixels resting
+   just under 0.05 never transfer, never cycle hue, and integrate toward grey. Restoring it moved
+   field saturation 0.634 → **0.68–0.79** and luma 0.294 → **0.25–0.33**, both inside the oracle's band.
+   `noiseLQ` is r8Unorm — single-channel — so the source's RGB lookup is three decorrelated taps;
+   reading `.rgb` gives green and blue a constant 0, i.e. a −0.029/−0.078 per-frame drain, which
+   collapsed luma 4× on the first attempt.
+2. **Our comp carried a term butterchurn's does not:** `ret *= 1 + 0.12·bp`, applied *after* the
+   invert. The field is dark, so the invert lands near 0.74 and the darkest background inverts to
+   ≈1.0; ×1.12 pushes everything above 0.893 through the ceiling, and a clipped pixel is white with
+   the hue gone. Display clipped **0.831 → 0.353** (oracle 0.017). The beat still reads through the
+   zoom pump, which is geometry and cannot clip.
+
+**Decay stays butterchurn-faithful** (default warp only). Restoring it for the custom-warp path was
+measured and starves the field to saturation 0.254 / luma 0.116 — D-137's *observation* was right
+even though its conclusion, deleting the loop's only sink, was not.
+
+**Falsified on the way, recorded so they are not retried:** `modVol` is not starving the strands
+(saturated at 1.0 for 81–91 % of frames, mean 0.88–0.94 across all three stem arms), and
+"decay restored + stronger injection" is not the pair.
+
+**Not finished.** Display saturation barely moved (0.262 → **0.274** against the oracle's 0.67) and
+the lower field still blows out to white. The tone-map hypothesis in PR.5 is therefore still live for
+that residual, and is now testable against a field that is known-good. **PR.5's done-when is only
+half met:** clipping is confirmed as *a* cause and is halved, but the four-preset shared-operator
+question is untouched. **Gate: Matt has not seen this live.**
+
+**Follow-up (real, not cosmetic):** `DragonBloomMVWarpAccumulationTest` is env-gated and renders
+nothing — it passes in 0.001 s. There is no golden on Dragon Bloom's output, which is why the
+wash-out shipped unnoticed and why PR.5's A/B had to be built by hand.
+
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
 between the top and bottom of the screen and keeps its motion inside the canvas. Camera and
