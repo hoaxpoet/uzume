@@ -44,11 +44,12 @@ struct PlaybackHealthToastTests {
     private func low() -> SignalHealth { SignalHealth(peakBand: .low, peakDBFS: -13) }
     private func healthy() -> SignalHealth { SignalHealth(peakBand: .healthy, peakDBFS: -6) }
 
-    @Test("band=low after a healthy window fires exactly one warning toast tagged audio.levels.low")
+    @Test("a SUSTAINED low run after a healthy window fires one warning toast tagged audio.levels.low")
     func test_bandLow_firesOneToast() async {
         let fix = makeSUT()
         fix.health.send(healthy())   // D-197: chain must have been loud first
-        fix.health.send(low())
+        // BUG-121: the drop must persist. One window is a fade between tracks.
+        for _ in 0..<PlaybackErrorBridge.quietWindowsBeforeNudge { fix.health.send(low()) }
         await Task.yield(); await Task.yield()
         #expect(fix.toastManager.visibleToasts.count == 1)
         #expect(fix.toastManager.visibleToasts.first?.severity == .warning)
@@ -59,7 +60,7 @@ struct PlaybackHealthToastTests {
     func test_bandLow_twice_onlyOne() async {
         let fix = makeSUT()
         fix.health.send(healthy())
-        fix.health.send(low())
+        for _ in 0..<PlaybackErrorBridge.quietWindowsBeforeNudge { fix.health.send(low()) }
         await Task.yield(); await Task.yield()
         // Dismiss it, then re-degrade — the latch must still suppress a re-toast.
         if let id = fix.toastManager.visibleToasts.first?.id { fix.toastManager.dismiss(id: id) }
@@ -80,13 +81,49 @@ struct PlaybackHealthToastTests {
     @Test("Spotify source picks the Normalize-Volume copy; otherwise generic")
     func test_spotifyCopy() async {
         let spotify = makeSUT(spotify: true)
-        spotify.health.send(healthy()); spotify.health.send(low()); await Task.yield(); await Task.yield()
+        spotify.health.send(healthy())
+        for _ in 0..<PlaybackErrorBridge.quietWindowsBeforeNudge { spotify.health.send(low()) }
+        await Task.yield(); await Task.yield()
         #expect(spotify.toastManager.visibleToasts.first?.copy
             == LocalizedCopy.string(for: .audioLevelsLow(isSpotifySource: true)))
 
         let generic = makeSUT(spotify: false)
-        generic.health.send(healthy()); generic.health.send(low()); await Task.yield(); await Task.yield()
+        generic.health.send(healthy())
+        for _ in 0..<PlaybackErrorBridge.quietWindowsBeforeNudge { generic.health.send(low()) }
+        await Task.yield(); await Task.yield()
         #expect(generic.toastManager.visibleToasts.first?.copy
             == LocalizedCopy.string(for: .audioLevelsLow(isSpotifySource: false)))
+    }
+
+    // MARK: - BUG-121
+
+    /// Matt saw this nudge on ordinary listening, repeatedly. Every "degraded" verdict in his
+    /// session history was ONE window — 1 of 68, 1 of 20, 1 of 34 — always a lone `critical`
+    /// at −18 to −24 dBFS in the MIDDLE of a track: a gap between tracks, a fade, a soft
+    /// intro. D-197 had already patched the version that fired on a quiet OPENING; the false
+    /// positive moved into the song and kept firing.
+    @Test("a single quiet window does not toast — that is a passage, not a broken chain")
+    func test_singleQuietWindow_noToast() async {
+        let fix = makeSUT()
+        fix.health.send(healthy())
+        fix.health.send(low())            // one fade
+        fix.health.send(healthy())        // music resumes
+        await Task.yield(); await Task.yield()
+        #expect(fix.toastManager.visibleToasts.isEmpty,
+                "a lone quiet window nudged the listener about their audio chain")
+    }
+
+    /// A run that is BROKEN by a healthy window starts over — two fades in one song are still
+    /// two fades, not a fault.
+    @Test("a healthy window resets the run")
+    func test_healthyResetsTheRun() async {
+        let fix = makeSUT()
+        fix.health.send(healthy())
+        fix.health.send(low()); fix.health.send(low())
+        fix.health.send(healthy())
+        fix.health.send(low()); fix.health.send(low())
+        await Task.yield(); await Task.yield()
+        #expect(fix.toastManager.visibleToasts.isEmpty,
+                "two separate short dips were treated as one sustained fault")
     }
 }

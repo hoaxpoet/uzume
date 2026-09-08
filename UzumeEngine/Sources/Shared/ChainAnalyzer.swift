@@ -255,6 +255,12 @@ public enum ChainAnalyzer {
     // MARK: - LogScan
 
     /// One pass over session.log, extracting every chain-health signal.
+    /// Consecutive low/critical SIGNAL_HEALTH windows required before a session is graded
+    /// degraded (BUG-121). Windows are ~5 s apart, so three is ~15 s with the peak never once
+    /// above −15 dBFS. Matches `PlaybackErrorBridge.quietWindowsBeforeNudge` deliberately:
+    /// the toast the listener sees and the verdict the closeout cites must agree.
+    static let quietWindowsForDegraded = 3
+
     struct LogScan {
         var deadTap = false
         /// D-197 follow-up — "degraded only after loud": a `band=low`/`band=critical`
@@ -270,9 +276,37 @@ public enum ChainAnalyzer {
         var lastSampleRateHz: Int?
         var mentionsLoveRehab = false
 
+        /// One SIGNAL_HEALTH line. Split out to keep `init` inside its complexity budget.
+        ///
+        /// BUG-121 — a single quiet window is a passage, not a degraded chain. Across Matt's
+        /// whole session history this latch fired on exactly ONE window out of 20, 34 and 68,
+        /// always a lone `critical` at −18 to −24 dBFS mid-track, and `band=low` never once
+        /// occurred. Requiring a RUN keeps a genuinely quiet chain flagged — it is quiet in
+        /// every window — while a fade between tracks is not.
+        private mutating func readSignalHealth(
+            _ line: String, sawHealthy: inout Bool, quietRun: inout Int
+        ) {
+            if line.contains("deadTap=true") { deadTap = true }
+            if line.contains("band=healthy") {
+                sawHealthy = true
+                quietRun = 0
+            }
+            if line.contains("band=low") || line.contains("band=critical") {
+                quietRun += 1
+                if sawHealthy, quietRun >= ChainAnalyzer.quietWindowsForDegraded {
+                    bandLowAfterHealthy = true
+                }
+            }
+            if let range = line.range(of: "rate="),
+               let rate = Int(line[range.upperBound...].prefix { $0.isNumber }) {
+                lastSampleRateHz = rate
+            }
+        }
+
         init(logURL: URL) {
             guard let text = try? String(contentsOf: logURL, encoding: .utf8) else { return }
             var sawHealthy = false
+            var quietRun = 0
             for raw in text.split(whereSeparator: \.isNewline) {
                 let line = String(raw)
                 let lower = line.lowercased()
@@ -280,14 +314,7 @@ public enum ChainAnalyzer {
                     mentionsLoveRehab = true
                 }
                 if line.contains("SIGNAL_HEALTH:") {
-                    if line.contains("deadTap=true") { deadTap = true }
-                    if line.contains("band=healthy") { sawHealthy = true }
-                    if sawHealthy, line.contains("band=low") || line.contains("band=critical") {
-                        bandLowAfterHealthy = true
-                    }
-                    if let range = line.range(of: "rate="),
-                       let rate = Int(line[range.upperBound...]
-                           .prefix { $0.isNumber }) { lastSampleRateHz = rate }
+                    readSignalHealth(line, sawHealthy: &sawHealthy, quietRun: &quietRun)
                 }
                 // DRM-silence catalog lines (SessionRecorder / AudioInputRouter).
                 if lower.contains("drm") && lower.contains("silen") { drmSilenceLines += 1 }
