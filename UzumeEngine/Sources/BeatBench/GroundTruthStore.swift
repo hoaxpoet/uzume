@@ -301,3 +301,30 @@ struct ScoringWindow {
         self.to = spanSeconds
     }
 }
+
+// MARK: - DownbeatScore (BUG-118)
+
+/// Downbeat F inside the DOWNBEAT reference's own extent, intersected with the scoring span.
+///
+/// A downbeat reference routinely covers less than the beat reference: billie_jean has 557
+/// beats over 286 s but only 34 downbeats over 69 s, because librosa extended the beats and
+/// emits no downbeats at all. Trimming the estimate to the BEAT span therefore penalised a
+/// whole-track grid for every correct downbeat in the 217 s the reference never covered —
+/// precision 34/139, F 0.39, against a clamped grid's 0.90. That reads as "whole-track
+/// analysis ruins downbeats" and is purely reference coverage: scored inside the real
+/// coverage the same comparison runs 0.95 against 0.59, the other way round.
+///
+/// A reference that stops early is not evidence that later downbeats are wrong.
+enum DownbeatScore {
+    static func f(reference: [Double], estimate: [Double], span: (Double, Double)) -> Double? {
+        guard let first = reference.first, let last = reference.last, !estimate.isEmpty else {
+            return nil
+        }
+        let from = max(span.0, first) - 1
+        let to = min(span.1, last) + 1
+        let ref = reference.filter { $0 >= from && $0 <= to }
+        let est = estimate.filter { $0 >= from && $0 <= to }
+        guard !ref.isEmpty, !est.isEmpty else { return nil }
+        return Metrics.fMeasure(reference: ref, estimate: est).score
+    }
+}

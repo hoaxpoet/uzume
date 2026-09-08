@@ -214,7 +214,11 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       = 214 s) hours after the default was reverted, so he was testing
     ///                       the analysis that had been withdrawn. Grids are DATA; withdrawing
     ///                       the code that made them requires re-analysing.
-    public static let currentSchemaVersion: Int = 12
+    ///   v13 (BUG-118) — whole-track grids are back ON, so v12 entries hold CLAMPED 30 s
+    ///                       grids covering ~18 % of a track. Same reasoning as v12 in the
+    ///                       other direction: a grid is data, and changing the analysis that
+    ///                       produces it does not reach anything already cached.
+    public static let currentSchemaVersion: Int = 13
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

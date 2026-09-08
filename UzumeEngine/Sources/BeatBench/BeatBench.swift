@@ -251,11 +251,16 @@ struct BeatBenchCommand: ParsableCommand {
             let gridSpan = (window.from, window.to)
             let refInSpan = truth.beats.filter { $0 >= gridSpan.0 - 1 && $0 <= gridSpan.1 + 1 }
             let scores = Metrics.score(reference: refInSpan, estimate: estBeats)
-            let downbeatF = truth.downbeats.isEmpty || estDownbeats.isEmpty
-                ? nil
-                : Metrics.fMeasure(reference: truth.downbeats.filter {
-                    $0 >= gridSpan.0 - 1 && $0 <= gridSpan.1 + 1
-                }, estimate: estDownbeats).score
+            // Downbeats are scored inside the DOWNBEAT reference's own coverage, which is
+            // routinely shorter than the beat reference's. billie_jean carries 557 beats over
+            // 286 s but only 34 downbeats over 69 s — librosa extended the beats and emits no
+            // downbeats at all. Trimming the estimate to the BEAT span left a whole-track grid
+            // penalised for every correct downbeat in the 217 s the reference never covered:
+            // precision 34/139, F 0.39 against the clamped grid's 0.90, which reads as "whole
+            // track ruins downbeats" and is purely reference coverage. Scored inside the real
+            // coverage the same comparison is 0.95 vs 0.59 the other way.
+            let downbeatF = DownbeatScore.f(
+                reference: truth.downbeats, estimate: estDownbeats, span: gridSpan)
 
             rows.append(BaselineRow(
                 trackID: truth.trackID,
