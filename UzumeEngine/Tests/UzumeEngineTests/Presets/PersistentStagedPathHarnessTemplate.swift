@@ -35,6 +35,9 @@ import Testing
 import Foundation
 import Metal
 import simd
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 @testable import Renderer
 @testable import Presets
 @testable import Shared
@@ -113,6 +116,19 @@ struct PersistentStagedPathHarnessTemplate {
             guard cmd.status == .completed else { throw HarnessError.renderFailed }
 
             stateRMS.append(try Self.rms(of: pipeline, stage: Self.stateStageName))
+
+            // RENDER_VISUAL=1 dumps the composite at a few frames so a human can
+            // SEE the field converge, not just read that it did. Task 5's "a
+            // solved field must not be black" is an eyes claim; meanLuma below is
+            // the floor, this is the evidence.
+            if Self.dumpFrames.contains(i + 1), let dir = try Self.visualOutputDirectory() {
+                try Self.writePNG(HarnessTemplateCore.readBGRA(capture, width: Self.width,
+                                                              height: Self.height),
+                                  to: dir.appendingPathComponent(
+                                      String(format: "poisson_composite_frame%03d.png", i + 1)))
+                print("[persistent-template] wrote \(dir.path)/poisson_composite_frame"
+                      + String(format: "%03d.png", i + 1))
+            }
         }
 
         // ── The metric ──
@@ -155,6 +171,43 @@ struct PersistentStagedPathHarnessTemplate {
         #expect(HarnessTemplateCore.isNonConstant(composite), "composite is constant at silence")
         #expect(HarnessTemplateCore.meanLuma(composite) > 0.02,
                 "a solved pressure field rendered black — a black diagnostic teaches nothing")
+    }
+
+    /// Frames whose composite is written to PNG under `RENDER_VISUAL=1`.
+    private static let dumpFrames: Set<Int> = [1, 10, 30, 60]
+
+    /// Output directory for the PNG dump, or nil when `RENDER_VISUAL` is unset.
+    private static func visualOutputDirectory() throws -> URL? {
+        guard ProcessInfo.processInfo.environment["RENDER_VISUAL"] == "1" else { return nil }
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("uzume-alfven1-poisson")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private static func writePNG(_ bgra: [UInt8], to url: URL) throws {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB) else {
+            throw HarnessError.setupFailed("sRGB colour space")
+        }
+        let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue
+                                | CGBitmapInfo.byteOrder32Little.rawValue)
+        var copy = bgra
+        let image = copy.withUnsafeMutableBytes { raw -> CGImage? in
+            guard let base = raw.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: space, bitmapInfo: info.rawValue) else { return nil }
+            return context.makeImage()
+        }
+        guard let image,
+              let destination = CGImageDestinationCreateWithURL(
+                url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+            throw HarnessError.setupFailed("PNG destination")
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw HarnessError.setupFailed("PNG write")
+        }
     }
 
     /// Root-mean-square of the red channel of a persistent stage's current state.
