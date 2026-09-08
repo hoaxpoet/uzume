@@ -446,6 +446,17 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// diagnostic; certification requires a non-empty manifest (Task 4 gate).
     public let audioRoutes: [AudioRoute]
 
+    /// When true, manual/segment cycling steps over this preset (PR.0).
+    ///
+    /// Sidecar key `exclude_from_cycling`. For harness fixtures that must stay in
+    /// `presets` — tests and `selectPreset(named:)` reach them there — but that
+    /// nobody should land on by pressing next. `is_diagnostic` does NOT imply this:
+    /// Spectral Cartograph is diagnostic and deliberately stays browsable (Matt,
+    /// 2026-09-04). Replaces `PresetLoader`'s single-name literal now that a second
+    /// fixture (`Poisson Sandbox`, ALFVEN.1) needs the same treatment, exactly as
+    /// that literal's own comment directed.
+    public let excludeFromCycling: Bool
+
     /// Feedback-buffer pixel format for mv_warp presets (PUB.4, ultra-review).
     ///
     /// Sidecar key `feedback_pixel_format`, values `"bgra8Unorm"` /
@@ -588,6 +599,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         case rubricProfile = "rubric_profile"
         case rubricHints = "rubric_hints"
         case isDiagnostic = "is_diagnostic"
+        case excludeFromCycling = "exclude_from_cycling"
         case waitForCompletionEvent = "wait_for_completion_event"
         case requiresRegularBeat = "requires_regular_beat"
         case textOverlay = "text_overlay"
@@ -716,8 +728,25 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         // MARK: Text Overlay
         textOverlay = try container.decodeIfPresent(Bool.self, forKey: .textOverlay) ?? false
 
-        // MARK: Staged Composition (V.ENGINE.1)
+        // MARK: Cycling (PR.0 → sidecar flag at ALFVEN.1)
+        excludeFromCycling = try container.decodeIfPresent(
+            Bool.self, forKey: .excludeFromCycling) ?? false
+
+        // MARK: Staged Composition (V.ENGINE.1; persistent/iterated at ALFVEN.1, D-244)
         stages = try container.decodeIfPresent([PresetStage].self, forKey: .stages) ?? []
+
+        // The final stage writes the drawable, which the view owns and reuses —
+        // there is no pair to persist, so `persistent` there is an authoring
+        // error, not a no-op we should absorb (ALFVEN.1 task 1).
+        if let finalStage = stages.last, finalStage.persistent {
+            throw DecodingError.dataCorruptedError(
+                forKey: .stages,
+                in: container,
+                debugDescription: """
+                    final stage '\(finalStage.name)' is marked persistent; the \
+                    drawable-writing stage cannot own persistent state
+                    """)
+        }
 
         // MARK: Marks-on-top Overlay (Skein.ENGINE.1.1)
         marks = try container.decodeIfPresent(MarksConfig.self, forKey: .marks)
