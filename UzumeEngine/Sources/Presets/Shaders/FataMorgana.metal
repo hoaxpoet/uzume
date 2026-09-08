@@ -40,6 +40,9 @@ struct FataUniforms {
     float4 randPreset;  // fixed per-load random vec4 (the comp's blue-gradient scale)
 };
 
+// PR.6: horizon height in top-left-origin uv (0.5 = the source's centred horizon).
+constant float kFataHorizonV = 0.62;
+
 // MARK: - Samplers
 
 // The warp samples the feedback with REPEAT wrapping — butterchurn's warp `uv_1`
@@ -157,7 +160,12 @@ fragment float4 fata_morgana_comp_fragment(
     // in.uv.y = 1 - vUv.y already — so the butterchurn flip resolves to in.uv
     // directly. (An explicit `1.0 - in.uv.y` double-flips → sky/water reversed.)
     float2 uv = in.uv;
-    float2 uv1 = uv - 0.5;
+    // PR.6 framing (Matt, roster review): "horizon moves so sky occupies a larger share than
+    // water, letting the pulsars grow and reflect." The source pins the horizon at v = 0.5;
+    // the perspective floor (z = 0.2/|uv1.y|), the sky/water select (m), the reflection
+    // sample and the blue gradient all hang off uv1.y, so one constant moves the whole
+    // horizon and everything stays consistent with it. 0.62 = sky 62 %, water 38 %.
+    float2 uv1 = float2(uv.x - 0.5, uv.y - kFataHorizonV);
 
     // Perspective floor/ceiling + scrolling ground noise (starfield in the sky).
     float  z  = 0.2 / abs(uv1.y);
@@ -184,7 +192,7 @@ fragment float4 fata_morgana_comp_fragment(
     float  gv = clamp((0.25 / sqrt(dot(gt, gt)))
                       * (blueNoise.sample(pwWrap, g / 256.0).r - 0.9), 0.0, 1.0);
 
-    float3 ret = col + (gv * gv + (u.randPreset.xyz * (0.5 - uv.y)) * float3(0.0, 0.0, 1.0)) * (1.0 - m);
+    float3 ret = col + (gv * gv + (u.randPreset.xyz * (kFataHorizonV - uv.y)) * float3(0.0, 0.0, 1.0)) * (1.0 - m);
 
     // ── Diagnostic term isolation (u.gammaAdj carries fataDebugMode; 0 = normal) ──
     // 1: field reflection only (main(p), no glow/stars)  2: glow only  3: raw field at uv
