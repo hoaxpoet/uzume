@@ -10,6 +10,22 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-08-192543] BUG-065 measured for the first time — the premise does not reproduce (kept OPEN)
+
+544 seconds, one continuous track (LCD Soundsystem, *Dance Yrself Clean*), whole-track grid, meter 4. The best evidence this defect has had, and it says the defect as written is not there.
+
+**The error that reaches the viewer** — `onset_residual_ms`, recorded for the first time this afternoon: p50 **14.9 ms**, p90 26.7, max 29.8, signed mean **−0.1 ms**, **100 % inside the ~60 ms perceptual window**, flat across all nine minutes.
+
+**The correction** — `drift_ms` — goes 0 → **−153 ms** at five and a half minutes → **+3 ms at the end**. It reverses. Only 26 of 54 buckets move away from zero, where a genuine clock mismatch moves essentially all of them. That is a bounded offset excursion the tracker absorbs, most likely following which percussive element dominates as the arrangement changes, not drift.
+
+**The original evidence was the compensation.** This entry has always cited `drift_ms` growing 0 → 119 ms as the defect. `drift_ms` is what the tracker APPLIES (`displayTime = pt + drift + shift`); the error is what survives it, and nothing recorded that until today.
+
+**Two false starts on the way, both mine, both corrected by measurement.** A 0.81 ms/s "clock mismatch" fitted to four buckets, two of which were the EMA still converging from zero — after convergence the slope is +0.37 ms/s, the opposite sign. And a resampler hypothesis derived from that bad fit: the probe was still worth running (it clears the grid's time base to −3 ppm over two minutes) but it was built to test a number that was an artifact.
+
+**Kept OPEN at Matt's call.** One sequenced-electronic track with machine-steady timing is not proof for live-played material with real rubato. The remaining ±15 ms residual floor is a separate question — plausibly the gap between the app's assumed 50 ms output latency and the Duet 3's measured 11.2 ms, which a tap-side residual is structurally blind to.
+
+---
+
 ### [dev-2026-09-08-181826] BUG-065 — the drift evidence has always measured the correction, not the error
 
 Matt: *"Work on drift first."* The first thing to look at was what `drift_ms` actually is, and it is not what every diagnosis of this defect has assumed.
