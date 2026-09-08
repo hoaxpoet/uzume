@@ -694,6 +694,31 @@ question is untouched. **Gate: Matt has not seen this live.**
 nothing — it passes in 0.001 s. There is no golden on Dragon Bloom's output, which is why the
 wash-out shipped unnoticed and why PR.5's A/B had to be built by hand.
 
+**PR.5.2 — the white-out was a TRANSIENT, and the mean was hiding it ✅ (2026-09-08, `4d5f75ff`).**
+PR.5.1 reported the residual as steady-state wash. It is not: measured per-frame rather than
+averaged over the track, display `nearWhite` runs **0.985 → 0.166 → 0.000** at frames 0 / 400 / 800.
+Dragon Bloom opened on a near-fully-white screen and faded in over ~10 s, every time it appeared —
+which is why steady-state numbers kept looking acceptable while Matt kept reporting wash-out. **A
+metric averaged over the track cannot see a transient; that is the same class of error as the span
+artifact and the `nearWhite` label in the replay harness still carries the old, wrong gloss
+("= EMPTY accumulator"), which should be corrected.**
+
+Two causes, both closed: the feedback field was cleared to **black** and the comp inverts it
+(butterchurn's `loadPreset` blends and keeps the previous buffers — it never clears, so our clear is
+a port defect); and **BUG-115** ran the per-frame zoom at 1.024 median / 1.070 p90 against the
+source's 0.99951, evacuating the frame faster than the strands refilled it, with the emptied corners
+driven to black by the R→G→B fade and stuck there — below the 0.05 transfer gate no push fires, so
+black is an absorbing state.
+
+Result on the 20:12 session: nearWhite **0.241 → 0.091**, saturation 0.354 → **0.441**, clipped
+0.191 → **0.150**, luma 0.748 → **0.700**.
+
+**Falsified first, recorded so they are not retried:** inverted black field regions (field
+`nearBlack` is 0.000–0.005), the strand `flare` term (0.182 vs 0.182), additive strand blending (the
+reference's waves are all `additive=0`, confirmed against the live oracle), and modVol starvation.
+
+**Gate: still not seen live.** Every number here is offline replay of Matt's own capture.
+
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
 between the top and bottom of the screen and keeps its motion inside the canvas. Camera and
