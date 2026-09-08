@@ -103,19 +103,32 @@ public final class PresetLoader: @unchecked Sendable {
         /// Names of earlier stages whose outputs this stage samples (texture(13)+).
         public let samples: [String]
         /// True if this stage's color attachment is the drawable pixel format.
-        /// False if it targets `.rgba16Float` (intermediate pass).
+        /// False if it targets `pixelFormat` (intermediate pass).
         public let writesToDrawable: Bool
+        /// State survives across frames on a ping-pong pair (ALFVEN.1).
+        public let persistent: Bool
+        /// Render passes per frame, ping-ponging this stage's own pair (ALFVEN.1).
+        public let iterations: Int
+        /// Offscreen colour format this stage's pipeline was compiled against.
+        /// Meaningless when `writesToDrawable`.
+        public let pixelFormat: MTLPixelFormat
 
         public init(
             name: String,
             pipelineState: MTLRenderPipelineState,
             samples: [String],
-            writesToDrawable: Bool
+            writesToDrawable: Bool,
+            persistent: Bool = false,
+            iterations: Int = 1,
+            pixelFormat: MTLPixelFormat = .rgba16Float
         ) {
             self.name = name
             self.pipelineState = pipelineState
             self.samples = samples
             self.writesToDrawable = writesToDrawable
+            self.persistent = persistent
+            self.iterations = iterations
+            self.pixelFormat = pixelFormat
         }
     }
 
@@ -209,21 +222,24 @@ public final class PresetLoader: @unchecked Sendable {
         }
     }
 
-    /// Presets that manual/segment cycling steps over (PR.0).
+    /// True when manual/segment cycling must step over this preset (PR.0).
     ///
-    /// "Staged Sandbox" is the two-stage composition harness fixture — a test
-    /// pattern proving the V.ENGINE.1 scaffold, not a visual anyone should land
-    /// on. It stays in `presets` because `StagedCompositionTests` and
-    /// `PresetVisualReviewTests` look it up there and `selectPreset(named:)`
-    /// must still reach it; only the cycle skips it. Its `is_diagnostic: true`
-    /// already keeps it out of Orchestrator scoring (D-074) — that gate does
-    /// not cover cycling, which is how it reached Matt's roster review.
+    /// Harness fixtures — `Staged Sandbox` (V.ENGINE.1), `Poisson Sandbox`
+    /// (ALFVEN.1) — are test patterns proving an engine scaffold, not visuals
+    /// anyone should land on. They stay in `presets` because the composition tests
+    /// and `PresetVisualReviewTests` look them up there and `selectPreset(named:)`
+    /// must still reach them; only the cycle skips them. `is_diagnostic: true`
+    /// already keeps them out of Orchestrator scoring (D-074) — that gate does not
+    /// cover cycling, which is how the first one reached Matt's roster review.
     ///
-    /// One name literal for one fixture. If a second ever appears, promote this
-    /// to a sidecar flag rather than growing the set.
-    private static let cycleExclusions: Set<String> = ["Staged Sandbox"]
+    /// ALFVEN.1 promoted this from a single name literal to the sidecar flag
+    /// `exclude_from_cycling`, as that literal's own comment directed once a
+    /// second fixture appeared.
+    private static func isCycleExcluded(_ descriptor: PresetDescriptor) -> Bool {
+        descriptor.excludeFromCycling
+    }
 
-    /// Next cyclable index from `start`, skipping `cycleExclusions`.
+    /// Next cyclable index from `start`, skipping cycle-excluded presets.
     ///
     /// Returns `start` unchanged if every preset is excluded, so the caller can
     /// never spin. Callers hold `lock`.
@@ -231,7 +247,7 @@ public final class PresetLoader: @unchecked Sendable {
         var index = start
         for _ in 0..<presets.count {
             index = (index + step + presets.count) % presets.count
-            if !Self.cycleExclusions.contains(presets[index].descriptor.name) {
+            if !Self.isCycleExcluded(presets[index].descriptor) {
                 return index
             }
         }
@@ -492,10 +508,13 @@ public final class PresetLoader: @unchecked Sendable {
                 return nil
             }
             let isFinal = (index == lastIndex)
+            // ALFVEN.1: a non-final stage renders in its declared `pixel_format`
+            // (default rgba16Float), so its pipeline must be compiled for it.
+            let stageFormat = stage.resolvedPixelFormat
             let pipelineDescriptor = MTLRenderPipelineDescriptor()
             pipelineDescriptor.vertexFunction = vertexFn
             pipelineDescriptor.fragmentFunction = fragmentFn
-            pipelineDescriptor.colorAttachments[0].pixelFormat = isFinal ? pixelFormat : .rgba16Float
+            pipelineDescriptor.colorAttachments[0].pixelFormat = isFinal ? pixelFormat : stageFormat
 
             do {
                 let state = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
@@ -503,7 +522,10 @@ public final class PresetLoader: @unchecked Sendable {
                     name: stage.name,
                     pipelineState: state,
                     samples: stage.samples,
-                    writesToDrawable: isFinal
+                    writesToDrawable: isFinal,
+                    persistent: stage.persistent,
+                    iterations: stage.iterations,
+                    pixelFormat: stageFormat
                 ))
             } catch {
                 logger.error("Stage '\(stage.name)' pipeline creation failed for \(url.lastPathComponent): \(error)")

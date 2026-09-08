@@ -2518,7 +2518,8 @@ Every preset ships a `<PresetName>.json` sidecar alongside its `.metal` file. Th
 | `requires_regular_beat` | `false` | Hard-excluded from planning on beat-irregular tracks (D-154). |
 | `is_diagnostic` | `false` | Excluded from planner selection entirely (D-074); dev/diagnostic presets only. |
 | `text_overlay` | `false` | Binds `texture(12)` text overlay (SpectralCartograph-class diagnostics). |
-| `stages` | none | Staged-composition pass list (V.ENGINE.1) — per-stage fragment + `samples` wiring; see the staged paradigm section. |
+| `stages` | none | Staged-composition pass list (V.ENGINE.1) — per-stage fragment + `samples` wiring; see the staged paradigm section and §17.2 for the per-stage keys. |
+| `exclude_from_cycling` | `false` | Manual/segment cycling steps over this preset (PR.0). For harness fixtures that must stay reachable by name but that nobody should land on by pressing next — `Staged Sandbox`, `Poisson Sandbox`. **Not** implied by `is_diagnostic`: Spectral Cartograph is diagnostic and deliberately stays browsable. Was a name literal in `PresetLoader`; promoted to this flag at ALFVEN.1 when a second fixture appeared. |
 | `marks` | none | mv_warp scene-geometry overlay block (draw params + chromatic + comp + beat pump); Dragon Bloom-class strand overlays. |
 | `scene_camera` / `scene_lights` / `scene_fog` / `scene_fog_near` / `scene_far_plane` | ray-march defaults | Ray-march scene setup — see §GPU Contract Details in ARCHITECTURE. `scene_lights` takes up to 4 lights (RMENV.1 multi-light; key/rim/fill/accent). |
 | `scene_dolly_speed` | `0` (camera-static) | Forward camera dolly speed (world-units/s) seeding `RayMarchPipeline.cameraDollySpeed`; per-frame speed is bass-modulated `× (0.5 + bass)`. Sidecar-owned (not app code) so the engine-side replay harness renders the flight — BUG-074. Volumetric Lithograph = 5.0. |
@@ -2544,6 +2545,38 @@ Every route the preset's code actually consumes, declared so the route-coverage 
 - `kind` — the floor class `RouteCoverageTests` applies over the canonical fixture set (`Tests/UzumeEngineTests/Fixtures/route_coverage/`): `continuous` = non-constant + variance floor; `accent` = ≥ 1 firing per fixture; `structural` = ≥ 1 section event on a fixture that contains one; `gate` = peak ≥ 0.9 on every fixture. **Declare an enable as `gate`, never `continuous`** — a silence gate (`pulseAmp01`) or confidence gate sits pinned open through music, which is correct behaviour but reads as a driver under `continuous` and clears that floor only because the fixtures open in silence (BUG-088, measured on Aurora Veil: pinned 1.000 through music, p5–p95 range 0.000). The only failure a gate has is never opening.
 
 Rules: **audit before declaring** — a declared route the code doesn't read is as wrong as an unread route left undeclared; enumerate from the `.metal` (snake_case fields) *and* the preset's CPU driver (`RenderPipeline+<Preset>.swift` / `<Preset>State.swift` / `<Preset>Geometry.swift` — mv_warp and geometry presets consume most primitives on the CPU). One row per (behaviour × primitive); a stem-summed drive declares each contributing primitive. A red route in `RouteCoverageTests` is a **defect to file, not a floor to tune** (QG.1: "red route = the gate working").
+
+---
+
+### 17.2 `stages[]` — per-stage keys for the `staged` paradigm
+
+A `staged` preset's `stages` array is ordered; the last entry writes the drawable
+and every earlier entry renders into a named offscreen texture. Per-stage keys:
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `name` | required | Unique within the preset. The key later stages use in `samples`. |
+| `fragment_function` | required | Metal fragment function in the preset's `.metal`. |
+| `samples` | `[]` | Earlier stages whose outputs this stage reads, bound at `[[texture(13)]]`, `[[texture(14)]]`, … in declared order. **Max 7** — `[[texture(20)]]` is the persistent-state slot. |
+| `persistent` | `false` | The stage owns a ping-pong texture pair that survives across frames; frame N samples frame N-1's output at `[[texture(20)]]`. The pair is zeroed at allocation, on preset switch, and by `resetStagedPersistentState()`, and re-zeroed by the non-finite watchdog. **A persistent final (drawable-writing) stage is a decode error** — the view owns the drawable, so there is nothing to persist. (ALFVEN.1, D-244) |
+| `iterations` | `1` | Render passes encoded per frame, ping-ponging this stage's own pair, with its `samples` inputs held constant across all of them. Range `1…64`. Turns a stage into a relaxation solver. Composes with `persistent`: iteration 1 of frame N+1 warm-starts from frame N's state. (ALFVEN.1, D-244) |
+| `pixel_format` | `rgba16Float` | Offscreen colour format. Allowlist: `rgba16Float`, `rgba32Float`, `rg32Float`. Unknown values warn and fall back to `rgba16Float` (the `feedback_pixel_format` precedent, PUB.4). Ignored on the final stage, which always takes the drawable format. A Poisson/Jacobi solve needs `rgba32Float`. (ALFVEN.1, D-244) |
+
+An iterated persistent stage is how a GPU solver is authored here — the whole
+example is `PoissonSandbox.json` + `PoissonSandbox.metal`:
+
+```json
+{ "name": "pressure", "fragment_function": "poisson_sandbox_pressure_fragment",
+  "samples": ["divergence"], "persistent": true, "iterations": 24,
+  "pixel_format": "rgba32Float" }
+```
+
+Two things to know before authoring one. **The warm start is the point**: at 256²
+a cold 24-sweep Jacobi solve removes only ~11 % of the domain-scale error in one
+frame, and it is persistence across frames that gets it to the answer (see the
+measured tables in `PoissonProjectionConvergenceTests`). And **stateful stages
+need a multi-frame harness before the preset**, not after — copy
+`PersistentStagedPathHarnessTemplate`.
 
 ---
 

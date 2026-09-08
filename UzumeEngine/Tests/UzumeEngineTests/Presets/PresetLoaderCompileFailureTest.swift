@@ -108,7 +108,13 @@ struct PresetLoaderCompileFailureTest {
     /// conversion, jaggedness fix, and camera-orbit removal each landed correctly, but
     /// Matt's verdict stayed negative through every round ("a loser across the board").
     /// See docs/DECISIONS.md D-224.)
-    static let expectedProductionPresetCount = 29
+    /// 29 → 30 at ALFVEN.1 (Poisson Sandbox added — the diagnostic proving the
+    /// persistent / iterations / pixel_format staged extensions by actually solving
+    /// ∇²p = f with a ported Jacobi projection. `is_diagnostic:true`,
+    /// `certified:false`, and `exclude_from_cycling:true` so it never lands in the
+    /// manual cycle; it is a harness fixture in the same class as Staged Sandbox,
+    /// not aesthetic content. See docs/DECISIONS.md D-244.)
+    static let expectedProductionPresetCount = 30
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

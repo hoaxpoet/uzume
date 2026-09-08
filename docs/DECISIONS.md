@@ -125,6 +125,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-232 | Accepted | **The design system reaches the app as a VENDORED copy, and Uzume is always dark (DS.1, 2026-09-01, Matt chose A).** [D-228] makes `uzume-site` the design-system source of truth, but the app may not take a package dependency on it: a fresh clone and CI would then need a second repo present, and the app is the thing that has to build. So `UzumeApp/DesignSystem/UzumeTokens.swift` is a byte-identical copy of `uzume-site@03d5478`'s token file under a provenance header (repo, path, commit, SHA-256), and `Scripts/check_design_token_drift.sh` is the cost made visible: it verifies the vendored body against its recorded hash always, and against the upstream file when a sibling checkout is present — `SKIP`/0 when it is not. **The price is a manual re-sync**, accepted because tokens change on the order of once per design increment and a silent divergence now fails a script instead of being discovered in a screenshot. **App-only roles never go in the vendored file** — they live in `UzumeTokens+App.swift`, each commenting the `--color-*` name it was transcribed from, so any app colour greps back to a line of `tokens.css`. **Uzume is always dark:** every screen keeps the near-black canvas whatever macOS is set to, so the engine's output is the only bright thing in the frame and the ≥4.5:1 overlay measurement stays valid against one appearance. That diverges from upstream — the Swift package builds on adaptive AppKit system colours and `tokens.css` publishes a full light palette — so the app pins its roles to the DARK block and the app root sets `.preferredColorScheme(.dark)`; light-appearance support is a real increment with its own review, not a side effect of a token swap. Two upstream disagreements found and recorded rather than papered over: the package's system-colour mapping resolves to **neither** palette (`.windowBackgroundColor` in dark appearance is far lighter than `--color-canvas` #0b0c10), and `UzumeRadius` (6/10/14) agrees with `--radius-*` (6/12/16) only on the smallest rung. §Rationale below. |
 | D-242 | Accepted — **amended at PREP.2 (2026-09-04): two budgets, and Release is the configuration they are measured in**; see §Amendment | **Session preparation has a time budget: 40 tracks in 5 minutes (Matt, 2026-09-03).** Preparation had no stated performance target anywhere in the docs — it was measured only as "did every track land". Matt set one after a live local-file run: **12 FLAC files took 10 minutes**, i.e. **50 s/track**, against a ceiling of **7.5 s/track** (300 s ÷ 40). The current local path is therefore ~**6.7× over budget**, and the gap widens with playlist length because the outer loop is serial. The budget is wall-clock from the first preparation task starting to the session reaching `.ready`, on the Mac mini dev target, cold cache, and it applies to **both** sources — though they are structurally unequal: streaming analyses a 30 s preview per track while the local path decodes and analyses the **entire** file (LFSTEM.1's whole-file stem sweep, DYN.1c's loudness profile), so local is the path that has to close the gap. Why it is a product commitment and not a nice-to-have: Uzume's proposition is that the whole visual session is planned before the listener presses play, and the wait is the one unavoidable friction that buys it — a wait that scales to ~30 minutes for a real 40-track playlist makes the proposition unusable, whatever the visuals do afterwards. **The number is a target, not a measurement:** no per-stage timing exists for the local path, so which stage dominates is unknown and must not be guessed. PREP.1 instruments before anything is optimised (evidence-before-implementation). §Rationale below. |
 | D-243 | Accepted | **Bar position is recorded per window, and a declined window emits no bars** — sparse and correct over dense with a fallback (Matt, 2026-09-05) |
+| D-244 | Accepted | **Staged stages gain persistence, iteration and a per-stage pixel format; the projection is a PORT of an MIT reference, not a derivation** (ALFVEN.1, 2026-09-08) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -5599,3 +5600,102 @@ never the option that shipped, so his answer cannot carry the weight of this out
 
 Tracked as BUG-117. Do not re-enable the default until a declined track reports no bars in a way
 consumers can read as no bars.
+
+---
+
+## D-244: Staged stages gain persistence, iteration and a per-stage pixel format; the projection is a port
+
+**Date:** 2026-09-08 · **Increment:** ALFVEN.1 · **Status:** Accepted
+
+### The decision
+
+The `staged` paradigm (V.ENGINE.1) grows three optional, **generic** sidecar keys on a stage:
+`persistent` (the stage owns a ping-pong texture pair that survives across frames, previous half at
+`[[texture(20)]]`), `iterations: N` (the stage encodes N passes per frame ping-ponging that pair,
+`samples` held constant), and `pixel_format` (per-stage offscreen format from a small allowlist,
+default unchanged at `rgba16Float`). Together they make a stage able to be a stateful iterated GPU
+solver rather than a single-shot fragment.
+
+And: the pressure projection built on that surface is **adopted from
+[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation) (MIT)**
+— divergence, the Jacobi pressure sweep and gradient-subtract taken verbatim in structure, adapted
+only in context (Metal syntax, our texel-offset convention, a periodic sampler in place of the
+reference's bounded-box free-slip clauses). Attribution in `docs/CREDITS.md`.
+
+### Why generic keys and not an Alfvén pipeline
+
+Alfvén (`docs/presets/ALFVEN_DESIGN.md` §6) motivated this, but nothing about a ping-pong pair, an
+iteration count or a pixel format is Alfvén-specific — they are the three things the existing staged
+shape was missing to express any stateful solver. Building them as a bespoke MHD pipeline would have
+bought one preset; building them as staged keys buys the paradigm, and lets ALFVEN.2 be a preset
+increment rather than an engine one. Infrastructure lands before the preset and is never bundled
+with it (ALFVEN_DESIGN.md §10).
+
+### Why the projection is ported, not derived (FA #73 / FA #65)
+
+A correct, tuned, MIT-licensed GPU implementation of exactly these three passes already exists. FA
+#73's case study is Murmuration burning an M7 round hand-deriving force-based boids while a
+reference sat unread. The stencils here are short enough that re-deriving them *feels* cheap, which
+is precisely the trap — the cost is not writing them, it is the tuning rounds spent discovering the
+conventions the reference already encodes.
+
+Two of those conventions were kept deliberately against a first-principles objection, per FA #65: the
+reference's divergence carries a `0.5` factor while its gradient subtract uses an unscaled central
+difference, and its Jacobi solves in units where the grid spacing is one texel. Both look like
+inconsistencies on paper. Neither was "fixed"; the analytic test was written against the convention
+the reference has. `PoissonProjectionConvergenceTests` then measured the result against the
+closed-form Jacobi prediction for that stencil and matched it to five decimal places — evidence that
+the port is the reference, not an approximation of it.
+
+### What the convergence measurement actually showed
+
+Cold-start max relative error against `p = sin(x)sin(y)` at N = 64, one frame:
+4 sweeps 0.98086 · 8 sweeps 0.96209 · 16 sweeps 0.92562 · 24 sweeps 0.89052.
+
+24 Jacobi sweeps is a **partial solve by construction** — the domain-scale mode is damped by
+`cos(h)` per sweep, so at practical resolutions one frame barely touches it. This is not a defect and
+the threshold was not raised to hide it: it is the finding that makes `persistent` load-bearing
+rather than a convenience. Warm-started at 24 sweeps/frame the same field reaches 0.000155 within 60
+frames. **The iteration count buys per-frame responsiveness; persistence buys the answer.**
+
+### Consequences
+
+- `samples` is now capped at 7 per stage (`[[texture(13)]]`…`[[texture(19)]]`), enforced at decode,
+  so `[[texture(20)]]` is a fixed address a shader author can rely on rather than one that shifts
+  when a sample is added.
+- A `persistent` final (drawable-writing) stage is a **decode error**, not a warning — the view owns
+  the drawable and there is nothing to persist.
+- Persistent textures are `.shared` (UMA) so the non-finite watchdog (ALFVEN_DESIGN.md §8.3) can probe
+  them without a blit or a GPU pass.
+- `PresetLoader`'s single-name `cycleExclusions` literal became the sidecar flag
+  `exclude_from_cycling`, as that literal's own comment directed once a second harness fixture
+  appeared.
+- ALFVEN.2's open risk (§11 — whether a Jacobi projection reproduces the CPU spectral spike's
+  filament sharpness) is **not** resolved by this increment and is not made easier by it. See the
+  ALFVEN.1 closeout.
+
+### Iteration count: 24 stands, and the real lever is the grid (Matt, 2026-09-08)
+
+The ALFVEN.1 prompt asked how sharp the seams should be, framing 12 / 24 / 40 sweeps as a
+sharpness-against-frame-budget trade. **The measurement changed the question.** Jacobi's
+domain-scale damping is `cos(h)` per sweep, so the sweep count does not buy sharpness — it buys
+**settling time**, and settling scales as **N²**:
+
+| Sweeps/frame | Time to converge at 256² | At true 1080p |
+|---|---|---|
+| 12 | ~32 s | minutes |
+| 24 | ~16 s | minutes |
+| 40 | ~10 s | minutes |
+
+Against the design's ~35 s re-seed ceiling, 12 is effectively never settled and 40 buys 6 s for
+1.7× the passes. None of the three works at full resolution, so **more iterations cannot fix an N²
+problem** — the lever is a fixed coarse solver grid with an upsample, which is an ALFVEN.2
+decision. Matt's call: **keep 24 as the shipped default and settle it in ALFVEN.2 alongside the
+grid resolution**, because the two parameters sit on the same axis and fixing one blind of the
+other is how a tuning round starts.
+
+Note this also relocates the risk: the slow scale is the **lobes**, not the seams. Seam softness
+is explicitly NOT a fidelity target (`docs/VISUAL_REFERENCES/alfven/README.md` §PROVENANCE
+CAVEAT names chasing spectral sharpness on a projection solver as the FA #64 trap), while
+`06_anti_static_quilt.png` makes box-scale condensation the failure mode — and box scale is
+exactly what an under-converged Jacobi under-resolves.
