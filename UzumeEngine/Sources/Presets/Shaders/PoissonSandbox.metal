@@ -61,9 +61,16 @@ constant constexpr sampler poisson_grid_sampler(filter::nearest,
                                                 address::repeat);
 
 // Display gain for the pressure field in `compose`. Diagnostic presentation only
-// — it scales nothing the solver sees. Measured empirically against the rendered
-// field so the mid-tone sits near the middle of the ramp.
-constant constexpr float kPoissonDisplayGain = 30.0;
+// — it scales nothing the solver sees.
+//
+// Sized against the CONVERGED field, not the first frame. The pressure stage is
+// persistent, so its amplitude grows by ~50x over the first second as the solve
+// warm-starts toward the answer (measured RMS 0.051 at frame 1, 2.78 at frame 60
+// at 256^2). A gain tuned to frame 1 clips the answer to flat white and hides the
+// very thing this diagnostic exists to show. At 0.25 the converged field sits in
+// the middle of the ramp, and the early frames read as a faint, unfinished field —
+// which is what an unconverged solve honestly looks like.
+constant constexpr float kPoissonDisplayGain = 0.25;
 
 // ─── Stage 1: VELOCITY ───────────────────────────────────────────────────────
 //
@@ -196,8 +203,9 @@ fragment float4 poisson_sandbox_compose_fragment(
                            : mix(midCol, posCol, (t - 0.5) * 2.0);
 
     // Projected-velocity magnitude as a brightness lift, so a dead projection
-    // reads as a flat field rather than as a plausible one.
-    col *= 0.75 + 0.55 * saturate(length(vel));
+    // reads as a flat field rather than as a plausible one. Kept under 1.0 so it
+    // modulates the ramp instead of driving it into clipping.
+    col *= 0.70 + 0.30 * saturate(length(vel));
 
     // Thin iso-contours on the pressure field — the cheapest way to see whether
     // the solve is smooth or still noisy after N sweeps.
