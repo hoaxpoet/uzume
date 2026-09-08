@@ -6,6 +6,7 @@
 // a silently absent row reads as "nothing to see" when it is in fact the finding.
 
 import Foundation
+import DSP
 
 // MARK: - Ground truth
 
@@ -266,5 +267,37 @@ enum LiveReport {
             lines.append("- `\(row.trackID ?? "(unidentified)")` — \(row.groundTruthNote)")
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+}
+
+// MARK: - ScoringWindow (BUG-118)
+
+/// Which beats to score, and over what span.
+///
+/// Default: the grid's own span, with the reference trimmed to match, so a grid is not
+/// penalised for music it was never shown. That is right for a single baseline and INVALID
+/// for an A/B between arms whose coverage differs — a 30 s grid graded on 30 s against a
+/// whole-track grid graded on six minutes are not comparable numbers, and that artifact has
+/// produced two wrong conclusions in this repo (FT.4.1's, and BUG-118's own revert).
+///
+/// `--span-seconds N` fixes the window for BOTH sides so two arms describe the same music.
+struct ScoringWindow {
+    let beats: [Double]
+    let downbeats: [Double]
+    let from: Double
+    let to: Double
+
+    init(grid: BeatGrid, spanSeconds: Double) {
+        guard spanSeconds > 0 else {
+            self.beats = grid.beats
+            self.downbeats = grid.downbeats
+            self.from = grid.beats.first ?? 0
+            self.to = grid.beats.last ?? 0
+            return
+        }
+        self.beats = grid.beats.filter { $0 <= spanSeconds }
+        self.downbeats = grid.downbeats.filter { $0 <= spanSeconds }
+        self.from = 0
+        self.to = spanSeconds
     }
 }

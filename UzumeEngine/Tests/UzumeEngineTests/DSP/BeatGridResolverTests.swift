@@ -287,4 +287,24 @@ struct BeatGridResolverGoldenTests {
                 A confident meter must be a correct one (D-207).
                 """)
     }
+
+    // MARK: - BUG-117 — "no bar information" must be expressible
+
+    @Test("a grid with no downbeats and meter 1 reports that it does not know the bars")
+    func test_noBarInformationIsExpressible() {
+        let beats = (0..<32).map { Double($0) * 0.5 }
+        let blind = BeatGrid(beats: beats, downbeats: [], bpm: 120,
+                             beatsPerBar: 1, barConfidence: 0, frameRate: 50, frameCount: 800)
+        #expect(!blind.hasBarInformation,
+                "meter 1 with no downbeats is the resolver saying it found NO bar structure")
+
+        // Either a real meter or real downbeats counts as knowing.
+        let metered = BeatGrid(beats: beats, downbeats: [], bpm: 120,
+                               beatsPerBar: 4, barConfidence: 0.9, frameRate: 50, frameCount: 800)
+        #expect(metered.hasBarInformation)
+        let withDownbeats = BeatGrid(beats: beats, downbeats: [0, 2, 4], bpm: 120,
+                                     beatsPerBar: 1, barConfidence: 0.5,
+                                     frameRate: 50, frameCount: 800)
+        #expect(withDownbeats.hasBarInformation)
+    }
 }

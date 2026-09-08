@@ -338,4 +338,90 @@ struct BarLineWholeTrackProbe {
         print("\n  windows: \(correct) correct, \(incorrect) incorrect, "
               + "\(unscoreable) unscoreable (no tapped meter), \(silentWindows) declined")
     }
+
+    /// BUG-118 — what does tiling do to the DOWNBEAT activation, as opposed to the beats?
+    ///
+    /// The five-suite table's one span-fair regression is billie_jean, whose reference is
+    /// full-track (`extended_by: librosa`): beat F IMPROVES 0.97 -> 0.99 while downbeat F
+    /// collapses 0.90 -> 0.37. Beats survive tiling; downbeats do not. This measures the
+    /// grid either side to say how.
+    ///
+    /// UZUME_DB_TILE_PROBE=1 swift test --package-path UzumeEngine --filter BarLineWholeTrackProbe
+    @Test("tiling: beats vs downbeats",
+          .enabled(if: ProcessInfo.processInfo.environment["UZUME_DB_TILE_PROBE"] == "1"))
+    func tilingDownbeats() throws {
+        let fixtures = URL(fileURLWithPath: (NSHomeDirectory() as NSString)
+            .appendingPathComponent("uzume_beatbench_fixtures"))
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let analyzer = try DefaultBeatGridAnalyzer(device: device)
+        let names = ["billie_jean", "bleed", "take_five", "solsbury_hill", "money"]
+        print("\n  track            arm      beats  downbeats  db/beat  medianBarSec  meter")
+        for name in names {
+            var audioURL: URL?
+            for ext in ["mp3", "wav", "m4a", "flac"] {
+                let u = fixtures.appendingPathComponent("\(name).\(ext)")
+                if FileManager.default.fileExists(atPath: u.path) { audioURL = u; break }
+            }
+            guard let audioURL, let (audio, rate) = try? Self.decodeMono(url: audioURL),
+                  !audio.isEmpty else { continue }
+            for whole in [false, true] {
+                let grid = analyzer.analyzeBeatGrid(
+                    samples: audio, sampleRate: rate, wholeTrack: whole)
+                // Restrict to the first 30 s so BOTH arms describe the same music.
+                let beats = grid.beats.filter { $0 <= 30.0 }
+                let downs = grid.downbeats.filter { $0 <= 30.0 }
+                let gaps = (0..<max(downs.count - 1, 0)).map { downs[$0 + 1] - downs[$0] }
+                let medianBar = gaps.isEmpty ? 0 : gaps.sorted()[gaps.count / 2]
+                let ratio = beats.isEmpty ? 0 : Double(downs.count) / Double(beats.count)
+                let pad = String(repeating: " ", count: max(0, 16 - name.count))
+                print(String(format: "  %@%@%@  %5d  %9d  %7.3f  %12.3f  %5d",
+                             name, pad, whole ? "whole " : "clamp ",
+                             beats.count, downs.count, ratio, medianBar, grid.beatsPerBar))
+            }
+        }
+    }
+
+    /// BUG-118 — WHERE does the whole-track grid degrade?
+    ///
+    /// Span-matched over the first 30 s it equals the clamp. Over the full track it does
+    /// not: bleed's beat F is 0.76 and billie_jean's downbeat F falls 0.90 -> 0.37 against
+    /// the same full-track reference. If quality falls with time-into-track, the defect is
+    /// in what the resolver assumes globally, not in the tiling of activations.
+    ///
+    /// Beat spacing regularity is the proxy: |IOI - local median| in each tenth of the
+    /// track, plus the downbeat interval's coefficient of variation per tenth.
+    ///
+    /// UZUME_DECAY_PROBE=1 swift test --package-path UzumeEngine --filter BarLineWholeTrackProbe
+    @Test("does the whole-track grid degrade with time into the track",
+          .enabled(if: ProcessInfo.processInfo.environment["UZUME_DECAY_PROBE"] == "1"))
+    func degradesWithTime() throws {
+        let fixtures = URL(fileURLWithPath: (NSHomeDirectory() as NSString)
+            .appendingPathComponent("uzume_beatbench_fixtures"))
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let analyzer = try DefaultBeatGridAnalyzer(device: device)
+        for name in ["billie_jean", "bleed", "take_five", "solsbury_hill"] {
+            var audioURL: URL?
+            for ext in ["mp3", "wav", "m4a", "flac"] {
+                let u = fixtures.appendingPathComponent("\(name).\(ext)")
+                if FileManager.default.fileExists(atPath: u.path) { audioURL = u; break }
+            }
+            guard let audioURL, let (audio, rate) = try? Self.decodeMono(url: audioURL),
+                  !audio.isEmpty else { continue }
+            let grid = analyzer.analyzeBeatGrid(samples: audio, sampleRate: rate, wholeTrack: true)
+            guard grid.beats.count > 100 else { continue }
+            let span = (grid.beats.last ?? 0) - (grid.beats.first ?? 0)
+            let iois = (0..<(grid.beats.count - 1)).map { grid.beats[$0 + 1] - grid.beats[$0] }
+            let median = iois.sorted()[iois.count / 2]
+            var buckets = [[Double]](repeating: [], count: 10)
+            for (i, ioi) in iois.enumerated() {
+                let t = (grid.beats[i] - (grid.beats.first ?? 0)) / max(span, 1e-9)
+                buckets[min(9, max(0, Int(t * 10)))].append(abs(ioi - median) * 1000)
+            }
+            let line = buckets.map { b -> String in
+                b.isEmpty ? "  -  " : String(format: "%5.0f", b.reduce(0, +) / Double(b.count))
+            }.joined(separator: " ")
+            let pad = String(repeating: " ", count: max(0, 15 - name.count))
+            print("  \(name)\(pad)|IOI-med| ms by tenth:  \(line)")
+        }
+    }
 }

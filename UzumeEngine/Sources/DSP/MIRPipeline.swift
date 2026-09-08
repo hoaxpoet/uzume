@@ -437,10 +437,7 @@ public final class MIRPipeline: @unchecked Sendable {
                 playbackTime: elapsedSeconds,   // Double (QR.1 / D-079)
                 deltaTime: ctx.deltaTime
             )
-            fv.beatPhase01    = driftResult.beatPhase01
-            fv.beatsUntilNext = driftResult.beatsUntilNext
-            fv.barPhase01     = driftResult.barPhase01
-            fv.beatsPerBar    = Float(driftResult.beatsPerBar)
+            applyDriftPhase(driftResult, to: &fv)
         } else {
             let predictorResult = beatPredictor.update(
                 subBassOnset: ctx.beat.onsets[0],
@@ -461,6 +458,7 @@ public final class MIRPipeline: @unchecked Sendable {
         // envelope is at rest on both sides) to the live drift tracker's
         // per-beat phase, computed above — Matt's "more energetic" steady
         // state. Runs AFTER the drift block so the live phase is current.
+        followLocalTempo(at: elapsedSeconds)
         let pulse = beatPulseClock.update(
             energySum: fv.bass + fv.mid + fv.treble,
             time: elapsedSeconds,
@@ -562,6 +560,28 @@ extension MIRPipeline {
         fv.midRel = out.midRel; fv.midDev = out.midDev
         fv.trebRel = out.trebRel; fv.trebDev = out.trebDev
         fv.bassAttRel = out.bassAttRel; fv.midAttRel = out.midAttRel; fv.trebAttRel = out.trebAttRel
+    }
+
+    /// Phase fields from the drift tracker (grid path).
+    private func applyDriftPhase(
+        _ result: LiveBeatDriftTracker.Result, to fv: inout FeatureVector
+    ) {
+        fv.beatPhase01    = result.beatPhase01
+        fv.beatsUntilNext = result.beatsUntilNext
+        fv.barPhase01     = result.barPhase01
+        fv.beatsPerBar    = Float(result.beatsPerBar)
+    }
+
+    /// BUG-119 — keep the pulse on the track's LOCAL tempo.
+    ///
+    /// The pulse period was installed once per track from `grid.bpm`, a single whole-track
+    /// median, and never revisited. On real material that put Ferrofluid Ocean's spike
+    /// punches 7–20 % off the music (bleed's grid reads 115.0 BPM clamped and 123.6
+    /// whole-track), which is what made them read as incoherent grain rather than a pulse.
+    /// The drift tracker already reads the grid's local period every frame; this hands it on.
+    private func followLocalTempo(at elapsedSeconds: Double) {
+        guard let localPeriod = liveDriftTracker.lastLocalBeatPeriod else { return }
+        beatPulseClock.trackLocalBeatPeriod(localPeriod, at: elapsedSeconds)
     }
 
     /// Write the `BeatPulseClock` output onto the pulse fields (floats 40–43:

@@ -140,11 +140,23 @@ public final class BeatPulseClock: @unchecked Sendable {
     // MARK: - State
 
     /// Beat period in seconds. nil = no usable tempo → pulse stays silent.
+    /// EMA weight for local-tempo tracking. ~0.02 per analysis frame follows a real tempo
+    /// change over a few seconds while ignoring beat-to-beat jitter in the grid.
+    static let tempoTrackingAlpha = 0.02
+
+    /// Relative period change required before the anchor is rewritten. Below this the pulse
+    /// is already close enough and re-anchoring every frame would be churn.
+    static let tempoUpdateThreshold = 0.005
+
     private var periodS: Double?
 
     /// Anchor instant (in the caller's `time` clock). nil until the first
     /// note has been confirmed.
     private var anchorTime: Double?
+
+    /// Smoothed seconds-per-beat, tracking the grid's local period (see
+    /// `trackLocalBeatPeriod`). Nil until a tempo is installed.
+    private var smoothedBeatPeriod: Double?
 
     /// First frame time of the current candidate audible run (pre-anchor).
     private var pendingAnchorTime: Double?
@@ -180,14 +192,63 @@ public final class BeatPulseClock: @unchecked Sendable {
 
     /// Install the pulse tempo from the cached `BeatGrid`'s BPM. Pass nil (or
     /// a non-positive BPM) to silence the pulse (reactive mode / no grid).
-    /// The sole tempo authority — called from `MIRPipeline.setBeatGrid`.
+    /// Called once per track from `MIRPipeline.setBeatGrid` to seed the tempo;
+    /// `trackLocalBeatPeriod` then follows the music from there.
     public func setTempo(bpm: Double?) {
         if let bpm, bpm > 0 {
             periodS = (60.0 / bpm) * Self.pulseBeats   // slow pulse (D-154)
+            smoothedBeatPeriod = 60.0 / bpm
         } else {
             periodS = nil
+            smoothedBeatPeriod = nil
         }
     }
+
+    /// Follow the track's LOCAL tempo instead of holding one whole-track average.
+    ///
+    /// The pulse period used to be fixed for a whole track from `grid.bpm` — one median,
+    /// installed at track change, never revisited. Matt, 2026-09-04: *"you should not be
+    /// averaging BPM / tempo, you should be recording it over the duration of the track so
+    /// that visuals are better synced."* Widening the analysis window (PR.12) did not fix
+    /// that on its own; it changed which average got installed, and on real material that
+    /// moved the pulse 7–20 % off (bleed 115.0 → 123.6 BPM, money 116.2 → 129.3), which is
+    /// what made Ferrofluid Ocean's spike punches read as incoherent grain.
+    ///
+    /// Two things this must not do. It must not JUMP the phase: the phase is
+    /// `(time − anchor) / period`, so changing the period without re-anchoring rewrites
+    /// history. Total elapsed beats are preserved across the change instead, which keeps
+    /// `phase01` and `beatIndex` continuous through it. And it must not WOBBLE: a raw
+    /// beat-to-beat period is noisy, so it is smoothed over a few beats — a local tempo that
+    /// tracks the music, not an average of the whole song.
+    ///
+    /// - Parameters:
+    ///   - beatPeriod: seconds per beat at `time`, from `BeatGrid.localTiming`.
+    ///   - time: the playback clock the pulse is running on.
+    public func trackLocalBeatPeriod(_ beatPeriod: Double, at time: Double) {
+        guard beatPeriod > 0.05, beatPeriod < 4.0 else { return }
+        let smoothed: Double
+        if let previous = smoothedBeatPeriod {
+            smoothed = previous + Self.tempoTrackingAlpha * (beatPeriod - previous)
+        } else {
+            smoothed = beatPeriod
+        }
+        smoothedBeatPeriod = smoothed
+
+        let target = smoothed * Self.pulseBeats
+        guard let current = periodS else { periodS = target; return }
+        // Ignore changes below the threshold so the anchor is not rewritten every frame.
+        guard abs(target - current) / current > Self.tempoUpdateThreshold else { return }
+        if let anchor = anchorTime, time > anchor {
+            // Preserve elapsed BEATS, not elapsed seconds — that is what keeps the phase
+            // continuous while the rate changes underneath it.
+            let elapsedBeats = (time - anchor) / current
+            anchorTime = time - elapsedBeats * target
+        }
+        periodS = target
+    }
+
+    /// Current pulse period in seconds, for tests that assert tempo tracking.
+    var currentPulsePeriodForTesting: Double? { periodS }
 
     /// Clear the anchor and amplitude state for a new track (called from
     /// `MIRPipeline.reset()`). Keeps the tempo — `setTempo` is the sole tempo
