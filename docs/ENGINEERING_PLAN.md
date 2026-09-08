@@ -750,6 +750,26 @@ composition parameters — the cheapest items in the whole review and each an un
 Likely folds into PR.5 as one look increment. **Done-when:** each is a before/after sheet Matt has
 approved.
 
+**PR.6 — implemented 2026-09-08, pending Matt's approval of the sheets.** Three parameter changes,
+each built to his exact words, no design invention:
+- **Murmuration** — *"flock takes more of the frame"*: `viewScale` 1.05 → **1.30**
+  (`Murmuration3DGeometry.swift`); the roam clamps scaled ×0.81 so the swelled flock stays framed
+  (`Murmuration3D.metal`). Flock bounding box ×1.24 in both axes on the audio sequence;
+  `test_framed` ("stays framed throughout") passes at the new zoom. Lever if he wants more: 1.5.
+- **Fata Morgana** — *"horizon moves so sky occupies a larger share than water"*: the source pins the
+  horizon at v = 0.5; the floor perspective, sky/water select, reflection sample and blue gradient all
+  hang off one `uv1.y`, so a single constant `kFataHorizonV = 0.62` moves the whole horizon
+  consistently. Measured: first water row 0.38–0.44 → 0.50–0.56 of the frame. **Fata Morgana has no
+  curated reference set** (`docs/VISUAL_REFERENCES/` has none) — a framing change built to Matt's
+  words does not need one, but certification work would.
+- **Glaze** — *"stops jumping between the top and bottom of the screen and keeps its motion inside
+  the canvas"*: the lift term could push the spring anchor to ≈1.7, so the tail slammed the top wall
+  and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
+  bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
+  margin; x is untouched. Motion gate run before commit (a hard wall could read as a bump).
+**Done-when unchanged:** Matt approves each sheet. The PR.4 hang is queued behind a fresh capture —
+no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to root-cause yet.
+
 **PR.7 — variation and longevity** (deliberately last). Cymatic Resonance (more pattern variation —
 and it is the preset he rates highest, *"one of the best to watch"*), Witchlight (more looping),
 Floret (*"mesmerizing but also kinda boring"*), Filigree once PR.2 has landed. Shared cause: the
