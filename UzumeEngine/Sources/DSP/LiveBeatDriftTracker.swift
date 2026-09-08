@@ -297,6 +297,11 @@ public final class LiveBeatDriftTracker: @unchecked Sendable {
     }
 
     /// Current tracker confidence. `.unlocked` when no grid is installed.
+    /// Seconds per beat at the last phase computation, from `BeatGrid.localTiming` — the
+    /// grid's LOCAL period, not a whole-track average. Nil when there is no grid coverage
+    /// at the current time. Consumed by `BeatPulseClock` via `MIRPipeline` (BUG-119).
+    public private(set) var lastLocalBeatPeriod: Double?
+
     public var currentLockState: LockState {
         lock.lock(); defer { lock.unlock() }
         return computeLockState()
@@ -874,8 +879,14 @@ public final class LiveBeatDriftTracker: @unchecked Sendable {
     private func computePhase(at time: Double) -> PhaseTriple {
         guard let timing = grid.localTiming(at: time),
               let idx = grid.beatIndex(at: time) else {
+            lastLocalBeatPeriod = nil
             return PhaseTriple(beatPhase01: 0, beatsUntilNext: 1, barPhase01: 0)
         }
+        // The grid's LOCAL seconds-per-beat here, published so the pulse clock can follow
+        // the music instead of holding one whole-track average (BUG-119). Read from this
+        // tracker rather than the grid directly because the grid is in track time and this
+        // is the object that owns the mapping from the live clock onto it.
+        lastLocalBeatPeriod = timing.period
         let beatTime = grid.beats[idx]
         let period = max(timing.period, 1e-6)
         let rawPhase = (time - beatTime) / period

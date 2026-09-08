@@ -487,5 +487,47 @@ final class BeatPulseClockTests: XCTestCase {
         var out = BeatPulseClock.Output.zero
         for _ in 0..<60 { out = clock.update(energySum: 0.6, time: t2, deltaTime: 1 / 60); t2 += 1 / 60 }
         XCTAssertGreaterThan(out.amp01, 0.5, "pulse re-anchors on the new track's first note")
+    
+
+    // MARK: - BUG-119 — the pulse follows the track's local tempo
+
+    /// The pulse period was installed once per track from `grid.bpm` — a single whole-track
+    /// median — and never revisited. On real material that put Ferrofluid Ocean's spike
+    /// punches 7–20 % off the music (bleed 115.0 vs 123.6 BPM). Following the grid's LOCAL
+    /// period fixes that, but only if it does not jump the phase doing it: the phase is
+    /// `(time − anchor) / period`, so the anchor has to be rewritten to preserve elapsed
+    /// BEATS rather than elapsed seconds.
+    func test_localTempoChangeKeepsPhaseContinuous() {
+        let clock = BeatPulseClock()
+        clock.setTempo(bpm: 120)                       // 0.5 s/beat → 2.0 s pulse period
+        var t = 0.0
+        for _ in 0..<40 { _ = clock.update(energySum: 1.0, time: t, deltaTime: 0.05); t += 0.05 }
+        let before = clock.update(energySum: 1.0, time: t, deltaTime: 0.05).phase01
+
+        clock.trackLocalBeatPeriod(0.55, at: t)        // a 10 % tempo change
+        let after = clock.update(energySum: 1.0, time: t, deltaTime: 0.0).phase01
+
+        XCTAssertLessThan(abs(after - before), 0.02,
+                          "phase jumped \(before) → \(after) when the period changed")
     }
+
+    /// Following local tempo must not mean following beat-to-beat noise. One stray period
+    /// leaves the pulse alone; a sustained change is tracked.
+    func test_localTempoIsSmoothedNotJittery() {
+        let clock = BeatPulseClock()
+        clock.setTempo(bpm: 120)
+        var t = 0.0
+        for _ in 0..<40 { _ = clock.update(energySum: 1.0, time: t, deltaTime: 0.05); t += 0.05 }
+
+        clock.trackLocalBeatPeriod(1.2, at: t)
+        let afterOutlier = clock.currentPulsePeriodForTesting ?? 0
+        XCTAssertLessThan(abs(afterOutlier - 2.0), 0.06,
+                          "a single stray period moved the pulse to \(afterOutlier)")
+
+        for _ in 0..<400 { clock.trackLocalBeatPeriod(0.4, at: t); t += 0.02 }
+        let afterSustained = clock.currentPulsePeriodForTesting ?? 0
+        XCTAssertLessThan(abs(afterSustained - 1.6), 0.15,
+                          "sustained 0.4 s/beat should approach a 1.6 s pulse, got \(afterSustained)")
+    }
+}
 }
