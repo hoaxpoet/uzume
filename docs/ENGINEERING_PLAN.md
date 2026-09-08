@@ -737,7 +737,11 @@ top/bottom **0.30–2.59** (harder than ours) with **nearWhite 0.000 through the
 push "evacuated the frame" was inferred, not measured, and wrong** — BUG-115's real defects were the
 FA #31 routing and the uncapped 7 %. Nine more hypotheses falsified and recorded in BUG-122's entry;
 the y-mirrored strand set that fixed the symptom was tested and rejected as unfaithful and unnecessary.
-**Gate: Matt has not seen PR.5.4 live.**
+**Gate: Matt has not seen PR.5.4 live.** **Seen 2026-09-08 22:41: *"Color is better but still washed out."* Correct — and the
+metric could not see it. Same track, reference luma 0.37 / saturation 0.89; ours 0.57 / 0.65. `nearWhite`
+is blind to pale. **Matt: "stop and proceed with another PR increment."** Residual parked as BUG-123
+(one bounded increment if ever reopened). **PR.5 is CLOSED at this state:** colour restored, cold-start
+flash gone, quiet-passage white-outs gone, coupling restored; tone still paler than the reference.
 
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
