@@ -2,7 +2,7 @@
   "name": "Dragon Bloom",
   "family": "hypnotic",
   "duration": 45,
-  "description": "Warm fiery bilaterally-symmetric feathered feedback bloom — a faithful port of the Milkdrop preset `$$$ Royal - Mashup (220)`'s render loop (butterchurn-replicated: no-decay custom warp + R→G→B colour transfer + waves composited normal-alpha on top, comp-stage echo/gamma/invert) on Uzume's mv_warp, uplifted with stem separation (three tumbling spectral strands ← drums/bass/vocals — each arm is an instrument), bass breathing, per-arm transient flares, an energy-weighted tumble, and a comp-stage beat pump. See docs/presets/DRAGON_BLOOM_PLAN.md + D-137/D-138.",
+  "description": "Warm fiery bilaterally-symmetric feathered feedback bloom \u2014 a faithful port of the Milkdrop preset `$$$ Royal - Mashup (220)`'s render loop (butterchurn-replicated: no-decay custom warp + R\u2192G\u2192B colour transfer + waves composited normal-alpha on top, comp-stage echo/gamma/invert) on Uzume's mv_warp, uplifted with stem separation (three tumbling spectral strands \u2190 drums/bass/vocals \u2014 each arm is an instrument), bass breathing, per-arm transient flares, an energy-weighted tumble, and a comp-stage beat pump. See docs/presets/DRAGON_BLOOM_PLAN.md + D-137/D-138.",
   "author": "Matt",
   "inspired_by": {
     "milkdrop_filename": "$$$ Royal - Mashup (220)",
@@ -11,17 +11,29 @@
     "source_form": ".milk \u2014 cream-of-the-crop pack file; sha256 is of that .milk, whose reference copy was removed at PUB.1 (D-116 bullet 4)",
     "sha256": "510366e48739f3dcd14371badb0649aa3ddf6ec68b061577709c1f2f4a043091"
   },
-  "passes": ["direct", "mv_warp"],
+  "passes": [
+    "direct",
+    "mv_warp"
+  ],
   "fragment_function": "dragon_bloom_fragment",
   "vertex_function": "fullscreen_vertex",
-  "decay": 0.950,
+  "decay": 0.95,
   "marks": {
     "vertex_count": 1536,
     "instance_count": 3,
     "primitive": "line_strip",
     "chromatic": 1.0,
-    "comp": { "invert": 1.0, "echo": 0.5, "gamma": 1.07 },
-    "beat_pulse": true
+    "comp": {
+      "invert": 1.0,
+      "echo": 0.5,
+      "gamma": 1.07
+    },
+    "beat_pulse": true,
+    "canvas_clear": [
+      0.468,
+      0.717,
+      0.829
+    ]
   },
   "stem_affinity": {
     "drums": "strand_arm",
@@ -30,19 +42,60 @@
   },
   "visual_density": 0.45,
   "motion_intensity": 0.55,
-  "color_temperature_range": [0.60, 0.95],
+  "color_temperature_range": [
+    0.6,
+    0.95
+  ],
   "fatigue_risk": "low",
-  "transition_affordances": ["crossfade", "morph"],
-  "section_suitability": ["buildup", "peak", "bridge"],
-  "complexity_cost": { "tier1": 1.4, "tier2": 0.7 },
+  "transition_affordances": [
+    "crossfade",
+    "morph"
+  ],
+  "section_suitability": [
+    "buildup",
+    "peak",
+    "bridge"
+  ],
+  "complexity_cost": {
+    "tier1": 1.4,
+    "tier2": 0.7
+  },
   "audio_routes": [
-    { "route": "bloom_breathing", "primitive": "bass", "kind": "continuous" },
-    { "route": "drums_strand_volume", "primitive": "drumsEnergy", "kind": "continuous" },
-    { "route": "drums_strand_flare", "primitive": "drumsEnergyDev", "kind": "accent" },
-    { "route": "bass_strand_volume", "primitive": "bassEnergy", "kind": "continuous" },
-    { "route": "bass_strand_flare", "primitive": "bassEnergyDev", "kind": "accent" },
-    { "route": "vocals_strand_volume", "primitive": "vocalsEnergy", "kind": "continuous" },
-    { "route": "vocals_strand_flare", "primitive": "vocalsEnergyDev", "kind": "accent" }
+    {
+      "route": "bloom_breathing",
+      "primitive": "bassAttRel",
+      "kind": "continuous"
+    },
+    {
+      "route": "drums_strand_volume",
+      "primitive": "drumsEnergy",
+      "kind": "continuous"
+    },
+    {
+      "route": "drums_strand_flare",
+      "primitive": "drumsEnergyDev",
+      "kind": "accent"
+    },
+    {
+      "route": "bass_strand_volume",
+      "primitive": "bassEnergy",
+      "kind": "continuous"
+    },
+    {
+      "route": "bass_strand_flare",
+      "primitive": "bassEnergyDev",
+      "kind": "accent"
+    },
+    {
+      "route": "vocals_strand_volume",
+      "primitive": "vocalsEnergy",
+      "kind": "continuous"
+    },
+    {
+      "route": "vocals_strand_flare",
+      "primitive": "vocalsEnergyDev",
+      "kind": "accent"
+    }
   ],
   "certified": true,
   "rubric_profile": "lightweight"

@@ -344,7 +344,18 @@ float2 mvWarpPerVertex(
     float md   = sin(ang * 5.0);
     md = md * md * md * md * md;                              // ^5
     float z    = (1.0 + fabs(0.01 * md)) * 0.99951;
-    z *= clamp(1.0 + 0.06 * (f.bass * 6.0 - 1.0), 0.97, 1.07);  // breathing (bass, 6×-boosted)
+    // Breathing, on the SIGNED deviation primitive (BUG-115, D-026/FA #31). The old form
+    // was `clamp(1 + 0.06*(f.bass*6 - 1), 0.97, 1.07)` — an absolute threshold on
+    // AGC-normalised bass, neutral only at f.bass == 1/6. On real music it sat at 1.024
+    // median / 1.070 p90, i.e. a 2.4–7 % zoom EVERY frame against the source's 0.99951
+    // baseline: 50–140× the reference's own deviation from 1.0. That evacuated the frame
+    // faster than the strands could refill it, and the corners it emptied were then driven
+    // to black by the R→G→B fade — where they STICK, because below the transfer's 0.05
+    // gate no push fires. Black is an absorbing state, and the comp inverts it to white.
+    // `bass_att_rel` is ~0 at nominal, so the baseline is now the source's; tanh caps the
+    // ~3× real-music spikes (project_deviation_primitive_real_range — saturate vs p99,
+    // never vs 1.0), matching the Nacre pattern.
+    z *= 1.0 + 0.06 * tanh(max(0.0, f.bass_att_rel));           // breathing (bass deviation)
 
     float2 centre = float2(0.5, 0.5);
     float2 p      = uv - centre;
