@@ -72,6 +72,8 @@ final class PlaybackErrorBridge {
     /// surfaced here: the `AudioStallOverlayView` card already covers it earlier
     /// and more prominently (Matt's call, ASH.2).
     private var audioLevelsLowShown = false
+    /// Consecutive low/critical windows since the last healthy one (BUG-121).
+    private var quietRun = 0
 
     /// D-197 follow-up ("degraded only after loud"): latched true on the first
     /// `band=healthy` window. The low-levels nudge fires only after this — a
@@ -84,6 +86,8 @@ final class PlaybackErrorBridge {
     /// Seconds the low-level nudge stays up before auto-dismiss — long enough to
     /// read the remediation, short enough to stay unobtrusive.
     static let audioLevelsLowToastDuration: TimeInterval = 10
+    /// Consecutive quiet windows before the nudge — ~15 s at the 5 s cadence (BUG-121).
+    static let quietWindowsBeforeNudge = 3
 
     // MARK: - Silent-tap detector state
 
@@ -202,24 +206,24 @@ final class PlaybackErrorBridge {
 
     // MARK: - Signal-health toast (ASH.2)
 
-    /// Surface a one-per-session low-level nudge on the first sustained `band=low`
-    /// OR `band=critical` window. The monitor only publishes after a full 5 s window
-    /// closes and only on change, so a single reading already means one sustained
-    /// window.
-    ///
-    /// CR.1.1 (D-197): `.critical` (< −15 dBFS) is a WORSE state than `.low`
-    /// (−15…−12) but was previously NOT wired here — a session that went straight
-    /// `.critical → .healthy` (skipping the `.low` window) produced no live warning
-    /// at all, so a degraded-chain M7 ran unflagged (the Cymatic Resonance M7 2026-07-22:
-    /// the tap peaked at −24 dBFS = critical during the quiet intro, no toast fired).
-    /// Both degraded bands now nudge; the copy ("audio levels low") covers both.
+    /// Nudge when the chain has been loud, then goes quiet and STAYS quiet. D-197 wired
+    /// `.critical` in alongside `.low`; BUG-121 added the run requirement — its KNOWN_ISSUES
+    /// entry has why one window is a fade, not a fault.
     private func handle(health: SignalHealth) {
         // "Degraded only after loud" (D-197 follow-up): the chain must have been
         // observed healthy at least once before a low/critical window reads as
         // degradation — otherwise a quiet intro nudges falsely.
-        if health.peakBand == .healthy { hasSeenHealthyChain = true; return }
-        guard hasSeenHealthyChain,
-              health.peakBand == .low || health.peakBand == .critical,
+        // BUG-121 — a chain fault is SUSTAINED; a quiet passage is not. Firing on the FIRST
+        // quiet window nudged Matt on ordinary listening: every session has a fade or a gap,
+        // and across his history it fired on exactly one window of 20, 34 and 68.
+        if health.peakBand == .healthy {
+            hasSeenHealthyChain = true
+            quietRun = 0
+            return
+        }
+        guard health.peakBand == .low || health.peakBand == .critical else { return }
+        quietRun += 1
+        guard hasSeenHealthyChain, quietRun >= Self.quietWindowsBeforeNudge,
               !audioLevelsLowShown else { return }
         audioLevelsLowShown = true
         let isSpotify = isSpotifySourceProvider?() ?? false
