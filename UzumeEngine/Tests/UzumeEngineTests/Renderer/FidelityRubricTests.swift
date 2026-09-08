@@ -191,6 +191,9 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Nimbus":               false,   // direct-fragment; heuristic sees no deviation primitives
     "Ricercar":             false,   // FL.13 flow-field coupling CPU-side; not yet certified
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
+    "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
+                                     // surface, not a certification candidate. Reads no audio at all
+                                     // (routing is ALFVEN.3), so the coupling items cannot pass.
     "Meniscus":             false,   // MEN.2a stub, measured 4/15. The heuristic reads the
                                      // preset's MSL, and Meniscus's subject is not in it —
                                      // the surface is `MeniscusSurface` geometry drawn from a
