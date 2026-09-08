@@ -58,16 +58,26 @@ struct GlazeSpring {
         vx4 = vx4 * damp + dt * (x3 - x4) * spring
         vy4 = vy4 * damp + dt * ((y3 - y4) * spring - grav)
         x2 += vx2; y2 += vy2; x3 += vx3; y3 += vy3; x4 += vx4; y4 += vy4
-        wall(&x2, &vx2, bounce); wall(&y2, &vy2, bounce)
-        wall(&x3, &vx3, bounce); wall(&y3, &vy3, bounce)
-        wall(&x4, &vx4, bounce); wall(&y4, &vy4, bounce)
+        wall(&x2, &vx2, bounce); wall(&y2, &vy2, bounce, lo: kGlazeWallLo, hi: kGlazeWallHi)
+        wall(&x3, &vx3, bounce); wall(&y3, &vy3, bounce, lo: kGlazeWallLo, hi: kGlazeWallHi)
+        wall(&x4, &vx4, bounce); wall(&y4, &vy4, bounce, lo: kGlazeWallLo, hi: kGlazeWallHi)
     }
 
     /// Reflect velocity off the [0,1] walls (source `above`/`below` bounce guards).
-    private func wall(_ pos: inout Float, _ vel: inout Float, _ bnc: Float) {
-        if pos <= 0 { vel = abs(vel) * bnc } else if pos >= 1 { vel = -abs(vel) * bnc }
+    private func wall(_ pos: inout Float, _ vel: inout Float, _ bnc: Float, lo: Float = 0, hi: Float = 1) {
+        if pos <= lo { pos = lo; vel = abs(vel) * bnc } else if pos >= hi { pos = hi; vel = -abs(vel) * bnc }
     }
 }
+
+// MARK: - PR.6 framing bounds (Matt: keep Glaze's motion inside the canvas)
+
+/// Vertical range the spring anchor may be asked to reach. The seed band is seedY ± 0.16, so a
+/// tail held inside [0.22, 0.78] keeps the band on-screen with margin.
+private let kGlazeAnchorYLo: Float = 0.30
+private let kGlazeAnchorYHi: Float = 0.70
+/// Vertical walls the masses bounce off (was the canvas edge, 0/1 — the source's `above`/`below`).
+private let kGlazeWallLo: Float = 0.22
+private let kGlazeWallHi: Float = 0.78
 
 // MARK: - GLAZE.3 audio-anchor gains (M7 render-tune levers)
 
@@ -126,7 +136,14 @@ extension RenderPipeline {
         // ponytail: kGlazeSwing/kGlazeLift are the render-tune levers (M7) — set by render-compare
         // on the real session (the bass↔other differential is denser but smaller than the old band gap).
         let anchorX = 0.5 + 0.10 * sin(tSec * 0.37) + kGlazeSwing * (glazeSpring.bassStemEMA - glazeSpring.otherStemEMA)
-        let anchorY = 0.5 + 0.08 * sin(tSec * 0.53) + kGlazeLift * glazeSpring.liftEMA
+        // PR.6 framing (Matt, roster review): Glaze "stops jumping between the top and bottom of
+        // the screen and keeps its motion inside the canvas." The lift term can push the anchor
+        // well above 1.0 (kGlazeLift 1.2 × fullness ≈ 1), so the tail slammed the top wall and
+        // bounced — that IS the jump — and the seed band (seedY ± 0.16) left the canvas at
+        // either wall. Bound the anchor to the middle band; the spring still moves freely
+        // within it and the walls (now kGlazeWallLo/Hi) keep the band on-screen.
+        let anchorY = min(max(0.5 + 0.08 * sin(tSec * 0.53) + kGlazeLift * glazeSpring.liftEMA,
+                              kGlazeAnchorYLo), kGlazeAnchorYHi)
         glazeSpring.step(anchorX: anchorX, anchorY: anchorY)
         // Source pixel_eqs: poke centre = (mass-4 x, tail SPEED), poke scale = mass-3 x.
         let tailSpeed = (glazeSpring.vx4 * glazeSpring.vx4 + glazeSpring.vy4 * glazeSpring.vy4).squareRoot()
