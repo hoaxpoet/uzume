@@ -207,7 +207,14 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       track has all four stems at 0.000 for ~0.4 s out of every 2 s,
     ///                       baked in. The holes are DATA, not code — a v10 hit would replay
     ///                       them forever — so those entries must be re-analysed.
-    public static let currentSchemaVersion: Int = 11
+    ///   v12 (BUG-118) — the beat grid in a v11 entry was computed with the TILED whole-track
+    ///                       decode, which is now off by default. A code revert does not reach
+    ///                       a cached grid: Matt's session `2026-09-08T13-58-15Z` replayed
+    ///                       whole-track grids from cache (KC Accidental, 543 beats at 152 BPM
+    ///                       = 214 s) hours after the default was reverted, so he was testing
+    ///                       the analysis that had been withdrawn. Grids are DATA; withdrawing
+    ///                       the code that made them requires re-analysing.
+    public static let currentSchemaVersion: Int = 12
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).
