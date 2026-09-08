@@ -10,6 +10,24 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-08-173808] BUG-121 — one quiet window condemned the session and nudged the listener
+
+Matt: *"in the last few sessions, I was seeing notifications that the signal source was low… this has been a problem historically, and I would like to resolve it once and for all."*
+
+**It fired on a single 5-second window.** Across every session on disk, each "degraded" verdict is exactly one: 1 of 68, 1 of 20, 1 of 34. `band=low` has **never** fired in his history — the trigger was always a lone `band=critical` at −18.6 to −24.5 dBFS, landing mid-session (sample 59 of 68, 10 of 20, 21 of 34). Those are fades, gaps between tracks, soft passages. Music has them; every session has one.
+
+**Why the previous fix did not hold.** D-197's follow-up already addressed this once as "degraded only after loud" — a quiet window counts only if a healthy one preceded it. That removes the quiet OPENING and nothing else, so the false positive moved into the middle of the song, where every track has one. Patching the symptom's location rather than its shape is why it came back.
+
+**Fix.** The live toast and the offline verdict both require **3 consecutive** low/critical windows, from one shared constant so what the listener sees and what a closeout cites cannot disagree. At the ~5 s cadence that is ~15 s during which the peak never once crossed −15 dBFS: music does not do that while playing, a misrouted chain does it permanently. A healthy window resets the run, so two dips in one song stay two dips.
+
+**Verified in both directions on his real data.** Re-grading his actual sessions flips every false positive to `clean` while the already-clean ones stay clean; the negative control — a chain quiet in *every* window — still grades `degraded`; and the boundary is asserted (a run of 2 does not flag, 3 does) so the threshold cannot drift quietly.
+
+**Also filed: BUG-120**, the Witchlight defect fixed earlier today and live-confirmed, which had no KNOWN_ISSUES entry until the doc gate caught the gap in the numbering.
+
+1923 engine tests green, 466 app tests green, swiftlint 0.
+
+---
+
 ### [dev-2026-09-08-135334] BUG-119 — the beat pulse held one average BPM for a whole track; that was Ferrofluid Ocean's grain
 
 Matt, 2026-09-07: *"Ferrofluid Ocean is pixelated / grainy - doesn't look like it used to look."* Then, after the reverts: *"Yes, FFO's grain is back to normal."* That second message is what identified it — only the beat-grid changes could reach FFO, so the grain had to come from one of them.

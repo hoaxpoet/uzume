@@ -56,11 +56,14 @@ struct ChainAnalyzerTests {
     func degradedFromLog() throws {
         let dir = try makeDir("degraded")
         defer { try? FileManager.default.removeItem(at: dir) }
-        // D-197: the chain was loud (healthy) first, THEN dropped to band=low — a
-        // real degradation, so `signal_health_band_low` flags.
+        // D-197: the chain was loud (healthy) first, THEN dropped — a real degradation.
+        // BUG-121: the drop must be SUSTAINED. One window is a fade between tracks; a
+        // misrouted chain is quiet in every window, so the fixture holds a run.
         try write("""
             [t] SIGNAL_HEALTH: peak=-4.0dBFS band=healthy deadTap=false rate=48000
             [t] SIGNAL_HEALTH: peak=-13.5dBFS band=low deadTap=false rate=48000
+            [t] SIGNAL_HEALTH: peak=-13.8dBFS band=low deadTap=false rate=48000
+            [t] SIGNAL_HEALTH: peak=-14.2dBFS band=low deadTap=false rate=48000
             [t] DRM silence detected on the tap
             """, to: dir, "session.log")
         let health = ChainAnalyzer.analyze(sessionDir: dir)
@@ -159,5 +162,62 @@ struct ChainAnalyzerTests {
 
         let log = try String(contentsOf: dir.appendingPathComponent("session.log"), encoding: .utf8)
         #expect(log.contains("CHAIN_HEALTH: verdict=clean"))
+    }
+
+    // MARK: - BUG-121 — one quiet window is a passage, not a degraded chain
+
+    /// Every "degraded" verdict in Matt's entire session history was ONE window: 1 of 68,
+    /// 1 of 20, 1 of 34, always a lone `critical` at −18 to −24 dBFS in the MIDDLE of a
+    /// track, and `band=low` never once occurred. D-197 had already patched the version of
+    /// this that fired on a quiet opening; the false positive simply moved into the song.
+    @Test("A single quiet window mid-session does NOT grade degraded (BUG-121)")
+    func oneQuietWindowIsNotDegraded() throws {
+        let dir = try makeDir("one_quiet_window")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var lines = (0..<8).map { _ in
+            "[t] SIGNAL_HEALTH: peak=-10.4dBFS band=healthy deadTap=false rate=48000"
+        }
+        // The fade between two tracks, verbatim in shape from session 2026-09-08T14-09-48Z.
+        lines.insert("[t] SIGNAL_HEALTH: peak=-18.6dBFS band=critical deadTap=false rate=48000",
+                     at: 5)
+        try write(lines.joined(separator: "\n"), to: dir, "session.log")
+        let health = ChainAnalyzer.analyze(sessionDir: dir)
+        #expect(!health.reasons.contains("signal_health_band_low"),
+                "a lone quiet window graded the whole session degraded")
+    }
+
+    /// The other direction, which is what the check is FOR: a chain that is actually quiet —
+    /// wrong output device, wrong routing — is quiet in every window, and must still flag.
+    @Test("A sustained quiet run DOES grade degraded (BUG-121 negative control)")
+    func sustainedQuietIsDegraded() throws {
+        let dir = try makeDir("sustained_quiet")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var lines = ["[t] SIGNAL_HEALTH: peak=-4.0dBFS band=healthy deadTap=false rate=48000"]
+        lines += (0..<6).map { _ in
+            "[t] SIGNAL_HEALTH: peak=-19.0dBFS band=critical deadTap=false rate=48000"
+        }
+        try write(lines.joined(separator: "\n"), to: dir, "session.log")
+        let health = ChainAnalyzer.analyze(sessionDir: dir)
+        #expect(health.reasons.contains("signal_health_band_low"),
+                "a chain quiet in every window must still be caught")
+        #expect(health.verdict == .degraded)
+    }
+
+    /// Two quiet windows is still a passage — the boundary, asserted so the threshold is not
+    /// quietly loosened or tightened without this failing.
+    @Test("The threshold is a RUN of three, not two (BUG-121)")
+    func thresholdIsThree() throws {
+        for (count, shouldFlag) in [(2, false), (3, true)] {
+            let dir = try makeDir("run_\(count)")
+            defer { try? FileManager.default.removeItem(at: dir) }
+            var lines = ["[t] SIGNAL_HEALTH: peak=-4.0dBFS band=healthy deadTap=false rate=48000"]
+            lines += (0..<count).map { _ in
+                "[t] SIGNAL_HEALTH: peak=-16.0dBFS band=critical deadTap=false rate=48000"
+            }
+            try write(lines.joined(separator: "\n"), to: dir, "session.log")
+            let health = ChainAnalyzer.analyze(sessionDir: dir)
+            #expect(health.reasons.contains("signal_health_band_low") == shouldFlag,
+                    "a run of \(count) should\(shouldFlag ? "" : " not") flag")
+        }
     }
 }

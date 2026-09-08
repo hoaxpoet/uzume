@@ -75,8 +75,12 @@ struct PlaybackErrorBridgeTests {
         let sut = makeHealthSUT()
         _ = sut.bridge   // retain — subscriptions live with the bridge
         // Chain is loud first (healthy), then drops to .critical — a real degradation.
+        // BUG-121: and STAYS there. A single window is a fade between tracks; the D-197
+        // intent this test guards — that `.critical` nudges and not only `.low` — is intact.
         sut.health.send(SignalHealth(peakBand: .healthy, peakDBFS: -4))
-        sut.health.send(SignalHealth(peakBand: .critical, peakDBFS: -24))
+        for _ in 0..<PlaybackErrorBridge.quietWindowsBeforeNudge {
+            sut.health.send(SignalHealth(peakBand: .critical, peakDBFS: -24))
+        }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(hasAudioLevelsLowToast(sut.tm),
                 "a .critical window after the chain was loud must nudge (D-197 — .critical was unwired)")
