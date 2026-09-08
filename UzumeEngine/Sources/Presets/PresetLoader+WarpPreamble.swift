@@ -56,6 +56,7 @@ extension PresetLoader {
         float2 uv;                     // direct screen UV [0,1]
         float2 warped_uv;              // displaced UV to sample prev frame at
         float  decay;                  // pf.decay, interpolated across the grid
+        float2 ditherOffset;           // D-137 warp_18: source's `rand_frame.xy`
     };
 
     // ── Sampler for warp texture reads (clamp-to-edge to avoid border wrap) ──
@@ -129,6 +130,10 @@ extension PresetLoader {
         out.uv        = uv;
         out.warped_uv = warped_uv;
         out.decay     = pf.decay;
+        // warp_18's `rand_frame.xy` — a per-frame offset so the dither pattern does not
+        // stand still. `features` is only bound to the vertex stage, so it is derived
+        // here and interpolated (constant across the mesh) rather than in the fragment.
+        out.ditherOffset = fract(float2(features.time * 0.7371, features.time * 0.4113));
         return out;
     }
 
@@ -138,6 +143,7 @@ extension PresetLoader {
     fragment float4 mvWarp_fragment(
         WarpVertexOut      in           [[stage_in]],
         texture2d<float>   prevTex      [[texture(0)]],
+        texture2d<float>   noiseTex     [[texture(1)]],
         constant float&    chromaticMix [[buffer(0)]]
     ) {
         // ── L4 (D-137): full source.milk warp shader (warp_3..15) ──────────────
@@ -164,6 +170,7 @@ extension PresetLoader {
         // Milkdrop/butterchurn's warp-mesh approach (and cheaper than a per-fragment
         // recompute). The chromatic transfer below still gates on chromaticMix so
         // every other mv_warp preset is byte-for-byte unchanged.
+        constexpr sampler ditherSampler(filter::nearest, address::repeat);
         float2 baseUV = in.warped_uv;
         float3 c0  = prevTex.sample(warpSampler, baseUV).rgb;
         float  a0  = prevTex.sample(warpSampler, baseUV).a;
@@ -185,8 +192,16 @@ extension PresetLoader {
         warm += xfer.xxx * float3(-1.0, 1.0, 0.0) * 0.014;
         warm += xfer.yyy * float3(0.0, -1.0, 1.0) * 0.080;
         warm += xfer.zzz * float3(0.0, 0.0, -1.0) * 0.020;
-        // (warp_18..19 error-diffusion dither deferred — needs a noise texture
-        // bound to the warp pass; it is anti-banding polish, not the fill.)
+        // warp_18..19 — the source's error-diffusion dither, restored (PR.5.1).
+        //   ret += (noise_lq(uv·texsize + rand_frame) - 0.5)/256 · vec3(1,3,8) · 5
+        // This was previously deferred as "anti-banding polish, not the fill". It is not
+        // polish: the R→G→B transfer directly above is hard-gated at `(ret - 0.05)·99`,
+        // so a pixel resting just under 0.05 never transfers and never cycles hue — it
+        // sits and integrates toward grey. The dither's ±(0.010, 0.029, 0.078) is what
+        // keeps pixels crossing that gate, which is why the oracle's field holds
+        // saturation 0.74–0.89 where ours sat at 0.63 and washed to pale lavender.
+        // Measured on the accumulator with the comp disabled on both sides; the
+        // per-channel (1,3,8) weighting is the source's, not a tuning knob.
         //
         // DECAY: butterchurn applies decay ONLY in the DEFAULT warp
         // (`ret = sample(prev)·decay`). When a CUSTOM warp shader is present (DB),
@@ -196,8 +211,26 @@ extension PresetLoader {
         // path (chromaticMix>0) we must NOT apply decay — applying it was an extra
         // ~5%/frame loss that starved the edges (pale background) and dimmed the
         // field vs the oracle. Other presets use the default-warp decay unchanged.
+        float3 outColor = mix(cr, warm, chromaticMix);
+        if (chromaticMix > 0.0) {
+            // One noise texel per screen pixel (source: `uv_orig · texsize · texsize_noise_lq.zw`).
+            // `noiseLQ` is r8Unorm — SINGLE channel — so the source's RGB lookup becomes three
+            // decorrelated taps. Reading `.rgb` here instead would hand green and blue a
+            // constant 0, i.e. a fixed −0.029 / −0.078 drain per frame rather than a dither.
+            float2 dbase = in.uv * float2(prevTex.get_width(), prevTex.get_height())
+                         / float2(noiseTex.get_width(), noiseTex.get_height()) + in.ditherOffset;
+            float3 dn = float3(noiseTex.sample(ditherSampler, dbase).r,
+                               noiseTex.sample(ditherSampler, dbase + float2(0.37, 0.11)).r,
+                               noiseTex.sample(ditherSampler, dbase + float2(0.71, 0.53)).r);
+            outColor += (dn - 0.5) / 256.0 * float3(1.0, 3.0, 8.0) * 5.0 * chromaticMix;
+        }
+        // DECAY stays butterchurn-faithful: applied in the DEFAULT warp only. A custom
+        // warp shader (Dragon Bloom) self-regulates through the normalise + hue-zoom +
+        // R→G→B transfer above — and, as of this change, the dither that lets that
+        // transfer actually fire. Restoring the multiply here was measured and starves
+        // the field (saturation 0.254, luma 0.116 vs the oracle's 0.74–0.89 / 0.26–0.57).
         float decayMul = (chromaticMix > 0.0) ? 1.0 : in.decay;
-        return float4(mix(cr, warm, chromaticMix), a0) * decayMul;
+        return float4(outColor, a0) * decayMul;
     }
 
     // ── mvWarp_compose_fragment ───────────────────────────────────────────────
@@ -266,7 +299,14 @@ extension PresetLoader {
         ret *= post.z;                            // gamma multiply (1.07)
         // brighten(sqrt)+darken(square) cancel → omitted.
         ret  = mix(ret, 1.0 - ret, post.x);       // invert
-        ret *= (1.0 + 0.12 * bp);                 // beat brighten (accent on the pump)
+        // NO post-invert beat brighten (PR.5.1). butterchurn's comp ends at the invert;
+        // the `ret *= 1 + 0.12·bp` that used to sit here was ours, and it was the white-out.
+        // Dragon Bloom's field is dark (luma ≈ 0.26), so the invert lands it near 0.74 and
+        // the darkest background inverts to ≈ 1.0 — multiplying THAT by up to 1.12 pushes
+        // every pixel above 0.893 through the ceiling, and a clipped pixel has all three
+        // channels at 1, i.e. white with the hue gone. Measured against the oracle on the
+        // same track: display clipped 0.831 vs its 0.017, nearWhite 0.274 vs its 0.000.
+        // The beat still reads through the zoom pump above, which is geometry and cannot clip.
         return float4(saturate(ret), 1.0);
     }
 
