@@ -719,6 +719,26 @@ reference's waves are all `additive=0`, confirmed against the live oracle), and 
 
 **Gate: still not seen live.** Every number here is offline replay of Matt's own capture.
 
+**PR.5.4 — the blinding white was a DRAIN, and the reference's push is the cure ✅ (2026-09-08).**
+Matt on PR.5.2: *"better with respect to color, although there is still a sizable presence of blinding
+white. unfortunately, I'm sensing less connection between visuals and music."* Both true, both PR.5.2:
+its outward-only, un-kneed breathing was flat on 64 % of frames (zoom spread 0.0741 → 0.0053 — the lost
+connection), and with no outward push the field DRAINED wherever the strands were not and on every
+quiet passage; the comp inverts a drained region to white. **BUG-122 was filed on a false premise**
+("a vertical split the reference does not have"): the oracle's flat profile was one 120-frame sample.
+**Every earlier oracle time-series was a single-moment sample** — `render()` does not advance the audio
+and the hidden Browser pane throttles rAF and timers — so the oracle was rebuilt as an offline drive
+(`render({audioLevels, elapsedTime})` from the decoded track at 60 fps; `tools/dragon_bloom_reference/
+index.html` gained `__seek`/`__pos`). Measured that way on Seven Nation Army: the reference swings
+top/bottom **0.30–2.59** (harder than ours) with **nearWhite 0.000 through the drop**, and its
+`zoom *= min(1.05, max(1, max(bass,treb)))` sits at the 1.05 cap on **60 %** of frames, mean **+3.15 %**.
+**Fix:** always-on +3 % outward baseline, bass deviation to the 5 % cap. Session 21:12: nearWhite
+**0.448 → 0.000 on every sampled frame**, saturation 0.52. **PR.5.2's assertion that the old constant
+push "evacuated the frame" was inferred, not measured, and wrong** — BUG-115's real defects were the
+FA #31 routing and the uncapped 7 %. Nine more hypotheses falsified and recorded in BUG-122's entry;
+the y-mirrored strand set that fixed the symptom was tested and rejected as unfaithful and unnecessary.
+**Gate: Matt has not seen PR.5.4 live.**
+
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
 between the top and bottom of the screen and keeps its motion inside the canvas. Camera and
