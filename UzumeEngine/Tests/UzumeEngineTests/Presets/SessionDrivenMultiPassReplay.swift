@@ -156,6 +156,12 @@ struct SessionDrivenMultiPassReplay {
                                      start, mean(slice.map(\.clipped)), mean(slice.map(\.saturation))))
         }
         print("  trajectory (frame:clipped/saturation)  " + trajectory.joined(separator: "  "))
+        var lumaTrack: [String] = []
+        for start in stride(from: 0, to: measured.count, by: bucket) {
+            let slice = Array(measured[start..<min(start + bucket, measured.count)])
+            lumaTrack.append(String(format: "%3d:%.2f", start, mean(slice.map(\.meanLuma))))
+        }
+        print("  luma trajectory                        " + lumaTrack.joined(separator: "  "))
         // The harness must not be rendering a dead image — that is the FLY.6 failure.
         #expect(lum.max()! > 0.0, "every frame is pure black — the replay drove nothing")
         #expect(Set(lum.map { Int($0 * 1000) }).count > 1,
