@@ -828,6 +828,32 @@ not install at wire (0.6 s) either — Dragon Bloom appeared **150 s** after `wi
   if not intended, score undeclared presets at the track's mean deviation rather than 0.5.
 - **PR.8.1 (small): capture one session with info logging** to see why the planned install waits.
 
+**PR.8.2 — the ranked walk was a regression, found by Matt in 25 minutes ✅ (2026-09-09).** *"I was
+unable to access Arachne and a dozen other presets were missing as well."* PR.8's one-line change
+made the walk unusable, and it shipped and merged.
+
+**Mechanism.** `reactiveWalkNudge` ranked through `rank(...)` under the LIVE scoring context.
+`familyRepeatMultiplier` penalises the **current** preset too — its family is by definition the
+current family — so each press sank the current preset to the bottom of a freshly-computed ranking
+and `(currentIdx + 1) % count` wrapped to index 0. The walk oscillated between the top two entries
+of the moment. Matt's log: `Aurora Veil → Dragon Bloom → Aurora Veil → …`, later
+`Ricercar ↔ Fata Morgana` once the live adapter had moved him elsewhere. Seven distinct presets
+appeared in his session because the planner and mood-override switches changed *which pair* the walk
+then bounced between. Nothing was missing from the build — all 30 sidecars are bundled.
+Second defect in the same line: `filter { $0.1 > 0 }` dropped every planner-excluded preset from a
+**manual override** path — all three diagnostics categorically, plus Volumetric Lithograph
+(24 ms > the 16.6 ms budget). The alphabetical walk it replaced had reached those by accident.
+
+**Fix.** `DefaultPresetScorer.walkOrder(presets:track:context:)` (new file, `PresetScorer+Walk.swift`):
+ranks by track fit with `currentPreset`/`recentHistory` cleared, so the order is stable under the
+walk, and returns **every** preset with excluded ones sorted last and ties broken by name.
+`PresetWalkOrderTests` pins all three properties and was **verified to fail against the PR.8 code**
+— reaching 2 of 7 presets, the same ratio Matt hit.
+
+**What this cost and what it says.** PR.8's closeout claimed the walk change as an unambiguous win on
+the strength of a ranking dump; nothing exercised the walk itself. A one-line behavioural change to
+an interactive path shipped with no test of that path, and the person who found it was Matt.
+
 **Matt: "do all three" — done 2026-09-09 (D-245).** Immediate nudge walks scorer-ranked order; the
 section quarter is gated on real section data (three-weight normalisation when nil); undeclared stem
 affinity scores the mean deviation. Result on the measured tracks: Seven Nation Army opener Filigree by
