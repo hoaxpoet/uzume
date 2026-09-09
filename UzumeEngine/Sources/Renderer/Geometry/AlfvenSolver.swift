@@ -102,6 +102,14 @@ public struct AlfvenSolverConfiguration: Sendable {
     }
 }
 
+/// Mirrors `AlfvenDisplayParams` in AlfvenSolver.metal. Layout is the GPU contract.
+struct AlfvenDisplayParams {
+    var exposure: Float
+    var hueCentre: Float
+    var pad0: Float
+    var pad1: Float
+}
+
 /// Mirrors `AlfvenParams` in AlfvenSolver.metal. Layout is the GPU contract.
 struct AlfvenParams {
     var dt: Float = 0
@@ -130,9 +138,23 @@ public enum AlfvenSolverError: Error {
 
 // MARK: - Solver
 
-/// Owns the MHD state and advances it. Not a `ParticleGeometry`: it renders nothing
-/// itself — `stateTexture` is sampled by the preset's fragment.
-public final class AlfvenSolver: @unchecked Sendable {
+/// Owns the MHD state, advances it, and draws it.
+///
+/// Conforms to `ParticleGeometry` for the same reason `MitosisGeometry` does: the protocol
+/// is exactly "compute per frame, then draw into the caller's encoder", which is what a
+/// PDE-on-textures preset needs. `activeParticleFraction` is accepted and ignored — the
+/// governor's lever here is `substeps`, not a particle count.
+public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
+
+    /// Accepted for protocol conformance; this solver has no particles. The frame-budget
+    /// lever for an MHD field is the substep count, not a dispatch fraction.
+    public var activeParticleFraction: Float = 1.0
+
+    /// Fixed exposure standing in for film.py's percentile auto-exposure, which needs a
+    /// reduction surface that does not exist yet.
+    public var displayExposure: Float = 0.55
+    /// Late magenta<->teal end of film.py's palette drift (Matt, 2026-09-09).
+    public var displayHueCentre: Float = 0.72
 
     public private(set) var configuration: AlfvenSolverConfiguration
 
@@ -172,11 +194,13 @@ public final class AlfvenSolver: @unchecked Sendable {
 
     let dtBuffer: MTLBuffer
     let cflScratch: MTLBuffer
+    private let displayPipeline: MTLRenderPipelineState?
 
     /// Cycle index at the last step, so a re-seed is detected rather than recomputed.
     private var lastCycle: Int = -1
 
     public init(device: MTLDevice, library: MTLLibrary,
+                pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb,
                 configuration: AlfvenSolverConfiguration = .init()) throws {
         guard configuration.edge > 0, configuration.edge & (configuration.edge - 1) == 0,
               configuration.edge <= 1024 else {
@@ -212,6 +236,19 @@ public final class AlfvenSolver: @unchecked Sendable {
         cflScratch = cfl
 
         (state, fields) = try Self.allocateTextures(device: device, edge: configuration.edge)
+
+        // Display pipeline. Optional so a solver can be constructed headlessly for tests
+        // on a library without the display functions.
+        if let vfn = library.makeFunction(name: "alfven_display_vertex"),
+           let ffn = library.makeFunction(name: "alfven_display_fragment") {
+            let desc = MTLRenderPipelineDescriptor()
+            desc.vertexFunction = vfn
+            desc.fragmentFunction = ffn
+            desc.colorAttachments[0].pixelFormat = pixelFormat
+            displayPipeline = try? device.makeRenderPipelineState(descriptor: desc)
+        } else {
+            displayPipeline = nil
+        }
         logger.info("""
             AlfvenSolver: \(configuration.edge)² compute solver, \
             \(configuration.substeps) substeps/frame, adaptive dt <= \(configuration.maxDt)
@@ -244,6 +281,30 @@ public final class AlfvenSolver: @unchecked Sendable {
     }
 
     // MARK: Stepping
+
+    /// `ParticleGeometry` entry point. Audio is NOT read here — routing is ALFVEN.3 — so
+    /// the field advances on wall-clock time only, which is also what keeps the re-seed
+    /// cycle on the listener's clock rather than the simulation's.
+    public func update(features: FeatureVector, stemFeatures: StemFeatures,
+                       commandBuffer: MTLCommandBuffer) {
+        update(time: features.time, commandBuffer: commandBuffer)
+    }
+
+    /// Draw the current field. `J` is what the fragment colours (§4); omega and psi are
+    /// state and supply nothing visual on their own.
+    public func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {
+        guard let displayPipeline else { return }
+        var params = AlfvenDisplayParams(exposure: displayExposure,
+                                         hueCentre: displayHueCentre,
+                                         pad0: 0,
+                                         pad1: 0)
+        encoder.setRenderPipelineState(displayPipeline)
+        encoder.setFragmentBytes(&params,
+                                 length: MemoryLayout<AlfvenDisplayParams>.stride,
+                                 index: 0)
+        encoder.setFragmentTexture(stateTexture, index: 0)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+    }
 
     /// Advance the field by one frame: `substeps` explicit steps, each with its own full
     /// RHS evaluation and its own CFL-adapted timestep.

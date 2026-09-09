@@ -370,3 +370,61 @@ kernel void alfven_cfl_finish(
     float dx = 6.28318530718 / float(p.gridEdge);
     dtOut[0] = min(p.dt, 0.25 * dx / max(c, 1e-3));
 }
+
+// ─── Display ────────────────────────────────────────────────────────────────
+//
+// The shipping look is docs/presets/alfven_spike/film.py, and the spike's README is
+// explicit that the Metal fragment should reproduce THAT rather than invent its own.
+// film.py's percentile auto-exposure and two-sigma seam bloom are global/multi-scale and
+// still need a reduction surface, so this is film.py's PALETTE with a fixed exposure —
+// the same placeholder the staged version used, and diagnosable in the same way.
+//
+// Palette centre 0.72: the late magenta<->teal end of film.py's drift, which is the
+// fourth column of the concept sheet and Matt's pick (2026-09-09).
+
+struct AlfvenDisplayParams {
+    float exposure;
+    float hueCentre;
+    float _pad0;
+    float _pad1;
+};
+
+struct AlfvenVertexOut {
+    float4 position [[position]];
+    float2 uv;
+};
+
+vertex AlfvenVertexOut alfven_display_vertex(uint vid [[vertex_id]]) {
+    AlfvenVertexOut out;
+    out.uv = float2((vid << 1) & 2, vid & 2);
+    out.position = float4(out.uv * 2.0 - 1.0, 0.0, 1.0);
+    out.uv.y = 1.0 - out.uv.y;
+    return out;
+}
+
+static inline float3 alf_hsv2rgb(float3 c) {
+    float3 p = abs(fract(c.xxx + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return c.z * mix(float3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+fragment float4 alfven_display_fragment(
+    AlfvenVertexOut in [[stage_in]],
+    constant AlfvenDisplayParams& p [[buffer(0)]],
+    texture2d<float, access::sample> stateTex [[texture(0)]]
+) {
+    constexpr sampler smp(filter::linear, address::repeat);
+    float J = stateTex.sample(smp, in.uv).z;
+
+    float aJ = clamp(abs(J) * p.exposure, 0.0, 1.0);
+    float sJ = tanh(J * p.exposure * 1.2);
+
+    // film.py: h = centre + 0.30*sJ, s = 0.32 + 0.58*(1-aJ^2), v = filmic(1.9*aJ^0.85)
+    float hue = p.hueCentre + 0.30 * sJ;
+    float sat = 0.32 + 0.58 * (1.0 - aJ * aJ);
+    float x   = 1.9 * pow(aJ, 0.85);
+    float val = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+
+    float3 col = alf_hsv2rgb(float3(fract(hue), sat, val));
+    col += float3(0.035, 0.045, 0.075) * (1.0 - val);   // D-037: never black
+    return float4(min(col, float3(1.0)), 1.0);
+}

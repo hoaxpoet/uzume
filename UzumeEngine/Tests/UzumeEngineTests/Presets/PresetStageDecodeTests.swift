@@ -50,7 +50,6 @@ struct PresetStageDecodeTests {
         // a deliberate act; a preset drifting into the keys without one fails this test.
         let deliberateUsers: Set<String> = [
             "Poisson Sandbox",   // ALFVEN.1 diagnostic — proves the surface
-            "Alfvén",            // ALFVEN.2 — spectral FFT chain + persistent state
             "FFT Sandbox",       // ALFVEN.1c — 8-iteration butterfly stages
         ]
         for descriptor in descriptors where !deliberateUsers.contains(descriptor.name) {
