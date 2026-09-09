@@ -108,7 +108,7 @@
     "tier1": 10.0,
     "tier2": 5.8
   },
-  "certified": false,
+  "certified": true,
   "rubric_hints": {
     "dust_motes": true,
     "hero_specular": true

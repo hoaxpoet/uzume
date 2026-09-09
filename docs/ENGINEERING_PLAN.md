@@ -300,7 +300,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 
 | Preset | Matt's ask (abbreviated) | Status |
 |---|---|---|
-| **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | 🔨 **PR.18, code complete — M7 owed.** Sync half addressed (14 routes, BUG-124). Fidelity half built: silk material, strand irregularity, node glints, atmosphere, wave displacement, and the catenary scallop. Rubric 4/15 → 8/15; cost 6.6 → 10.0 ms, inside budget. Reference set recurated (11 images). |
+| **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | ✅ **PR.18 — CERTIFIED 2026-09-09, the 22nd.** Matt: *"looks great. looks ready to certify."* Sync half addressed (14 routes, BUG-124); fidelity half built (silk material, strand irregularity, node glints, atmosphere, wave displacement, catenary scallop). Rubric 4/15 → 8/15; cost 6.6 → ~9.8 ms, inside budget. Reference set recurated (12 images). Open items listed under PR.18 step 4. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
@@ -531,13 +531,34 @@ passed the lint — more evidence the old set was never on disk.
 
 **Sources are Matt's choice per the curation process** — these are proposals he can swap.
 
-#### Step 4 — M7, owed
+#### Step 4 — M7 ✅ PASSED, and **Gossamer is CERTIFIED — the 22nd** (2026-09-09)
 
-Matt watches it live. Two things a still cannot settle: whether the scallop and the glints read in
-motion at playing brightness, and whether the wave displacement is legible as the silk *moving*
-rather than as a brightness pulse. Per-trait against the new references: macro geometry, scallop,
-node glints and departure-from-anti-reference all **pass**; thread crispness and the R-lobe sheen
-are **partial** — our halo terms are softer than the reference's crisp silver hairlines.
+Matt, on session [`2026-09-09T22-36-18Z`](../../uzume_sessions): *"looks great. looks ready to
+certify."* Certified on his sign-off per `SHADER_CRAFT.md §12.1` M7; `certified: true` in the
+sidecar and added to `FidelityRubricTests.certifiedPresets`.
+
+**Session health, since a felt pass still wants a number beside it.** Gossamer was live from
+22:36:43 to the end of the session — **81 s, 5414 frames, `failures=0`, `unpresented=0`** across
+every `DRAWABLE_LIFECYCLE` heartbeat, on the Release build of this branch at `3c07fa0c`.
+
+**One incidental datum on BUG-060** (app hang on a `preset → Gossamer` switch, uninvestigated,
+last recurrence 2026-08-03): this session performed exactly that switch and ran ~81 s clean
+afterwards. That is **one instance of non-recurrence, not a fix** — the defect was always
+intermittent and nothing here addresses a mechanism. The row stays open.
+
+**What certification does NOT close.** Recorded so a later session does not read `certified: true`
+as "finished":
+- **Wave displacement is RADIAL, not perpendicular-to-local-tangent.** The §10.2.2 target asks for
+  the latter; the difference is small on a radially-propagating wave, which is why it passes, but
+  the item is half-done.
+- **Wave propagation velocity is still the constant `kWaveSpeed`.** §10.2.7's
+  `2.0 + vocals_energy_dev × 5.0` is not implemented.
+- **M3 still fails** — one cookbook material against a floor of three.
+- **Thread crispness and the R-lobe sheen read partial** against the curated references; our halo
+  terms are softer than the reference's silver hairlines.
+- **Reference slot 04** covers zero-ambient emission but not emission falling onto a surface.
+- `mat_silk_thread` never reads `p.absorption`, so a coefficient the reference set specifies has
+  nowhere to land.
 
 #### The decision Matt owed before step 3 — answered 2026-09-09
 
@@ -1281,7 +1302,10 @@ beta cut.
 **The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
 which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
 diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
-to it. That leaves **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
+to it. ⚠ **Superseded by the PR.18 recount (2026-09-09): four, not six** — Arachne was removed
+at D-246 and Gossamer certified at PR.18. The live figure is Membrane, Nebula, Plasma, Waveform;
+the sentence below is kept as written for the record of what the survey said at the time.
+That left **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
 Plasma, Waveform.
 
 **Why Matt is seeing them at all.** `uzume.settings.visuals.showUncertifiedPresets = 1` in his defaults, so
@@ -7847,7 +7871,7 @@ These milestones map to product-level outcomes, not implementation phases.
 
 **Milestone C — Device-Aware Show Quality.** ✅ **MET (2026-04-25).** The same playlist produces an excellent show on M1 and a richer one on M4 without jank. *Requires: ~~Phase 6 complete~~ ✅.*
 
-**Milestone D — Library Depth.** ⏳ **IN PROGRESS — 21 / 27 production presets certified (recounted from the tree at RICERCAR-CERT.1, 2026-08-20).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **29 JSON sidecars, 21 with `certified: true`**, of which 2 (StagedSandbox, SpectralCartograph) are diagnostics rather than roster presets → **27 production presets, 21 certified**. Uncertified roster presets: Arachne, Gossamer, Membrane, Nebula, Plasma, Waveform. *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
+**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 26 production presets certified (recounted from the sidecars at PR.18, 2026-09-09).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **29 JSON sidecars, 22 with `certified: true`**, of which 3 (StagedSandbox, SpectralCartograph, **PoissonSandbox**) carry `is_diagnostic` and are not roster presets → **26 production presets, 22 certified**. Uncertified roster presets are down to **four**: Membrane, Nebula, Plasma, Waveform. *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
 
 **Roster survey (2026-07-19) — the production presets (`FidelityRubricTests.certifiedPresets` = ground truth; 27 → 26 at Glass Brutalist's retirement GBRETIRE.1 / D-186, then 26 → 25 at Kinetic Sculpture's retirement KSRETIRE.1 / D-188, 2026-07-20):**
 - **Certified (14):** Lumen Mosaic, Ferrofluid Ocean, Dragon Bloom, Fata Morgana, Murmuration, Nimbus, Skein, Nacre, Floret, Glaze, Filigree, Mitosis, Cytokinesis (Mitosis gen-2), Aurora Veil (AV.7).
