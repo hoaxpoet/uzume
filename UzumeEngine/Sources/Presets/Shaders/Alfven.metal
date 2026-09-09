@@ -118,6 +118,7 @@ constant constexpr float kAlfvenMaxTrace  = 3.0;    // CFL: max back-trace, texe
 constant constexpr float kAlfvenClampW    = 24.0;   // hard clamp on omega (§8.2)
 constant constexpr float kAlfvenClampP    = 12.0;   // hard clamp on psi
 constant constexpr float kAlfvenSeedFloor = 0.02;   // below this |psi| RMS proxy, re-seed
+constant constexpr float kAlfvenHueCentre = 0.72;   // late/magenta-teal end (Matt, 2026-09-09)
 // The re-seed cycle (§5). NOT a stylistic choice: 2D MHD inverse-cascades <psi^2> to box
 // scale and CONDENSATES there (Biskamp ch. 7), so a sustained driven state is a static
 // quilt (`06_anti_static_quilt.png`) — verified twice during concept work. The look IS the
@@ -437,7 +438,13 @@ fragment float4 alfven_compose_fragment(
     float sJ = tanh(J * kFixedExposure * 1.2);
 
     // film.py: h = hue_centre + 0.30*sJ, s = 0.32 + 0.58*(1-aJ^2), v = filmic(1.9*aJ^0.85)
-    float hue = 0.52 + 0.30 * sJ;
+    // Palette centre 0.72 — the LATE end of film.py's drift (magenta <-> teal), which is
+    // the fourth column of the concept sheet and Matt's pick (2026-09-09).
+    // `04_palette_opponent_drift.png`: "Left = early (acid green <-> violet), right = late
+    // (magenta <-> teal)". film.py maps hue = 0.46 + 0.26*centroid01, so 0.72 is the top of
+    // that range. ALFVEN.3 will drive the centre from spectral centroid; if only this end
+    // is wanted, that routing's range narrows rather than spanning the full drift.
+    float hue = kAlfvenHueCentre + 0.30 * sJ;
     float sat = 0.32 + 0.58 * (1.0 - aJ * aJ);
     float x   = 1.9 * pow(aJ, 0.85);
     float val = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);

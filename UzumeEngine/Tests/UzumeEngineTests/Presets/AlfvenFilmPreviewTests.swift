@@ -35,6 +35,11 @@ import UniformTypeIdentifiers
 struct AlfvenFilmPreviewTests {
 
     private static let edge = 256
+    /// Palette centre. 0.72 = the late (magenta <-> teal) end Matt selected; overridable
+    /// so the drift range can be inspected without an edit.
+    private static var hueCentre: Double {
+        ProcessInfo.processInfo.environment["ALFVEN_HUE"].flatMap(Double.init) ?? 0.72
+    }
     /// Frames to capture: early in the arc, mid-arc, and late — the fold-to-filament
     /// progression §3 calls the cycle.
     private static let captureAt: Set<Int> = [60, 240, 600, 1080]
@@ -192,7 +197,12 @@ struct AlfvenFilmPreviewTests {
 
         var out = [UInt8](repeating: 0, count: width * height * 4)
         for i in 0..<(width * height) {
-            let hue = 0.52 + 0.30 * sJ[i]
+            // Matt's pick (2026-09-09): the FOURTH COLUMN of the concept sheet, i.e. the
+            // LATE end of film.py's palette drift — magenta <-> teal, not the early
+            // acid-green <-> violet. film.py maps hue = 0.46 + 0.26*centroid01, so the
+            // late end is 0.72. `04_palette_opponent_drift.png` annotates exactly this:
+            // "Left = early (acid green <-> violet), right = late (magenta <-> teal)".
+            let hue = Self.hueCentre + 0.30 * sJ[i]
             let sat = 0.32 + 0.58 * (1.0 - aJ[i] * aJ[i])
             let val = filmic(1.9 * pow(aJ[i], 0.85))
             var (r, g, b) = hsv2rgb(hue, min(max(sat, 0), 1), min(max(val, 0), 1))
