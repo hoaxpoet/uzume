@@ -1,0 +1,52 @@
+{
+  "name": "Poisson Sandbox",
+  "description": "ALFVEN.1 diagnostic preset proving the persistent / iterations / pixel_format staged extensions: an analytic divergent velocity field is projected divergence-free by a 24-sweep Jacobi Poisson solve on a persistent rgba32Float ping-pong pair. Solver shaders ported from WebGL-Fluid-Simulation (MIT) — see docs/CREDITS.md.",
+  "author": "Uzume engine",
+  "passes": ["staged"],
+  "stages": [
+    {
+      "name": "velocity",
+      "fragment_function": "poisson_sandbox_velocity_fragment",
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "divergence",
+      "fragment_function": "poisson_sandbox_divergence_fragment",
+      "samples": ["velocity"],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "pressure",
+      "fragment_function": "poisson_sandbox_pressure_fragment",
+      "samples": ["divergence"],
+      "persistent": true,
+      "iterations": 24,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "project",
+      "fragment_function": "poisson_sandbox_project_fragment",
+      "samples": ["velocity", "pressure"],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "compose",
+      "fragment_function": "poisson_sandbox_compose_fragment",
+      "samples": ["pressure", "project"]
+    }
+  ],
+  "vertex_function": "fullscreen_vertex",
+  "fragment_function": "poisson_sandbox_compose_fragment",
+  "duration": 30,
+  "visual_density": 0.35,
+  "motion_intensity": 0.05,
+  "color_temperature_range": [0.30, 0.70],
+  "fatigue_risk": "high",
+  "transition_affordances": ["cut"],
+  "section_suitability": ["ambient"],
+  "complexity_cost": { "tier1": 2.0, "tier2": 1.4 },
+  "certified": false,
+  "is_diagnostic": true,
+  "exclude_from_cycling": true,
+  "rubric_profile": "lightweight"
+}

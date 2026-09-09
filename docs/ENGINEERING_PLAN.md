@@ -9096,3 +9096,57 @@ full engine suite green.
 **Capability registry:** no rows changed. No renderer capability was added, promoted, or blocked.
 
 **Remaining:** nothing. `UzumeApp` builds clean from a fresh `xcodebuild`.
+
+---
+
+## Phase ALFVEN — Alfvén program (MHD field preset; infrastructure first)
+
+Design: `docs/presets/ALFVEN_DESIGN.md`. Concept + port survey:
+`docs/presets/ALFVEN_CONCEPT_2026-09-08.md`, `docs/presets/ALFVEN_PORT_SURVEY_2026-09-08.md`.
+Plan (design §10): **ALFVEN.1** infrastructure → **ALFVEN.2** preset (no audio) →
+**ALFVEN.3** audio routing. Infrastructure lands before the preset and is never bundled with it.
+
+### Increment ALFVEN.1 — persistent + iterated staged stages, and the Poisson projection ✅ (2026-09-08)
+
+**Done-when (all met).** The `staged` paradigm can express a stateful, iterated GPU solver: a stage
+may own a ping-pong pair surviving across frames, may run N times per frame ping-ponging its own
+output, and may declare its own pixel format. A `Poisson Sandbox` diagnostic solves ∇²p = f by Jacobi
+iteration on that surface and is asserted to converge against an analytic solution. No Alfvén preset,
+no shader art, no audio routing — those are ALFVEN.2 / ALFVEN.3.
+
+**What shipped.**
+
+| Task | Outcome |
+|---|---|
+| 1 — three sidecar keys | `PresetStage.persistent` / `.iterations` (1…64) / `.pixelFormat` (`rgba16Float`/`rgba32Float`/`rg32Float`), all `decodeIfPresent`. Unknown format warns + falls back (PUB.4 precedent); out-of-range `iterations`, a persistent FINAL stage, and >7 `samples` are decode errors. `PresetStageDecodeTests` sweeps every shipping sidecar for unchanged defaults. |
+| 2 — persistent ping-pong pair | Zeroed pair allocated at preset-compile time in the declared format; previous half bound at `[[texture(20)]]` (`kStagedPersistentTextureSlot`, documented in ARCHITECTURE §GPU Contract Details). Zeroed on preset switch and by `resetStagedPersistentState()`. |
+| 3 — `iterations` | N passes per frame in the existing stage loop (`encodeOffscreenStages`), `samples` held constant, composing with `persistent`. No parallel code path. |
+| 4 — ported projection | `PoissonSandbox.metal` — divergence / Jacobi pressure / gradient-subtract adopted verbatim in structure from WebGL-Fluid-Simulation (MIT); attribution row in `docs/CREDITS.md`. |
+| 5 — diagnostic preset | `Poisson Sandbox` — velocity → divergence → pressure (persistent, 24 sweeps, rgba32Float) → project → compose. `is_diagnostic`, `certified: false`, `rubric_profile: lightweight`, out of planner selection (D-074) and out of manual cycling. |
+| 6 — convergence gate | `PoissonProjectionConvergenceTests`. Cold start at N=64: 4/8/16/24 sweeps → 0.98086 / 0.96209 / 0.92562 / 0.89052, strictly decreasing, thresholds frozen at the measured values. Cross-checked against the closed-form Jacobi prediction for this stencil — agreement to 5 decimal places. Warm-started: 0.000155 after 60 frames. |
+| 7 — harness template | `PersistentStagedPathHarnessTemplate` (`HARNESS_TEMPLATES=1`), 60 silence frames through the production dispatch, metric = the state field's RMS trajectory asserting neither saturation nor decay. |
+| 8 — non-finite watchdog | `probeStagedPersistentState()` — one rotating 16×16 texel block per persistent stage per frame off `.shared` (UMA) memory, re-zeroing the pair on NaN/Inf. ~0.2 µs/frame Release. |
+
+**The finding worth carrying forward.** 24 Jacobi sweeps is a **partial solve by construction** — the
+domain-scale mode is damped by only `cos(h)` per sweep, so a cold single frame at N=64 still carries
+89 % of the error. The iteration count buys per-frame responsiveness; **persistence buys the answer**
+(0.000155 after 60 warm-started frames). Sizing an iteration count without measuring convergence is
+how a solver silently ships unconverged. Recorded in [D-244] and in the test's frozen comment.
+
+**Out-of-scope change made deliberately.** `PresetLoader`'s `cycleExclusions` single-name literal
+became the sidecar flag `exclude_from_cycling`, exactly as that literal's own comment directed once a
+second harness fixture appeared. Without it, Poisson Sandbox would have landed in Matt's manual cycle
+— the defect he reported at the 2026-09-04 roster review.
+
+**Decisions:** [D-244].
+
+**Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
+format; non-finite watchdog) plus a new persistent-harness-template row.
+
+**Next:** ALFVEN.2 — `Alfven.metal` + sidecar, MHD advance, silence state, re-seed cycle. **No audio
+routing.** Its first task is the §11 look comparison against the reference set, before any tuning.
+Open it by deciding the **solver grid resolution** — [D-244] §Iteration count records why sweep
+count cannot be set independently of it (settling scales as N²; 24 sweeps stands until then).
+Its compose stage is a **port of `docs/presets/alfven_spike/film.py`**, not an authoring exercise:
+that spike's README is explicit that the Metal fragment "should reproduce THIS, not invent its own
+look" — same FA #73 discipline that governed the projection port at ALFVEN.1.
