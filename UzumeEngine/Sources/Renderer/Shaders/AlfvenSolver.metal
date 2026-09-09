@@ -124,3 +124,249 @@ kernel void alfven_fft_cols(
         dst.write(float4(buf[i] * scale, 0.0, 1.0), uint2(gid.x, i));
     }
 }
+
+// ─── Solver kernels ─────────────────────────────────────────────────────────
+//
+// The physics is ALFVEN.2's, unchanged and already validated — spectral Poisson with the
+// correct sign (phi_h = -omega_h/k^2), spectral Poisson brackets, Hou-Li filter, the 2/3
+// dealias mask and the spike's integrating factor. Only the ORCHESTRATION moves: a Swift
+// substep loop with barriers instead of a per-frame staged DAG, which is what makes
+// substeps and adaptive dt possible at all.
+//
+// State packing: .r = omega, .g = psi, .b = J (cached for the fragment), .a = 1.
+
+struct AlfvenParams {
+    float dt;
+    float alpha;        // linear drag on omega
+    float nu4;          // k^4 hyperdiffusion
+    float drive;        // forcing amplitude
+    float time;         // seconds, for forcing phase + the re-seed cycle
+    float cutoff;       // spectral filter cutoff in mode numbers
+    float clampW;
+    float clampP;
+    uint  n;            // grid edge
+    uint  seedKOmega;
+    uint  seedKPsi;
+    float seedAmpOmega;
+    float seedAmpPsi;
+    float seedPhase;
+    float blendRate;    // per-substep share of the re-seed crossfade
+    float _pad;
+};
+
+static inline float2 alf_wavenumber(uint2 gid, uint n) {
+    int kx = int(gid.x); if (kx > int(n) / 2) { kx -= int(n); }
+    int ky = int(gid.y); if (ky > int(n) / 2) { ky -= int(n); }
+    return float2(float(kx), float(ky));
+}
+
+static inline void alf_unpack(float2 fk, float2 fmk, thread float2& aH, thread float2& bH) {
+    aH = 0.5 * float2(fk.x + fmk.x, fk.y - fmk.y);
+    float2 d = 0.5 * float2(fk.x - fmk.x, fk.y + fmk.y);
+    bH = float2(d.y, -d.x);
+}
+
+static inline float alf_hash(float2 p) {
+    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+/// Band-limited random-phase seed over integer wavevectors, amplitude k^-1.6, normalised
+/// by its own analytic RMS so `amp` keeps the spike's meaning.
+static inline float alf_seed(float2 uv, float phase, float amp, uint kmax) {
+    constexpr float kTau = 6.28318530718;
+    float s = 0.0, norm = 0.0;
+    int km = int(kmax);
+    for (int m = -km; m <= km; ++m) {
+        for (int nn = 0; nn <= km; ++nn) {
+            if (nn == 0 && m <= 0) { continue; }
+            float k2 = float(m * m + nn * nn);
+            if (k2 < 1.0 || k2 > float(km * km)) { continue; }
+            float a = pow(k2, -0.8);
+            float ph = kTau * alf_hash(float2(float(m), float(nn)) + phase);
+            s += a * sin(kTau * (float(m) * uv.x + float(nn) * uv.y) + ph);
+            norm += a * a * 0.5;
+        }
+    }
+    return s * amp / sqrt(max(norm, 1e-9));
+}
+
+kernel void alfven_seed_state(
+    texture2d<float, access::write> dst [[texture(0)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    float2 uv = (float2(gid) + 0.5) / float(p.n);
+    dst.write(float4(alf_seed(uv, p.seedPhase, p.seedAmpOmega, p.seedKOmega),
+                     alf_seed(uv, p.seedPhase + 8.0, p.seedAmpPsi, p.seedKPsi),
+                     0.0, 1.0), gid);
+}
+
+/// Hou-Li filter + the spike's integrating factor. omega carries the drag, psi does not
+/// (Ew vs Ep in alfven.py), so the packed spectrum is unpacked, scaled separately, repacked.
+kernel void alfven_spectral_filter(
+    texture2d<float, access::read>  src [[texture(0)]],
+    texture2d<float, access::write> dst [[texture(1)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    uint2 mir = uint2((p.n - gid.x) % p.n, (p.n - gid.y) % p.n);
+    float2 omegaH, psiH;
+    alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
+
+    float2 k = alf_wavenumber(gid, p.n);
+    float k2 = dot(k, k);
+    float kr = clamp(sqrt(k2) / p.cutoff, 0.0, 1.0);
+    float filt  = exp(-36.0 * pow(kr, 36.0));
+    float hyper = exp(-p.nu4 * k2 * k2 * p.dt);
+    omegaH *= filt * hyper * exp(-p.alpha * p.dt);
+    psiH   *= filt * hyper;
+
+    dst.write(float4(omegaH.x - psiH.y, omegaH.y + psiH.x, 0.0, 1.0), gid);
+}
+
+/// Spectrum of (a_x + i a_y) for one of the four fields. `mode` selects which:
+/// 0 = phi (phi_h = -omega_h/k^2), 1 = omega, 2 = psi, 3 = J (J_h = -k^2 psi_h).
+kernel void alfven_grad_spectrum(
+    texture2d<float, access::read>  src [[texture(0)]],
+    texture2d<float, access::write> dst [[texture(1)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    constant uint& mode                 [[buffer(1)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    uint2 mir = uint2((p.n - gid.x) % p.n, (p.n - gid.y) % p.n);
+    float2 omegaH, psiH;
+    alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
+    float2 k = alf_wavenumber(gid, p.n);
+    float k2 = dot(k, k);
+
+    float2 field;
+    switch (mode) {
+        // omega = lap(phi) => phi_h = -omega_h/k^2. The sign here is the one that cost
+        // ALFVEN.2 most of its investigation; see that increment's history.
+        case 0:  field = (k2 < 0.5) ? float2(0.0) : (-omegaH / k2); break;
+        case 1:  field = omegaH; break;
+        case 2:  field = psiH;   break;
+        default: field = -k2 * psiH; break;
+    }
+    // (i*kx + i*i*ky) * field = (-ky + i*kx) * field
+    float2 g = float2(-k.y * field.x - k.x * field.y,
+                      -k.y * field.y + k.x * field.x);
+    dst.write(float4(g, 0.0, 1.0), gid);
+}
+
+/// The two nonlinear terms, packed as one complex field for a single transform pair.
+kernel void alfven_brackets(
+    texture2d<float, access::read>  gPhi [[texture(0)]],
+    texture2d<float, access::read>  gOme [[texture(1)]],
+    texture2d<float, access::read>  gPsi [[texture(2)]],
+    texture2d<float, access::read>  gJ   [[texture(3)]],
+    texture2d<float, access::write> dst  [[texture(4)]],
+    constant AlfvenParams& p             [[buffer(0)]],
+    uint2 gid                            [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    float2 a = gPhi.read(gid).xy, b = gOme.read(gid).xy;
+    float2 c = gPsi.read(gid).xy, d = gJ.read(gid).xy;
+    float brPhiOmega = a.x * b.y - a.y * b.x;
+    float brPsiJ     = c.x * d.y - c.y * d.x;
+    float brPhiPsi   = a.x * c.y - a.y * c.x;
+    dst.write(float4(-brPhiOmega + brPsiJ, -brPhiPsi, 0.0, 1.0), gid);
+}
+
+/// Orszag 2/3 dealias mask — every bracket needs it (alfven.py:79).
+kernel void alfven_dealias(
+    texture2d<float, access::read>  src [[texture(0)]],
+    texture2d<float, access::write> dst [[texture(1)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    float2 k = alf_wavenumber(gid, p.n);
+    float cut = (2.0 / 3.0) * float(p.n / 2);
+    float mask = (abs(k.x) < cut && abs(k.y) < cut) ? 1.0 : 0.0;
+    dst.write(float4(src.read(gid).xy * mask, 0.0, 1.0), gid);
+}
+
+/// One explicit step, plus the re-seed crossfade and the safety clamps. `dtBuf` carries
+/// the CFL-adapted timestep computed by `alfven_cfl_reduce`, so the timestep tracks the
+/// field instead of being fixed at authoring time.
+kernel void alfven_integrate(
+    texture2d<float, access::read>  state [[texture(0)]],
+    texture2d<float, access::read>  nl    [[texture(1)]],
+    texture2d<float, access::read>  gPsi  [[texture(2)]],
+    texture2d<float, access::write> dst   [[texture(3)]],
+    constant AlfvenParams& p              [[buffer(0)]],
+    device const float* dtBuf             [[buffer(1)]],
+    uint2 gid                             [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    constexpr float kTau = 6.28318530718;
+    float2 uv = (float2(gid) + 0.5) / float(p.n);
+    float dt = dtBuf[0];
+
+    float2 c = state.read(gid).xy;
+    float2 n = nl.read(gid).xy;
+
+    float force = p.drive * 0.25 * (
+          sin(kTau * (2.0 * uv.x + 3.0 * uv.y) + 0.71 * p.time)
+        + sin(kTau * (4.0 * uv.x - 2.0 * uv.y) - 0.53 * p.time + 1.7)
+        + sin(kTau * (3.0 * uv.x + 5.0 * uv.y) + 0.37 * p.time + 3.1)
+        + sin(kTau * (5.0 * uv.x - 4.0 * uv.y) - 0.89 * p.time + 0.4));
+
+    float omega = c.x + dt * (n.x + force);
+    float psi   = c.y + dt * n.y;
+
+    if (p.blendRate > 0.0) {
+        float r = clamp(p.blendRate, 0.0, 1.0);
+        omega = mix(omega, alf_seed(uv, p.seedPhase, p.seedAmpOmega, p.seedKOmega), r);
+        psi   = mix(psi,   alf_seed(uv, p.seedPhase + 8.0, p.seedAmpPsi, p.seedKPsi), r);
+    }
+
+    omega = clamp(omega, -p.clampW, p.clampW);
+    psi   = clamp(psi,   -p.clampP, p.clampP);
+
+    // J = lap(psi), recovered from psi's spectral gradient magnitude is not available
+    // here, so use the local stencil in PHYSICAL units for the cached diagnostic value.
+    float h = kTau / float(p.n);
+    float invH2 = 1.0 / (h * h);
+    uint2 l = uint2((gid.x + p.n - 1) % p.n, gid.y), r2 = uint2((gid.x + 1) % p.n, gid.y);
+    uint2 u = uint2(gid.x, (gid.y + 1) % p.n),       d = uint2(gid.x, (gid.y + p.n - 1) % p.n);
+    float J = (state.read(l).y + state.read(r2).y + state.read(u).y + state.read(d).y
+               - 4.0 * c.y) * invH2;
+
+    dst.write(float4(omega, psi, J, 1.0), gid);
+}
+
+/// CFL reduction: the field-wide max of max(|u|, |B|), then dt = min(dtMax, 0.25*dx/c).
+/// This is the mechanism a staged DAG could not express — the timestep depends on a
+/// global reduction over the CURRENT state, fed back into the same frame's stepping.
+/// Matches the spike (alfven.py:86, 149-151).
+kernel void alfven_cfl_reduce(
+    texture2d<float, access::read> gPhi [[texture(0)]],
+    texture2d<float, access::read> gPsi [[texture(1)]],
+    device atomic_uint* scratch         [[buffer(0)]],
+    constant AlfvenParams& p            [[buffer(1)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    float u = length(gPhi.read(gid).xy);     // |grad phi| = |u|
+    float b = length(gPsi.read(gid).xy);     // |grad psi| = |B|
+    float c = max(u, b);
+    // Monotonic bit pattern for non-negative floats, so an integer atomic max works.
+    atomic_fetch_max_explicit(scratch, as_type<uint>(c), memory_order_relaxed);
+}
+
+kernel void alfven_cfl_finish(
+    device const atomic_uint* scratch [[buffer(0)]],
+    device float* dtOut               [[buffer(1)]],
+    constant AlfvenParams& p          [[buffer(2)]],
+    uint tid                          [[thread_position_in_grid]]
+) {
+    if (tid != 0) { return; }
+    float c = as_type<float>(atomic_load_explicit(scratch, memory_order_relaxed));
+    float dx = 6.28318530718 / float(p.n);
+    dtOut[0] = min(p.dt, 0.25 * dx / max(c, 1e-3));
+}

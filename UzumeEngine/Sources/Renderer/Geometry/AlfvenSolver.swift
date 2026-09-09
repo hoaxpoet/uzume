@@ -1,0 +1,419 @@
+// AlfvenSolver — Alfvén's 2D MHD solver as a compute pipeline (ALFVEN.4).
+//
+// WHY THIS EXISTS. ALFVEN.2 built the same physics on the `staged` fragment path and
+// measured three limits that are architectural rather than tuning:
+//
+//   1. SUBSTEPS were impossible. Derivative spectra are computed once per frame upstream
+//      in a staged DAG, so substeps 2..N evaluate the Poisson brackets against STALE
+//      derivatives — measured as psi 0.90 -> 0.049 while superficially improving omega.
+//   2. ADAPTIVE dt was inexpressible. The blow-up is a CFL violation that DEVELOPS as the
+//      enstrophy cascade energises the field (u*k_max*dt: 0.10 at omega 1.2, 2.56 at
+//      omega 30), and the fix needs dt recomputed from a field-wide reduction over the
+//      current state — which a linear DAG cannot feed back into the same frame.
+//   3. COST. A 2D FFT as fragment passes is 16 render passes; in threadgroup memory it is
+//      2 dispatches.
+//
+// A Swift-side substep loop with barriers solves all three at once. The pattern follows
+// `MitosisGeometry` (D-182 — adapt the template matching the paradigm): Gray-Scott is the
+// same shape, an iterative PDE ping-ponged across substeps per frame.
+//
+// The PHYSICS is ALFVEN.2's and unchanged: spectral Poisson with the corrected sign
+// (phi_h = -omega_h/k^2), spectral Poisson brackets, Hou-Li filter, 2/3 dealiasing, and
+// the spike's integrating factor with omega alone carrying the drag. That version reached
+// psi conserved to 0.06%, J in the right order and total energy conserved; what it could
+// not do is keep the timestep inside the CFL limit as the field energised.
+
+import Foundation
+import Metal
+import simd
+import Shared
+
+// MARK: - Configuration
+
+/// Tunables for the solver. Values are the spike's where the spike has one.
+public struct AlfvenSolverConfiguration: Sendable {
+    /// Grid edge. Must be a power of two (the FFT requires it) and <= 1024 (threadgroup
+    /// memory). Fixed rather than drawable-sized: D-244's N^2 finding and the FFT's
+    /// power-of-two requirement both point the same way, and it caps cost independently
+    /// of display resolution.
+    public var edge: Int
+    /// Upper bound on the timestep. The CFL reduction lowers it as the field energises;
+    /// it never raises it above this.
+    public var maxDt: Float
+    /// Substeps per frame. Free here — each runs its own full RHS evaluation, so none of
+    /// them sees stale derivatives.
+    public var substeps: Int
+    public var alpha: Float
+    /// k^4 hyperdiffusion. DERIVED from the grid rather than copied: the spike's
+    /// nu4 = 2.5e-7 is tuned for N = 256, and k^4 damping is violently
+    /// resolution-dependent — the same constant at N = 128 gives 17x less dissipation at
+    /// the dealias cutoff (13.3/s vs 0.83/s), which is exactly the enstrophy pile-up seen
+    /// as omega climbing. What should be held fixed is the dissipation RATE at the cutoff,
+    /// so nu4 = C / k_cut^4 with C taken from the spike's own operating point.
+    public var nu4: Float
+    public var drive: Float
+    public var spectralCutoff: Float
+    public var clampOmega: Float
+    public var clampPsi: Float
+    public var seedKOmega: Int
+    public var seedKPsi: Int
+    public var seedAmpOmega: Float
+    public var seedAmpPsi: Float
+    /// Seconds per re-seed. §5: a sustained driven MHD state condenses into a static
+    /// quilt, so the look is a sequence of transients.
+    public var cycleSeconds: Float
+    /// Crossfade duration for a re-seed, seconds (the spike's advance_blend tau).
+    public var blendTau: Float
+
+    public init(
+        edge: Int = 256,
+        maxDt: Float = 0.005,          // the spike's own ceiling
+        substeps: Int = 4,
+        alpha: Float = 0.16,
+        nu4: Float? = nil,     // nil => derived from `edge`, see the property comment
+        drive: Float = 0.020,
+        spectralCutoff: Float = 100.0,
+        clampOmega: Float = 200.0,     // a genuine backstop: ~25x the measured equilibrium
+        clampPsi: Float = 100.0,
+        seedKOmega: Int = 3,
+        seedKPsi: Int = 2,
+        seedAmpOmega: Float = 1.2,
+        seedAmpPsi: Float = 0.9,
+        cycleSeconds: Float = 22.0,
+        blendTau: Float = 1.1
+    ) {
+        self.edge = edge
+        self.maxDt = maxDt
+        self.substeps = substeps
+        self.alpha = alpha
+        // C = 2.5e-7 * ((2/3)*128)^4 — the spike's dissipation rate at its own cutoff.
+        let kCut = (2.0 / 3.0) * (Float(edge) / 2.0)
+        self.nu4 = nu4 ?? (13.256 / (kCut * kCut * kCut * kCut))
+        self.drive = drive
+        self.spectralCutoff = spectralCutoff
+        self.clampOmega = clampOmega
+        self.clampPsi = clampPsi
+        self.seedKOmega = seedKOmega
+        self.seedKPsi = seedKPsi
+        self.seedAmpOmega = seedAmpOmega
+        self.seedAmpPsi = seedAmpPsi
+        self.cycleSeconds = cycleSeconds
+        self.blendTau = blendTau
+    }
+}
+
+/// Mirrors `AlfvenParams` in AlfvenSolver.metal. Layout is the GPU contract.
+struct AlfvenParams {
+    var dt: Float = 0
+    var alpha: Float = 0
+    var nu4: Float = 0
+    var drive: Float = 0
+    var time: Float = 0
+    var cutoff: Float = 0
+    var clampW: Float = 0
+    var clampP: Float = 0
+    var n: UInt32 = 0
+    var seedKOmega: UInt32 = 0
+    var seedKPsi: UInt32 = 0
+    var seedAmpOmega: Float = 0
+    var seedAmpPsi: Float = 0
+    var seedPhase: Float = 0
+    var blendRate: Float = 0
+    var pad: Float = 0
+}
+
+public enum AlfvenSolverError: Error {
+    case functionNotFound(String)
+    case allocationFailed
+    case edgeNotPowerOfTwo(Int)
+}
+
+// MARK: - Solver
+
+/// Owns the MHD state and advances it. Not a `ParticleGeometry`: it renders nothing
+/// itself — `stateTexture` is sampled by the preset's fragment.
+public final class AlfvenSolver: @unchecked Sendable {
+
+    public private(set) var configuration: AlfvenSolverConfiguration
+
+    /// Current state: `.r = omega`, `.g = psi`, `.b = J`. Sampled by the fragment.
+    public var stateTexture: MTLTexture { state[stateIndex] }
+
+    private let device: MTLDevice
+    private let logger = Logging.renderer
+
+    private var state: [MTLTexture] = []      // ping-pong pair
+    private var stateIndex = 0
+    private var scratchA: MTLTexture!         // spectra / intermediate complex fields
+    private var scratchB: MTLTexture!
+    private var scratchC: MTLTexture!   // inverse-transform staging, keeps scratchB intact
+    private var gradPhi: MTLTexture!
+    private var gradOmega: MTLTexture!
+    private var gradPsi: MTLTexture!
+    private var gradJ: MTLTexture!
+    private var nonlinear: MTLTexture!
+
+    private let fftRows: MTLComputePipelineState
+    private let fftCols: MTLComputePipelineState
+    private let seedPSO: MTLComputePipelineState
+    private let filterPSO: MTLComputePipelineState
+    private let gradPSO: MTLComputePipelineState
+    private let bracketPSO: MTLComputePipelineState
+    private let dealiasPSO: MTLComputePipelineState
+    private let integratePSO: MTLComputePipelineState
+    private let cflReducePSO: MTLComputePipelineState
+    private let cflFinishPSO: MTLComputePipelineState
+
+    private let dtBuffer: MTLBuffer
+    private let cflScratch: MTLBuffer
+
+    /// Cycle index at the last step, so a re-seed is detected rather than recomputed.
+    private var lastCycle: Int = -1
+
+    public init(device: MTLDevice, library: MTLLibrary,
+                configuration: AlfvenSolverConfiguration = .init()) throws {
+        guard configuration.edge > 0, configuration.edge & (configuration.edge - 1) == 0,
+              configuration.edge <= 1024 else {
+            throw AlfvenSolverError.edgeNotPowerOfTwo(configuration.edge)
+        }
+        self.device = device
+        self.configuration = configuration
+
+        func pso(_ name: String) throws -> MTLComputePipelineState {
+            guard let fn = library.makeFunction(name: name) else {
+                throw AlfvenSolverError.functionNotFound(name)
+            }
+            return try device.makeComputePipelineState(function: fn)
+        }
+        fftRows      = try pso("alfven_fft_rows")
+        fftCols      = try pso("alfven_fft_cols")
+        seedPSO      = try pso("alfven_seed_state")
+        filterPSO    = try pso("alfven_spectral_filter")
+        gradPSO      = try pso("alfven_grad_spectrum")
+        bracketPSO   = try pso("alfven_brackets")
+        dealiasPSO   = try pso("alfven_dealias")
+        integratePSO = try pso("alfven_integrate")
+        cflReducePSO = try pso("alfven_cfl_reduce")
+        cflFinishPSO = try pso("alfven_cfl_finish")
+
+        guard let dtBuf = device.makeBuffer(length: MemoryLayout<Float>.size,
+                                            options: .storageModeShared),
+              let cfl = device.makeBuffer(length: MemoryLayout<UInt32>.size,
+                                          options: .storageModeShared) else {
+            throw AlfvenSolverError.allocationFailed
+        }
+        dtBuffer = dtBuf
+        cflScratch = cfl
+
+        try allocateTextures()
+        logger.info("""
+            AlfvenSolver: \(configuration.edge)² compute solver, \
+            \(configuration.substeps) substeps/frame, adaptive dt <= \(configuration.maxDt)
+            """)
+    }
+
+    private func allocateTextures() throws {
+        let n = configuration.edge
+        func make() throws -> MTLTexture {
+            let d = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba32Float, width: n, height: n, mipmapped: false)
+            d.usage = [.shaderRead, .shaderWrite]
+            d.storageMode = .shared     // read back by the soak; UMA, so no copy cost
+            guard let t = device.makeTexture(descriptor: d) else {
+                throw AlfvenSolverError.allocationFailed
+            }
+            return t
+        }
+        state = [try make(), try make()]
+        scratchA = try make(); scratchB = try make(); scratchC = try make()
+        gradPhi = try make(); gradOmega = try make()
+        gradPsi = try make(); gradJ = try make()
+        nonlinear = try make()
+    }
+
+    // MARK: Stepping
+
+    /// Advance the field by one frame: `substeps` explicit steps, each with its own full
+    /// RHS evaluation and its own CFL-adapted timestep.
+    ///
+    /// Encodes into `commandBuffer`; the caller commits. Nothing here reads back, so the
+    /// adaptive timestep costs no stall — the reduction writes `dtBuffer` on the GPU and
+    /// the integrate kernel reads it there.
+    public func update(time: Float, commandBuffer: MTLCommandBuffer) {
+        var params = makeParams(time: time)
+
+        // Re-seed on a cycle boundary (§5): the look is a sequence of transients, because
+        // a sustained driven 2D MHD state condenses to a static quilt.
+        let cycle = Int(floor(time / configuration.cycleSeconds))
+        if cycle != lastCycle {
+            lastCycle = cycle
+            params.seedPhase = 7.31 * Float(cycle) + 1.7
+            if cycle == 0 { encodeSeed(&params, into: commandBuffer) }
+        }
+
+        for _ in 0..<configuration.substeps {
+            encodeSubstep(&params, into: commandBuffer)
+        }
+    }
+
+    /// Force a fresh seed — first frame, or recovery after a non-finite blow-up.
+    public func reseed(time: Float, commandBuffer: MTLCommandBuffer) {
+        var params = makeParams(time: time)
+        params.seedPhase = 7.31 * floor(time / configuration.cycleSeconds) + 1.7
+        encodeSeed(&params, into: commandBuffer)
+    }
+
+    private func makeParams(time: Float) -> AlfvenParams {
+        let cfg = configuration
+        // Per-substep share of the re-seed crossfade, raised cosine (the spike's
+        // advance_blend). Zero outside the blend window.
+        let cycleStart = floor(time / cfg.cycleSeconds) * cfg.cycleSeconds
+        let a = min(max((time - cycleStart) / cfg.blendTau, 0), 1)
+        let blendRate: Float = a < 1
+            ? (0.5 - 0.5 * cos(.pi * a)) * (cfg.maxDt / cfg.blendTau) * .pi
+            : 0
+        return AlfvenParams(
+            dt: cfg.maxDt, alpha: cfg.alpha, nu4: cfg.nu4, drive: cfg.drive,
+            time: time, cutoff: cfg.spectralCutoff,
+            clampW: cfg.clampOmega, clampP: cfg.clampPsi,
+            n: UInt32(cfg.edge),
+            seedKOmega: UInt32(cfg.seedKOmega), seedKPsi: UInt32(cfg.seedKPsi),
+            seedAmpOmega: cfg.seedAmpOmega, seedAmpPsi: cfg.seedAmpPsi,
+            seedPhase: 7.31 * floor(time / cfg.cycleSeconds) + 1.7,
+            blendRate: blendRate)
+    }
+
+    private func grid() -> (MTLSize, MTLSize) {
+        let n = configuration.edge
+        return (MTLSize(width: n, height: n, depth: 1), MTLSize(width: 16, height: 16, depth: 1))
+    }
+
+    private func encodeSeed(_ params: inout AlfvenParams, into cmd: MTLCommandBuffer) {
+        guard let enc = cmd.makeComputeCommandEncoder() else { return }
+        let (g, t) = grid()
+        enc.setComputePipelineState(seedPSO)
+        enc.setTexture(state[stateIndex], index: 0)
+        enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+        enc.dispatchThreads(g, threadsPerThreadgroup: t)
+        enc.endEncoding()
+    }
+
+    /// One full explicit step. Each substep re-evaluates the RHS from scratch, which is
+    /// exactly what the staged path could not do.
+    private func encodeSubstep(_ params: inout AlfvenParams, into cmd: MTLCommandBuffer) {
+        let n = configuration.edge
+        let (g, t) = grid()
+        let src = state[stateIndex]
+        let dst = state[1 - stateIndex]
+
+        func compute(_ body: (MTLComputeCommandEncoder) -> Void) {
+            guard let enc = cmd.makeComputeCommandEncoder() else { return }
+            body(enc)
+            enc.endEncoding()
+        }
+        func fft(_ pso: MTLComputePipelineState, _ a: MTLTexture, _ b: MTLTexture,
+                 forward: Bool) {
+            compute { enc in
+                enc.setComputePipelineState(pso)
+                enc.setTexture(a, index: 0)
+                enc.setTexture(b, index: 1)
+                var fwd: UInt32 = forward ? 1 : 0
+                enc.setBytes(&fwd, length: MemoryLayout<UInt32>.size, index: 0)
+                enc.dispatchThreadgroups(MTLSize(width: n, height: n, depth: 1),
+                                         threadsPerThreadgroup: MTLSize(width: n / 2, height: 1, depth: 1))
+            }
+        }
+
+        // state -> spectrum -> filtered spectrum
+        fft(fftRows, src, scratchB, forward: true)
+        fft(fftCols, scratchB, scratchA, forward: true)
+        compute { enc in
+            enc.setComputePipelineState(filterPSO)
+            enc.setTexture(scratchA, index: 0)
+            enc.setTexture(scratchB, index: 1)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+            enc.dispatchThreads(g, threadsPerThreadgroup: t)
+        }
+
+        // Four derivative-spectra chains. Each yields both partials of one field from a
+        // single inverse transform, because the x- and y-derivatives are separately real.
+        let targets = [gradPhi!, gradOmega!, gradPsi!, gradJ!]
+        for (mode, target) in targets.enumerated() {
+            compute { enc in
+                enc.setComputePipelineState(gradPSO)
+                enc.setTexture(scratchB, index: 0)
+                enc.setTexture(scratchA, index: 1)
+                enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+                var m = UInt32(mode)
+                enc.setBytes(&m, length: MemoryLayout<UInt32>.size, index: 1)
+                enc.dispatchThreads(g, threadsPerThreadgroup: t)
+            }
+            // Inverse straight into `target`. An earlier version ran a dealias pass here
+            // "as a copy" — badly wrong: `alfven_dealias` masks on alf_wavenumber(gid),
+            // i.e. it treats the TEXEL INDEX as a wavenumber, so on a real-space field it
+            // zeroes ~55% of the image by position. Dealiasing belongs only on the
+            // brackets, in k-space, which is where it is applied below.
+            fft(fftCols, scratchA, scratchC, forward: false)
+            fft(fftRows, scratchC, target, forward: false)
+        }
+
+        // Adaptive dt from a field-wide max — the mechanism the staged DAG could not host.
+        cflScratch.contents().assumingMemoryBound(to: UInt32.self).pointee = 0
+        compute { enc in
+            enc.setComputePipelineState(cflReducePSO)
+            enc.setTexture(gradPhi, index: 0)
+            enc.setTexture(gradPsi, index: 1)
+            enc.setBuffer(cflScratch, offset: 0, index: 0)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 1)
+            enc.dispatchThreads(g, threadsPerThreadgroup: t)
+        }
+        compute { enc in
+            enc.setComputePipelineState(cflFinishPSO)
+            enc.setBuffer(cflScratch, offset: 0, index: 0)
+            enc.setBuffer(dtBuffer, offset: 0, index: 1)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 2)
+            enc.dispatchThreads(MTLSize(width: 1, height: 1, depth: 1),
+                                threadsPerThreadgroup: MTLSize(width: 1, height: 1, depth: 1))
+        }
+
+        // Brackets -> transform -> dealias -> back, then integrate.
+        compute { enc in
+            enc.setComputePipelineState(bracketPSO)
+            enc.setTexture(gradPhi, index: 0)
+            enc.setTexture(gradOmega, index: 1)
+            enc.setTexture(gradPsi, index: 2)
+            enc.setTexture(gradJ, index: 3)
+            enc.setTexture(nonlinear, index: 4)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+            enc.dispatchThreads(g, threadsPerThreadgroup: t)
+        }
+        fft(fftRows, nonlinear, scratchA, forward: true)
+        fft(fftCols, scratchA, scratchB, forward: true)
+        compute { enc in
+            enc.setComputePipelineState(dealiasPSO)
+            enc.setTexture(scratchB, index: 0)
+            enc.setTexture(scratchA, index: 1)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+            enc.dispatchThreads(g, threadsPerThreadgroup: t)
+        }
+        fft(fftCols, scratchA, scratchB, forward: false)
+        fft(fftRows, scratchB, nonlinear, forward: false)
+
+        compute { enc in
+            enc.setComputePipelineState(integratePSO)
+            enc.setTexture(src, index: 0)
+            enc.setTexture(nonlinear, index: 1)
+            enc.setTexture(gradPsi, index: 2)
+            enc.setTexture(dst, index: 3)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+            enc.setBuffer(dtBuffer, offset: 0, index: 1)
+            enc.dispatchThreads(g, threadsPerThreadgroup: t)
+        }
+        stateIndex = 1 - stateIndex
+    }
+
+    /// The timestep the CFL reduction chose on the last substep. Diagnostics only.
+    public var lastAdaptiveDt: Float {
+        dtBuffer.contents().assumingMemoryBound(to: Float.self).pointee
+    }
+}
