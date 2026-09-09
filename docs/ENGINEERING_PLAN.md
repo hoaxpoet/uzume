@@ -828,6 +828,13 @@ not install at wire (0.6 s) either — Dragon Bloom appeared **150 s** after `wi
   if not intended, score undeclared presets at the track's mean deviation rather than 0.5.
 - **PR.8.1 (small): capture one session with info logging** to see why the planned install waits.
 
+**Matt: "do all three" — done 2026-09-09 (D-245).** Immediate nudge walks scorer-ranked order; the
+section quarter is gated on real section data (three-weight normalisation when nil); undeclared stem
+affinity scores the mean deviation. Result on the measured tracks: Seven Nation Army opener Filigree by
+0.035 (outside the noise), Dance Yrself Clean a Cytokinesis/Cymatic Resonance cluster. Goldens
+regenerated; the two "neutral 0.5" affinity tests restated to the new contract; the D-080 zero-profile
+guard unchanged. PR.8.1 remains open.
+
 
 **PR.9 — certify or remove every uncertified preset** (pre-public-beta gate, Matt 2026-09-04).
 Seven presets are `certified: false`: Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph,
