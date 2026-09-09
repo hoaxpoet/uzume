@@ -97,8 +97,8 @@ static inline float2 alfven_sample_catrom(texture2d<float, access::sample> tex,
 // substeps per output frame; we do the same by giving the `state` stage `iterations: 8`,
 // which is exactly what ALFVEN.1's iterated-stage surface is for. 0.016/8 = 0.002 sits
 // inside the spike's bound. Fixed, never the render dt (BUG-097).
-constant constexpr float kAlfvenDt        = 0.002;
-constant constexpr int   kAlfvenSubsteps  = 8;      // must match the sidecar's iterations
+constant constexpr float kAlfvenDt        = 0.016;
+constant constexpr int   kAlfvenSubsteps  = 1;      // must match the sidecar's iterations
 constant constexpr float kAlfvenAlpha     = 0.16;   // linear drag on omega (spike value)
 constant constexpr float kAlfvenNu        = 0.9;    // omega diffusion, texel^2 units
 constant constexpr float kAlfvenEta       = 0.5;    // psi diffusion
@@ -197,6 +197,126 @@ static inline float alfven_forcing(float2 uv, float t) {
     return f * 0.25;
 }
 
+
+// ─── Spectral stabiliser (ALFVEN.1c) ────────────────────────────────────────
+//
+// The Hou-Li filter, applied where it belongs. ALFVEN.2 measured that no local operator
+// reproduces it — the 3x3 tent leaves mid-k at 0.75 and the biharmonic at 0.25, so both
+// eat the band the lobes live in, and J came out ~100x the reference either way. In
+// k-space the same filter leaves low-k at 1.000000 and kills the Nyquist corner to
+// 3.5e-21 (FFTSandboxTests). Transform helpers live in the shared preamble.
+//
+// The chain runs on the PREVIOUS frame's psi and the `state` stage picks the filtered
+// result up on its first substep — one frame of lag, which is standard for this scheme.
+
+fragment float4 alfven_fft_rows_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    constant StagedPassInfo& p [[buffer(9)]],
+    texture2d<float, access::read> stateTex [[texture(13)]],
+    texture2d<float, access::read> prevTex [[texture(20)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int n = int(stateTex.get_width());
+    int j, wing; float angle;
+    uz_fft_indices(int(gid.x), p.index, j, wing, angle);
+    float2 a, b;
+    if (p.index == 0) {
+        // BOTH fields in one transform: omega as the real part, psi as the imaginary
+        // part. The filter is real and the DFT is linear, so filtering the complex field
+        // (omega + i*psi) filters the two independently and exactly — one chain, not two.
+        // The spike filters both w and p (alfven.py:104-105); filtering only psi left
+        // omega free to cascade, which measured as an effective k ~ 19 in J while the
+        // filter's cutoff sits at k ~ 109, i.e. it never saw the energy that mattered.
+        a = stateTex.read(uint2(uint(j), gid.y)).xy;
+        b = stateTex.read(uint2(uint(j + n / 2), gid.y)).xy;
+    } else {
+        a = prevTex.read(uint2(uint(j), gid.y)).xy;
+        b = prevTex.read(uint2(uint(j + n / 2), gid.y)).xy;
+    }
+    return float4(uz_fft_combine(a, b, angle, wing, true), 0.0, 1.0);
+}
+
+fragment float4 alfven_fft_cols_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    constant StagedPassInfo& p [[buffer(9)]],
+    texture2d<float, access::read> inputTex [[texture(13)]],
+    texture2d<float, access::read> prevTex [[texture(20)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int n = int(inputTex.get_height());
+    int j, wing; float angle;
+    uz_fft_indices(int(gid.y), p.index, j, wing, angle);
+    float2 a, b;
+    if (p.index == 0) {
+        a = inputTex.read(uint2(gid.x, uint(j))).xy;
+        b = inputTex.read(uint2(gid.x, uint(j + n / 2))).xy;
+    } else {
+        a = prevTex.read(uint2(gid.x, uint(j))).xy;
+        b = prevTex.read(uint2(gid.x, uint(j + n / 2))).xy;
+    }
+    return float4(uz_fft_combine(a, b, angle, wing, true), 0.0, 1.0);
+}
+
+fragment float4 alfven_fft_filter_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::read> specTex [[texture(13)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int w = int(specTex.get_width()), h = int(specTex.get_height());
+    return float4(specTex.read(gid).xy * uz_houli_filter(gid, w, h), 0.0, 1.0);
+}
+
+fragment float4 alfven_ifft_cols_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    constant StagedPassInfo& p [[buffer(9)]],
+    texture2d<float, access::read> inputTex [[texture(13)]],
+    texture2d<float, access::read> prevTex [[texture(20)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int n = int(inputTex.get_height());
+    int j, wing; float angle;
+    uz_fft_indices(int(gid.y), p.index, j, wing, angle);
+    float2 a, b;
+    if (p.index == 0) {
+        a = inputTex.read(uint2(gid.x, uint(j))).xy;
+        b = inputTex.read(uint2(gid.x, uint(j + n / 2))).xy;
+    } else {
+        a = prevTex.read(uint2(gid.x, uint(j))).xy;
+        b = prevTex.read(uint2(gid.x, uint(j + n / 2))).xy;
+    }
+    float2 r = uz_fft_combine(a, b, angle, wing, false);
+    if (p.index == p.count - 1) { r /= float(n); }
+    return float4(r, 0.0, 1.0);
+}
+
+fragment float4 alfven_ifft_rows_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    constant StagedPassInfo& p [[buffer(9)]],
+    texture2d<float, access::read> inputTex [[texture(13)]],
+    texture2d<float, access::read> prevTex [[texture(20)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int n = int(inputTex.get_width());
+    int j, wing; float angle;
+    uz_fft_indices(int(gid.x), p.index, j, wing, angle);
+    float2 a, b;
+    if (p.index == 0) {
+        a = inputTex.read(uint2(uint(j), gid.y)).xy;
+        b = inputTex.read(uint2(uint(j + n / 2), gid.y)).xy;
+    } else {
+        a = prevTex.read(uint2(uint(j), gid.y)).xy;
+        b = prevTex.read(uint2(uint(j + n / 2), gid.y)).xy;
+    }
+    float2 r = uz_fft_combine(a, b, angle, wing, false);
+    if (p.index == p.count - 1) { r /= float(n); }
+    return float4(r, 0.0, 1.0);
+}
+
 // ─── Stage 1: PHI — Jacobi solve of lap(phi) = -omega ────────────────────────
 //
 // Same ported stencil ALFVEN.1 proved against the analytic solution: the reference
@@ -234,7 +354,9 @@ fragment float4 alfven_phi_fragment(
 fragment float4 alfven_state_fragment(
     VertexOut in [[stage_in]],
     constant FeatureVector& f [[buffer(0)]],
+    constant StagedPassInfo& p [[buffer(9)]],
     texture2d<float, access::sample> phiTex [[texture(13)]],
+    texture2d<float, access::sample> filteredPsiTex [[texture(14)]],
     texture2d<float, access::sample> prevStateTex [[texture(20)]]
 ) {
     float2 uv    = in.uv;
@@ -244,7 +366,15 @@ fragment float4 alfven_state_fragment(
     // Covers frame 1 after a preset switch (ALFVEN.1 zeroes persistent pairs) and
     // recovery after a watchdog re-zero. Sampled at one texel plus its neighbours as a
     // cheap stand-in for a field-wide RMS, which a fragment cannot compute.
-    float2 c  = prevStateTex.sample(alfven_state_sampler, uv).xy;
+    // psi comes from the spectral filter on the FIRST substep of the frame (the chain ran
+    // on last frame's psi, before this stage); later substeps carry it forward themselves.
+    // omega always comes from this stage's own previous state.
+    // Both fields come back spectrally filtered on the first step of the frame:
+    // .x = omega (the transform's real part), .y = psi (its imaginary part).
+    float2 c = prevStateTex.sample(alfven_state_sampler, uv).xy;
+    if (p.index == 0) {
+        c = filteredPsiTex.sample(alfven_state_sampler, uv).xy;
+    }
     float2 n1 = prevStateTex.sample(alfven_state_sampler, uv + texel * 37.0).xy;
     float2 n2 = prevStateTex.sample(alfven_state_sampler, uv - texel * 53.0).xy;
     float presence = abs(c.x) + abs(c.y) + abs(n1.y) + abs(n2.y);
@@ -274,11 +404,26 @@ fragment float4 alfven_state_fragment(
     float2 src = uv - traceTexels * texel;
     // Cubic rather than bilinear — the measured fix for the interpolation loss above.
     float2 advected = alfven_sample_catrom(prevStateTex, src, texel);
-    // Catmull-Rom can overshoot at a sharp front; clamp to the bilinear neighbourhood so
-    // a current sheet cannot ring into a new extremum and seed an instability.
-    float2 lin = prevStateTex.sample(alfven_lerp_sampler, src).xy;
-    float2 lo = min(lin, advected), hi = max(lin, advected);
-    advected = clamp(advected, lo - abs(lin) - 1.0e-3, hi + abs(lin) + 1.0e-3);
+    // Catmull-Rom is not monotone: at a sharp front it overshoots, and an overshoot in psi
+    // is a new extremum that the next step amplifies. Clamp to the range of the four DONOR
+    // texels around the back-traced point — the standard limiter for high-order
+    // semi-Lagrangian advection (Selle et al. 2008 use the same guard on MacCormack).
+    //
+    // The previous version of this clamp was a NO-OP and shipped as if it were a guard:
+    // it took lo = min(lin, advected) and hi = max(lin, advected), which `advected` is
+    // trivially always inside. Unlimited Catmull-Rom then injected energy into psi — a
+    // field with NO source term, which the reference conserves to four decimals — driving
+    // psi 0.9 -> 6.3 once the spectral filter replaced the local damping that had been
+    // hiding it.
+    float2 donor = src / texel - 0.5;
+    float2 dbase = floor(donor);
+    float2 d00 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(0.5, 0.5)) * texel).xy;
+    float2 d10 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(1.5, 0.5)) * texel).xy;
+    float2 d01 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(0.5, 1.5)) * texel).xy;
+    float2 d11 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(1.5, 1.5)) * texel).xy;
+    float2 lo = min(min(d00, d10), min(d01, d11));
+    float2 hi = max(max(d00, d10), max(d01, d11));
+    advected = clamp(advected, lo, hi);
     float omega = advected.x;
     float psi   = advected.y;
 
@@ -390,10 +535,13 @@ fragment float4 alfven_state_fragment(
 
     // ── Integrate ──
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
+    // No local grid-scale term on omega either: the spectral filter now covers both
+    // fields, and it does so without touching the mid-k band the lobes occupy.
     omega += kAlfvenDt * (lorentz - kAlfvenAlpha * c.x + force)
-           + kAlfvenNu * kAlfvenDt * lapW
-           - kAlfvenHyperRate * kAlfvenDt * checker;
-    psi   += kAlfvenEta * kAlfvenDt * lapP - kAlfvenNu4Psi * kAlfvenDt * pBilap;
+           + kAlfvenNu * kAlfvenDt * lapW;
+    // No local grid-scale term on psi any more: the spectral filter does that job, and
+    // does it without touching the mid-k band these lobes live in.
+    psi   += kAlfvenEta * kAlfvenDt * lapP;
 
     // ── Re-seed crossfade (§5) ──
     // Ported from the spike's advance_blend: a raised cosine so the dissolve has no

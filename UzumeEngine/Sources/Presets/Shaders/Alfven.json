@@ -5,6 +5,16 @@
   "family": "hypnotic",
   "passes": ["staged"],
   "stages": [
+    { "name": "fftrows", "fragment_function": "alfven_fft_rows_fragment",
+      "samples": ["state"], "iterations": 8, "pixel_format": "rgba32Float" },
+    { "name": "fftcols", "fragment_function": "alfven_fft_cols_fragment",
+      "samples": ["fftrows"], "iterations": 8, "pixel_format": "rgba32Float" },
+    { "name": "fftfilt", "fragment_function": "alfven_fft_filter_fragment",
+      "samples": ["fftcols"], "pixel_format": "rgba32Float" },
+    { "name": "ifftcols", "fragment_function": "alfven_ifft_cols_fragment",
+      "samples": ["fftfilt"], "iterations": 8, "pixel_format": "rgba32Float" },
+    { "name": "ifftrows", "fragment_function": "alfven_ifft_rows_fragment",
+      "samples": ["ifftcols"], "iterations": 8, "pixel_format": "rgba32Float" },
     {
       "name": "phi",
       "fragment_function": "alfven_phi_fragment",
@@ -16,9 +26,8 @@
     {
       "name": "state",
       "fragment_function": "alfven_state_fragment",
-      "samples": ["phi"],
+      "samples": ["phi", "ifftrows"],
       "persistent": true,
-      "iterations": 8,
       "pixel_format": "rgba32Float"
     },
     {

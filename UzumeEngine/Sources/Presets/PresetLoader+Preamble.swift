@@ -23,6 +23,45 @@ extension PresetLoader {
         #define FFT_BIN_COUNT 512
         #define WAVEFORM_CAPACITY 2048
 
+        // Stockham radix-2 FFT helpers (ALFVEN.1c). Shared so the FFT Sandbox diagnostic
+        // and any preset needing a spectral operator use ONE implementation — a wrong FFT
+        // fails silently, so it should exist once and be gated once (FFTSandboxTests).
+        // Complex values pack as (re, im). Requires power-of-two extent along the axis.
+        static inline float2 uz_cmul(float2 a, float2 b) {
+            return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+        }
+        // Gather form: from this fragment's output index `o` along the transform axis,
+        // recover the partner index `j`, which wing of the butterfly this is, and the
+        // twiddle angle. `wing` is deliberately not named `half` — that is an MSL keyword
+        // and shadowing it is Failed Approach #44.
+        static inline void uz_fft_indices(int o, int pass, thread int& j,
+                                          thread int& wing, thread float& angle) {
+            int ns   = 1 << pass;
+            int span = ns << 1;
+            int blk  = o / span;
+            int r    = o - blk * span;
+            int lo   = r & (ns - 1);
+            wing     = r / ns;
+            j        = blk * ns + lo;
+            angle    = -6.28318530718 * float(lo) / float(span);
+        }
+        // One butterfly, given the two gathered inputs.
+        static inline float2 uz_fft_combine(float2 a, float2 b, float angle, int wing,
+                                            bool forward) {
+            float ang = forward ? angle : -angle;
+            float2 w  = float2(cos(ang), sin(ang));
+            float2 wb = uz_cmul(w, b);
+            return (wing == 0) ? (a + wb) : (a - wb);
+        }
+        // Hou-Li spectral filter, exp(-36 (k/kmax)^36) — the spike's stabiliser. `gid` is
+        // the k-space texel; frequencies are in FFT order so the wavenumber wraps at N/2.
+        static inline float uz_houli_filter(uint2 gid, int w, int h) {
+            int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
+            int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
+            float kr = clamp(sqrt(float(kx * kx + ky * ky)) / float(w / 2), 0.0, 1.0);
+            return exp(-36.0 * pow(kr, 36.0));
+        }
+
         // Matches Swift StagedPassInfo (Renderer). Bound at fragment buffer 9 on every
         // staged pass; `(0, 1)` for a stage that is not iterated. ALFVEN.1c.
         struct StagedPassInfo {

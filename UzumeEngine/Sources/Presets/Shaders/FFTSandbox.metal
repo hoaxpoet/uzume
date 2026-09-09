@@ -31,29 +31,8 @@
 //   Reads use access::read at integer coordinates: no sampler, no filtering, no
 //   wing-texel ambiguity in the index math.
 
-// MARK: - Complex helpers
-
-static inline float2 fft_cmul(float2 a, float2 b) {
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
-}
-
-/// One radix-2 Stockham butterfly, gathered. `o` is this fragment's index along the
-/// transform axis, `n` the transform length, `pass` the 0-based pass index.
-/// `forward` selects the twiddle sign; the 1/N scaling is applied once, on the final
-/// inverse pass, by the caller.
-static inline void fft_indices(int o, int n, int pass, thread int& j, thread int& wing,
-                               thread float& angle) {
-    int ns   = 1 << pass;          // butterfly span for this pass
-    int span = ns << 1;
-    int blk  = o / span;
-    int r    = o - blk * span;
-    int lo   = r & (ns - 1);
-    wing     = r / ns;             // 0 = additive output, 1 = subtractive
-    // Named `wing`, NOT `half`: `half` is an MSL keyword (the 16-bit float
-    // type) and shadowing it is Failed Approach #44 verbatim.
-    j        = blk * ns + lo;      // partner index, always in [0, n/2)
-    angle    = -6.28318530718 * float(lo) / float(span);
-}
+// Transform helpers (uz_cmul / uz_fft_indices / uz_fft_combine / uz_houli_filter)
+// live in the shared preamble so this diagnostic and Alfven use ONE implementation.
 
 // MARK: - Stages
 
@@ -81,7 +60,7 @@ fragment float4 fft_sandbox_rows_fwd_fragment(
     uint2 gid = uint2(in.position.xy);
     int n = int(inputTex.get_width());
     int j, wing; float angle;
-    fft_indices(int(gid.x), n, p.index, j, wing, angle);
+    uz_fft_indices(int(gid.x), p.index, j, wing, angle);
 
     // Pass 0 reads the stage INPUT; later passes read this stage's previous iteration.
     float2 a, b;
@@ -92,9 +71,7 @@ fragment float4 fft_sandbox_rows_fwd_fragment(
         a = prevTex.read(uint2(uint(j), gid.y)).xy;
         b = prevTex.read(uint2(uint(j + n / 2), gid.y)).xy;
     }
-    float2 w  = float2(cos(angle), sin(angle));
-    float2 wb = fft_cmul(w, b);
-    float2 r  = (wing == 0) ? (a + wb) : (a - wb);
+    float2 r = uz_fft_combine(a, b, angle, wing, true);
     return float4(r, 0.0, 1.0);
 }
 
@@ -108,7 +85,7 @@ fragment float4 fft_sandbox_cols_fwd_fragment(
     uint2 gid = uint2(in.position.xy);
     int n = int(inputTex.get_height());
     int j, wing; float angle;
-    fft_indices(int(gid.y), n, p.index, j, wing, angle);
+    uz_fft_indices(int(gid.y), p.index, j, wing, angle);
 
     float2 a, b;
     if (p.index == 0) {
@@ -118,9 +95,7 @@ fragment float4 fft_sandbox_cols_fwd_fragment(
         a = prevTex.read(uint2(gid.x, uint(j))).xy;
         b = prevTex.read(uint2(gid.x, uint(j + n / 2))).xy;
     }
-    float2 w  = float2(cos(angle), sin(angle));
-    float2 wb = fft_cmul(w, b);
-    float2 r  = (wing == 0) ? (a + wb) : (a - wb);
+    float2 r = uz_fft_combine(a, b, angle, wing, true);
     return float4(r, 0.0, 1.0);
 }
 
@@ -136,7 +111,7 @@ fragment float4 fft_sandbox_cols_inv_fragment(
     uint2 gid = uint2(in.position.xy);
     int n = int(inputTex.get_height());
     int j, wing; float angle;
-    fft_indices(int(gid.y), n, p.index, j, wing, angle);
+    uz_fft_indices(int(gid.y), p.index, j, wing, angle);
 
     float2 a, b;
     if (p.index == 0) {
@@ -146,9 +121,7 @@ fragment float4 fft_sandbox_cols_inv_fragment(
         a = prevTex.read(uint2(gid.x, uint(j))).xy;
         b = prevTex.read(uint2(gid.x, uint(j + n / 2))).xy;
     }
-    float2 w  = float2(cos(-angle), sin(-angle));
-    float2 wb = fft_cmul(w, b);
-    float2 r  = (wing == 0) ? (a + wb) : (a - wb);
+    float2 r = uz_fft_combine(a, b, angle, wing, false);
     if (p.index == p.count - 1) { r /= float(n); }
     return float4(r, 0.0, 1.0);
 }
@@ -163,7 +136,7 @@ fragment float4 fft_sandbox_rows_inv_fragment(
     uint2 gid = uint2(in.position.xy);
     int n = int(inputTex.get_width());
     int j, wing; float angle;
-    fft_indices(int(gid.x), n, p.index, j, wing, angle);
+    uz_fft_indices(int(gid.x), p.index, j, wing, angle);
 
     float2 a, b;
     if (p.index == 0) {
@@ -173,9 +146,7 @@ fragment float4 fft_sandbox_rows_inv_fragment(
         a = prevTex.read(uint2(uint(j), gid.y)).xy;
         b = prevTex.read(uint2(uint(j + n / 2), gid.y)).xy;
     }
-    float2 w  = float2(cos(-angle), sin(-angle));
-    float2 wb = fft_cmul(w, b);
-    float2 r  = (wing == 0) ? (a + wb) : (a - wb);
+    float2 r = uz_fft_combine(a, b, angle, wing, false);
     if (p.index == p.count - 1) { r /= float(n); }
     return float4(r, 0.0, 1.0);
 }
@@ -190,12 +161,7 @@ fragment float4 fft_sandbox_filter_fragment(
 ) {
     uint2 gid = uint2(in.position.xy);
     int w = int(specTex.get_width()), h = int(specTex.get_height());
-    int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
-    int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
-    float kmax = float(w / 2);
-    float kr = clamp(sqrt(float(kx * kx + ky * ky)) / kmax, 0.0, 1.0);
-    float filt = exp(-36.0 * pow(kr, 36.0));
-    return float4(specTex.read(gid).xy * filt, 0.0, 1.0);
+    return float4(specTex.read(gid).xy * uz_houli_filter(gid, w, h), 0.0, 1.0);
 }
 
 /// Diagnostic view: round-trip error against the source, amplified so any deviation is
