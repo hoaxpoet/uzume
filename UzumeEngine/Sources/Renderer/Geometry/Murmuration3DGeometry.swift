@@ -71,7 +71,7 @@ public struct Murmuration3DConfiguration: Sendable {
         drag: Float = 3.0,
         camDist: Float = 3.2,        // camera further back (Matt 2026-06-04: room to traverse)
         camPitch: Float = 0.35,
-        viewScale: Float = 1.05      // zoomed out → room for the energy-swelled flock to roam
+        viewScale: Float = 1.30      // PR.6 (Matt, roster review): "flock takes more of the frame" — was 1.05
     ) {
         self.particleCount = particleCount
         self.drag = drag

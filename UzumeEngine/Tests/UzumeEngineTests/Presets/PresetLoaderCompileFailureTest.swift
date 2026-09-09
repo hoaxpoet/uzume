@@ -115,16 +115,20 @@ struct PresetLoaderCompileFailureTest {
     /// manual cycle; it is a harness fixture in the same class as Staged Sandbox,
     /// not aesthetic content. See docs/DECISIONS.md D-244.)
     /// 30 → 31 at ALFVEN.2 (Alfvén added — driven 2D incompressible MHD in vorticity /
-    /// flux-function form on the ALFVEN.1 persistent+iterated staged surface. Physics
-    /// ported from the pseudo-spectral CPU spike; PLACEHOLDER exposure until a
-    /// reduction/mip surface exists for film.py's percentile auto-exposure. `certified:
-    /// false`, `exclude_from_cycling: true` while the look is a placeholder, no audio
-    /// routing until ALFVEN.3. See docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
+    /// flux-function form. Physics ported from the pseudo-spectral CPU spike; the solver
+    /// moved to a COMPUTE pipeline at ALFVEN.4 (`AlfvenSolver`) because the staged
+    /// fragment path can host neither a mid-frame reduction for adaptive dt nor real
+    /// substeps. PLACEHOLDER exposure until a reduction/mip surface exists for film.py's
+    /// percentile auto-exposure. `certified: false`, `exclude_from_cycling: true` while
+    /// the look is a placeholder, no audio routing until ALFVEN.3. See
+    /// docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
     /// 31 → 32 at ALFVEN.1c (FFT Sandbox added — a GPU 2D Stockham FFT on the staged
     /// surface, one butterfly pass per stage iteration, gated by a round-trip identity
     /// test. Infrastructure for Alfvén's spectral stabiliser, proven standalone first.
     /// `is_diagnostic`, `exclude_from_cycling`.)
-    static let expectedProductionPresetCount = 32
+    /// 32 → 31 on merging main (D-246: Arachne removed there, taking main's own count
+    /// 30 → 29. This branch's +2 lands on top of that, so 29 + 2 = 31, NOT 32.)
+    static let expectedProductionPresetCount = 31
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

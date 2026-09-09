@@ -56,6 +56,18 @@ struct PresetSidecarKeyGateTests {
     /// Adding a row here is a decision, not a formality — it says the mechanism is wired
     /// and waiting, not that nobody checked.
     private static let deliberateZeroAdopterKeys: [String: String] = [
+        "natural_cycle_seconds": """
+            D-246: Arachne was the only adopter and was removed. The key feeds \
+            `PresetMaxDuration`, which is generic (V.7.6.2) and still governs how long any \
+            preset may hold a segment — the formula simply has no declarant right now. The \
+            next preset with a natural build cycle adopts it by declaring the key.
+            """,
+        "wait_for_completion_event": """
+            D-246: Arachne was the only adopter and was removed. The completion-signalling \
+            path (`PresetSignaling`, `activePresetSignaling()`) is intact and generic; with no \
+            conformer every track plans as a single segment, which is what non-signalling \
+            presets already did.
+            """,
         "requires_regular_beat": """
             D-154 as amended (FBS.S5c, 2026-06-11): Matt watched Pyramid Song under the \
             Ferrofluid beat-sync and chose to retire the ban outright rather than narrow it. \

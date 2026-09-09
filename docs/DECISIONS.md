@@ -126,6 +126,8 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-242 | Accepted — **amended at PREP.2 (2026-09-04): two budgets, and Release is the configuration they are measured in**; see §Amendment | **Session preparation has a time budget: 40 tracks in 5 minutes (Matt, 2026-09-03).** Preparation had no stated performance target anywhere in the docs — it was measured only as "did every track land". Matt set one after a live local-file run: **12 FLAC files took 10 minutes**, i.e. **50 s/track**, against a ceiling of **7.5 s/track** (300 s ÷ 40). The current local path is therefore ~**6.7× over budget**, and the gap widens with playlist length because the outer loop is serial. The budget is wall-clock from the first preparation task starting to the session reaching `.ready`, on the Mac mini dev target, cold cache, and it applies to **both** sources — though they are structurally unequal: streaming analyses a 30 s preview per track while the local path decodes and analyses the **entire** file (LFSTEM.1's whole-file stem sweep, DYN.1c's loudness profile), so local is the path that has to close the gap. Why it is a product commitment and not a nice-to-have: Uzume's proposition is that the whole visual session is planned before the listener presses play, and the wait is the one unavoidable friction that buys it — a wait that scales to ~30 minutes for a real 40-track playlist makes the proposition unusable, whatever the visuals do afterwards. **The number is a target, not a measurement:** no per-stage timing exists for the local path, so which stage dominates is unknown and must not be guessed. PREP.1 instruments before anything is optimised (evidence-before-implementation). §Rationale below. |
 | D-243 | Accepted | **Bar position is recorded per window, and a declined window emits no bars** — sparse and correct over dense with a fallback (Matt, 2026-09-05) |
 | D-244 | Accepted | **Staged stages gain persistence, iteration and a per-stage pixel format; the projection is a PORT of an MIT reference, not a derivation** (ALFVEN.1, 2026-09-08) |
+| D-245 | Accepted (item 3 reversed 2026-09-09) | Scorer: section weight gated on real section data; undeclared stem affinity scores the mean deviation; ~~ranked walk~~ → the manual walk is alphabetical over every preset |
+| D-246 | Accepted | Arachne removed from the roster (PR.9); the segmented-session machinery it motivated stays |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -5602,6 +5604,84 @@ Tracked as BUG-117. Do not re-enable the default until a declined track reports 
 consumers can read as no bars.
 
 ---
+
+## D-246: Arachne is removed; the machinery it motivated stays
+
+**Date:** 2026-09-09 · **Increment:** PR.9 · **Status:** Accepted (Matt: "remove Arachne")
+
+### The decision
+
+Arachne leaves the roster. Deleted: `Shaders/Arachne.{metal,json}`, `Presets/Arachnid/` (4 files),
+`Orchestrator/ArachneStateSignaling.swift`, five test suites, both design docs, and the visual-reference
+directory — ~6,100 lines.
+
+### Why
+
+PR.9's gate is certify-or-remove before the public beta, and Arachne's case was the best-informed in
+the uncertified set. It is the largest investment there — 1652 lines, 48 commits, an 872-line design
+doc whose name (`ARACHNE_V8_DESIGN`) records eight prior iterations — and it has **zero audio routes**,
+**no reference images** in the repo, and it **renders broken** (Matt, live, session `15-08-12Z`:
+*"Arachne is visible, but it's still a massively broken preset."*). "Certify" would not have been
+tuning or repair; it would have been authoring the preset a ninth time, then designing its musical
+coupling from nothing, then curating references to certify it against.
+
+### What stays, deliberately
+
+The **segmented-session model is generic and survives**: `PresetMaxDuration` (formula from the deleted
+design doc's §5.2 — the derivation is preserved in that file's own comment), `PlannedPresetSegment`,
+`SegmentEndReason`, and the `PresetSignaling` completion path. Arachne was the only conformer, so
+`activePresetSignaling()` now returns nil and every track plans as a single segment — which is what
+non-signalling presets already did. Two sidecar keys (`natural_cycle_seconds`,
+`wait_for_completion_event`) are now zero-adopter by design and are declared as such in
+`PresetSidecarKeyGateTests`.
+
+### Consequences
+
+- **The `staged` paradigm has no production preset left** — only the two diagnostic sandboxes. The
+  paradigm's reference template (`StagedPathHarnessTemplate`, QG.4/D-182) was retargeted from Arachne
+  to Staged Sandbox and its golden re-bootstrapped.
+- Roster: 30 → **29** production presets (`expectedProductionPresetCount`); the uncertified set drops
+  from six to five (Gossamer, Membrane, Nebula, Plasma, Waveform), each still awaiting its own call.
+- Historical references in dated records (past increments, prior decisions, audit reports) are left
+  intact — they are the record of what happened, not claims about the current tree.
+
+## D-245: The opener falls out of the score, so the score must not carry dead weight
+
+**Date:** 2026-09-09 · **Increment:** PR.8 · **Status:** Accepted (Matt: "do all three")
+
+### The decision
+
+Three changes to `DefaultPresetScorer` and the immediate preset nudge, all from what PR.8 measured with
+the production scorer on cached track profiles:
+
+1. **The section-suitability quarter is gated on real section data.** Since section detection was
+   removed (D-170) every planned segment carries `section: nil`, and a nil section scored 1.0 — a
+   quarter of every total was a constant. With no section, the three live sub-scores (mood 0.30,
+   tempo 0.20, stem affinity 0.25) are re-normalised to sum to 1.0; the four-weight D-032 form is kept
+   verbatim for the day sections return.
+2. **A preset that declares no `stem_affinity` scores the track's mean stem deviation**, not a flat
+   0.5. The flat value made declaring affinity a structural advantage: on energetic material the five
+   declaring presets scored 0.88–1.00 on that quarter against 0.50 for the rest and owned the top of
+   every ranking. Declared presets still score over their declared stems only; the D-080 zero-profile
+   guard (unconverged balance → 0.5) is unchanged.
+3. ~~**The immediate nudge walks scorer-ranked order**~~ — **REVERSED 2026-09-09 (PR.8.3).** Shipped,
+   and it made the walk unusable: ranked order is per-track and so unpredictable to navigate, and the
+   implementation recomputed it per press, which oscillated between two presets (PR.8.2). Matt:
+   *"I just want the presets to be listed in alphabetical order, so that I can easily navigate to the
+   preset I want."* The walk is alphabetical again. **What survives from the fix:** it walks EVERY
+   loaded preset — PR.8's `filter { $0.1 > 0 }` had dropped diagnostics and over-budget presets from
+   a manual override path, which is how Arachne became unreachable. `PlaybackActionRouting`'s doc
+   comment claiming "scorer-ranked order" is the thing that was wrong; the alphabetical walk is the
+   intended behaviour.
+
+### Consequences
+
+The opener stops being a per-session coin toss on the tracks measured: on Seven Nation Army Filigree
+leads by 0.035, outside the ±0.02 seeded noise. `GoldenSessionTests` were regenerated under the new
+formula; their sole-family repeats are the catalog symptom those tests already document. There is
+still **no opener rule** — track 1 is the best fit under an empty history — and PR.8 records that as
+the design, not a gap. `PlanRankingDumpTests` (env-gated, `PLAN_DUMP_META`) prints the production
+ranking for any cached profile so the next "why did X open?" is answered by the code that chose it.
 
 ## D-244: Staged stages gain persistence, iteration and a per-stage pixel format; the projection is a port
 

@@ -61,6 +61,14 @@ struct BeatBenchCommand: ParsableCommand {
     @Option(name: .long, help: "With --audio: analyse only the first N seconds (0 = whole file).")
     var seconds: Double = 0
 
+    /// PR.2 gate check: the 2-arg `analyzeBeatGrid` convenience defaults to `wholeTrack: false`
+    /// (the 30 s clamp) and its doc says it stays that way for BeatBench's benefit — so until now
+    /// this CLI could not ask what the LOCAL-FILE path actually produces. PR.12 put local files on
+    /// the whole-track grid; measuring that arm needs this flag.
+    @Flag(name: .long,
+          help: "With --audio: analyse on the WHOLE-TRACK grid (the local-file path), not the 30 s clamp.")
+    var wholeTrack: Bool = false
+
     /// BUG-118 — score every arm over the SAME window.
     ///
     /// By default a row is scored over its own grid's span, with the reference trimmed to
@@ -197,7 +205,7 @@ struct BeatBenchCommand: ParsableCommand {
             samples = Array(samples[0..<limit])
         }
         let analyzer = try DefaultBeatGridAnalyzer(device: device)
-        let grid = analyzer.analyzeBeatGrid(samples: samples, sampleRate: rate)
+        let grid = analyzer.analyzeBeatGrid(samples: samples, sampleRate: rate, wholeTrack: wholeTrack)
         let span = String(format: "%.1f", Double(samples.count) / rate)
         let bpm = String(format: "%.2f", grid.bpm)
         // Downbeat count + span are reported because a low downbeat F is ambiguous
@@ -206,7 +214,8 @@ struct BeatBenchCommand: ParsableCommand {
         let dbSpan = grid.downbeats.isEmpty
             ? "none"
             : String(format: "%.1f-%.1fs", grid.downbeats.first ?? 0, grid.downbeats.last ?? 0)
-        print("\(url.lastPathComponent)  analysed \(span)s  →  bpm \(bpm)  "
+        let arm = wholeTrack ? "whole-track" : "30s clamp"
+        print("\(url.lastPathComponent)  [\(arm)]  analysed \(span)s  →  bpm \(bpm)  "
               + "beatsPerBar \(grid.beatsPerBar)  beats \(grid.beats.count)  "
               + "downbeats \(grid.downbeats.count) [\(dbSpan)]  "
               + "barConfidence \(String(format: "%.2f", grid.barConfidence))")

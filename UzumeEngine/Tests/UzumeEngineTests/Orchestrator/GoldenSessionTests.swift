@@ -73,12 +73,12 @@ struct GoldenSessionTests {
         // has no family-repeat competitor and gets picked across remaining slots.
         // This reveals a real catalog clustering symptom (4 of 12 aesthetic presets
         // share `geometric`); the orchestrator's behavior is correct given the inputs.
-        #expect(ids == [
-            "Plasma",
-            "Murmuration",
-            "Membrane",
-            "Membrane",
-            "Membrane",
+                // PR.8 (2026-09-09): regenerated under the re-weighted scorer — the always-1.0 section
+        // quarter is gated out when no section data exists, and presets with no declared
+        // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
+        // sole-family repeats below are the same catalog symptom the comments above describe.
+#expect(ids == [
+            "Volumetric Lithograph", "Membrane", "Membrane", "Membrane", "Membrane",
         ])
     }
 
@@ -133,12 +133,15 @@ struct GoldenSessionTests {
         let session = try planner.plan(
             tracks: makeSessionB(), catalog: makeRealCatalog(), deviceTier: .tier2)
         // GBRETIRE.1: GB retired → Waveform (sole waveform-family) now wins mellow jazz.
-        #expect(session.tracks.map { $0.preset.id } == [
-            "Waveform", "Waveform",
-            "Waveform", "Waveform", "Waveform",
+                // PR.8 (2026-09-09): regenerated under the re-weighted scorer — the always-1.0 section
+        // quarter is gated out when no section data exists, and presets with no declared
+        // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
+        // sole-family repeats below are the same catalog symptom the comments above describe.
+#expect(session.tracks.map { $0.preset.id } == [
+            "Gossamer", "Gossamer", "Gossamer", "Gossamer", "Gossamer",
         ])
         #expect(session.tracks.map { $0.preset.family?.rawValue } == [
-            "waveform", "waveform", "waveform", "waveform", "waveform",
+            "sparkle", "sparkle", "sparkle", "sparkle", "sparkle",
         ])
     }
 
@@ -211,13 +214,12 @@ struct GoldenSessionTests {
         // substitution, not a planning regression. Six tracks, four distinct presets
         // across four families (hypnotic / waveform / reaction / geometric) — the
         // ≥3-family variety guard still holds.
-        #expect(session.tracks.map { $0.preset.id } == [
-            "Plasma",
-            "Waveform",
-            "Membrane",
-            "Plasma",
-            "Waveform",
-            "Ferrofluid Ocean",
+                // PR.8 (2026-09-09): regenerated under the re-weighted scorer — the always-1.0 section
+        // quarter is gated out when no section data exists, and presets with no declared
+        // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
+        // sole-family repeats below are the same catalog symptom the comments above describe.
+#expect(session.tracks.map { $0.preset.id } == [
+            "Volumetric Lithograph", "Gossamer", "Plasma", "Fractal Tree", "Gossamer", "Membrane",
         ])
     }
 

@@ -242,6 +242,28 @@ public final class PitchTracker: @unchecked Sendable {
     }
 
     /// Returns the τ at the first CMNDF local minimum below `yinThreshold`, or -1 if none found.
+    /// YIN step 4 — "absolute threshold", both halves of it.
+    ///
+    /// The paper (de Cheveigné & Kawahara 2002, §4) reads: *set an absolute threshold and choose
+    /// the smallest value of τ that gives a minimum of d′ deeper than that threshold; **if none is
+    /// found, the global minimum is chosen instead**.* Only the first half was implemented — a
+    /// miss returned −1 and the frame was discarded.
+    ///
+    /// That is why `vocalsPitchConfidence` has been written off twice as "garnish" (KNOWN_ISSUES:
+    /// SPARSE, 0.1 % nonzero; WL.1 measured 4.5 %). Confidence is `1 − d′[τ]`, so a τ returned only
+    /// below the 0.15 threshold makes confidence **either 0 or > 0.85 and never in between** —
+    /// measured on Seven Nation Army through the production chain: 0.0 % of 1290 frames landed
+    /// strictly between. A consumer cannot gate on a signal with no middle; Gossamer's
+    /// `> 0.35` emission gate has never been able to do anything.
+    ///
+    /// Measured on realistic separation noise, the global minimum sits at **0.159–0.167** — a hair
+    /// above the gate, so the detector runs on a knife-edge and ordinary material falls off it.
+    /// Returning that minimum restores the paper's behaviour and makes confidence continuous;
+    /// genuinely unpitched frames still surface a shallow minimum (≈0.53) and are rejected
+    /// downstream by `confidenceThreshold`, which until now was unreachable dead code.
+    ///
+    /// Window size is NOT the lever — 2048 → 4096 moves the minimum 0.159 → 0.165 and changes no
+    /// detection rate. That hypothesis was measured and dropped.
     private func findMinimum() -> Int {
         var tau = minTau
         while tau <= maxTau {
@@ -253,7 +275,14 @@ public final class PitchTracker: @unchecked Sendable {
             }
             tau += 1
         }
-        return -1
+        // No τ under the threshold: the paper's fallback — the global minimum over the search range.
+        var bestTau = -1
+        var bestValue = Float.greatestFiniteMagnitude
+        for tau in minTau...maxTau where cmndfBuffer[tau] < bestValue {
+            bestValue = cmndfBuffer[tau]
+            bestTau = tau
+        }
+        return bestTau
     }
 
     private func parabolicRefinement(at tau: Int) -> Float {

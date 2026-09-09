@@ -234,19 +234,103 @@ phase is the remediation programme. His scope calls, 2026-09-04:
 - **Observe before fixing.** Capture and watch the flagged presets against *Low* before proposing a
   cause (PR.1), rather than working from the review notes directly.
 
-**The central finding — "sync is weak" is three different problems.** The review reads as one
-complaint repeated across ten presets. The routing sidecars say it is not:
+**RETRACTED 2026-09-09 — the "central finding" was a synthesis, and two of its three rows were wrong.**
+What stood here was a three-row cause table grouping the roster's complaints into mechanisms, built
+from Matt's 25 observations. Those observations were **never recorded in the repo** — the plan said
+"wrote 25 per-preset observations" and then carried only this synthesis plus four quoted fragments.
+With no artifact to check against, nobody could verify the interpretation. Matt, 2026-09-09:
+*"I'm not convinced that PR.2 is necessary; I worry that it is a misinterpretation of my notes."*
 
-| Cause | Presets | Evidence in the tree |
+The notes are now at **[`docs/PRESET_ROSTER_REVIEW_2026-09-04.md`](PRESET_ROSTER_REVIEW_2026-09-04.md)**,
+27 presets, verbatim. Against that source:
+
+| the row said | what the source and the tree say |
+|---|---|
+| *"No audio coupling declared at all — Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph. **Nothing to tune — there is no coupling to tune.**"* | **False for Gossamer**, checked 2026-09-09: four stem routes, a 32-wave pool, YIN pitch tracking, and shader reads of `mid_att_rel` ×5 and `bass_att_rel` ×3. It had no `audio_routes` **key** — a documentation gap, not an absence. Ten real routes now declared. The other four were never re-checked; **assume this row is unverified for all of them.** |
+| *"Coupled, but nothing ties motion rate to tempo — Filigree, Mitosis, Cytokinesis, Nacre, Floret… the single highest-leverage item in the review"* | Built on **one hedged sentence**: Filigree's *"Speed of music could be better tied to speed of the motion? **Perhaps**."* A question mark and a "perhaps" became a five-preset phase. **Cytokinesis does not belong at all** — its observations are *"Remove overlap between dividing cells"* and *"Hangs for seconds before restart"*, nothing about speed or sync. Nacre's actual complaint is *"Too fast overall"*, a constant. Floret's is *"kinda boring"*, variation. Only Mitosis (*"Speed is seemingly uniform"*) supports the mechanism. |
+| *"Coupled and beat-aware — the beat itself is wrong"* | Stands. Witchlight, Meniscus, Lumen Mosaic, Ferrofluid Ocean consume beat/bar phase; their symptoms are BUG-065 and BUG-028, engine work parked under D-206. |
+
+**A cluster the synthesis dropped entirely: colour.** Aurora Veil *"wish there was more color variation,
+purple is fleeting"*; Dragon Bloom *"the same saturated color across the visible light spectrum"*;
+Glaze *"more mixture and blending of colors. Also quite bright"*. Three presets, one theme — invisible
+because the chosen framing was *sync*, so everything was read through sync.
+
+**The lesson, which the new structure exists to enforce:** grouping by inferred cause produced a
+cheaper-looking phase (one mechanism beats five design problems) and lost the source. Matt,
+2026-09-09: *"We need deeper dives into each of the presets — better definition and better
+implementation."*
+
+---
+
+## Phase PR, restructured (2026-09-09) — one preset at a time
+
+**The unit of work is a preset, not a mechanism.** Each deep dive runs in four steps and does not
+skip forward:
+
+1. **Definition.** Quote Matt's observation from the roster review. Write the one-sentence musical
+   role (*"how is this preset's primary visual subject another instrument in the band?"* — the
+   `preset-session` skill's bar). Confirm the reference set exists, or curate it. **No code yet.**
+2. **Diagnosis, measured.** Before proposing a cause: are its routes *declared* (`audio_routes`), do
+   they *fire* (QG.1), and do the primitives they read *carry signal* on real material? Today
+   produced two cases where the answer to a "this preset doesn't respond to music" complaint was a
+   broken input, not a missing design — Gossamer's coupling was undeclared, and vocal pitch was
+   being discarded by a half-implemented algorithm (BUG-124). **A preset is not diagnosed until its
+   inputs have been measured.**
+3. **Implementation.** The change, with the routes declared so QG.1 keeps them honest.
+4. **M7.** Matt watches it live on material that suits it. A still cannot settle a temporal
+   complaint (PR.6's Glaze) and offline numbers cannot settle a felt one.
+
+**Ordering is Matt's**, not a scoring exercise. His stated preference 2026-09-09: not Cymatic
+Resonance (*"in good shape and is fine for launch"*), but *"a preset that shows promise but is a weak
+implementation right now"* — Gossamer named as the first candidate.
+
+**Standing rules for every deep dive.**
+- **Quote, never paraphrase.** Cite the preset's heading in the roster review. If an increment cannot
+  point at a sentence Matt wrote, it is inventing the requirement.
+- **One preset per increment.** No mechanism is rolled across presets before it has been proven on
+  one and approved.
+- **Report the negative result.** Three today: PR.2's premise, `stem_dependence` (built, measured,
+  reverted — the signal it needed does not exist), and pitch-window size. Recording them is what
+  stops the next session re-deriving them.
+
+### The register — every preset, Matt's ask, and where it stands
+
+Sourced from [`PRESET_ROSTER_REVIEW_2026-09-04.md`](PRESET_ROSTER_REVIEW_2026-09-04.md). "Ask" is
+abbreviated; the review is the authority. **Open** rows are candidate deep dives.
+
+| Preset | Matt's ask (abbreviated) | Status |
 |---|---|---|
-| **No audio coupling declared at all** | Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph | `audio_routes: []` in all five sidecars. These are exactly the five Matt flagged, and all five are `certified: false`. Nothing to tune — there is no coupling to tune. |
-| **Coupled, but nothing ties motion *rate* to tempo** | Filigree, Mitosis, Cytokinesis, Nacre, Floret | 8–13 declared routes each, **zero beat or bar routes** between them (Floret has `barPhase01` for a pulse but nothing driving rate). Motion speed is constant regardless of what is playing. |
-| **Coupled *and* beat-aware — the beat itself is wrong** | Witchlight, Meniscus, Lumen Mosaic, Ferrofluid Ocean | All four consume `beatPhase01`/`barPhase01`. Their symptoms are BUG-065 (live phase drift) and BUG-028 (meter assumed simple), not preset defects. |
+| **Gossamer** | *"Tuning for sync with music, has potential."* | 🔨 **in progress.** Ten real routes declared (2026-09-09); BUG-124 restored the vocal-pitch signal it is keyed to; Matt saw it live — *"looks pretty good"*. **Remaining:** BUG-060 (force-quit hang on switching to it, uninvestigated), certification (no curated references), the particles idea he raised, and whether "hue on vocal pitch" survives knowing the vocals stem carries periodic bleed on instrumentals. |
+| **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
+| **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
+| **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
+| **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
+| **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
+| **Nacre** | *"Slow down the speed slightly or make it match the tempo of the music. Too fast overall."* | ⏳ **open.** Primary complaint is a constant that is too high; tempo-matching is his *alternative*, not the requirement. |
+| **Floret** | *"Pulses to the beat but more connection could be obvious."*; *"Mesmerizing but also kinda boring."* | ⏳ **open.** Variation/longevity, not rate. |
+| **Cymatic Resonance** | *"One of the best to watch… I want to see more variation of the patterns it creates."* | ⏸ **deferred by Matt** (2026-09-09): *"in good shape and is fine for launch."* |
+| **Witchlight** | *"Inconsistent with downbeat. Want more looping."* | ⏳ **partly blocked.** Downbeat half is BUG-065/D-206 engine work, parked. "More looping" is preset work and is not blocked. Sequence question answered by PR.8. |
+| **Aurora Veil** | *"Looks great… Wish there was more color variation, purple is fleeting."* | ⏳ **open — colour cluster.** |
+| **Glaze** | colour: *"more mixture and blending of colors. Also quite bright"* | ⏳ **open — colour cluster.** Framing half ✅ (PR.6). |
+| **Dragon Bloom** | *"the same saturated color across the visible light spectrum"* | ✅ PR.5.1–5.4; residual parked as **BUG-123** on Matt's call. Colour cluster's third member. |
+| **Fata Morgana** | *"Too dark, want more reflection of the pulsars in the water"*; sky/water ratio; *"not apparent"* sync | 🔨 **partly done.** Sky/water ✅ (PR.6, approved). **Open:** too dark, pulsar reflection, sync. |
+| **Cytokinesis** | *"Remove overlap between dividing cells."*; *"Hangs for seconds before restart"* | ⏳ **PR.4, blocked.** No repro of the hang in any recorded session (max frame gap 199 ms). Needs a capture from Matt. |
+| **Meniscus** | *"Sync is weak, puddle ripple looks good but timing could be improved"* | ⏳ **partly blocked** — timing is the parked beat work. |
+| **Lumen Mosaic** | *"Sync could probably be improved. Downbeat and beat."* | ⏳ **blocked** — parked beat work (D-206). |
+| **Ferrofluid Ocean** | *"Brilliant sync… but everything seems like 4/4 time."* | ⏳ **blocked** — BUG-028, meter assumed simple. |
+| **Volumetric Lithograph** | *"Not strong sync with music"* | ⏳ **open.** Also excluded from selection on tier 1 (24 ms > 16.6 ms budget) — it may simply not be appearing. |
+| **Ricercar** | *"Need to test with more tracks. Not clear or strong sync with Bowie's Subterraneans"* | ⏳ **open, cheapest first step:** test on other material. Subterraneans is near-beatless. |
+| **Stave** | *"A little hazy. Maybe make a little crisper? Not sure."* | ⏳ **open**, low confidence in the ask — confirm with Matt before work. |
+| **Fractal Tree** | *"dances along with the music pretty convincingly. Might consider adding additional trees"* | ⏳ **open**, an enhancement not a defect. |
+| **Murmuration** | *"Beautiful. Cloud could be bigger"* | ✅ **PR.6, approved live.** |
+| **Nimbus** | *"Doesn't do much and yet people seem to really like it"* | ⏸ no ask. |
+| **Skein** | *"Fine enough"* | ⏸ no ask. |
+| **Spectral Cartograph** | *"Opportunities to clean up eventually"* | ⏸ deferred; it is `is_diagnostic`, so it never auto-installs. |
+| **Staged Sandbox** | *"Get rid of it."* | 🔨 hidden from the cycle at PR.0 rather than removed — **and PR.9 then retargeted the staged harness template onto it**, so infrastructure now depends on something Matt asked to be gone. Needs a decision. |
+| **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
 
-The middle row is the single highest-leverage item in the review: one mechanism, five presets, and
-it answers four separately-worded complaints ("a movie on a loop", "speed is seemingly uniform",
-"too fast overall", "pulses to the beat but more connection could be obvious"). The third row is
-engine work that is currently **parked** (D-206) and must not be worked around inside the presets.
+**Nine of the open rows are blocked on parked engine work** (D-206 beat drift, BUG-028 meter). Those
+are not preset deep dives and must not be worked around inside presets.
 
 **Material note that shapes PR.1.** *Low* is two half-albums: tracks 1–7 are rhythmic (Speed Of
 Life, Breaking Glass, What In The World, Sound And Vision, Always Crashing In The Same Car, Be My
@@ -307,6 +391,10 @@ and the grader misreading quiet music is noted as a separate possible defect.
 **Done-when:** ✅ for the timing half. ⏳ the look half reopens when a video-on *Low* capture exists;
 ⏳ the per-preset production-path half reopens when the harness reaches the other paradigms (PR.10).
 
+**PR.2 — tempo-scaled motion rate — ❌ RETIRED 2026-09-09 (Matt).** *Superseded by the per-preset register above; the row below is kept for its measurements and its hazard note.*
+
+**Why retired.** It generalised **one hedged sentence** — Filigree's *"Speed of music could be better tied to speed of the motion? Perhaps."* — across five presets, one of which (Cytokinesis) Matt never made the complaint about. Matt: *"I'm not convinced that PR.2 is necessary; I worry that it is a misinterpretation of my notes."* **What survives:** rate-coupling is a legitimate hypothesis for **Mitosis** (*"Speed is seemingly uniform"*) and, hedged, for **Filigree** — to be tested inside those presets' own deep dives, one at a time. Nacre's *"Too fast overall"* is a constant, not a coupling. Its gate re-check (2026-09-09) and the BUG-097 hazard note below remain valid and should be read by whoever picks up either preset.
+
 **PR.2 — tempo-scaled motion rate** (the main lever; **gated on PR.3, not just PR.1** — PR.1 §3.3 measured the grid's TEMPO wrong on *Low*'s ambient side, and a motion rate read off a wrong BPM bakes in a compensation for a bad number). Give Filigree, Mitosis,
 Cytokinesis, Nacre and Floret a motion rate that tracks the cached grid's tempo, so a fast track
 visibly quickens and a slow one settles. Ship **Filigree first as the single proof** — it is the
@@ -317,6 +405,44 @@ render and fixture rates all differ and a steady-rate fixture cannot see the err
 Filigree's motion rate measurably differs between a fast and a slow track from the same capture
 harness, the coupling is declared in the sidecar's `audio_routes` (so QG.1 route coverage gates it),
 and Matt has confirmed the Filigree proof before any other preset is touched.
+
+**Gate re-checked 2026-09-09 (Matt: *"check if pr.2 is unblocked"*) — PARTIALLY CLEARED, and the
+remaining half need not block PR.2.** The gate was PR.1 §3.3: *"the grid's tempo is wrong on the
+ambient side"*, Weeping Wall reading 142.3 BPM.
+
+**The instrument could not ask the question.** `analyzeBeatGrid(samples:sampleRate:)` — the two-arg
+convenience — defaults to `wholeTrack: false`, and its own doc keeps it that way "so the many
+existing call sites (tests, diagnostics, **BeatBench**) are unchanged". So BeatBench measured the
+30 s clamp, not the local-file path PR.12 actually changed. A first re-measure reproduced 142.25 on
+Weeping Wall and would have reported "still broken" from the wrong arm — the span-artifact class
+again. BeatBench gained `--whole-track` to close that hole.
+
+**Measured on the whole-track grid (`--whole-track`), *Low*:**
+
+| track | BPM | beatsPerBar | barConfidence | grid span |
+|---|---:|---:|---:|---|
+| Speed Of Life | 116.05 | 4 | **1.00** | 3.3-164.5 s of 167 |
+| Sound And Vision | 106.28 | 4 | **1.00** | 1.6-179.9 s of 183 |
+| Breaking Glass | 94.87 | 2 | 0.73 | 1.1-108.6 s of 113 |
+| Art Decade | 78.52 | 4 | 0.86 | 0.4-220.8 s of 227 |
+| Warszawa | 75.08 | 4 | 0.43 | 0.5-368.4 s of 384 |
+| **Weeping Wall** | **171.73** | **1** | **0.37** | 0.0-203.5 s of 208 |
+
+- **Coverage is fixed.** Grids span whole tracks, not 30 s. PR.12 works.
+- **The rhythmic side is trustworthy** - barConfidence 1.00 on the 4/4 material.
+- **The ambient side is still not.** Weeping Wall answers `beatsPerBar 1` - BUG-117's "no bar
+  information" - at confidence 0.37, and its BPM moved 142.25 to 171.73 between the two arms. Two
+  answers 20 % apart on one file is itself the finding; neither is a foundation for a motion rate.
+  That is the wrong-metrical-level gap D-210 declined and FT.3.1 owns. It is not closing soon.
+
+**Why PR.2 is nonetheless unblocked.** The gate's fear was *baking a compensation for a bad number
+into a preset*. The grid now carries the signal needed to avoid that: `barConfidence`, and
+`BeatGrid.hasBarInformation` (BUG-117) which makes "this grid does not know" expressible rather than
+silently reading as 1 beat per bar. So the mechanism ships as **tempo-scaled when the grid is
+confident, default rate when it is not** - Weeping Wall gets the fallback, Speed Of Life gets the
+coupling, and no compensation is baked in anywhere. **Both tracks in the done-when's fast/slow pair
+should be confident ones** (e.g. Speed Of Life 116 vs Art Decade 78.5) so the proof measures the
+mechanism rather than the gap.
 
 **PR.3 — chasing the downbeat, not tolerating it** 🔨 (2026-09-04). **Scope changed by Matt
 mid-increment.** This began as "surface the corroboration and let Matt decide" and then as a
@@ -650,12 +776,136 @@ tone-map operator, on a full-track *Low* capture rather than a still, establishe
 the cause; if it is, the four presets share the operator and each gets its exposure set where Matt
 puts it; if it is not, that negative result is recorded before any brightness parameter is touched.
 
+**PR.5.1 — Dragon Bloom: the dither and the post-invert brighten ✅ (2026-09-08, `762e8862`).**
+**The tone-map candidate above was not the cause, and the A/B PR.5 asked for was run the other way
+round:** the butterchurn oracle was set to comp-identity (`invert 0, echo_alpha 0, gammaadj 1` — the
+preset carries no custom comp shader, so those baseVals genuinely disable it) and compared against
+our *accumulator*, read back through `HARNESS_DUMP_ACCUMULATOR`, on the same track and the same
+statistic. That is the comparison eleven earlier hypotheses lacked: every one of them reasoned about
+the field *through* a comp that is not invertible.
+
+The field was already at the oracle's luma (0.294 vs 0.26–0.57) and short on saturation (0.634 vs
+0.74–0.89) **before any comp ran** — so the wash-out started upstream of the tone-map question. Two
+defects, both fixed:
+
+1. **The source's `warp_18..19` dither was load-bearing, not polish.** D-137 deferred it as
+   "anti-banding polish, not the fill" — a first-principles claim with no rendering proof, the exact
+   FA #65 pattern. The R→G→B transfer above it is hard-gated at `(ret - 0.05)·99`, so pixels resting
+   just under 0.05 never transfer, never cycle hue, and integrate toward grey. Restoring it moved
+   field saturation 0.634 → **0.68–0.79** and luma 0.294 → **0.25–0.33**, both inside the oracle's band.
+   `noiseLQ` is r8Unorm — single-channel — so the source's RGB lookup is three decorrelated taps;
+   reading `.rgb` gives green and blue a constant 0, i.e. a −0.029/−0.078 per-frame drain, which
+   collapsed luma 4× on the first attempt.
+2. **Our comp carried a term butterchurn's does not:** `ret *= 1 + 0.12·bp`, applied *after* the
+   invert. The field is dark, so the invert lands near 0.74 and the darkest background inverts to
+   ≈1.0; ×1.12 pushes everything above 0.893 through the ceiling, and a clipped pixel is white with
+   the hue gone. Display clipped **0.831 → 0.353** (oracle 0.017). The beat still reads through the
+   zoom pump, which is geometry and cannot clip.
+
+**Decay stays butterchurn-faithful** (default warp only). Restoring it for the custom-warp path was
+measured and starves the field to saturation 0.254 / luma 0.116 — D-137's *observation* was right
+even though its conclusion, deleting the loop's only sink, was not.
+
+**Falsified on the way, recorded so they are not retried:** `modVol` is not starving the strands
+(saturated at 1.0 for 81–91 % of frames, mean 0.88–0.94 across all three stem arms), and
+"decay restored + stronger injection" is not the pair.
+
+**Not finished.** Display saturation barely moved (0.262 → **0.274** against the oracle's 0.67) and
+the lower field still blows out to white. The tone-map hypothesis in PR.5 is therefore still live for
+that residual, and is now testable against a field that is known-good. **PR.5's done-when is only
+half met:** clipping is confirmed as *a* cause and is halved, but the four-preset shared-operator
+question is untouched. **Gate: Matt has not seen this live.**
+
+**Follow-up (real, not cosmetic):** `DragonBloomMVWarpAccumulationTest` is env-gated and renders
+nothing — it passes in 0.001 s. There is no golden on Dragon Bloom's output, which is why the
+wash-out shipped unnoticed and why PR.5's A/B had to be built by hand.
+
+**PR.5.2 — the white-out was a TRANSIENT, and the mean was hiding it ✅ (2026-09-08, `4d5f75ff`).**
+PR.5.1 reported the residual as steady-state wash. It is not: measured per-frame rather than
+averaged over the track, display `nearWhite` runs **0.985 → 0.166 → 0.000** at frames 0 / 400 / 800.
+Dragon Bloom opened on a near-fully-white screen and faded in over ~10 s, every time it appeared —
+which is why steady-state numbers kept looking acceptable while Matt kept reporting wash-out. **A
+metric averaged over the track cannot see a transient; that is the same class of error as the span
+artifact and the `nearWhite` label in the replay harness still carries the old, wrong gloss
+("= EMPTY accumulator"), which should be corrected.**
+
+Two causes, both closed: the feedback field was cleared to **black** and the comp inverts it
+(butterchurn's `loadPreset` blends and keeps the previous buffers — it never clears, so our clear is
+a port defect); and **BUG-115** ran the per-frame zoom at 1.024 median / 1.070 p90 against the
+source's 0.99951, evacuating the frame faster than the strands refilled it, with the emptied corners
+driven to black by the R→G→B fade and stuck there — below the 0.05 transfer gate no push fires, so
+black is an absorbing state.
+
+Result on the 20:12 session: nearWhite **0.241 → 0.091**, saturation 0.354 → **0.441**, clipped
+0.191 → **0.150**, luma 0.748 → **0.700**.
+
+**Falsified first, recorded so they are not retried:** inverted black field regions (field
+`nearBlack` is 0.000–0.005), the strand `flare` term (0.182 vs 0.182), additive strand blending (the
+reference's waves are all `additive=0`, confirmed against the live oracle), and modVol starvation.
+
+**Gate: still not seen live.** Every number here is offline replay of Matt's own capture.
+
+**PR.5.4 — the blinding white was a DRAIN, and the reference's push is the cure ✅ (2026-09-08).**
+Matt on PR.5.2: *"better with respect to color, although there is still a sizable presence of blinding
+white. unfortunately, I'm sensing less connection between visuals and music."* Both true, both PR.5.2:
+its outward-only, un-kneed breathing was flat on 64 % of frames (zoom spread 0.0741 → 0.0053 — the lost
+connection), and with no outward push the field DRAINED wherever the strands were not and on every
+quiet passage; the comp inverts a drained region to white. **BUG-122 was filed on a false premise**
+("a vertical split the reference does not have"): the oracle's flat profile was one 120-frame sample.
+**Every earlier oracle time-series was a single-moment sample** — `render()` does not advance the audio
+and the hidden Browser pane throttles rAF and timers — so the oracle was rebuilt as an offline drive
+(`render({audioLevels, elapsedTime})` from the decoded track at 60 fps; `tools/dragon_bloom_reference/
+index.html` gained `__seek`/`__pos`). Measured that way on Seven Nation Army: the reference swings
+top/bottom **0.30–2.59** (harder than ours) with **nearWhite 0.000 through the drop**, and its
+`zoom *= min(1.05, max(1, max(bass,treb)))` sits at the 1.05 cap on **60 %** of frames, mean **+3.15 %**.
+**Fix:** always-on +3 % outward baseline, bass deviation to the 5 % cap. Session 21:12: nearWhite
+**0.448 → 0.000 on every sampled frame**, saturation 0.52. **PR.5.2's assertion that the old constant
+push "evacuated the frame" was inferred, not measured, and wrong** — BUG-115's real defects were the
+FA #31 routing and the uncapped 7 %. Nine more hypotheses falsified and recorded in BUG-122's entry;
+the y-mirrored strand set that fixed the symptom was tested and rejected as unfaithful and unnecessary.
+**Gate: Matt has not seen PR.5.4 live.** **Seen 2026-09-08 22:41: *"Color is better but still washed out."* Correct — and the
+metric could not see it. Same track, reference luma 0.37 / saturation 0.89; ours 0.57 / 0.65. `nearWhite`
+is blind to pale. **Matt: "stop and proceed with another PR increment."** Residual parked as BUG-123
+(one bounded increment if ever reopened). **PR.5 is CLOSED at this state:** colour restored, cold-start
+flash gone, quiet-passage white-outs gone, coupling restored; tone still paler than the reference.
+
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
 between the top and bottom of the screen and keeps its motion inside the canvas. Camera and
 composition parameters — the cheapest items in the whole review and each an unambiguous win.
 Likely folds into PR.5 as one look increment. **Done-when:** each is a before/after sheet Matt has
 approved.
+
+**PR.6 — implemented 2026-09-08, pending Matt's approval of the sheets.** Three parameter changes,
+each built to his exact words, no design invention:
+- **Murmuration** — *"flock takes more of the frame"*: `viewScale` 1.05 → **1.30**
+  (`Murmuration3DGeometry.swift`); the roam clamps scaled ×0.81 so the swelled flock stays framed
+  (`Murmuration3D.metal`). Flock bounding box ×1.24 in both axes on the audio sequence;
+  `test_framed` ("stays framed throughout") passes at the new zoom. Lever if he wants more: 1.5.
+- **Fata Morgana** — *"horizon moves so sky occupies a larger share than water"*: the source pins the
+  horizon at v = 0.5; the floor perspective, sky/water select, reflection sample and blue gradient all
+  hang off one `uv1.y`, so a single constant `kFataHorizonV = 0.62` moves the whole horizon
+  consistently. Measured: first water row 0.38–0.44 → 0.50–0.56 of the frame. **Fata Morgana has no
+  curated reference set** (`docs/VISUAL_REFERENCES/` has none) — a framing change built to Matt's
+  words does not need one, but certification work would.
+- **Glaze** — *"stops jumping between the top and bottom of the screen and keeps its motion inside
+  the canvas"*: the lift term could push the spring anchor to ≈1.7, so the tail slammed the top wall
+  and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
+  bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
+  margin; x is untouched. **And the cause, not just the symptom:** simulated to steady state the source's gravity (1.0) makes the WALLS the attractor — the tail rests at y 0.05 in silence and 0.97 under energy, so the jump is the tail flipping between two rests. The first cut bounded the anchor alone and the GLAZE.3 lift test caught it (both cases pinned at the upper wall — lift removed, not bounded). Gravity 0.3 lets the tail follow the anchor inside the band: silence ≈ 0.36, energy ≈ 0.55, nothing pinned; GLAZE.3 passes; motion gate on 600 frames: 0 spikes, 0 frozen.
+**✅ APPROVED 2026-09-09 (session `16-46-30Z`), Matt: *"All three look good."*** Seen live, not from the
+sheets — Murmuration, Fata Morgana and Glaze all appear in that session. **PR.6 is COMPLETE**; its
+done-when (each a before/after sheet Matt has approved) is met for all three.
+
+Glaze was the one that needed the live look: its complaint was *jumping*, a temporal defect a still
+cannot show, and the first fix attempt had flattened the vertical response rather than bounding it.
+Approved with gravity 0.3 — a deliberate departure from the source spring, because the request was
+itself a departure from the source behaviour.
+
+**The same session independently confirms PR.8.3 at roster scale:** 18 distinct presets reached in one
+pass, against the 2 the PR.8 ranked walk could reach. The PR.4 hang is still queued behind a fresh
+capture — no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to
+root-cause yet.
 
 **PR.7 — variation and longevity** (deliberately last). Cymatic Resonance (more pattern variation —
 and it is the preset he rates highest, *"one of the best to watch"*), Witchlight (more looping),
@@ -671,6 +921,96 @@ the sequence vs. last?"* — that is `SessionPlanner` ordering. Witchlight's sid
 increment to establish whether opener choice reflects any stated intent or falls out of scoring.
 **Done-when:** the opener rule is written down or shown not to exist, and Matt has a recommendation.
 
+**PR.8 — answered 2026-09-09.** *"Why is Witchlight first in the sequence vs. last?"* Three findings,
+each from the production code or the session logs, not a model of them:
+
+1. **There is no opener rule.** `SessionPlanner` is a greedy forward walk; track 1 gets the highest
+   `DefaultPresetScorer` total under an empty history (no family penalty, no cooldown) **plus seeded
+   noise of ±0.02** (`selectPreset`, seed = `UInt64.random` per session). The top of the ranking sits
+   within 0.02–0.04 of itself, so the opener is a per-session coin toss inside that cluster. Run
+   through the production scorer on the cached profiles (`PlanRankingDumpTests`, env-gated
+   `PLAN_DUMP_META=<StemCache …/metadata.json>`): Seven Nation Army → Arachne 8/12 seeds, Filigree
+   4/12; Dance Yrself Clean → Arachne/Fata Morgana/Lumen Mosaic/Dragon Bloom within 0.05. **Witchlight
+   ranks 23rd of 30** on Seven Nation Army (total 0.731 vs 0.872). The planner never picks it.
+2. **`section_suitability` is dead weight.** `makeSections` emits `section: nil` for every segment
+   since section detection was removed (D-170), and `sectionSuitabilitySubScore` returns 1.0 for a nil
+   section — so a quarter of every preset's score is the constant 1.0, and Witchlight's
+   `[ambient, bridge, comedown, buildup]` declaration decides nothing. Related asymmetry: the five
+   presets that declare `stem_affinity` (Arachne, Fata Morgana, Lumen Mosaic, Dragon Bloom, Volumetric
+   Lithograph) score 0.88–1.00 on that quarter for energetic tracks while everyone else scores a flat
+   0.50 — which is why those five own the top of both dumps.
+3. **The sequence Matt sees is the immediate-nudge walk, and it is alphabetical.** The keyboard's
+   immediate nudge goes through `reactiveWalkNudge`, which sorts the catalog **by name** (the protocol
+   doc says "scorer-ranked order"; the implementation does not). The launch default is Waveform; the
+   only name after "Waveform" is "Witchlight", so the first press gives Witchlight, and the next press
+   wraps to Arachne → Aurora Veil → Cymatic Resonance → Cytokinesis → Dragon Bloom → Fata Morgana —
+   exactly the 21:12 and 22:41 session logs, one second apart. Witchlight is *last* alphabetically
+   and *first* after Waveform. Once a key is pressed, `manualPresetOverrideThisTrack` suppresses the
+   planned install for the rest of the track, so the planner's real opener is never seen.
+
+**Unresolved, flagged not chased:** in the 19:10 session (no early keypress) the planned preset did
+not install at wire (0.6 s) either — Dragon Bloom appeared **150 s** after `wire active`. The
+`applyPlannedSegment` guards look satisfied on first call; the cause needs an info-level capture
+(`Orchestrator: applied planned preset`), which the unified log does not persist by default.
+
+**Recommendation (product-level, default first):**
+- **Default: make the immediate nudge walk scorer-ranked order**, as its own contract says — then
+  "next" from launch gives the planner's best fit for the track, not the alphabetical neighbour of
+  the diagnostic default. One line in `reactiveWalkNudge`. Trade-off: the walk order changes per
+  track; the current alphabetical walk is at least predictable.
+- **Fix or retire the dead quarter of the score.** Either drop `weightSectionSuitability` and
+  re-normalise (mood 0.40 / tempo 0.27 / affinity 0.33), or gate it on real section data if that
+  ever returns. Today it is a constant pretending to be a signal.
+- **Decide whether declaring `stem_affinity` should be an advantage.** It currently is a large one;
+  if not intended, score undeclared presets at the track's mean deviation rather than 0.5.
+- **PR.8.1 (small): capture one session with info logging** to see why the planned install waits.
+
+**PR.8.2 — the ranked walk was a regression, found by Matt in 25 minutes ✅ (2026-09-09).** *"I was
+unable to access Arachne and a dozen other presets were missing as well."* PR.8's one-line change
+made the walk unusable, and it shipped and merged.
+
+**Mechanism.** `reactiveWalkNudge` ranked through `rank(...)` under the LIVE scoring context.
+`familyRepeatMultiplier` penalises the **current** preset too — its family is by definition the
+current family — so each press sank the current preset to the bottom of a freshly-computed ranking
+and `(currentIdx + 1) % count` wrapped to index 0. The walk oscillated between the top two entries
+of the moment. Matt's log: `Aurora Veil → Dragon Bloom → Aurora Veil → …`, later
+`Ricercar ↔ Fata Morgana` once the live adapter had moved him elsewhere. Seven distinct presets
+appeared in his session because the planner and mood-override switches changed *which pair* the walk
+then bounced between. Nothing was missing from the build — all 30 sidecars are bundled.
+Second defect in the same line: `filter { $0.1 > 0 }` dropped every planner-excluded preset from a
+**manual override** path — all three diagnostics categorically, plus Volumetric Lithograph
+(24 ms > the 16.6 ms budget). The alphabetical walk it replaced had reached those by accident.
+
+**Fix.** `DefaultPresetScorer.walkOrder(presets:track:context:)` (new file, `PresetScorer+Walk.swift`):
+ranks by track fit with `currentPreset`/`recentHistory` cleared, so the order is stable under the
+walk, and returns **every** preset with excluded ones sorted last and ties broken by name.
+`PresetWalkOrderTests` pins all three properties and was **verified to fail against the PR.8 code**
+— reaching 2 of 7 presets, the same ratio Matt hit.
+
+**What this cost and what it says.** PR.8's closeout claimed the walk change as an unambiguous win on
+the strength of a ranking dump; nothing exercised the walk itself. A one-line behavioural change to
+an interactive path shipped with no test of that path, and the person who found it was Matt.
+
+**PR.8.3 — the walk is alphabetical again, on Matt's call ✅ (2026-09-09).** *"I just want the presets
+to be listed in alphabetical order, so that I can easily navigate to the preset I want."* Ranked order
+is per-track and therefore unpredictable to navigate — the trade-off PR.8's own recommendation named,
+now settled by living with both. **The ordering reverts; the reachability fix stays:** the walk covers
+every loaded preset with no eligibility filter, which is what actually made Arachne unreachable.
+`DefaultPresetScorer.walkOrder` and its engine test are deleted — a `sorted { $0.name < $1.name }` in
+the router needs neither. Both properties are now pinned in `DefaultPlaybackActionRouterTests`
+(alphabetical stepping, and full reachability including diagnostics and over-budget presets), which
+is where a router behaviour belongs and where PR.8 should have put a test in the first place.
+
+**Matt: "do all three" — done 2026-09-09 (D-245).** Immediate nudge walks scorer-ranked order; the
+section quarter is gated on real section data (three-weight normalisation when nil); undeclared stem
+affinity scores the mean deviation. Result on the measured tracks: Seven Nation Army opener Filigree by
+0.035 (outside the noise), Dance Yrself Clean a Cytokinesis/Cymatic Resonance cluster. Goldens
+regenerated; the two "neutral 0.5" affinity tests restated to the new contract; the D-080 zero-profile
+guard unchanged. PR.8.1 remains open.
+
+
+**PR.9 — certify or remove — ⚠ REFRAMED 2026-09-09 (Matt).** The binary is malformed: *"we will not be able to disposition without making changes to each preset — they do not pass M7 review and most of these presets need better definition overall."* There is a **third state — needs definition** — and it is true of most of the set. Asking "certify or remove?" of Nebula and Plasma (55–77 line day-one shaders with no reference set) forces a decision the artifact cannot support. **The gate still stands for the public beta**; what changed is that a disposition is now the *output* of a deep dive, not a precondition. Arachne was dispositioned (removed, D-246) precisely because it had been looked at live. The row below keeps the inventory and the per-preset facts, which remain accurate.
+
 **PR.9 — certify or remove every uncertified preset** (pre-public-beta gate, Matt 2026-09-04).
 Seven presets are `certified: false`: Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph,
 Arachne, Waveform. **None ships in that state** — each is either certified against the §12 fidelity
@@ -680,6 +1020,54 @@ coupling from scratch, not tuning it: this is preset-authoring work per preset, 
 honest default for any that does not earn the effort. **Done-when:** every `certified: false` preset
 has an explicit certify-or-remove decision from Matt with a date, and none remains undecided at the
 beta cut.
+
+**PR.9 inventory ✅ (2026-09-09) — facts gathered; every disposition is Matt's call, undecided until he says.**
+
+**The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
+which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
+diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
+to it. That leaves **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
+Plasma, Waveform.
+
+**Why Matt is seeing them at all.** `uzume.settings.visuals.showUncertifiedPresets = 1` in his defaults, so
+the uncertified six are in his roster today. The five zero-route presets PR.1 flagged as *"no audio coupling
+declared at all"* are **exactly** this set minus Waveform — the roster complaint and the certification gap
+are the same fact seen twice.
+
+| Preset | Size / history | What it is | State |
+|---|---|---|---|
+| **Waveform** | 101 lines, 2026-04-06, 2 commits | A spectrum-and-waveform bar display — a signal readout rather than a visualizer | **Load-bearing:** `VisualizerEngine.swift:936` installs it as the launch default before any plan wires, and `PresetLoaderTests` asserts it exists. Removing it needs a replacement default first. |
+| **Nebula** | 77 lines, 2026-04-06, 2 commits | Radial starburst on black | Day-one demo shader; zero routes |
+| **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
+| **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
+| **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
+| ~~**Arachne**~~ | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | **REMOVED 2026-09-09 (D-246), Matt's call.** Seen live (session `15-08-12Z`): *"Arachne is visible, but it's still a massively broken preset."* Zero routes, no reference images, broken render, eight prior design iterations — certifying meant authoring it again. ~6,100 lines deleted. |
+
+**None has curated reference images** — every `docs/VISUAL_REFERENCES/<preset>/` in this set holds a README
+and nothing else, so there is no fidelity target to certify *against* without curating one first.
+
+**What certifying one costs.** For the five zero-route presets it is not tuning — there is no coupling to
+tune. It is designing the musical role, curating references, authoring the routes, and running the §12
+rubric: preset-authoring work per preset, comparable to a preset uplift. Arachne additionally needs its
+render verified live before any of that is worth starting.
+
+**Arachne's case is now fully informed** (2026-09-09). It is the largest investment in the uncertified set —
+1652 lines, 48 commits, an 872-line design doc whose name (`ARACHNE_V8_DESIGN`) records eight prior
+iterations — and it renders broken, has zero audio coupling, and has no reference images to certify
+against. "Certify" here is not tuning or repair; it is authoring the preset again. That is the trade-off
+Matt is deciding, not a recommendation from this row.
+
+**Dispositions so far.** **Arachne — REMOVE, 2026-09-09 (D-246).** Five remain undecided: Gossamer
+(carries BUG-060), Membrane, Nebula, Plasma, and Waveform (load-bearing as the launch default — removing
+it needs a replacement chosen first).
+
+**A consequence of the first removal, for the record:** the `staged` paradigm now has **no production
+preset** — only the two diagnostic sandboxes. Its reference template was retargeted to Staged Sandbox.
+If `staged` is to stay a supported paradigm, it needs a production preset or an explicit note that it
+is infrastructure awaiting one.
+
+**Not decided here.** Per-preset disposition is Matt's; this row records the facts and stays open until he
+gives one. PR.9's done-when is unchanged: an explicit certify-or-remove decision, with a date, for each.
 
 **PR.10 — session-driven replay across every paradigm** ✅ (2026-09-04). **The premise in PR.1 was
 half wrong and the increment is much smaller than it scoped.** PR.1 reported that 23 of 26 flagged

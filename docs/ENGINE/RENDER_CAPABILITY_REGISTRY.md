@@ -7,7 +7,7 @@
 - **Missing** — capability does not exist in the codebase. Adding it is a renderer change, not a preset change.
 - **Unknown** — capability has been discussed but not investigated; status to be confirmed before any preset depends on it.
 
-This registry was first compiled from the Arachne v8 architecture audit (`docs/VISUAL_REFERENCES/arachne/Arachne_Rendering_Architecture_Contract.md`). It is the engine-side source of truth for "what we can already render" and the gating document for new preset families.
+This registry was first compiled from the Arachne v8 architecture audit (`docs/VISUAL_REFERENCES/arachne/Arachne_Rendering_Architecture_Contract.md`, **deleted at D-246 with the preset — recover from git history**). It is the engine-side source of truth for "what we can already render" and the gating document for new preset families.
 
 Entries should cite source files. When adding a capability, link to the files that implement it. When marking a capability missing, link to the closest related code so future work has a starting point.
 
