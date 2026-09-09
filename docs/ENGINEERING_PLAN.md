@@ -784,6 +784,51 @@ the sequence vs. last?"* — that is `SessionPlanner` ordering. Witchlight's sid
 increment to establish whether opener choice reflects any stated intent or falls out of scoring.
 **Done-when:** the opener rule is written down or shown not to exist, and Matt has a recommendation.
 
+**PR.8 — answered 2026-09-09.** *"Why is Witchlight first in the sequence vs. last?"* Three findings,
+each from the production code or the session logs, not a model of them:
+
+1. **There is no opener rule.** `SessionPlanner` is a greedy forward walk; track 1 gets the highest
+   `DefaultPresetScorer` total under an empty history (no family penalty, no cooldown) **plus seeded
+   noise of ±0.02** (`selectPreset`, seed = `UInt64.random` per session). The top of the ranking sits
+   within 0.02–0.04 of itself, so the opener is a per-session coin toss inside that cluster. Run
+   through the production scorer on the cached profiles (`PlanRankingDumpTests`, env-gated
+   `PLAN_DUMP_META=<StemCache …/metadata.json>`): Seven Nation Army → Arachne 8/12 seeds, Filigree
+   4/12; Dance Yrself Clean → Arachne/Fata Morgana/Lumen Mosaic/Dragon Bloom within 0.05. **Witchlight
+   ranks 23rd of 30** on Seven Nation Army (total 0.731 vs 0.872). The planner never picks it.
+2. **`section_suitability` is dead weight.** `makeSections` emits `section: nil` for every segment
+   since section detection was removed (D-170), and `sectionSuitabilitySubScore` returns 1.0 for a nil
+   section — so a quarter of every preset's score is the constant 1.0, and Witchlight's
+   `[ambient, bridge, comedown, buildup]` declaration decides nothing. Related asymmetry: the five
+   presets that declare `stem_affinity` (Arachne, Fata Morgana, Lumen Mosaic, Dragon Bloom, Volumetric
+   Lithograph) score 0.88–1.00 on that quarter for energetic tracks while everyone else scores a flat
+   0.50 — which is why those five own the top of both dumps.
+3. **The sequence Matt sees is the immediate-nudge walk, and it is alphabetical.** The keyboard's
+   immediate nudge goes through `reactiveWalkNudge`, which sorts the catalog **by name** (the protocol
+   doc says "scorer-ranked order"; the implementation does not). The launch default is Waveform; the
+   only name after "Waveform" is "Witchlight", so the first press gives Witchlight, and the next press
+   wraps to Arachne → Aurora Veil → Cymatic Resonance → Cytokinesis → Dragon Bloom → Fata Morgana —
+   exactly the 21:12 and 22:41 session logs, one second apart. Witchlight is *last* alphabetically
+   and *first* after Waveform. Once a key is pressed, `manualPresetOverrideThisTrack` suppresses the
+   planned install for the rest of the track, so the planner's real opener is never seen.
+
+**Unresolved, flagged not chased:** in the 19:10 session (no early keypress) the planned preset did
+not install at wire (0.6 s) either — Dragon Bloom appeared **150 s** after `wire active`. The
+`applyPlannedSegment` guards look satisfied on first call; the cause needs an info-level capture
+(`Orchestrator: applied planned preset`), which the unified log does not persist by default.
+
+**Recommendation (product-level, default first):**
+- **Default: make the immediate nudge walk scorer-ranked order**, as its own contract says — then
+  "next" from launch gives the planner's best fit for the track, not the alphabetical neighbour of
+  the diagnostic default. One line in `reactiveWalkNudge`. Trade-off: the walk order changes per
+  track; the current alphabetical walk is at least predictable.
+- **Fix or retire the dead quarter of the score.** Either drop `weightSectionSuitability` and
+  re-normalise (mood 0.40 / tempo 0.27 / affinity 0.33), or gate it on real section data if that
+  ever returns. Today it is a constant pretending to be a signal.
+- **Decide whether declaring `stem_affinity` should be an advantage.** It currently is a large one;
+  if not intended, score undeclared presets at the track's mean deviation rather than 0.5.
+- **PR.8.1 (small): capture one session with info logging** to see why the planned install waits.
+
+
 **PR.9 — certify or remove every uncertified preset** (pre-public-beta gate, Matt 2026-09-04).
 Seven presets are `certified: false`: Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph,
 Arachne, Waveform. **None ships in that state** — each is either certified against the §12 fidelity
