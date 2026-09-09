@@ -846,6 +846,39 @@ honest default for any that does not earn the effort. **Done-when:** every `cert
 has an explicit certify-or-remove decision from Matt with a date, and none remains undecided at the
 beta cut.
 
+**PR.9 inventory ✅ (2026-09-09) — facts gathered; every disposition is Matt's call, undecided until he says.**
+
+**The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
+which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
+diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
+to it. That leaves **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
+Plasma, Waveform.
+
+**Why Matt is seeing them at all.** `uzume.settings.visuals.showUncertifiedPresets = 1` in his defaults, so
+the uncertified six are in his roster today. The five zero-route presets PR.1 flagged as *"no audio coupling
+declared at all"* are **exactly** this set minus Waveform — the roster complaint and the certification gap
+are the same fact seen twice.
+
+| Preset | Size / history | What it is | State |
+|---|---|---|---|
+| **Waveform** | 101 lines, 2026-04-06, 2 commits | A spectrum-and-waveform bar display — a signal readout rather than a visualizer | **Load-bearing:** `VisualizerEngine.swift:936` installs it as the launch default before any plan wires, and `PresetLoaderTests` asserts it exists. Removing it needs a replacement default first. |
+| **Nebula** | 77 lines, 2026-04-06, 2 commits | Radial starburst on black | Day-one demo shader; zero routes |
+| **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
+| **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
+| **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
+| **Arachne** | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | Zero routes. **Renders near-black in the review harness at every energy level, and its reference images are absent from the repo** (the black Ref panels in its contact sheet). Whether it renders live is unverified — the harness may not drive its geometry path. |
+
+**None has curated reference images** — every `docs/VISUAL_REFERENCES/<preset>/` in this set holds a README
+and nothing else, so there is no fidelity target to certify *against* without curating one first.
+
+**What certifying one costs.** For the five zero-route presets it is not tuning — there is no coupling to
+tune. It is designing the musical role, curating references, authoring the routes, and running the §12
+rubric: preset-authoring work per preset, comparable to a preset uplift. Arachne additionally needs its
+render verified live before any of that is worth starting.
+
+**Not decided here.** Per-preset disposition is Matt's; this row records the facts and stays open until he
+gives one. PR.9's done-when is unchanged: an explicit certify-or-remove decision, with a date, for each.
+
 **PR.10 — session-driven replay across every paradigm** ✅ (2026-09-04). **The premise in PR.1 was
 half wrong and the increment is much smaller than it scoped.** PR.1 reported that 23 of 26 flagged
 presets "cannot be replayed from a real session". True of `SessionReplayHarness` (it drives
