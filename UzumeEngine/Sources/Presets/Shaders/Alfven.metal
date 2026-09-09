@@ -56,6 +56,20 @@ constant constexpr float kAlfvenMaxTrace  = 3.0;    // CFL: max back-trace, texe
 constant constexpr float kAlfvenClampW    = 24.0;   // hard clamp on omega (§8.2)
 constant constexpr float kAlfvenClampP    = 12.0;   // hard clamp on psi
 constant constexpr float kAlfvenSeedFloor = 0.02;   // below this |psi| RMS proxy, re-seed
+// The re-seed cycle (§5). NOT a stylistic choice: 2D MHD inverse-cascades <psi^2> to box
+// scale and CONDENSATES there (Biskamp ch. 7), so a sustained driven state is a static
+// quilt (`06_anti_static_quilt.png`) — verified twice during concept work. The look IS the
+// decaying transient of a strong seed, which means the field must be re-seeded before the
+// condensate forms. With alpha = 0.16 against drive = 0.020 the driven equilibrium for
+// omega is ~0.125, i.e. nearly dead, so without this cycle the field correctly decays to
+// nothing (measured: 10x decay over 900 frames, ALFVEN.2 soak).
+// Period from §3's temporal contract (20-30 s). The spike's film used ~12.6 s; §5 says the
+// driven condensate appeared at ~12 s, so 22 s sits inside the contract while staying well
+// clear of a full decay. ALFVEN.3 replaces the fixed period with section boundaries.
+constant constexpr float kAlfvenCycleSeconds = 22.0;
+constant constexpr float kAlfvenBlendTau     = 1.1;   // spike: advance_blend(tau=1.1)
+constant constexpr float kAlfvenSeedOmega    = 1.2;   // spike: _rand(1.2, 3)
+constant constexpr float kAlfvenSeedPsi      = 0.9;   // spike: _rand(0.9, 2)
 
 // ── Seed field ──────────────────────────────────────────────────────────────
 //
@@ -149,9 +163,15 @@ fragment float4 alfven_state_fragment(
     float2 n1 = prevStateTex.sample(alfven_state_sampler, uv + texel * 37.0).xy;
     float2 n2 = prevStateTex.sample(alfven_state_sampler, uv - texel * 53.0).xy;
     float presence = abs(c.x) + abs(c.y) + abs(n1.y) + abs(n2.y);
+    // Which braid we are on, and how far into its crossfade. Derived from time rather
+    // than held as state, so it survives the watchdog re-zeroing the pair.
+    float cycle      = floor(f.time / kAlfvenCycleSeconds);
+    float cycleStart = cycle * kAlfvenCycleSeconds;
+    float seedPhase  = 7.31 * cycle + 1.7;   // a different braid every cycle
+
     if (presence < kAlfvenSeedFloor) {
-        float omega0 = alfven_seed(uv, 3.0, 1.2);   // spike: _rand(1.2, 3)
-        float psi0   = alfven_seed(uv, 11.0, 0.9);  // spike: _rand(0.9, 2)
+        float omega0 = alfven_seed(uv, seedPhase, kAlfvenSeedOmega);
+        float psi0   = alfven_seed(uv, seedPhase + 8.0, kAlfvenSeedPsi);
         return float4(omega0, psi0, 0.0, 1.0);
     }
 
@@ -229,6 +249,20 @@ fragment float4 alfven_state_fragment(
            + kAlfvenNu * kAlfvenDt * lapW
            - kAlfvenHyper * checker;
     psi   += kAlfvenEta * kAlfvenDt * lapP;
+
+    // ── Re-seed crossfade (§5) ──
+    // Ported from the spike's advance_blend: a raised cosine so the dissolve has no
+    // visible in/out corner, applied as a per-step share of the crossfade rather than an
+    // absolute mix, so the blend rate is independent of how many frames it spans.
+    float a = clamp((f.time - cycleStart) / kAlfvenBlendTau, 0.0, 1.0);
+    if (a < 1.0) {
+        float g = 0.5 - 0.5 * cos(M_PI_F * a);
+        float r = g * (kAlfvenDt / kAlfvenBlendTau) * M_PI_F;
+        float omegaSeed = alfven_seed(uv, seedPhase, kAlfvenSeedOmega);
+        float psiSeed   = alfven_seed(uv, seedPhase + 8.0, kAlfvenSeedPsi);
+        omega = mix(omega, omegaSeed, clamp(r, 0.0, 1.0));
+        psi   = mix(psi,   psiSeed,   clamp(r, 0.0, 1.0));
+    }
 
     // ── Hard clamps (§8.2) ──
     omega = clamp(omega, -kAlfvenClampW, kAlfvenClampW);
