@@ -83,10 +83,10 @@ struct AlfvenStabilitySoakTests {
         }
         // phi now comes from the SPECTRAL Poisson solve (exact, one multiply in k-space)
         // rather than a 24-sweep Jacobi that D-244 measured at an 89% residual.
-        let hasSpectralPoisson = specs.contains { $0.name == "poissonk" }
+        let hasSpectralPoisson = specs.contains { $0.name == "gphik" }
         let hasTransform = specs.contains { $0.name == "fftrows" && $0.iterations == 8 }
         let hasState = specs.contains { $0.name == "state" && $0.persistent }
-        #expect(hasSpectralPoisson, "phi must come from the spectral Poisson solve")
+        #expect(hasSpectralPoisson, "phi gradients must come from the spectral solve")
         #expect(hasTransform, "the FFT chain must be present (8 butterfly passes per axis)")
         #expect(hasState, "state must be the persistent MHD advance stage")
 
@@ -159,7 +159,7 @@ struct AlfvenStabilitySoakTests {
     /// healthy omega with a still-converging phi is a field that cannot stir yet.
     private static func measurePhi(_ pipeline: RenderPipeline, _ ctx: MetalContext,
                                    into s: inout Sample) throws {
-        guard let tex = pipeline.stagedTexture(named: "iprows") else {
+        guard let tex = pipeline.stagedTexture(named: "gphir") else {
             throw HarnessError.setupFailed("no phi texture")
         }
         // phi's stage is not persistent, so its texture is `.private` and getBytes on it
@@ -189,21 +189,16 @@ struct AlfvenStabilitySoakTests {
                              mipmapLevel: 0)
         }
         let hPhys = 2.0 * Double.pi / Double(w)
-        let invH2 = 1.0 / (hPhys * hPhys)
         var sum = 0.0
         var uMax = 0.0
         for y in 1..<(h - 1) {
             for x in 1..<(w - 1) {
-                let phi = Double(raw[(y * w + x) * 4])
-                sum += phi * phi
-                let l = Double(raw[(y * w + x - 1) * 4]), r = Double(raw[(y * w + x + 1) * 4])
-                let t = Double(raw[((y + 1) * w + x) * 4]), b = Double(raw[((y - 1) * w + x) * 4])
-                // u = (-phi_y, phi_x). phi is in PHYSICAL units from the spectral solve,
-                // so the texel displacement carries the same 1/h^2 the shader applies —
-                // without it this metric silently reports ~0 while the shader advects
-                // normally, i.e. it would model a different pipeline than the one running.
-                let ux = -(t - b) * 0.5, uy = (r - l) * 0.5
-                uMax = max(uMax, (ux * ux + uy * uy).squareRoot() * invH2)
+                // This texture holds phi's SPECTRAL derivatives directly: .x = phi_x,
+                // .y = phi_y. No stencil, and no h-scaling — they are already physical.
+                let px = Double(raw[(y * w + x) * 4]), py = Double(raw[(y * w + x) * 4 + 1])
+                sum += px * px + py * py
+                // u = (-phi_y, phi_x); report as texels per frame for comparability.
+                uMax = max(uMax, (px * px + py * py).squareRoot() * 0.016 / hPhys)
             }
         }
         s.phiRMS = (sum / Double((w - 2) * (h - 2))).squareRoot()

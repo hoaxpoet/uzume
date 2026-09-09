@@ -78,6 +78,33 @@ extension PresetLoader {
             return (k2 < 0.5) ? 0.0 : (1.0 / k2);
         }
 
+        // k-space wavenumbers for a texel, in FFT order (0..N/2 then negative).
+        static inline float2 uz_wavenumber(uint2 gid, int w, int h) {
+            int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
+            int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
+            return float2(float(kx), float(ky));
+        }
+
+        // Two REAL fields ride one complex transform as real and imaginary parts. Recover
+        // each one's spectrum by Hermitian unpacking against the mirrored texel:
+        //     a_h(k) = ( F(k) + conj(F(-k)) ) / 2          (the real-part field)
+        //     b_h(k) = -i( F(k) - conj(F(-k)) ) / 2        (the imaginary-part field)
+        static inline void uz_unpack_pair(float2 fk, float2 fmk,
+                                          thread float2& aH, thread float2& bH) {
+            aH = 0.5 * float2(fk.x + fmk.x, fk.y - fmk.y);
+            float2 d = 0.5 * float2(fk.x - fmk.x, fk.y + fmk.y);
+            bH = float2(d.y, -d.x);          // multiply by -i
+        }
+
+        // Spectrum of (a_x + i*a_y) for a real field a. One inverse transform of this
+        // yields BOTH partial derivatives — real part d/dx, imaginary part d/dy — because
+        // each is separately real. This is what makes a spectral Poisson bracket affordable:
+        // {a,b} = a_x b_y - a_y b_x needs four derivative fields, i.e. two transforms.
+        static inline float2 uz_grad_spectrum(float2 aH, float2 k) {
+            // (i*kx + i*i*ky) * a_h  =  (-ky + i*kx) * a_h
+            return uz_cmul(float2(-k.y, k.x), aH);
+        }
+
         // Matches Swift StagedPassInfo (Renderer). Bound at fragment buffer 9 on every
         // staged pass; `(0, 1)` for a stage that is not iterated. ALFVEN.1c.
         struct StagedPassInfo {

@@ -52,27 +52,105 @@
       "pixel_format": "rgba32Float"
     },
     {
-      "name": "poissonk",
-      "fragment_function": "alfven_poisson_k_fragment",
+      "name": "gphik",
+      "fragment_function": "alfven_grad_phi_fragment",
       "samples": [
         "fftcols"
       ],
       "pixel_format": "rgba32Float"
     },
     {
-      "name": "ipcols",
+      "name": "gphic",
       "fragment_function": "alfven_ifft_cols_fragment",
       "samples": [
-        "poissonk"
+        "gphik"
       ],
       "iterations": 8,
       "pixel_format": "rgba32Float"
     },
     {
-      "name": "iprows",
+      "name": "gphir",
       "fragment_function": "alfven_ifft_rows_fragment",
       "samples": [
-        "ipcols"
+        "gphic"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gomek",
+      "fragment_function": "alfven_grad_omega_fragment",
+      "samples": [
+        "fftcols"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gomec",
+      "fragment_function": "alfven_ifft_cols_fragment",
+      "samples": [
+        "gomek"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gomer",
+      "fragment_function": "alfven_ifft_rows_fragment",
+      "samples": [
+        "gomec"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gpsik",
+      "fragment_function": "alfven_grad_psi_fragment",
+      "samples": [
+        "fftcols"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gpsic",
+      "fragment_function": "alfven_ifft_cols_fragment",
+      "samples": [
+        "gpsik"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gpsir",
+      "fragment_function": "alfven_ifft_rows_fragment",
+      "samples": [
+        "gpsic"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gjk",
+      "fragment_function": "alfven_grad_j_fragment",
+      "samples": [
+        "fftcols"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gjc",
+      "fragment_function": "alfven_ifft_cols_fragment",
+      "samples": [
+        "gjk"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "gjr",
+      "fragment_function": "alfven_ifft_rows_fragment",
+      "samples": [
+        "gjc"
       ],
       "iterations": 8,
       "pixel_format": "rgba32Float"
@@ -81,8 +159,11 @@
       "name": "state",
       "fragment_function": "alfven_state_fragment",
       "samples": [
-        "iprows",
-        "ifftrows"
+        "ifftrows",
+        "gphir",
+        "gomer",
+        "gpsir",
+        "gjr"
       ],
       "persistent": true,
       "pixel_format": "rgba32Float"

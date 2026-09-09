@@ -98,10 +98,18 @@ static inline float2 alfven_sample_catrom(texture2d<float, access::sample> tex,
 // which is exactly what ALFVEN.1's iterated-stage surface is for. 0.016/8 = 0.002 sits
 // inside the spike's bound. Fixed, never the render dt (BUG-097).
 constant constexpr float kAlfvenDt        = 0.016;
-constant constexpr int   kAlfvenSubsteps  = 1;      // must match the sidecar's iterations
+// NOTE: the `state` stage must run ONCE per frame. Substepping is invalid in this
+// architecture: the four derivative spectra are computed once per frame upstream, so
+// substeps 2..N would evaluate the brackets against STALE derivatives. Measured — 8
+// substeps collapsed psi 0.90 -> 0.049 while appearing to "improve" omega, because the
+// stale RHS suppressed growth rather than resolving it.
+constant constexpr int   kAlfvenSubsteps  = 1;
 constant constexpr float kAlfvenAlpha     = 0.16;   // linear drag on omega (spike value)
-constant constexpr float kAlfvenNu        = 0.9;    // omega diffusion, texel^2 units
-constant constexpr float kAlfvenEta       = 0.5;    // psi diffusion
+constant constexpr float kAlfvenNu        = 0.002;  // omega diffusion, PHYSICAL units
+                                                    // (was 0.9 in texel^2; derivatives are
+                                                    // physical now and the spectral filter
+                                                    // carries the grid-scale load)
+constant constexpr float kAlfvenEta       = 0.001;  // psi diffusion, PHYSICAL units
 // Grid-scale damping expressed as a RATE (per second), not a per-step fraction. Every
 // other term here carries `* dt`; these did not, so introducing substeps multiplied the
 // damping by the substep count and collapsed psi from 0.90 to 0.046 in a single soak. The
@@ -317,254 +325,160 @@ fragment float4 alfven_ifft_rows_fragment(
     return float4(r, 0.0, 1.0);
 }
 
-// ─── PHI — spectral Poisson solve (replaces the 24-sweep Jacobi) ────────────
+// ─── Derivative spectra for the spectral Poisson brackets ───────────────────
 //
-// lap(phi) = -omega, solved EXACTLY by one multiply in k-space. D-244 measured the
-// Jacobi it replaces leaving an 89% residual on the domain-scale mode after 24 sweeps,
-// needing ~1000 warm-start frames to converge; this needs none, and it deletes 24 render
-// passes per frame in the process. Gated in FFTSandboxTests: 1.35e-3 relative residual,
-// which is the discretisation error of the CHECKING stencil, not of the solve.
+// ALFVEN.2 established by measurement that the semi-Lagrangian back-trace was the
+// non-conservative term: it drove omega to saturation and psi to decay, and it ran the
+// <psi^2> cascade UP in k when 2D MHD inverse-cascades it DOWN (Biskamp ch. 7). No
+// filter fixes a cascade direction. So the advection is replaced outright by the spike's
+// own formulation — Poisson brackets evaluated with spectral derivatives:
 //
-// omega and psi ride the same transform as real and imaginary parts, so omega's spectrum
-// is recovered by Hermitian unpacking, omega_h(k) = (F(k) + conj(F(-k))) / 2, before the
-// inverse-Laplacian multiply. phi_h is then Hermitian and inverse-transforms to a real phi.
+//     d_t omega = -{phi,omega} + {psi,J} - alpha omega + nu lap(omega) + f
+//     d_t psi   = -{phi,psi}              + eta lap(psi)
+//     {a,b}     = a_x b_y - a_y b_x
+//
+// Each stage below emits the spectrum of (a_x + i a_y) for one field, so ONE inverse
+// transform yields both of that field's partials. Four fields — phi, omega, psi, J — is
+// four transforms, and all four spectra derive from the single packed (omega + i psi)
+// transform already computed upstream.
 
-fragment float4 alfven_poisson_k_fragment(
-    VertexOut in [[stage_in]],
-    constant FeatureVector& f [[buffer(0)]],
+static inline void alfven_field_spectra(texture2d<float, access::read> specTex, uint2 gid,
+                                        thread float2& omegaH, thread float2& psiH,
+                                        thread float2& k) {
+    int w = int(specTex.get_width()), h = int(specTex.get_height());
+    uint2 mir = uint2(uint((w - int(gid.x)) % w), uint((h - int(gid.y)) % h));
+    uz_unpack_pair(specTex.read(gid).xy, specTex.read(mir).xy, omegaH, psiH);
+    k = uz_wavenumber(gid, w, h);
+}
+
+fragment float4 alfven_grad_phi_fragment(
+    VertexOut in [[stage_in]], constant FeatureVector& f [[buffer(0)]],
     texture2d<float, access::read> specTex [[texture(13)]]
 ) {
     uint2 gid = uint2(in.position.xy);
-    int w = int(specTex.get_width()), h = int(specTex.get_height());
-    uint2 mir = uint2(uint((w - int(gid.x)) % w), uint((h - int(gid.y)) % h));
-
-    float2 fk  = specTex.read(gid).xy;
-    float2 fmk = specTex.read(mir).xy;
-    // omega is the REAL part of the packed field: omega_h = (F(k) + conj(F(-k))) / 2.
-    float2 omegaH = 0.5 * float2(fk.x + fmk.x, fk.y - fmk.y);
-    return float4(omegaH * uz_inv_laplacian_k(gid, w, h), 0.0, 1.0);
+    float2 omegaH, psiH, k;
+    alfven_field_spectra(specTex, gid, omegaH, psiH, k);
+    // lap(phi) = -omega  =>  phi_h = omega_h / k^2, the exact Poisson solve.
+    float k2 = dot(k, k);
+    float2 phiH = (k2 < 0.5) ? float2(0.0) : omegaH / k2;
+    return float4(uz_grad_spectrum(phiH, k), 0.0, 1.0);
 }
 
-// ─── Stage 2: STATE — the MHD advance ───────────────────────────────────────
+fragment float4 alfven_grad_omega_fragment(
+    VertexOut in [[stage_in]], constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::read> specTex [[texture(13)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    float2 omegaH, psiH, k;
+    alfven_field_spectra(specTex, gid, omegaH, psiH, k);
+    return float4(uz_grad_spectrum(omegaH, k), 0.0, 1.0);
+}
+
+fragment float4 alfven_grad_psi_fragment(
+    VertexOut in [[stage_in]], constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::read> specTex [[texture(13)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    float2 omegaH, psiH, k;
+    alfven_field_spectra(specTex, gid, omegaH, psiH, k);
+    return float4(uz_grad_spectrum(psiH, k), 0.0, 1.0);
+}
+
+fragment float4 alfven_grad_j_fragment(
+    VertexOut in [[stage_in]], constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::read> specTex [[texture(13)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    float2 omegaH, psiH, k;
+    alfven_field_spectra(specTex, gid, omegaH, psiH, k);
+    // J = lap(psi)  =>  J_h = -k^2 psi_h.
+    return float4(uz_grad_spectrum(-dot(k, k) * psiH, k), 0.0, 1.0);
+}
+
+// ─── STATE — the MHD advance, pseudo-spectral ───────────────────────────────
+//
+// No back-trace. Both nonlinear terms are Poisson brackets built from spectral
+// derivatives, which is the spike's own formulation and the only version that respects
+// the inverse cascade. Everything here is in PHYSICAL units: the spectral derivatives
+// come out as d/dx and d/dy directly, so no h-scaling appears in the brackets — the
+// class of unit bug that cost this port the Lorentz coupling earlier simply cannot arise.
 
 fragment float4 alfven_state_fragment(
     VertexOut in [[stage_in]],
     constant FeatureVector& f [[buffer(0)]],
     constant StagedPassInfo& p [[buffer(9)]],
-    texture2d<float, access::sample> phiTex [[texture(13)]],
-    texture2d<float, access::sample> filteredPsiTex [[texture(14)]],
+    texture2d<float, access::sample> filteredTex [[texture(13)]],
+    texture2d<float, access::sample> gradPhiTex [[texture(14)]],
+    texture2d<float, access::sample> gradOmegaTex [[texture(15)]],
+    texture2d<float, access::sample> gradPsiTex [[texture(16)]],
+    texture2d<float, access::sample> gradJTex [[texture(17)]],
     texture2d<float, access::sample> prevStateTex [[texture(20)]]
 ) {
     float2 uv    = in.uv;
     float2 texel = 1.0 / float2(prevStateTex.get_width(), prevStateTex.get_height());
 
-    // ── Re-seed when the field is empty ──
-    // Covers frame 1 after a preset switch (ALFVEN.1 zeroes persistent pairs) and
-    // recovery after a watchdog re-zero. Sampled at one texel plus its neighbours as a
-    // cheap stand-in for a field-wide RMS, which a fragment cannot compute.
-    // psi comes from the spectral filter on the FIRST substep of the frame (the chain ran
-    // on last frame's psi, before this stage); later substeps carry it forward themselves.
-    // omega always comes from this stage's own previous state.
-    // Both fields come back spectrally filtered on the first step of the frame:
-    // .x = omega (the transform's real part), .y = psi (its imaginary part).
-    float2 c = prevStateTex.sample(alfven_state_sampler, uv).xy;
-    if (p.index == 0) {
-        c = filteredPsiTex.sample(alfven_state_sampler, uv).xy;
-    }
-    float2 n1 = prevStateTex.sample(alfven_state_sampler, uv + texel * 37.0).xy;
-    float2 n2 = prevStateTex.sample(alfven_state_sampler, uv - texel * 53.0).xy;
-    float presence = abs(c.x) + abs(c.y) + abs(n1.y) + abs(n2.y);
-    // Which braid we are on, and how far into its crossfade. Derived from time rather
-    // than held as state, so it survives the watchdog re-zeroing the pair.
     float cycle      = floor(f.time / kAlfvenCycleSeconds);
     float cycleStart = cycle * kAlfvenCycleSeconds;
-    float seedPhase  = 7.31 * cycle + 1.7;   // a different braid every cycle
+    float seedPhase  = 7.31 * cycle + 1.7;
 
-    if (presence < kAlfvenSeedFloor) {
-        float omega0 = alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega);
-        float psi0   = alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi);
-        return float4(omega0, psi0, 0.0, 1.0);
+    // Re-seed when the field is empty: frame 1 after a preset switch (ALFVEN.1 zeroes
+    // persistent pairs) and recovery after a watchdog re-zero.
+    float2 c  = prevStateTex.sample(alfven_state_sampler, uv).xy;
+    float2 n1 = prevStateTex.sample(alfven_state_sampler, uv + texel * 37.0).xy;
+    float2 n2 = prevStateTex.sample(alfven_state_sampler, uv - texel * 53.0).xy;
+    if (abs(c.x) + abs(c.y) + abs(n1.y) + abs(n2.y) < kAlfvenSeedFloor) {
+        return float4(alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega),
+                      alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi),
+                      0.0, 1.0);
     }
+    // Both fields arrive spectrally filtered: .x = omega, .y = psi.
+    c = filteredTex.sample(alfven_state_sampler, uv).xy;
 
-    // ── Velocity from phi:  u = (-phi_y, phi_x) ──
-    float phiL = phiTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).x;
-    float phiR = phiTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).x;
-    float phiT = phiTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).x;
-    float phiB = phiTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).x;
-    // UNITS. The spectral solve returns phi in PHYSICAL units (phi_h = omega_h / k^2 with
-    // integer mode numbers), where the Jacobi it replaced returned a texel-scaled
-    // potential. The back-trace wants a displacement in TEXELS:
-    //     u_phys       = grad_phys(phi) = grad_texel(phi) / h
-    //     displacement = u_phys * dt / h = grad_texel(phi) * dt / h^2
-    // Missing that 1/h^2 (= 1661 at N = 256) collapsed uMax from ~0.5 to 0.002 texels per
-    // frame — the advection had effectively stopped, which the soak caught immediately.
-    float hPhys  = 6.28318530718 / float(prevStateTex.get_width());
-    float invH2  = 1.0 / (hPhys * hPhys);
-    float2 u = float2(-(phiT - phiB) * 0.5, (phiR - phiL) * 0.5) * invH2;
+    // Spectral derivatives: real part = d/dx, imaginary part = d/dy.
+    float2 gPhi   = gradPhiTex.sample(alfven_state_sampler, uv).xy;
+    float2 gOmega = gradOmegaTex.sample(alfven_state_sampler, uv).xy;
+    float2 gPsi   = gradPsiTex.sample(alfven_state_sampler, uv).xy;
+    float2 gJ     = gradJTex.sample(alfven_state_sampler, uv).xy;
 
-    // ── Semi-Lagrangian advection of (omega, psi), CFL-bounded (§8.4) ──
-    // An unbounded back-trace on a spiking field is how this scheme diverges.
-    float2 traceTexels = clamp(u * kAlfvenDt, -kAlfvenMaxTrace, kAlfvenMaxTrace);
-    float2 src = uv - traceTexels * texel;
-    // Cubic rather than bilinear — the measured fix for the interpolation loss above.
-    float2 advected = alfven_sample_catrom(prevStateTex, src, texel);
-    // Catmull-Rom is not monotone: at a sharp front it overshoots, and an overshoot in psi
-    // is a new extremum that the next step amplifies. Clamp to the range of the four DONOR
-    // texels around the back-traced point — the standard limiter for high-order
-    // semi-Lagrangian advection (Selle et al. 2008 use the same guard on MacCormack).
-    //
-    // The previous version of this clamp was a NO-OP and shipped as if it were a guard:
-    // it took lo = min(lin, advected) and hi = max(lin, advected), which `advected` is
-    // trivially always inside. Unlimited Catmull-Rom then injected energy into psi — a
-    // field with NO source term, which the reference conserves to four decimals — driving
-    // psi 0.9 -> 6.3 once the spectral filter replaced the local damping that had been
-    // hiding it.
-    float2 donor = src / texel - 0.5;
-    float2 dbase = floor(donor);
-    float2 d00 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(0.5, 0.5)) * texel).xy;
-    float2 d10 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(1.5, 0.5)) * texel).xy;
-    float2 d01 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(0.5, 1.5)) * texel).xy;
-    float2 d11 = prevStateTex.sample(alfven_state_sampler, (dbase + float2(1.5, 1.5)) * texel).xy;
-    float2 lo = min(min(d00, d10), min(d01, d11));
-    float2 hi = max(max(d00, d10), max(d01, d11));
-    advected = clamp(advected, lo, hi);
-    float omega = advected.x;
-    float psi   = advected.y;
+    // {a,b} = a_x b_y - a_y b_x
+    float brPhiOmega = gPhi.x * gOmega.y - gPhi.y * gOmega.x;
+    float brPsiJ     = gPsi.x * gJ.y     - gPsi.y * gJ.x;
+    float brPhiPsi   = gPhi.x * gPsi.y   - gPhi.y * gPsi.x;
 
-    // ── J = lap(psi), and the Lorentz term {psi,J} ──
-    float pL = prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).y;
-    float pR = prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).y;
-    float pT = prevStateTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).y;
-    float pB = prevStateTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).y;
-    float psiC = c.y;
-    float J = (pL + pR + pT + pB - 4.0 * psiC);
-
-    // {psi,J} = psi_x J_y - psi_y J_x — J's own gradient needs the 8-neighbour ring.
-    float jL = (prevStateTex.sample(alfven_state_sampler, uv - float2(2.0 * texel.x, 0.0)).y
-                + psiC
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, texel.y)).y
-                + prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, texel.y)).y
-                - 4.0 * pL);
-    float jR = (psiC
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(2.0 * texel.x, 0.0)).y
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, texel.y)).y
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, -texel.y)).y
-                - 4.0 * pR);
-    float jT = (prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, texel.y)).y
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, texel.y)).y
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(0.0, 2.0 * texel.y)).y
-                + psiC
-                - 4.0 * pT);
-    float jB = (prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, texel.y)).y
-                + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, -texel.y)).y
-                + psiC
-                + prevStateTex.sample(alfven_state_sampler, uv - float2(0.0, 2.0 * texel.y)).y
-                - 4.0 * pB);
-    float2 gradPsi = float2((pR - pL) * 0.5, (pT - pB) * 0.5);
-    float2 gradJ   = float2((jR - jL) * 0.5, (jT - jB) * 0.5);
-
-    // UNIT SCALING — the Lorentz term is the one place this port silently lost its
-    // physics. Every derivative above is in TEXEL units (h = 1), so:
-    //     J_texel       = lap_texel(psi)          = h^2 * lap_phys(psi)
-    //     gradPsi_texel = h   * grad_phys(psi)
-    //     gradJ_texel   = h^3 * grad_phys(J_phys)
-    // and therefore the texel-space bracket is h^4 times the physical {psi,J}. With the
-    // spike's 2*pi box, h = 2*pi/N = 0.0245 at N = 256, so h^4 = 3.6e-7: the term came out
-    // 2.45e-5 of the drag term, i.e. ZERO. Without it there is no Lorentz force, no
-    // reconnection, and no "M" in MHD — the preset was advecting two passive scalars.
-    //
-    // h is derived from the texture width rather than hardcoded, because staged textures
-    // are drawable-sized. Note the consequence: 1/h^4 grows as N^4, so the Alfven-wave CFL
-    // limit tightens fast with resolution — this term, not the flow speed, is what sets
-    // the stable timestep.
-    float h = 6.28318530718 / float(prevStateTex.get_width());
-    float invH4 = 1.0 / (h * h * h * h);
-    float lorentz = (gradPsi.x * gradJ.y - gradPsi.y * gradJ.x) * invH4;
-
-    // ── Diffusion ──
+    // Physical Laplacians for the explicit diffusion (texel stencil / h^2).
+    float hPhys = 6.28318530718 / float(prevStateTex.get_width());
+    float invH2 = 1.0 / (hPhys * hPhys);
     float wL = prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).x;
     float wR = prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).x;
     float wT = prevStateTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).x;
     float wB = prevStateTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).x;
-    float lapW = (wL + wR + wT + wB - 4.0 * c.x);
-    float lapP = (pL + pR + pT + pB - 4.0 * psiC);
+    float pL = prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).y;
+    float pR = prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).y;
+    float pT = prevStateTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).y;
+    float pB = prevStateTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).y;
+    float lapW = (wL + wR + wT + wB - 4.0 * c.x) * invH2;
+    float lapP = (pL + pR + pT + pB - 4.0 * c.y) * invH2;
 
-    // Hou-Li analogue (§8.1, grounding level 3): damp ONLY what the 5-point Laplacian
-    // cannot see — the checkerboard mode, which is exactly the grid-scale pile-up the
-    // spectral filter existed to kill and the mode plain Jacobi/diffusion leaves alone.
-    float diagAvg = 0.25 * (
-        prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, texel.y)).x
-      + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, texel.y)).x
-      + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, -texel.y)).x
-      + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, -texel.y)).x);
-    float crossAvg = 0.25 * (wL + wR + wT + wB);
-    float checker  = c.x - 2.0 * crossAvg + diagAvg;   // zero on smooth fields
-
-    // The same operator on psi. The spike applies FILT to BOTH w and p (alfven.py:104-105);
-    // the first port applied it only to omega, leaving psi with NO grid-scale filter at
-    // all. That omission is what let psi sharpen to texel-scale gradients, and since
-    // J = lap(psi) those gradients become |J| spikes ~1000x the smooth background — which
-    // autoexp then normalises against, crushing the broad lobes to black. The references
-    // have the opposite topology: in `05_atmosphere_relaxed_state.png` whole lobes are
-    // BRIGHT and only the sign-change lines are dark, i.e. |J| is large and smooth across
-    // the field. Filtering psi is what produces that.
-    float pDiagAvg = 0.25 * (
-        prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, texel.y)).y
-      + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, texel.y)).y
-      + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, -texel.y)).y
-      + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, -texel.y)).y);
-    // A BAND high-pass, not the checkerboard operator. Measured: damping only the exact
-    // k = k_max mode (eigenvalue-4 operator, h = 0.2) left the |J| dynamic range at 1518x
-    // versus 1613x undamped — no effect, because a thin current sheet is a few texels
-    // wide, not one. The spike's FILT = exp(-36 (k/kmax)^36) is ~1 below 0.85 k_max and
-    // ~0 above, i.e. it removes a BAND. The real-space analogue of that is
-    // `psi - blur(psi)` with a 3x3 tent: eigenvalue 1 on the checkerboard, falling
-    // smoothly to 0 on smooth fields, so it damps the whole top of the spectrum and is
-    // unconditionally stable for h <= 1.
-    // BIHARMONIC hyperdiffusion — the spike's own `nu4 * k^4`, not an invented operator.
-    //
-    // The 3x3 tent high-pass this replaces was mine, and the measured sweep showed it has
-    // no good setting: filter hard enough to hold the grid scale and psi bleeds
-    // (0.30 -> psi 0.59), filter gently and the grid scale explodes (0.01 -> checker 3.97).
-    // The reason is selectivity. Writing the responses out for a mode with texel phase
-    // theta, the tent's high-pass is 1 - cos^2(tx/2)cos^2(ty/2): 1.00 at the checkerboard
-    // but still 0.75 at half-Nyquist, so it attenuates the mid-k band that carries the
-    // lobes. The discrete biharmonic is L^2 with L = 4(sin^2(tx/2) + sin^2(ty/2)): 64 at
-    // the checkerboard and 16 at half-Nyquist — 4:1 against the tent's 1.33:1, so at
-    // matched grid-scale damping it touches mid-k about three times less.
-    //
-    // lap(psi) at all four neighbours (jL/jR/jT/jB) is already computed above for the
-    // Lorentz bracket, so lap(lap(psi)) costs nothing extra here.
-    float pBilap = jL + jR + jT + jB - 4.0 * J;
-
-    // ── Integrate ──
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
-    // No local grid-scale term on omega either: the spectral filter now covers both
-    // fields, and it does so without touching the mid-k band the lobes occupy.
-    omega += kAlfvenDt * (lorentz - kAlfvenAlpha * c.x + force)
-           + kAlfvenNu * kAlfvenDt * lapW;
-    // No local grid-scale term on psi any more: the spectral filter does that job, and
-    // does it without touching the mid-k band these lobes live in.
-    psi   += kAlfvenEta * kAlfvenDt * lapP;
 
-    // ── Re-seed crossfade (§5) ──
-    // Ported from the spike's advance_blend: a raised cosine so the dissolve has no
-    // visible in/out corner, applied as a per-step share of the crossfade rather than an
-    // absolute mix, so the blend rate is independent of how many frames it spans.
+    float omega = c.x + kAlfvenDt * (-brPhiOmega + brPsiJ - kAlfvenAlpha * c.x
+                                     + kAlfvenNu * lapW + force);
+    float psi   = c.y + kAlfvenDt * (-brPhiPsi + kAlfvenEta * lapP);
+
+    // Re-seed crossfade (§5), raised cosine, as a per-step share of the blend.
     float a = clamp((f.time - cycleStart) / kAlfvenBlendTau, 0.0, 1.0);
     if (a < 1.0) {
         float g = 0.5 - 0.5 * cos(M_PI_F * a);
-        float r = g * (kAlfvenDt / kAlfvenBlendTau) * M_PI_F;
-        float omegaSeed = alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega);
-        float psiSeed   = alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi);
-        omega = mix(omega, omegaSeed, clamp(r, 0.0, 1.0));
-        psi   = mix(psi,   psiSeed,   clamp(r, 0.0, 1.0));
+        float r = clamp(g * (kAlfvenDt / kAlfvenBlendTau) * M_PI_F, 0.0, 1.0);
+        omega = mix(omega, alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega), r);
+        psi   = mix(psi,   alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi), r);
     }
 
-    // ── Hard clamps (§8.2) ──
     omega = clamp(omega, -kAlfvenClampW, kAlfvenClampW);
     psi   = clamp(psi,   -kAlfvenClampP, kAlfvenClampP);
 
+    // J is cached for the compose stage: J = lap(psi), physical.
+    float J = (pL + pR + pT + pB - 4.0 * c.y) * invH2;
     return float4(omega, psi, J, 1.0);
 }
 
