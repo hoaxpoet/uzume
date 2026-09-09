@@ -108,11 +108,11 @@ constant constexpr float kAlfvenEta       = 0.5;    // psi diffusion
 // rates reproduce the previously-tuned per-FRAME fractions (0.35 and 0.30 at 1/0.016 s)
 // independently of how many substeps a frame is split into.
 constant constexpr float kAlfvenHyperRate    = 0.35 / 0.016;   // omega, Hou-Li analogue
-// ...and on psi — the spike filters BOTH (alfven.py:104-105). Applied through a 3x3 tent
-// high-pass whose eigenvalue is 1 on the checkerboard and falls smoothly to 0 on smooth
-// fields, so h is a direct per-step damping fraction of the top of the spectrum and is
-// stable for any h <= 1.
-constant constexpr float kAlfvenHyperPsiRate = 0.30 / 0.016;   // psi — the spike filters BOTH
+// psi hyperdiffusion coefficient — the spike's `nu4 * k^4` (alfven.py), applied as a rate.
+// Sized so the per-FRAME damping at the checkerboard (discrete biharmonic response 64) is
+// ~0.30, matching the grid-scale control the tent achieved, while touching mid-k ~3x less:
+//   0.30 = nu4 * dt_frame * 64  =>  nu4 ~ 0.29
+constant constexpr float kAlfvenNu4Psi    = 0.29;
 constant constexpr float kAlfvenDrive     = 0.020;  // forcing amplitude (spike: 0.020 * ...)
 constant constexpr float kAlfvenMaxTrace  = 3.0;    // CFL: max back-trace, texels (§8.4)
 constant constexpr float kAlfvenClampW    = 24.0;   // hard clamp on omega (§8.2)
@@ -371,15 +371,28 @@ fragment float4 alfven_state_fragment(
     // `psi - blur(psi)` with a 3x3 tent: eigenvalue 1 on the checkerboard, falling
     // smoothly to 0 on smooth fields, so it damps the whole top of the spectrum and is
     // unconditionally stable for h <= 1.
-    float pTent = (4.0 * psiC + 2.0 * (pL + pR + pT + pB) + 4.0 * pDiagAvg) / 16.0;
-    float pHighPass = psiC - pTent;
+    // BIHARMONIC hyperdiffusion — the spike's own `nu4 * k^4`, not an invented operator.
+    //
+    // The 3x3 tent high-pass this replaces was mine, and the measured sweep showed it has
+    // no good setting: filter hard enough to hold the grid scale and psi bleeds
+    // (0.30 -> psi 0.59), filter gently and the grid scale explodes (0.01 -> checker 3.97).
+    // The reason is selectivity. Writing the responses out for a mode with texel phase
+    // theta, the tent's high-pass is 1 - cos^2(tx/2)cos^2(ty/2): 1.00 at the checkerboard
+    // but still 0.75 at half-Nyquist, so it attenuates the mid-k band that carries the
+    // lobes. The discrete biharmonic is L^2 with L = 4(sin^2(tx/2) + sin^2(ty/2)): 64 at
+    // the checkerboard and 16 at half-Nyquist — 4:1 against the tent's 1.33:1, so at
+    // matched grid-scale damping it touches mid-k about three times less.
+    //
+    // lap(psi) at all four neighbours (jL/jR/jT/jB) is already computed above for the
+    // Lorentz bracket, so lap(lap(psi)) costs nothing extra here.
+    float pBilap = jL + jR + jT + jB - 4.0 * J;
 
     // ── Integrate ──
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
     omega += kAlfvenDt * (lorentz - kAlfvenAlpha * c.x + force)
            + kAlfvenNu * kAlfvenDt * lapW
            - kAlfvenHyperRate * kAlfvenDt * checker;
-    psi   += kAlfvenEta * kAlfvenDt * lapP - kAlfvenHyperPsiRate * kAlfvenDt * pHighPass;
+    psi   += kAlfvenEta * kAlfvenDt * lapP - kAlfvenNu4Psi * kAlfvenDt * pBilap;
 
     // ── Re-seed crossfade (§5) ──
     // Ported from the spike's advance_blend: a raised cosine so the dissolve has no

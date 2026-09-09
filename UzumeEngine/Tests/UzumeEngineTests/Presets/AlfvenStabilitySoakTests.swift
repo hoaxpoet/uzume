@@ -42,7 +42,12 @@ import simd
 @MainActor
 struct AlfvenStabilitySoakTests {
 
-    private static let edge = 256          // the spike's grid (ALF_N=256)
+    /// Grid edge. The spike's ALF_N=256 by default; overridable so the soak can measure
+    /// the resolution dependence directly (D-244 recorded that the solver's behaviour
+    /// scales as N^2, and a coarser solver grid is the lever that finding pointed at).
+    private static var edge: Int {
+        ProcessInfo.processInfo.environment["ALFVEN_SOAK_EDGE"].flatMap(Int.init) ?? 256
+    }
     private static let subject = "Alfvén"
 
     /// Frames to soak. 900 ≈ 15 s at 60 fps — past the ~12 s at which the CPU spike's
