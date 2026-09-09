@@ -326,7 +326,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Nimbus** | *"Doesn't do much and yet people seem to really like it"* | ⏸ no ask. |
 | **Skein** | *"Fine enough"* | ⏸ no ask. |
 | **Spectral Cartograph** | *"Opportunities to clean up eventually"* | ⏸ deferred; it is `is_diagnostic`, so it never auto-installs. |
-| **Staged Sandbox** | *"Get rid of it."* | 🔨 hidden from the cycle at PR.0 rather than removed — **and PR.9 then retargeted the staged harness template onto it**, so infrastructure now depends on something Matt asked to be gone. Needs a decision. |
+| **Staged Sandbox** | *"Get rid of it."* — refined by Matt at PR.0 to *"I want to hide Staged Sandbox, the other diagnostic presets can still remain in the list"* | ✅ **CLOSED.** Hidden from the cycle at PR.0; Matt confirmed 2026-09-09: *"No need to get rid of Staged Sandbox. Hiding it was the right call, and this work has already occurred."* It remains the subject of the staged harness template (D-246), which is a legitimate use of a diagnostic fixture. |
 | **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
 
 **Nine of the open rows are blocked on parked engine work** (D-206 beat drift, BUG-028 meter). Those
