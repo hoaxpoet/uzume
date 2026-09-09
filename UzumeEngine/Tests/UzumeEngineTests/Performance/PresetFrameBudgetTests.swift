@@ -138,12 +138,16 @@ struct PresetFrameBudgetTests {
         "Waveform": 6.30,
         "Plasma": 6.30,
         "Meniscus": 5.76,
-        // PR.18 — Gossamer's first recorded cost, and the answer to "can this preset afford a
-        // fidelity uplift": 6.61 ms, 0.9x median, 18th of 22. Recorded from a run whose whole
-        // table read ~25 % above the PERF.17 baselines (a loaded machine — Stave 17.17 against
-        // 14.49, Skein 16.87 against 13.19), so the RANK is the trustworthy number here, not the
-        // absolute. It sits in the cheap half either way; the expensive rows are ray-marchers.
-        "Gossamer": 6.61,
+        // PR.18 — Gossamer's first recorded cost was **6.61 ms, 0.9x median, 18th of 22**, which
+        // answered "can this preset afford a fidelity uplift" with yes. The V.8 uplift then spent
+        // some of that headroom: **9.2-10.5 ms across five runs, 1.2-1.4x median, 4th of 22.**
+        // Recorded at 9.8. Ranks are the trustworthy comparison across runs — the roster's
+        // absolute figures swing ~25 % with machine load — and this preset moved from the cheap
+        // half to the expensive quarter. Still ~6.5 ms inside the 16.6 ms budget, and every row
+        // above it is a ray-marcher. Three ablations (wave displacement, dust motes, the silk
+        // BRDF) each moved it under 0.6 ms, so the cost is diffuse rather than one hot layer;
+        // most likely register pressure from a much larger fragment.
+        "Gossamer": 9.8,
         "Fata Morgana": 5.65,
         "Floret": 5.53,
         "Glaze": 5.10,

@@ -164,7 +164,13 @@ private let goldenPresetHashes: [String: PresetHashes] = [
     // V.9 Session 1 — regen at Session 5 cert review (D-124 redirect: full preset
     // rewrite, glass-dish baseline replaced; golden hashes are stale by design).
     // "Ferrofluid Ocean": (steady: 0x56AB1C4A28B32727, beatHeavy: 0x5CB393AAAFA84840, quiet: 0xA64C51A62FD35356),
-    "Gossamer": (steady: 0x5756A72F070F0F0D, beatHeavy: 0x5756A72F070F0F0D, quiet: 0x5756872D0F0F0F0D),
+    // PR.18 (2026-09-09): regenerated for the V.8 fidelity uplift — silk material with a
+    // cylindrical cross-section normal, per-strand irregularity, the catenary scallop
+    // between spoke anchors, node glints, haze and dust motes. An intentional visual
+    // change; only the QUIET hash had actually broken tolerance (distance 9 against the
+    // 8-bit threshold), the other two still matched, which is a fair reading of how much
+    // of this preset's look is the geometry that did NOT change.
+    "Gossamer": (steady: 0x9616870F074F0F0F, beatHeavy: 0x9716870F074F0F0F, quiet: 0x9616870F074F0F0F),
     // QR.1 (D-079): sminK now mixes continuous bass (Layer 1) + bass_dev
     // accent. steady/quiet hashes regenerated to original V.7 values within
     // the 8-bit dHash tolerance; beatHeavy shifts slightly because bass_dev
