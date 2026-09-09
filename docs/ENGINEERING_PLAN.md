@@ -902,7 +902,7 @@ are the same fact seen twice.
 | **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
 | **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
 | **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
-| **Arachne** | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | Zero routes. **Renders near-black in the review harness at every energy level, and its reference images are absent from the repo** (the black Ref panels in its contact sheet). Whether it renders live is unverified — the harness may not drive its geometry path. |
+| **Arachne** | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | Zero routes. Reference images absent from the repo. **Seen live 2026-09-09 (session `15-08-12Z`), Matt: *"Arachne is visible, but it's still a massively broken preset."*** The harness's near-black render was misleading — it does draw — but the live verdict is worse, not better: it renders and is broken. |
 
 **None has curated reference images** — every `docs/VISUAL_REFERENCES/<preset>/` in this set holds a README
 and nothing else, so there is no fidelity target to certify *against* without curating one first.
@@ -911,6 +911,12 @@ and nothing else, so there is no fidelity target to certify *against* without cu
 tune. It is designing the musical role, curating references, authoring the routes, and running the §12
 rubric: preset-authoring work per preset, comparable to a preset uplift. Arachne additionally needs its
 render verified live before any of that is worth starting.
+
+**Arachne's case is now fully informed** (2026-09-09). It is the largest investment in the uncertified set —
+1652 lines, 48 commits, an 872-line design doc whose name (`ARACHNE_V8_DESIGN`) records eight prior
+iterations — and it renders broken, has zero audio coupling, and has no reference images to certify
+against. "Certify" here is not tuning or repair; it is authoring the preset again. That is the trade-off
+Matt is deciding, not a recommendation from this row.
 
 **Not decided here.** Per-preset disposition is Matt's; this row records the facts and stays open until he
 gives one. PR.9's done-when is unchanged: an explicit certify-or-remove decision, with a date, for each.
