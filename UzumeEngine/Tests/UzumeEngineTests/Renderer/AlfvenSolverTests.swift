@@ -57,7 +57,19 @@ struct AlfvenSolverTests {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         var cfg = AlfvenSolverConfiguration()
-        cfg.edge = 128          // keeps the test quick; the FFT needs a power of two
+        // 256 is the PRODUCTION grid, and the test must measure what ships. At 128 the
+        // same solver equilibrates at omega ~30 against ~7 here — not a solver defect but
+        // an under-resolved one: 2D turbulence needs inertial range between the forcing
+        // and dissipation scales, and at 128 the cascade is truncated and piles up. A test
+        // at 128 was measuring a configuration nothing runs.
+        cfg.edge = 256
+        // Env overrides so the equilibrium can be bisected without editing the test.
+        let env = ProcessInfo.processInfo.environment
+        if let e = env["ALFVEN_EDGE"].flatMap(Int.init) { cfg.edge = e }
+        if let d = env["ALFVEN_DRIVE"].flatMap(Float.init) { cfg.drive = d }
+        if let a = env["ALFVEN_ALPHA"].flatMap(Float.init) { cfg.alpha = a }
+        if let s = env["ALFVEN_SUBSTEPS"].flatMap(Int.init) { cfg.substeps = s }
+        if let n4 = env["ALFVEN_NU4"].flatMap(Float.init) { cfg.nu4 = n4 }
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
                                       configuration: cfg)
 
