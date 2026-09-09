@@ -1,6 +1,7 @@
 # Proposal — telling the scorer which stems a preset *needs*
 
-**Status:** proposal, for Matt's decision. Nothing implemented.
+**Status:** **A was chosen, implemented, measured, and REVERTED the same day.** The mechanism works; the
+signal it would weight does not exist. See §Outcome. Nothing is in the tree.
 **Raised by:** Matt, 2026-09-09 — *"this could be an issue of limiting selection of the preset to only songs with prominent vocals."*
 
 ## The ask, and why the obvious change is wrong
@@ -81,3 +82,50 @@ Gates: `PresetSidecarKeyGateTests` requires every decoded key to have an adopter
 **A, scoped to an evaluation** — implement `stem_dependence`, adopt it on Gossamer alone, and measure
 the ranking shift on both kinds of material before deciding whether it stays. If the shift does not
 match what Matt wants to see, delete the key rather than tune it. **Not started; Matt's call.**
+
+
+---
+
+## Outcome (2026-09-09) — A implemented, measured, reverted
+
+Matt chose **A**. It was built (`stem_dependence` on `PresetDescriptor`, weighting in
+`stemAffinitySubScore`, adopted on Gossamer as `{"vocals": 1.0, "other": 0.4}`) and measured with
+`PlanRankingDumpTests` against a vocal track and an instrumental, exactly as this document required.
+
+**It made selection worse.**
+
+| | without | with `{vocals 1.0, other 0.4}` |
+|---|---:|---:|
+| Seven Nation Army (vocal) — Gossamer affinity | **0.88** | 0.76 |
+| Pacific Theme (instrumental) — Gossamer affinity | 0.03 | 0.00 |
+| **discrimination gap (total score)** | **0.207** | **0.176** |
+
+**Why — the primitive measures variability, not prominence.** `stemEnergyDeviation` is deviation about
+a stem's own running mean, so a *steady, prominent* vocal barely deviates. On Seven Nation Army the
+vocal has the **lowest** deviation of the four stems (0.705 against bass 0.973) despite being the most
+prominent thing in the song. Weighting toward vocals therefore penalises exactly the material it was
+meant to select. And the unweighted mean is a *better* discriminator, because on an instrumental all
+four deviations collapse together (Pacific Theme: 0.058 / 0.059 / 0.000 / 0.000) — averaging four
+signals beats trusting one.
+
+**The premise of this proposal was also wrong.** It said Gossamer "has no selectivity today" because
+declaring four stems is arithmetically identical to declaring none (D-245). Arithmetically true, but
+it does not follow: the mean deviation *is* selective (0.88 vocal vs 0.03 instrumental).
+
+**Two other candidate signals were measured and both fail.**
+
+- **Energy share** — Seven Nation Army's vocal is 22.8 % of stem energy, Pacific Theme's is 18.0 %.
+  Five points apart, because separation always emits four stems with energy in them.
+- **Pitch-confidence duty cycle** (newly meaningful after BUG-124) — *inverted*: **Weeping Wall, a
+  purely instrumental piece, scores 94.8 %**, above Seven Nation Army's 79.9 % and Combat Baby's
+  85.6 %. On that instrumental the separated "vocals" stem still carries median energy **0.301** and
+  reads as pitched at **132 Hz** — against Seven Nation Army's 0.339 and 130 Hz. Statistically the
+  same. The stem is full of periodic bleed and nothing downstream distinguishes it from a voice.
+
+**Conclusion: the blocker is not plumbing, it is that no primitive identifies vocal presence.** Any
+vocal-based selection needs one built first — a vocal-presence detector, not a re-weighting of what
+exists. Until then, selection by stem is guesswork.
+
+**Consequence for BUG-124, recorded there too:** the YIN fix recovers *periodicity*, which is not the
+same as *vocals*. Gossamer's emission gate now opens on 94.8 % of an instrumental's frames. The preset
+reading well on Combat Baby does not establish that it is responding to the voice.
