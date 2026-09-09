@@ -95,7 +95,12 @@ constant constexpr float kAlfvenDt        = 0.016;  // s per frame; fixed, not r
 constant constexpr float kAlfvenAlpha     = 0.16;   // linear drag on omega (spike value)
 constant constexpr float kAlfvenNu        = 0.9;    // omega diffusion, texel^2 units
 constant constexpr float kAlfvenEta       = 0.5;    // psi diffusion
-constant constexpr float kAlfvenHyper     = 0.35;   // grid-scale-only damping (Hou-Li analogue)
+constant constexpr float kAlfvenHyper     = 0.35;   // grid-scale damping on omega (Hou-Li analogue)
+// ...and on psi — the spike filters BOTH (alfven.py:104-105). Applied through a 3x3 tent
+// high-pass whose eigenvalue is 1 on the checkerboard and falls smoothly to 0 on smooth
+// fields, so h is a direct per-step damping fraction of the top of the spectrum and is
+// stable for any h <= 1.
+constant constexpr float kAlfvenHyperPsi  = 0.30;
 constant constexpr float kAlfvenDrive     = 0.020;  // forcing amplitude (spike: 0.020 * ...)
 constant constexpr float kAlfvenMaxTrace  = 3.0;    // CFL: max back-trace, texels (§8.4)
 constant constexpr float kAlfvenClampW    = 24.0;   // hard clamp on omega (§8.2)
@@ -316,12 +321,36 @@ fragment float4 alfven_state_fragment(
     float crossAvg = 0.25 * (wL + wR + wT + wB);
     float checker  = c.x - 2.0 * crossAvg + diagAvg;   // zero on smooth fields
 
+    // The same operator on psi. The spike applies FILT to BOTH w and p (alfven.py:104-105);
+    // the first port applied it only to omega, leaving psi with NO grid-scale filter at
+    // all. That omission is what let psi sharpen to texel-scale gradients, and since
+    // J = lap(psi) those gradients become |J| spikes ~1000x the smooth background — which
+    // autoexp then normalises against, crushing the broad lobes to black. The references
+    // have the opposite topology: in `05_atmosphere_relaxed_state.png` whole lobes are
+    // BRIGHT and only the sign-change lines are dark, i.e. |J| is large and smooth across
+    // the field. Filtering psi is what produces that.
+    float pDiagAvg = 0.25 * (
+        prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, texel.y)).y
+      + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, texel.y)).y
+      + prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, -texel.y)).y
+      + prevStateTex.sample(alfven_state_sampler, uv + float2(-texel.x, -texel.y)).y);
+    // A BAND high-pass, not the checkerboard operator. Measured: damping only the exact
+    // k = k_max mode (eigenvalue-4 operator, h = 0.2) left the |J| dynamic range at 1518x
+    // versus 1613x undamped — no effect, because a thin current sheet is a few texels
+    // wide, not one. The spike's FILT = exp(-36 (k/kmax)^36) is ~1 below 0.85 k_max and
+    // ~0 above, i.e. it removes a BAND. The real-space analogue of that is
+    // `psi - blur(psi)` with a 3x3 tent: eigenvalue 1 on the checkerboard, falling
+    // smoothly to 0 on smooth fields, so it damps the whole top of the spectrum and is
+    // unconditionally stable for h <= 1.
+    float pTent = (4.0 * psiC + 2.0 * (pL + pR + pT + pB) + 4.0 * pDiagAvg) / 16.0;
+    float pHighPass = psiC - pTent;
+
     // ── Integrate ──
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
     omega += kAlfvenDt * (lorentz - kAlfvenAlpha * c.x + force)
            + kAlfvenNu * kAlfvenDt * lapW
            - kAlfvenHyper * checker;
-    psi   += kAlfvenEta * kAlfvenDt * lapP;
+    psi   += kAlfvenEta * kAlfvenDt * lapP - kAlfvenHyperPsi * pHighPass;
 
     // ── Re-seed crossfade (§5) ──
     // Ported from the spike's advance_blend: a raised cosine so the dissolve has no
