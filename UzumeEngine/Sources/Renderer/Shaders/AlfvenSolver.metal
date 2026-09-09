@@ -204,7 +204,39 @@ kernel void alfven_seed_state(
 
 /// Hou-Li filter + the spike's integrating factor. omega carries the drag, psi does not
 /// (Ew vs Ep in alfven.py), so the packed spectrum is unpacked, scaled separately, repacked.
-kernel void alfven_spectral_filter(
+// The integrating factor. Split out of the old `alfven_spectral_filter`, which fused it
+// with the Hou-Li filter AND used `p.dt` (the fixed 0.005 ceiling) rather than the adaptive
+// dt the step actually advances by — so the dissipation applied never matched the step.
+// The spike keeps them separate too: Ew/Ep act INSIDE the RK2 stages (alfven.py:98-99),
+// FILT acts once at the end (alfven.py:104-105).
+//
+//   Ew = exp(-(nu4 k^4 + alpha) dt)   on omega
+//   Ep = exp(- nu4 k^4        dt)     on psi   — no drag on psi (alfven.py:99)
+kernel void alfven_efactor(
+    texture2d<float, access::read>  src [[texture(0)]],
+    texture2d<float, access::write> dst [[texture(1)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    device const float* dtBuf           [[buffer(1)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    uint2 mir = uint2((p.gridEdge - gid.x) % p.gridEdge, (p.gridEdge - gid.y) % p.gridEdge);
+    float2 omegaH, psiH;
+    alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
+
+    float2 k = alf_wavenumber(gid, p.gridEdge);
+    float k2 = dot(k, k);
+    float dt = dtBuf[0];
+    float hyper = exp(-p.nu4 * k2 * k2 * dt);
+    omegaH *= hyper * exp(-p.alpha * dt);
+    psiH   *= hyper;
+
+    dst.write(float4(omegaH.x - psiH.y, omegaH.y + psiH.x, 0.0, 1.0), gid);
+}
+
+// Hou-Li smooth spectral filter, applied once per substep to the STATE (alfven.py:104-105).
+// `p.cutoff` is the Nyquist wavenumber, matching the spike's `kmax = N/2`.
+kernel void alfven_houli(
     texture2d<float, access::read>  src [[texture(0)]],
     texture2d<float, access::write> dst [[texture(1)]],
     constant AlfvenParams& p            [[buffer(0)]],
@@ -216,12 +248,10 @@ kernel void alfven_spectral_filter(
     alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
 
     float2 k = alf_wavenumber(gid, p.gridEdge);
-    float k2 = dot(k, k);
-    float kr = clamp(sqrt(k2) / p.cutoff, 0.0, 1.0);
-    float filt  = exp(-36.0 * pow(kr, 36.0));
-    float hyper = exp(-p.nu4 * k2 * k2 * p.dt);
-    omegaH *= filt * hyper * exp(-p.alpha * p.dt);
-    psiH   *= filt * hyper;
+    float kr = clamp(sqrt(dot(k, k)) / p.cutoff, 0.0, 1.0);
+    float filt = exp(-36.0 * pow(kr, 36.0));
+    omegaH *= filt;
+    psiH   *= filt;
 
     dst.write(float4(omegaH.x - psiH.y, omegaH.y + psiH.x, 0.0, 1.0), gid);
 }
@@ -293,31 +323,58 @@ kernel void alfven_dealias(
 /// One explicit step, plus the re-seed crossfade and the safety clamps. `dtBuf` carries
 /// the CFL-adapted timestep computed by `alfven_cfl_reduce`, so the timestep tracks the
 /// field instead of being fixed at authoring time.
-kernel void alfven_integrate(
-    texture2d<float, access::read>  state [[texture(0)]],
-    texture2d<float, access::read>  nl    [[texture(1)]],
-    texture2d<float, access::read>  gPsi  [[texture(2)]],
-    texture2d<float, access::write> dst   [[texture(3)]],
-    constant AlfvenParams& p              [[buffer(0)]],
-    device const float* dtBuf             [[buffer(1)]],
-    uint2 gid                             [[thread_position_in_grid]]
-) {
-    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+// The band-limited stirring force, in real space. Low-k by construction (|k| <= 7), so
+// the spike's `f_h * Ew` in the corrector stage differs from `f_h` by exp(-alpha*dt) ~
+// 0.9997 at these wavenumbers — below single precision's grip on the result, so the
+// corrector reuses the same force.
+static inline float alf_force(float2 uv, constant AlfvenParams& p) {
     constexpr float kTau = 6.28318530718;
-    float2 uv = (float2(gid) + 0.5) / float(p.gridEdge);
-    float dt = dtBuf[0];
-
-    float2 c = state.read(gid).xy;
-    float2 n = nl.read(gid).xy;
-
-    float force = p.drive * 0.25 * (
+    return p.drive * 0.25 * (
           sin(kTau * (2.0 * uv.x + 3.0 * uv.y) + 0.71 * p.time)
         + sin(kTau * (4.0 * uv.x - 2.0 * uv.y) - 0.53 * p.time + 1.7)
         + sin(kTau * (3.0 * uv.x + 5.0 * uv.y) + 0.37 * p.time + 3.1)
         + sin(kTau * (5.0 * uv.x - 4.0 * uv.y) - 0.89 * p.time + 0.4));
+}
 
-    float omega = c.x + dt * (n.x + force);
-    float psi   = c.y + dt * n.y;
+// dst = base + coef*dt*(nl + force). Both RK2 stages are this same axpy; `coef` is 1.0
+// for the predictor and 0.5 for the corrector base (alfven.py:100-103).
+kernel void alfven_accumulate(
+    texture2d<float, access::read>  base [[texture(0)]],
+    texture2d<float, access::read>  nl   [[texture(1)]],
+    texture2d<float, access::write> dst  [[texture(2)]],
+    constant AlfvenParams& p             [[buffer(0)]],
+    device const float* dtBuf            [[buffer(1)]],
+    constant float& coef                 [[buffer(2)]],
+    uint2 gid                            [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    float2 uv = (float2(gid) + 0.5) / float(p.gridEdge);
+    float dt = dtBuf[0] * coef;
+    float2 c = base.read(gid).xy;
+    float2 n = nl.read(gid).xy;
+    dst.write(float4(c.x + dt * (n.x + alf_force(uv, p)), c.y + dt * n.y, 0.0, 1.0), gid);
+}
+
+// Re-seed crossfade, clamp backstop, and the J channel the fragment colours.
+//
+// J arrives already computed SPECTRALLY (alfven_j_spectrum) from the filtered spectrum,
+// so it carries nothing above the Hou-Li cutoff. It used to be a local 5-point stencil on
+// the RAW state — that is what put grid-scale content into the one quantity the fragment
+// colours. The stencil was not "amplifying" the grid scale: its effective wavenumber is
+// (2/h^2)(1-cos kh), which UNDER-reads curvature at high k (4/h^2 vs pi^2/h^2 at Nyquist).
+// Spectral J therefore reads slightly HIGHER than the stencil did even though it is the
+// smoother field — do not read that rise as a regression.
+kernel void alfven_finalize(
+    texture2d<float, access::read>  src    [[texture(0)]],
+    texture2d<float, access::read>  jField [[texture(1)]],
+    texture2d<float, access::write> dst    [[texture(2)]],
+    constant AlfvenParams& p               [[buffer(0)]],
+    uint2 gid                              [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    float2 uv = (float2(gid) + 0.5) / float(p.gridEdge);
+    float2 c = src.read(gid).xy;
+    float omega = c.x, psi = c.y;
 
     if (p.blendRate > 0.0) {
         float r = clamp(p.blendRate, 0.0, 1.0);
@@ -327,17 +384,7 @@ kernel void alfven_integrate(
 
     omega = clamp(omega, -p.clampW, p.clampW);
     psi   = clamp(psi,   -p.clampP, p.clampP);
-
-    // J = lap(psi), recovered from psi's spectral gradient magnitude is not available
-    // here, so use the local stencil in PHYSICAL units for the cached diagnostic value.
-    float h = kTau / float(p.gridEdge);
-    float invH2 = 1.0 / (h * h);
-    uint2 l = uint2((gid.x + p.gridEdge - 1) % p.gridEdge, gid.y), r2 = uint2((gid.x + 1) % p.gridEdge, gid.y);
-    uint2 u = uint2(gid.x, (gid.y + 1) % p.gridEdge),       d = uint2(gid.x, (gid.y + p.gridEdge - 1) % p.gridEdge);
-    float J = (state.read(l).y + state.read(r2).y + state.read(u).y + state.read(d).y
-               - 4.0 * c.y) * invH2;
-
-    dst.write(float4(omega, psi, J, 1.0), gid);
+    dst.write(float4(omega, psi, jField.read(gid).x, 1.0), gid);
 }
 
 /// CFL reduction: the field-wide max of max(|u|, |B|), then dt = min(dtMax, 0.25*dx/c).
@@ -427,4 +474,26 @@ fragment float4 alfven_display_fragment(
     float3 col = alf_hsv2rgb(float3(fract(hue), sat, val));
     col += float3(0.035, 0.045, 0.075) * (1.0 - val);   // D-037: never black
     return float4(min(col, float3(1.0)), 1.0);
+}
+
+/// Spectrum of J = lap(psi), i.e. J_h = -k^2 psi_h, taken from the FILTERED spectrum.
+///
+/// J is what the fragment colours (§4), and it was the one quantity in an otherwise fully
+/// spectral solver still computed with a local 5-point stencil on the RAW state. That
+/// stencil is a high-pass: it amplifies grid-scale content by 1/h^2 and deviates from -k^2
+/// exactly where the seams live, so it manufactured aliasing at the sharpest seams — the
+/// localised `07_anti_grid_speckle` signature in the rendered frames. Computed spectrally
+/// from the filtered spectrum, J carries nothing above the filter cutoff by construction.
+kernel void alfven_j_spectrum(
+    texture2d<float, access::read>  src [[texture(0)]],
+    texture2d<float, access::write> dst [[texture(1)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    uint2 mir = uint2((p.gridEdge - gid.x) % p.gridEdge, (p.gridEdge - gid.y) % p.gridEdge);
+    float2 omegaH, psiH;
+    alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
+    float2 k = alf_wavenumber(gid, p.gridEdge);
+    dst.write(float4(-dot(k, k) * psiH, 0.0, 1.0), gid);
 }

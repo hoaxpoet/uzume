@@ -28,81 +28,6 @@ import Metal
 import simd
 import Shared
 
-// MARK: - Configuration
-
-/// Tunables for the solver. Values are the spike's where the spike has one.
-public struct AlfvenSolverConfiguration: Sendable {
-    /// Grid edge. Must be a power of two (the FFT requires it) and <= 1024 (threadgroup
-    /// memory). Fixed rather than drawable-sized: D-244's N^2 finding and the FFT's
-    /// power-of-two requirement both point the same way, and it caps cost independently
-    /// of display resolution.
-    public var edge: Int
-    /// Upper bound on the timestep. The CFL reduction lowers it as the field energises;
-    /// it never raises it above this.
-    public var maxDt: Float
-    /// Substeps per frame. Free here — each runs its own full RHS evaluation, so none of
-    /// them sees stale derivatives.
-    public var substeps: Int
-    public var alpha: Float
-    /// k^4 hyperdiffusion. DERIVED from the grid rather than copied: the spike's
-    /// nu4 = 2.5e-7 is tuned for N = 256, and k^4 damping is violently
-    /// resolution-dependent — the same constant at N = 128 gives 17x less dissipation at
-    /// the dealias cutoff (13.3/s vs 0.83/s), which is exactly the enstrophy pile-up seen
-    /// as omega climbing. What should be held fixed is the dissipation RATE at the cutoff,
-    /// so nu4 = C / k_cut^4 with C taken from the spike's own operating point.
-    public var nu4: Float
-    public var drive: Float
-    public var spectralCutoff: Float
-    public var clampOmega: Float
-    public var clampPsi: Float
-    public var seedKOmega: Int
-    public var seedKPsi: Int
-    public var seedAmpOmega: Float
-    public var seedAmpPsi: Float
-    /// Seconds per re-seed. §5: a sustained driven MHD state condenses into a static
-    /// quilt, so the look is a sequence of transients.
-    public var cycleSeconds: Float
-    /// Crossfade duration for a re-seed, seconds (the spike's advance_blend tau).
-    public var blendTau: Float
-
-    public init(
-        edge: Int = 256,
-        maxDt: Float = 0.005,          // the spike's own ceiling
-        substeps: Int = 4,
-        alpha: Float = 0.16,
-        nu4: Float? = nil,     // nil => derived from `edge`, see the property comment
-        drive: Float = 0.020,
-        spectralCutoff: Float = 100.0,
-        clampOmega: Float = 200.0,     // a genuine backstop: ~25x the measured equilibrium
-        clampPsi: Float = 100.0,
-        seedKOmega: Int = 3,
-        seedKPsi: Int = 2,
-        seedAmpOmega: Float = 1.2,
-        seedAmpPsi: Float = 0.9,
-        cycleSeconds: Float = 22.0,
-        blendTau: Float = 1.1
-    ) {
-        self.edge = edge
-        self.maxDt = maxDt
-        self.substeps = substeps
-        self.alpha = alpha
-        // C = 2.5e-7 * ((2/3)*128)^4 — the spike's dissipation rate at its own cutoff.
-        let kCut = (2.0 / 3.0) * (Float(edge) / 2.0)
-        self.nu4 = nu4 ?? (13.256 / (kCut * kCut * kCut * kCut))
-        self.drive = drive
-        self.spectralCutoff = spectralCutoff
-        self.clampOmega = clampOmega
-        self.clampPsi = clampPsi
-        self.seedKOmega = seedKOmega
-        self.seedKPsi = seedKPsi
-        self.seedAmpOmega = seedAmpOmega
-        self.seedAmpPsi = seedAmpPsi
-        self.cycleSeconds = cycleSeconds
-        self.blendTau = blendTau
-    }
-}
-
-/// Mirrors `AlfvenDisplayParams` in AlfvenSolver.metal. Layout is the GPU contract.
 struct AlfvenDisplayParams {
     var exposure: Float
     var hueCentre: Float
@@ -180,19 +105,28 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         let nonlinear: MTLTexture
         /// The spectrally filtered state — what each step advances FROM.
         let filtered: MTLTexture
+        /// J = lap(psi), computed spectrally. What the fragment colours.
+        let jField: MTLTexture
+        /// RK2 stage slopes: k1 held across the second RHS evaluation, and the
+        /// half-step base E(w + 0.5*dt*k1) it is combined with.
+        let k1: MTLTexture
+        let rk: MTLTexture
     }
     var fields: Fields
 
     let fftRows: MTLComputePipelineState
     let fftCols: MTLComputePipelineState
     private let seedPSO: MTLComputePipelineState
-    let filterPSO: MTLComputePipelineState
+    let efactorPSO: MTLComputePipelineState
+    let houliPSO: MTLComputePipelineState
     let gradPSO: MTLComputePipelineState
     let bracketPSO: MTLComputePipelineState
     let dealiasPSO: MTLComputePipelineState
-    let integratePSO: MTLComputePipelineState
+    let accumulatePSO: MTLComputePipelineState
+    let finalizePSO: MTLComputePipelineState
     let cflReducePSO: MTLComputePipelineState
     let cflFinishPSO: MTLComputePipelineState
+    let jSpectrumPSO: MTLComputePipelineState
 
     let dtBuffer: MTLBuffer
     let cflScratch: MTLBuffer
@@ -220,13 +154,16 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         fftRows      = try pso("alfven_fft_rows")
         fftCols      = try pso("alfven_fft_cols")
         seedPSO      = try pso("alfven_seed_state")
-        filterPSO    = try pso("alfven_spectral_filter")
+        efactorPSO   = try pso("alfven_efactor")
+        houliPSO     = try pso("alfven_houli")
         gradPSO      = try pso("alfven_grad_spectrum")
         bracketPSO   = try pso("alfven_brackets")
         dealiasPSO   = try pso("alfven_dealias")
-        integratePSO = try pso("alfven_integrate")
+        accumulatePSO = try pso("alfven_accumulate")
+        finalizePSO  = try pso("alfven_finalize")
         cflReducePSO = try pso("alfven_cfl_reduce")
         cflFinishPSO = try pso("alfven_cfl_finish")
+        jSpectrumPSO = try pso("alfven_j_spectrum")
 
         guard let dtBuf = device.makeBuffer(length: MemoryLayout<Float>.size,
                                             options: .storageModeShared),
@@ -279,7 +216,10 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
             gradPsi: try make(),
             gradJ: try make(),
             nonlinear: try make(),
-            filtered: try make())
+            filtered: try make(),
+            jField: try make(),
+            k1: try make(),
+            rk: try make())
         return (pair, fields)
     }
 
