@@ -300,7 +300,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 
 | Preset | Matt's ask (abbreviated) | Status |
 |---|---|---|
-| **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | 🔨 **PR.18, in progress.** Sync half largely addressed: ten routes declared, BUG-124 restored the vocal-pitch signal, Matt live *"looks pretty good"*. The open ask is **fidelity** — see PR.18 below for the measured diagnosis and the decision owed. |
+| **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | 🔨 **PR.18, code complete — M7 owed.** Sync half addressed (14 routes, BUG-124). Fidelity half built: silk material, strand irregularity, node glints, atmosphere, wave displacement, and the catenary scallop. Rubric 4/15 → 8/15; cost 6.6 → 10.0 ms, inside budget. Reference set recurated (11 images). |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
@@ -403,17 +403,146 @@ already drawn, exactly the palette-shift the anti-reference rules out.
    than intended; only the ~1 px hard cores (coverage ≈ 1) are unaffected. **The preset's signature
    audio-visual layer is being squared away on every soft pixel**, which is a plausible contributor
    to *"more connection between visuals and music"* complaints on this preset. Single-character fix.
-2. **FA #31 — an absolute AGC-normalised band drives brightness.** Line 189:
-   `brightness = 0.12 + f.bass * 0.76 + bassRel * 0.12`. The absolute term carries 6× the weight of
-   the deviation term, so how bright the web is depends on the AGC's running-average denominator and
-   therefore on mix density — the same kick reads differently across tracks. D-026 says drive from
-   deviation.
+2. **Brightness is driven by an absolute AGC-normalised band at 6× the weight of its deviation
+   term.** Line 189: `brightness = 0.12 + f.bass * 0.76 + bassRel * 0.12`. The web's dynamics
+   therefore track the AGC's running-average denominator — mix density — rather than musical
+   events, and the same kick reads differently across tracks.
+
+   ⚠ **This entry first read "FA #31 exactly" and that was too strong — corrected here after the
+   over-literal fix broke a gate.** FA #31 bans absolute *thresholds*
+   (`smoothstep(0.22, 0.32, f.bass)`), whose breakpoint lands somewhere different on every track. A
+   smooth proportional term has no breakpoint to misplace, and **D-037 requires a silence state
+   distinguishable from a playing one** — for which absolute energy is the only available signal,
+   since every deviation primitive sits at ~0 in both. Removing the term outright made silence and
+   a steady mid-energy passage render identically; `PresetAcceptanceTests`' beat-vs-continuous
+   invariant went red with continuous motion at **zero and beat motion at 7.58**, i.e. an inversion
+   of D-004 introduced while trying to honour D-026. **The fault is the RATIO, and the fix is to
+   invert it** — absolute for presence, deviation for dynamics — not to delete the absolute term.
+   The rubric's own M4 check agrees: it looks for `f.band > 0.x` threshold patterns, not for
+   proportional use.
 
 **Not a defect, but worth Matt knowing:** the dewdrop layer (line 213) is annotated in the reference
 README as an *Arachne* trait, *"explicitly not Gossamer's."* Slot 03 does want node glints — body
 teal, tip a brighter different colour — so the layer's *idea* is wanted; its current form is not.
 
-#### The decision Matt owes before step 3
+#### Step 3 — implementation ✅ (2026-09-09, Matt: *"do all four, and recurate the reference images"*)
+
+**All four layers, plus the wave displacement the anti-reference names.** The fifth was not in
+the four offered; it is added because the curated anti-reference forbids exactly what v3 did
+(`waveContrib *= strandCov` — a palette tint on strands already drawn) and no amount of material
+work fixes a static grid. `Gossamer.metal` 272 → ~560 lines.
+
+| Layer | What landed |
+|---|---|
+| **Silk material** | `mat_silk_thread` at the README's own coefficients, plus `fiber_trt_lobe` for the third lobe §4.3 specifies and the cookbook recipe omits. Each strand carries a **cylindrical cross-section normal** derived from its signed offset, so a thread reads as a round lit filament rather than a flat stroke. |
+| **Strand irregularity** | `fbm4` along each thread, decorrelated per strand, driving width (±45 %), brightness, out-of-plane tilt and a transverse **sag** under a zero-at-both-ends envelope. |
+| **Node glints** | On the strands' proximity FIELDS rather than v3's `spokeCov * spirCov` — the product of two ~1 px hard cores, which intersect on almost no pixels. Warm-white against teal silk, per slot 03's body-vs-tip annotation, and modulated by the strand noise so not every node beads. |
+| **Atmosphere** | Haze halo carrying the waves' own colour into the air (the SSGI fill this 2D preset can express), with low-frequency density structure; dust motes on a jittered lattice drifting inward at high vocal energy, outward at silence. |
+| **+ Wave displacement** | The wave field is resolved BEFORE the geometry and pushes the sample point radially, signed by which side of the front the pixel is on. The silk now bows as a front passes. |
+
+**And the one thing that changed the read more than any of them: the catenary scallop.** A real
+orb-weaver's spiral is strung between consecutive spokes and sags outward in between; v3 drew
+true concentric ellipses, which is most of why it read as a polar grid. Amplitude scales as
+`r × gap`, so D-042's 0.77 rad open sector droops visibly more than its 0.27 rad clusters —
+the irregular anchor array finally has a visible consequence. First cut sagged uniformly and
+read as a doily; the chord-length term fixed it.
+
+**Both PR.18-diagnosed defects fixed:** the `strandCov²` double-multiply, and the absolute-vs-
+deviation brightness ratio — **the latter across two attempts.** The first deleted the absolute
+term entirely and `PresetAcceptanceTests` caught the result: silence and a steady passage rendered
+identically, so continuous motion was zero and the preset's only remaining motion was beat
+response. Final form is `0.11 + presence × 0.40 + max(0, bassRel) × 0.32 + max(0, midRel) × 0.14`
+with the beat flash cut 0.30 → 0.18, because a flash sized against v3's brightness range is an
+over-reaction against this one (D-004: beats are accents). See the corrected diagnosis note above.
+
+**Calibrated against v3 through the FEEDBACK path, not the direct render** — `mv_warp` at decay
+0.955 has ~22× gain on anything that holds still, so a scene that looks right as one frame
+arrives far hotter once it accumulates. The first cut measured meanLuma 0.300 against v3's 0.219
+and clipped 3.2× as many pixels on the same replay.
+
+**Final A/B, both arms on session `2026-09-09T21-16-47Z`, 240 frames at 1280×720:**
+
+| | clipped | saturation | meanLuma |
+|---|---|---|---|
+| v3 | 0.001 | 0.359 | 0.207 |
+| v4 | **0.002** | **0.316** | **0.248** |
+
+Clipping is level with v3. The extra luma is midtone — haze filling what used to be flat black,
+which is the atmosphere layer doing its job. **Saturation is genuinely down**, and the cause is
+deliberate: this metric is measured over BRIGHT pixels only, and v4's brightest pixels are the
+node glints, which are near-white *by design* (slot 03's body-vs-tip annotation — a glint reads as
+a glint because it differs in colour from the filament, not only in brightness). Reported rather
+than tuned away.
+
+⚠ **The earlier figures in this entry (0.003 / 0.340 / 0.267 against 0.005 / 0.288 / 0.219) were
+measured on session `2026-09-09T19-09-58Z`, which has since been rotated away.** They are left in
+the paragraph above as the record of the first cut, but the table is the comparable pair — both
+arms re-run on a surviving session after the brightness rebalance.
+
+**Cost — reported, not smoothed. ~10.0 ms at 1080p against v3's ~6.6 ms; 1.2–1.4× the roster
+median where v3 was 1.0×; 4th of 22 where v3 was 18th.** Inside the 16.6 ms budget with ~6.6 ms
+to spare, and `complexity_cost` is updated to `tier1 10.0 / tier2 5.8` so the planner budgets it
+honestly. Three ablations (displacement, motes, the silk BRDF) each moved it under 0.6 ms, so the
+cost is diffuse — most likely register pressure — rather than one hot layer. Two real savings
+were found on the way and kept: **the spoke direction table is now precomputed** (v3 evaluated 17
+`cos` + 17 `sin` per pixel to rebuild a constant table, and `GossamerStateTests` holds the table
+against the angles so the two cannot silently diverge), and **the haze noise is one octave, not
+four** — the first cut hid an `fbm4` behind `if (halo > 0.01)`, a threshold true out to r = 0.64,
+which is a guard in appearance only and cost 1.4× → 1.8× median.
+
+**Fidelity rubric 4/15 → 8/15**, above every certified preset on the automated gate (Lumen Mosaic
+is CERTIFIED at 3/15). Newly passing: M1 detail cascade (three distinct noise scales — haze 2.2,
+strand 5.5, grain 48.0), M2 octaves, E4 advanced BRDF, P1 hero specular, P3 dust motes. **Still
+failing and left failing:** M3 wants three cookbook materials and Gossamer draws one substance —
+two more `mat_*` calls would be decoration for a gate. E1/E2/P2 are 3D surface techniques with no
+surfaces here. E3 and P4 are implemented but undetectable: the fog utility is for ray-marched
+volumes and `chromatic_aberration_radial` is a texture post-process, neither of which can express
+a 2D radial halo or aberration on an analytic ring.
+
+**Gates.** `PresetRegressionTests`: only the QUIET golden had broken tolerance (distance 9 against
+8) — steady and beatHeavy still matched, a fair reading of how much of this preset is geometry
+that did not change; regenerated. QG.1 caught `node_glint` declared as an `accent` when `trebDev`
+never reaches an accent's 0.9 peak — corrected to continuous rather than the threshold moved.
+Motion gate: **96 frozen frames of 149 against v3's 105** on the same replay, so v4 moves *more*;
+the freezing is BUG-109's held analysis rows in the replay drive, not the preset.
+
+#### Step 3b — the reference set, recurated ✅
+
+**Eleven images, sourced from Wikimedia Commons with author and licence recorded per file** —
+the `cymatic_resonance` precedent. Nine CC BY / CC BY-SA / BSD / public-domain photographs, one
+1914 plate figure with no known restrictions, and `99_anti_flat_palette_grid.jpg`, which is
+Uzume's own v3 render — the literal state Matt described. Force-added past the `.gitignore` that
+lost the last set. `CheckVisualReferences` clean.
+
+**Every annotation was rewritten against the image actually in the folder.** Carrying over
+prose written for an image nobody could open is how the original set stayed wrong for months.
+
+**Twelve images, not eleven — and one recorded gap turned out to be a stale rule.** Slot 02
+(thread fineness) was first reported uncovered because every usable candidate was dew-beaded and
+the set excluded beading as *Arachne's* trait. Matt: *"Arachne has been retired, so beading overlap
+is no longer an issue"* — D-246 removed the preset there was anything to stay distinct from, so the
+constraint went with it and the slot is filled. Worth noting as a class: **a curated set inherits
+exclusions from presets that may no longer exist**, and nothing re-checks them.
+
+One genuine gap remains: **slot 04 covers zero-ambient emission but not emission falling onto a
+surface** (the fungi have no surroundings to catch their light). Slot 07 was also renamed: `temporal` is not one of the
+eight scales `_NAMING_CONVENTION.md` permits, so `07_temporal_mv_warp_echo.jpg` could never have
+passed the lint — more evidence the old set was never on disk.
+
+**Sources are Matt's choice per the curation process** — these are proposals he can swap.
+
+#### Step 4 — M7, owed
+
+Matt watches it live. Two things a still cannot settle: whether the scallop and the glints read in
+motion at playing brightness, and whether the wave displacement is legible as the silk *moving*
+rather than as a brightness pulse. Per-trait against the new references: macro geometry, scallop,
+node glints and departure-from-anti-reference all **pass**; thread crispness and the R-lobe sheen
+are **partial** — our halo terms are softer than the reference's crisp silver hairlines.
+
+#### The decision Matt owed before step 3 — answered 2026-09-09
+
+> Matt: *"do all four, and recurate the reference images."* Both done above. Retained for the
+> record of what was asked.
 
 The V.8 target is a large, fully-specified body of work and the reference images that would settle
 its look no longer exist. Two questions, in product terms:
