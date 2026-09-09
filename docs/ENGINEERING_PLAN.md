@@ -9412,6 +9412,64 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.4d — make it testable, and calibrate the live look ✅ (2026-09-09)
+
+**Done-when:** Alfvén can be put on screen in the app, and what it draws there matches the
+reference rather than the harness stills.
+
+**It was unreachable by any route.** Cycling skips `exclude_from_cycling`
+(`PresetLoader.isCycleExcluded`) and `certified: false` keeps it out of Orchestrator scoring
+(D-074). Both flags were right while the look was unproven — but together they mean no live
+look-check is possible. `exclude_from_cycling` → false; `certified: false` stays, so the planner
+still never selects it and it is reachable only by the manual next-preset control.
+
+**The shipping fragment was not drawing what the harness stills show**, in two ways, neither of
+them a recalibration:
+
+1. **`sJ` was tied to the exposure.** film.py normalises by two *different* statistics —
+   `aJ = autoexp(|J|)` ≈ `1/(p99.6-p2)` for value, and `sJ = tanh(J/(std*1.2))` ≈ `1/(std*1.2)`
+   for current-sheet polarity, which is what drives hue opponency. The shader collapsed both onto
+   `exposure`, so any exposure low enough not to blow out the value channel also drove `sJ` to
+   ~0.09 and killed the opponency — a flat lavender frame. Split out as `displayPolarityScale`
+   (0.52, from J's measured std 1.54…1.64).
+2. **The exposure had never been calibrated against anything.** 0.55 blew out at *both* field
+   scales: `|J|*0.55` reaches 2.99 at ALFVEN.4's J (rms 5.43) and still saturates at 4c's (1.55).
+   Measured on the production path it gave displayed-linear luma 0.353 against REF 05's 0.229.
+   Now **0.085**, which puts the production path at 0.229 — REF 05's own value.
+
+**⚠ The sRGB trap, recorded because it cost a round and will recur.** The render target is
+`.bgra8Unorm_srgb`, so its bytes are gamma-**encoded**; film.py and the reference PNGs write
+**linear** values straight to bytes (`(rgb*255).astype(uint8)`) and are then decoded as sRGB by
+any viewer — which is why the references look much darker than their byte values suggest, and
+that darker appearance is what was approved. Comparing raw byte means across the two conventions
+made the live path look 2× too *dark* and sent me to an exposure of 0.05, which is also what
+produced the hue-flat frame. Every brightness target in the harness is now stated in
+**displayed-linear** space: our film.py port 0.159, REF 01 0.114, REF 05 0.229. `meanLuma`
+sRGB-decodes before averaging.
+
+The live exposure is deliberately set to REF 05 (0.229) rather than to our own film.py port
+(0.159): the port still undershoots the reference Matt named, so matching the port would only
+reproduce that shortfall.
+
+**Harness:** `ALFVEN_LIVE` renders through `AlfvenSolver.render` — the actual production display
+fragment — and reports its displayed-linear luma, because every other measurement in that file
+describes the CPU port of film.py instead. Plus `ALFVEN_EXPOSURE` for sweeping, and a PNG dump of
+the live frame.
+
+**Known gap:** the shipping fragment still has no seam bloom (film.py's two Gaussian blurs over
+the brightest decile), so the live frame reads flatter and less contrasty than the stills. That
+needs the same reduction/blur surface as the percentile auto-exposure, and until it exists a
+fixed exposure cannot track a field whose scale moves — expect one adjustment round after a live
+look.
+
+**Also fixed:** a comment on `update(features:...)` claiming the re-seed cycle stays "on the
+listener's clock rather than the simulation's" — the exact opposite of what 4c established — and
+two test comments still asserting `exclude_from_cycling: true` for Alfvén.
+
+**Note, not fixed (out of scope):** `PostProcessChainTests.test_fullChain_under2ms_at1080p` flakes
+under parallel load (5.25 ms against a 5 ms Debug budget; clean 3/3 in isolation). Unrelated
+subsystem, and widening a budget is the wrong fix — flagged rather than touched.
+
 ### Increment ALFVEN.4c — the silence state ✅ (2026-09-09)
 
 **Done-when:** the rendered field matches `05_atmosphere_relaxed_state`'s character — broad,

@@ -84,6 +84,63 @@ struct AlfvenFilmPreviewTests {
         solver.reseed(time: 0, commandBuffer: seedCmd)
         seedCmd.commit(); seedCmd.waitUntilCompleted()
 
+        // ALFVEN_LIVE: render through the PRODUCTION display fragment
+        // (`alfven_display_fragment` via `AlfvenSolver.render`) and measure ITS luma.
+        // Everything else in this file measures the CPU port of film.py, which uses
+        // PERCENTILE auto-exposure the shader cannot do — so the numbers here are the
+        // only ones that describe what the app actually draws, and they are what
+        // `displayExposure` has to be calibrated against.
+        if env["ALFVEN_LIVE"] == "1" {
+            if let ex = env["ALFVEN_EXPOSURE"].flatMap(Float.init) { solver.displayExposure = ex }
+            let frames = Int(env["ALFVEN_FRAMES"] ?? "300") ?? 300
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            var lums: [Double] = []
+            for frame in 1...frames {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+                if frame % 60 == 0 {
+                    let pass = MTLRenderPassDescriptor()
+                    pass.colorAttachments[0].texture = target
+                    pass.colorAttachments[0].loadAction = .clear
+                    pass.colorAttachments[0].storeAction = .store
+                    pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                    guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                        throw HarnessError.commandBufferFailed
+                    }
+                    solver.render(encoder: enc, features: FeatureVector())
+                    enc.endEncoding()
+                }
+                cmd.commit(); cmd.waitUntilCompleted()
+                guard frame % 60 == 0 else { continue }
+                lums.append(Self.meanLuma(target))
+                let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("uzume-alfven4-film")
+                try FileManager.default.createDirectory(at: dir,
+                                                        withIntermediateDirectories: true)
+                var bgra = [UInt8](repeating: 0, count: Self.edge * Self.edge * 4)
+                bgra.withUnsafeMutableBytes { buf in
+                    guard let base = buf.baseAddress else { return }
+                    target.getBytes(base, bytesPerRow: Self.edge * 4,
+                                    from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                                    size: MTLSize(width: Self.edge,
+                                                                  height: Self.edge, depth: 1)),
+                                    mipmapLevel: 0)
+                }
+                try Self.writePNG(bgra, width: Self.edge, height: Self.edge,
+                                  to: dir.appendingPathComponent(
+                                      String(format: "live_f%04d.png", frame)))
+            }
+            print(String(format: "[alfven-live] exposure %.3f hue %.2f  meanLum avg %.3f "
+                                 + "min %.3f max %.3f   DISPLAYED-LINEAR (film.py port 0.159, "
+                                 + "REF 01 0.114, REF 05 0.229)",
+                         solver.displayExposure, solver.displayHueCentre,
+                         lums.reduce(0, +) / Double(lums.count),
+                         lums.min() ?? 0, lums.max() ?? 0))
+            return
+        }
+
         // ALFVEN_SWEEP: report brightness across a LONG run instead of four stills. The
         // re-seed cadence can only be judged over several cycles, and mean(aJ) is the
         // right per-frame proxy — it tracks film.py's delivered luma closely (0.061 ->
@@ -185,6 +242,56 @@ struct AlfvenFilmPreviewTests {
     /// `.b` of the solver's state texture is J = lap(psi) — what the fragment colours (§4).
     private static func readJ(_ solver: AlfvenSolver) -> [Double] {
         readChannel(solver, 2)
+    }
+
+    /// Offscreen colour target for the production display pass.
+    private static func makeTarget(_ ctx: MetalContext, edge: Int) throws -> MTLTexture {
+        let d = MTLTextureDescriptor()
+        d.pixelFormat = ctx.pixelFormat
+        d.width = edge; d.height = edge
+        d.usage = [.renderTarget, .shaderRead]
+        d.storageMode = .shared
+        guard let tex = ctx.device.makeTexture(descriptor: d) else {
+            throw HarnessError.setupFailed("no render target")
+        }
+        return tex
+    }
+
+    /// Rec.709 mean luma in DISPLAYED-LINEAR space — what the panel actually emits.
+    ///
+    /// This has to sRGB-DECODE the bytes, and getting that wrong invalidates the whole
+    /// comparison. `MetalContext.pixelFormat` is `.bgra8Unorm_srgb`, so the render target
+    /// stores gamma-ENCODED bytes and the display decodes them back to the shader's linear
+    /// output. film.py and the reference PNGs do the opposite: they write LINEAR values
+    /// straight to bytes (`(rgb*255).astype(uint8)`), which a viewer then decodes as sRGB
+    /// — so the references appear much darker than their byte values suggest, and that
+    /// darker appearance is what Matt approved. Comparing raw byte means across the two
+    /// conventions is apples-to-oranges: it made the live path look 2x too DARK and sent
+    /// me to an exposure of 0.05 that killed the hue opponency. Decode both, then compare.
+    ///
+    /// Targets in this space: our film.py port 0.159, REF 01 0.114, REF 05 0.229.
+    private static func srgbToLinear(_ c: Double) -> Double {
+        c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+    }
+
+    private static func meanLuma(_ tex: MTLTexture) -> Double {
+        let n = tex.width
+        var raw = [UInt8](repeating: 0, count: n * n * 4)
+        raw.withUnsafeMutableBytes { buf in
+            guard let base = buf.baseAddress else { return }
+            tex.getBytes(base, bytesPerRow: n * 4,
+                         from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                         size: MTLSize(width: n, height: n, depth: 1)),
+                         mipmapLevel: 0)
+        }
+        // BGRA8 on this path.
+        var sum = 0.0
+        for i in 0..<(n * n) {
+            sum += 0.2126 * srgbToLinear(Double(raw[i * 4 + 2]) / 255.0)
+                 + 0.7152 * srgbToLinear(Double(raw[i * 4 + 1]) / 255.0)
+                 + 0.0722 * srgbToLinear(Double(raw[i * 4 + 0]) / 255.0)
+        }
+        return sum / Double(n * n)
     }
 
     /// `.x` = omega, `.y` = psi, `.z` = J.

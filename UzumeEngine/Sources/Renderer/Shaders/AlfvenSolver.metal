@@ -431,9 +431,9 @@ kernel void alfven_cfl_finish(
 
 struct AlfvenDisplayParams {
     float exposure;
+    float polarityScale;
     float hueCentre;
     float _pad0;
-    float _pad1;
 };
 
 struct AlfvenVertexOut {
@@ -462,8 +462,15 @@ fragment float4 alfven_display_fragment(
     constexpr sampler smp(filter::linear, address::repeat);
     float J = stateTex.sample(smp, in.uv).z;
 
+    // film.py normalises these by TWO DIFFERENT quantities and they must stay separate:
+    //   aJ = autoexp(|J|)              -> 1/(p99.6 - p2)   (value / brightness)
+    //   sJ = tanh(J / (std(J) * 1.2))  -> 1/(std * 1.2)    (current-sheet POLARITY -> hue)
+    // This collapsed both onto `exposure`, so any exposure low enough not to blow the
+    // value out also drove sJ to ~0.09, killing the hue opponency and leaving a flat
+    // lavender frame. Both are fixed stand-ins for percentile/std reductions the fragment
+    // cannot do, so both are calibrated against the measured field (ALFVEN.4d).
     float aJ = clamp(abs(J) * p.exposure, 0.0, 1.0);
-    float sJ = tanh(J * p.exposure * 1.2);
+    float sJ = tanh(J * p.polarityScale);
 
     // film.py: h = centre + 0.30*sJ, s = 0.32 + 0.58*(1-aJ^2), v = filmic(1.9*aJ^0.85)
     float hue = p.hueCentre + 0.30 * sJ;

@@ -28,11 +28,12 @@ import Metal
 import simd
 import Shared
 
+/// Mirrors `AlfvenDisplayParams` in AlfvenSolver.metal. Layout is the GPU contract.
 struct AlfvenDisplayParams {
     var exposure: Float
+    var polarityScale: Float
     var hueCentre: Float
     var pad0: Float
-    var pad1: Float
 }
 
 /// Mirrors `AlfvenParams` in AlfvenSolver.metal. Layout is the GPU contract.
@@ -76,9 +77,29 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// lever for an MHD field is the substep count, not a dispatch fraction.
     public var activeParticleFraction: Float = 1.0
 
-    /// Fixed exposure standing in for film.py's percentile auto-exposure, which needs a
-    /// reduction surface that does not exist yet.
-    public var displayExposure: Float = 0.55
+    /// Fixed stand-in for film.py's percentile auto-exposure (`1/(p99.6 - p2)`), which
+    /// needs a reduction surface that does not exist yet. Calibrated against the measured
+    /// field at ALFVEN.4d, in DISPLAYED-LINEAR space against `05_atmosphere_relaxed_state`
+    /// (the silence target Matt named): 0.085 puts the production path at 0.229, which is
+    /// REF 05's own value. Note this is BRIGHTER than our film.py port's stills (0.159),
+    /// deliberately — the port still undershoots REF 05, and matching the port would just
+    /// reproduce that shortfall.
+    ///
+    /// ⚠ Calibrating this needs sRGB care, and getting it wrong cost a round: the render
+    /// target is `.bgra8Unorm_srgb` so its bytes are gamma-ENCODED, while film.py and the
+    /// reference PNGs write LINEAR values straight to bytes. Comparing raw byte means
+    /// across the two conventions made the live path look 2x too dark.
+    ///
+    /// ⚠ The previous 0.55 was never calibrated against anything and blew the value
+    /// channel out at BOTH field scales — `|J| * 0.55` reached 2.99 at ALFVEN.4's J (rms
+    /// 5.43) and still saturates at 4c's (rms 1.55). Measured on the production path it
+    /// gave meanLum 0.701 against film.py's 0.309...0.332.
+    public var displayExposure: Float = 0.085
+    /// Fixed stand-in for film.py's `1/(std(J) * 1.2)` — the current-sheet POLARITY scale
+    /// that drives hue opponency. Separate from `displayExposure` on purpose: they
+    /// normalise by different statistics, and collapsing them onto one constant is what
+    /// made the live frame flat lavender. J's std runs 1.54...1.64, so 1/(1.6*1.2) ~ 0.52.
+    public var displayPolarityScale: Float = 0.52
     /// Late magenta<->teal end of film.py's palette drift (Matt, 2026-09-09).
     public var displayHueCentre: Float = 0.72
 
@@ -237,9 +258,13 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
 
     // MARK: Stepping
 
-    /// `ParticleGeometry` entry point. Audio is NOT read here — routing is ALFVEN.3 — so
-    /// the field advances on wall-clock time only, which is also what keeps the re-seed
-    /// cycle on the listener's clock rather than the simulation's.
+    /// `ParticleGeometry` entry point. Audio is NOT read here — routing is ALFVEN.3.
+    ///
+    /// `features.time` is accepted and ignored: since ALFVEN.4c the field, the re-seed
+    /// cycle, its crossfade and the forcing phase all run off `simClock` (accumulated
+    /// substeps*dt), NOT off the caller's clock. An earlier version of this comment
+    /// claimed the opposite — that the cycle stayed "on the listener's clock rather than
+    /// the simulation's" — which is exactly the bug 4c fixed.
     public func update(features: FeatureVector, stemFeatures: StemFeatures,
                        commandBuffer: MTLCommandBuffer) {
         update(time: features.time, commandBuffer: commandBuffer)
@@ -250,9 +275,9 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     public func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {
         guard let displayPipeline else { return }
         var params = AlfvenDisplayParams(exposure: displayExposure,
+                                         polarityScale: displayPolarityScale,
                                          hueCentre: displayHueCentre,
-                                         pad0: 0,
-                                         pad1: 0)
+                                         pad0: 0)
         encoder.setRenderPipelineState(displayPipeline)
         encoder.setFragmentBytes(&params,
                                  length: MemoryLayout<AlfvenDisplayParams>.stride,
