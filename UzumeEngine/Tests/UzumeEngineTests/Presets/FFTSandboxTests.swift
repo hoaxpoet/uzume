@@ -134,6 +134,46 @@ struct FFTSandboxTests {
         #expect(maxImag < 1e-4, "a real input round-tripped to a complex result")
     }
 
+    @Test("the spectral Poisson solve is exact, not a partial solve")
+    func spectralPoissonIsExact() throws {
+        let (pipeline, ctx) = try run()
+        let src = try Self.read(pipeline, ctx, "source")
+        let phi = try Self.read(pipeline, ctx, "iprows")
+        let n = Self.edge
+
+        // Apply the discrete Laplacian to phi and compare against -source. The spike's box
+        // is 2*pi wide, so h = 2*pi/n and lap_phys = lap_texel / h^2.
+        let h = 2.0 * Double.pi / Double(n)
+        var maxErr = 0.0, maxSrc = 0.0, maxImag = 0.0
+        for y in 1..<(n - 1) {
+            for x in 1..<(n - 1) {
+                func v(_ xx: Int, _ yy: Int) -> Double { Double(phi[(yy * n + xx) * 4]) }
+                let lap = (v(x - 1, y) + v(x + 1, y) + v(x, y - 1) + v(x, y + 1)
+                           - 4.0 * v(x, y)) / (h * h)
+                let s0 = Double(src[(y * n + x) * 4])
+                maxErr = max(maxErr, abs(lap + s0))     // lap(phi) should equal -source
+                maxSrc = max(maxSrc, abs(s0))
+                maxImag = max(maxImag, abs(Double(phi[(y * n + x) * 4 + 1])))
+            }
+        }
+        let rel = maxErr / max(maxSrc, 1e-12)
+        print(String(format: "[fft] spectral Poisson: max rel residual %.4e | max |imag| %.3e",
+                     rel, maxImag))
+        // The residual here is the SECOND-ORDER DISCRETISATION error of the Laplacian used
+        // to check it, not solver error — the spectral solve itself is exact per mode. The
+        // source's highest mode is k~13 of 128, so (k*h)^2/12 ~ 3e-3 is the expected floor.
+        #expect(rel < 5e-3, """
+            spectral Poisson residual \(rel) exceeds the discretisation floor of the \
+            checking stencil — the inverse-Laplacian multiply or the k-space frequency \
+            mapping is wrong.
+            """)
+        #expect(maxImag < 1e-5, "a real source produced a complex potential")
+
+        // The contrast that motivates going spectral at all: D-244 measured 24 Jacobi
+        // sweeps leaving an 89% residual on the domain-scale mode at this resolution.
+        print("[fft] (24-sweep Jacobi at N=64 left 0.89052 relative error — D-244)")
+    }
+
     @Test("the Hou-Li filter passes low k and annihilates the top of the spectrum")
     func filterShapeIsCorrect() throws {
         let (pipeline, ctx) = try run()

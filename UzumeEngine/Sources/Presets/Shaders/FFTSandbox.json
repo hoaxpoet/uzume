@@ -1,34 +1,115 @@
 {
   "name": "FFT Sandbox",
-  "description": "ALFVEN.1c diagnostic: a GPU 2D FFT (Stockham radix-2, one butterfly pass per stage iteration) on the staged surface, with the spike's Hou-Li spectral filter applied in k-space. Proves the transform standalone via a round-trip identity gate before Alfvén depends on it. Requires power-of-two dimensions.",
+  "description": "ALFVEN.1c diagnostic: a GPU 2D FFT (Stockham radix-2, one butterfly pass per stage iteration) on the staged surface, with the spike's Hou-Li spectral filter applied in k-space. Proves the transform standalone via a round-trip identity gate before Alfv\u00e9n depends on it. Requires power-of-two dimensions.",
   "author": "Uzume engine",
-  "passes": ["staged"],
+  "passes": [
+    "staged"
+  ],
   "stages": [
-    { "name": "source", "fragment_function": "fft_sandbox_source_fragment",
-      "pixel_format": "rgba32Float" },
-    { "name": "fftrows", "fragment_function": "fft_sandbox_rows_fwd_fragment",
-      "samples": ["source"], "iterations": 8, "pixel_format": "rgba32Float" },
-    { "name": "fftcols", "fragment_function": "fft_sandbox_cols_fwd_fragment",
-      "samples": ["fftrows"], "iterations": 8, "pixel_format": "rgba32Float" },
-    { "name": "filtered", "fragment_function": "fft_sandbox_filter_fragment",
-      "samples": ["fftcols"], "pixel_format": "rgba32Float" },
-    { "name": "ifftcols", "fragment_function": "fft_sandbox_cols_inv_fragment",
-      "samples": ["filtered"], "iterations": 8, "pixel_format": "rgba32Float" },
-    { "name": "ifftrows", "fragment_function": "fft_sandbox_rows_inv_fragment",
-      "samples": ["ifftcols"], "iterations": 8, "pixel_format": "rgba32Float" },
-    { "name": "compose", "fragment_function": "fft_sandbox_compose_fragment",
-      "samples": ["source", "ifftrows"] }
+    {
+      "name": "source",
+      "fragment_function": "fft_sandbox_source_fragment",
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "fftrows",
+      "fragment_function": "fft_sandbox_rows_fwd_fragment",
+      "samples": [
+        "source"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "fftcols",
+      "fragment_function": "fft_sandbox_cols_fwd_fragment",
+      "samples": [
+        "fftrows"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "filtered",
+      "fragment_function": "fft_sandbox_filter_fragment",
+      "samples": [
+        "fftcols"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "ifftcols",
+      "fragment_function": "fft_sandbox_cols_inv_fragment",
+      "samples": [
+        "filtered"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "ifftrows",
+      "fragment_function": "fft_sandbox_rows_inv_fragment",
+      "samples": [
+        "ifftcols"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "poissonk",
+      "fragment_function": "fft_sandbox_poisson_fragment",
+      "samples": [
+        "fftcols"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "ipcols",
+      "fragment_function": "fft_sandbox_cols_inv_fragment",
+      "samples": [
+        "poissonk"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "iprows",
+      "fragment_function": "fft_sandbox_rows_inv_fragment",
+      "samples": [
+        "ipcols"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "compose",
+      "fragment_function": "fft_sandbox_compose_fragment",
+      "samples": [
+        "source",
+        "ifftrows"
+      ]
+    }
   ],
   "vertex_function": "fullscreen_vertex",
   "fragment_function": "fft_sandbox_compose_fragment",
   "duration": 30,
   "visual_density": 0.3,
   "motion_intensity": 0.0,
-  "color_temperature_range": [0.30, 0.60],
+  "color_temperature_range": [
+    0.3,
+    0.6
+  ],
   "fatigue_risk": "high",
-  "transition_affordances": ["cut"],
-  "section_suitability": ["ambient"],
-  "complexity_cost": { "tier1": 3.0, "tier2": 2.0 },
+  "transition_affordances": [
+    "cut"
+  ],
+  "section_suitability": [
+    "ambient"
+  ],
+  "complexity_cost": {
+    "tier1": 3.0,
+    "tier2": 2.0
+  },
   "certified": false,
   "is_diagnostic": true,
   "exclude_from_cycling": true,

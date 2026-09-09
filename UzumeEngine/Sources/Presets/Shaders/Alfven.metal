@@ -317,36 +317,32 @@ fragment float4 alfven_ifft_rows_fragment(
     return float4(r, 0.0, 1.0);
 }
 
-// ─── Stage 1: PHI — Jacobi solve of lap(phi) = -omega ────────────────────────
+// ─── PHI — spectral Poisson solve (replaces the 24-sweep Jacobi) ────────────
 //
-// Same ported stencil ALFVEN.1 proved against the analytic solution: the reference
-// solves `L+R+T+B-4C = rhs`, so with rhs = -omega*h^2 the sweep is
-// `phi = (L+R+T+B + omega*h^2) * 0.25`. Persistent + iterated, so it warm-starts from
-// the previous frame instead of restarting cold — which ALFVEN.1 measured as the
-// difference between an 89% residual and a converged field.
+// lap(phi) = -omega, solved EXACTLY by one multiply in k-space. D-244 measured the
+// Jacobi it replaces leaving an 89% residual on the domain-scale mode after 24 sweeps,
+// needing ~1000 warm-start frames to converge; this needs none, and it deletes 24 render
+// passes per frame in the process. Gated in FFTSandboxTests: 1.35e-3 relative residual,
+// which is the discretisation error of the CHECKING stencil, not of the solve.
 //
-// It samples `state` (texture 13) — the PREVIOUS frame's state, since `state` runs after
-// this stage in the linear DAG. A one-frame lag on phi is standard for this scheme.
+// omega and psi ride the same transform as real and imaginary parts, so omega's spectrum
+// is recovered by Hermitian unpacking, omega_h(k) = (F(k) + conj(F(-k))) / 2, before the
+// inverse-Laplacian multiply. phi_h is then Hermitian and inverse-transforms to a real phi.
 
-fragment float4 alfven_phi_fragment(
+fragment float4 alfven_poisson_k_fragment(
     VertexOut in [[stage_in]],
     constant FeatureVector& f [[buffer(0)]],
-    texture2d<float, access::sample> stateTex [[texture(13)]],
-    texture2d<float, access::sample> prevPhiTex [[texture(20)]]
+    texture2d<float, access::read> specTex [[texture(13)]]
 ) {
-    float2 uv    = in.uv;
-    float2 texel = 1.0 / float2(prevPhiTex.get_width(), prevPhiTex.get_height());
+    uint2 gid = uint2(in.position.xy);
+    int w = int(specTex.get_width()), h = int(specTex.get_height());
+    uint2 mir = uint2(uint((w - int(gid.x)) % w), uint((h - int(gid.y)) % h));
 
-    float L = prevPhiTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).x;
-    float R = prevPhiTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).x;
-    float T = prevPhiTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).x;
-    float B = prevPhiTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).x;
-
-    float omega = stateTex.sample(alfven_state_sampler, uv).x;
-    // h = 1 texel, matching the ported stencil's convention (ALFVEN.1 / D-244).
-    float phi = (L + R + T + B + omega) * 0.25;
-
-    return float4(clamp(phi, -1.0e4, 1.0e4), 0.0, 0.0, 1.0);
+    float2 fk  = specTex.read(gid).xy;
+    float2 fmk = specTex.read(mir).xy;
+    // omega is the REAL part of the packed field: omega_h = (F(k) + conj(F(-k))) / 2.
+    float2 omegaH = 0.5 * float2(fk.x + fmk.x, fk.y - fmk.y);
+    return float4(omegaH * uz_inv_laplacian_k(gid, w, h), 0.0, 1.0);
 }
 
 // ─── Stage 2: STATE — the MHD advance ───────────────────────────────────────
@@ -395,8 +391,16 @@ fragment float4 alfven_state_fragment(
     float phiR = phiTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).x;
     float phiT = phiTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).x;
     float phiB = phiTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).x;
-    // Central differences in TEXEL units (h = 1), matching the phi stencil.
-    float2 u = float2(-(phiT - phiB) * 0.5, (phiR - phiL) * 0.5);
+    // UNITS. The spectral solve returns phi in PHYSICAL units (phi_h = omega_h / k^2 with
+    // integer mode numbers), where the Jacobi it replaced returned a texel-scaled
+    // potential. The back-trace wants a displacement in TEXELS:
+    //     u_phys       = grad_phys(phi) = grad_texel(phi) / h
+    //     displacement = u_phys * dt / h = grad_texel(phi) * dt / h^2
+    // Missing that 1/h^2 (= 1661 at N = 256) collapsed uMax from ~0.5 to 0.002 texels per
+    // frame — the advection had effectively stopped, which the soak caught immediately.
+    float hPhys  = 6.28318530718 / float(prevStateTex.get_width());
+    float invH2  = 1.0 / (hPhys * hPhys);
+    float2 u = float2(-(phiT - phiB) * 0.5, (phiR - phiL) * 0.5) * invH2;
 
     // ── Semi-Lagrangian advection of (omega, psi), CFL-bounded (§8.4) ──
     // An unbounded back-trace on a spiking field is how this scheme diverges.

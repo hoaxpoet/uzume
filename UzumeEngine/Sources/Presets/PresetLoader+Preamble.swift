@@ -62,6 +62,22 @@ extension PresetLoader {
             return exp(-36.0 * pow(kr, 36.0));
         }
 
+        // Spectral inverse Laplacian: solves lap(phi) = -src for phi, EXACTLY, in one
+        // multiply. `gid` is the k-space texel; frequencies are in FFT order. The k=0 mode
+        // is the undetermined additive constant of a periodic Poisson problem and is set
+        // to zero (the spike does the same: K2inv[0,0] = 0).
+        //
+        // This replaces a 24-sweep Jacobi that D-244 measured leaving an 89% residual on
+        // the domain-scale mode: Jacobi damps that mode by only cos(h) per sweep, so it
+        // needs ~1000 frames of warm start where this needs none.
+        static inline float uz_inv_laplacian_k(uint2 gid, int w, int h) {
+            int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
+            int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
+            // Wavenumbers in the spike's 2*pi box are the integer mode numbers themselves.
+            float k2 = float(kx * kx + ky * ky);
+            return (k2 < 0.5) ? 0.0 : (1.0 / k2);
+        }
+
         // Matches Swift StagedPassInfo (Renderer). Bound at fragment buffer 9 on every
         // staged pass; `(0, 1)` for a stage that is not iterated. ALFVEN.1c.
         struct StagedPassInfo {

@@ -180,3 +180,16 @@ fragment float4 fft_sandbox_compose_fragment(
     col += float3(1.0, 0.2, 0.2) * saturate(err * 1000.0);   // error in red, 1e-3 = full
     return float4(min(col, float3(1.0)), 1.0);
 }
+
+/// Spectral Poisson solve: phi_h = src_h / k^2, i.e. lap(phi) = -src exactly.
+/// Verified in `FFTSandboxTests.spectralPoissonIsExact` by applying a discrete Laplacian
+/// to the result and comparing against the source.
+fragment float4 fft_sandbox_poisson_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::read> specTex [[texture(13)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int w = int(specTex.get_width()), h = int(specTex.get_height());
+    return float4(specTex.read(gid).xy * uz_inv_laplacian_k(gid, w, h), 0.0, 1.0);
+}

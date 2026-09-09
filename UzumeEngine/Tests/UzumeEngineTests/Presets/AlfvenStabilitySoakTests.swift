@@ -81,9 +81,13 @@ struct AlfvenStabilitySoakTests {
                             writesToDrawable: $0.writesToDrawable, persistent: $0.persistent,
                             iterations: $0.iterations, pixelFormat: $0.pixelFormat)
         }
-        let hasPhi = specs.contains { $0.name == "phi" && $0.persistent && $0.iterations == 24 }
+        // phi now comes from the SPECTRAL Poisson solve (exact, one multiply in k-space)
+        // rather than a 24-sweep Jacobi that D-244 measured at an 89% residual.
+        let hasSpectralPoisson = specs.contains { $0.name == "poissonk" }
+        let hasTransform = specs.contains { $0.name == "fftrows" && $0.iterations == 8 }
         let hasState = specs.contains { $0.name == "state" && $0.persistent }
-        #expect(hasPhi, "phi must be the persistent 24-sweep Jacobi stage")
+        #expect(hasSpectralPoisson, "phi must come from the spectral Poisson solve")
+        #expect(hasTransform, "the FFT chain must be present (8 butterfly passes per axis)")
         #expect(hasState, "state must be the persistent MHD advance stage")
 
         let buffers = try HarnessTemplateCore.makeSilenceBuffers(ctx)
@@ -107,7 +111,7 @@ struct AlfvenStabilitySoakTests {
             // Sample sparsely in time; a full readback every frame dominates the soak.
             if i % 30 == 0 || i == total - 1 {
                 var sample = try Self.measure(pipeline)
-                try Self.measurePhi(pipeline, into: &sample)
+                try Self.measurePhi(pipeline, ctx, into: &sample)
                 trace.append(sample)
             }
         }
@@ -153,19 +157,39 @@ struct AlfvenStabilitySoakTests {
     /// Read phi and derive the velocity the advection actually sees. This is the
     /// consumer-side measurement: omega only becomes motion via `u = curl(phi)`, so a
     /// healthy omega with a still-converging phi is a field that cannot stir yet.
-    private static func measurePhi(_ pipeline: RenderPipeline, into s: inout Sample) throws {
-        guard let tex = pipeline.stagedTexture(named: "phi") else {
+    private static func measurePhi(_ pipeline: RenderPipeline, _ ctx: MetalContext,
+                                   into s: inout Sample) throws {
+        guard let tex = pipeline.stagedTexture(named: "iprows") else {
             throw HarnessError.setupFailed("no phi texture")
         }
+        // phi's stage is not persistent, so its texture is `.private` and getBytes on it
+        // segfaults — ALFVEN.1 gives only persistent stages `.shared`, for the watchdog.
+        // Blit to a shared staging texture first.
         let w = tex.width, h = tex.height
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: tex.pixelFormat, width: w, height: h, mipmapped: false)
+        desc.usage = [.shaderRead]
+        desc.storageMode = .shared
+        guard let staging = ctx.device.makeTexture(descriptor: desc),
+              let cmd = ctx.commandQueue.makeCommandBuffer(),
+              let blit = cmd.makeBlitCommandEncoder() else {
+            throw HarnessError.setupFailed("staging blit")
+        }
+        blit.copy(from: tex, to: staging)
+        blit.endEncoding()
+        cmd.commit()
+        cmd.waitUntilCompleted()
+
         var raw = [Float](repeating: 0, count: w * h * 4)
         raw.withUnsafeMutableBytes { buf in
             guard let base = buf.baseAddress else { return }
-            tex.getBytes(base, bytesPerRow: w * 16,
-                         from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
-                                         size: MTLSize(width: w, height: h, depth: 1)),
-                         mipmapLevel: 0)
+            staging.getBytes(base, bytesPerRow: w * 16,
+                             from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                             size: MTLSize(width: w, height: h, depth: 1)),
+                             mipmapLevel: 0)
         }
+        let hPhys = 2.0 * Double.pi / Double(w)
+        let invH2 = 1.0 / (hPhys * hPhys)
         var sum = 0.0
         var uMax = 0.0
         for y in 1..<(h - 1) {
@@ -174,9 +198,12 @@ struct AlfvenStabilitySoakTests {
                 sum += phi * phi
                 let l = Double(raw[(y * w + x - 1) * 4]), r = Double(raw[(y * w + x + 1) * 4])
                 let t = Double(raw[((y + 1) * w + x) * 4]), b = Double(raw[((y - 1) * w + x) * 4])
-                // u = (-phi_y, phi_x), central differences, texels per unit time.
+                // u = (-phi_y, phi_x). phi is in PHYSICAL units from the spectral solve,
+                // so the texel displacement carries the same 1/h^2 the shader applies —
+                // without it this metric silently reports ~0 while the shader advects
+                // normally, i.e. it would model a different pipeline than the one running.
                 let ux = -(t - b) * 0.5, uy = (r - l) * 0.5
-                uMax = max(uMax, (ux * ux + uy * uy).squareRoot())
+                uMax = max(uMax, (ux * ux + uy * uy).squareRoot() * invH2)
             }
         }
         s.phiRMS = (sum / Double((w - 2) * (h - 2))).squareRoot()
