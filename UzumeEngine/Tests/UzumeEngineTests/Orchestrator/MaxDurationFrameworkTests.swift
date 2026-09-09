@@ -20,12 +20,6 @@ private struct ReferenceRow {
 }
 
 private let referenceTable: [ReferenceRow] = [
-    // BUG-011 round 8: Arachne is now `wait_for_completion_event:true`, so
-    // `maxDuration` returns `.infinity`. The pre-round-8 60 s
-    // `natural_cycle_seconds` cap is bypassed by the new early-return.
-    ReferenceRow(presetName: "Arachne",                expectedSeconds: nil),
-    // V.9 Session 1: motion_intensity 0.65→0.55, visual_density 0.75→0.65
-    // per D-124 redirect — 90 + (-50)(0.05) + (-30)(1) + (-15)(0.15) = 55.25.
     ReferenceRow(presetName: "Ferrofluid Ocean",       expectedSeconds: 55),
     ReferenceRow(presetName: "Fractal Tree",           expectedSeconds: 55),
     ReferenceRow(presetName: "Gossamer",               expectedSeconds: 102),
@@ -62,20 +56,6 @@ private func loadProductionDescriptors() throws -> [String: PresetDescriptor] {
 
 @Suite("MaxDurationFramework")
 struct MaxDurationFrameworkTests {
-
-    @Test("Arachne returns .infinity (wait_for_completion_event, BUG-011 round 8)")
-    func arachneMaxDurationIsInfinity() throws {
-        let descriptors = try loadProductionDescriptors()
-        guard let arachne = descriptors["Arachne"] else { return }
-
-        let computed = arachne.maxDuration(forSection: nil)
-        #expect(computed == .infinity, """
-            Arachne must return .infinity because wait_for_completion_event=true \
-            short-circuits the naturalCycleSeconds cap. The completion-event \
-            subscription wires the actual transition trigger.
-            """)
-        #expect(arachne.waitForCompletionEvent == true)
-    }
 
     @Test("Computed maxDurations match §5.3 reference table within ±2 s")
     func computedValuesMatchReferenceTable() throws {
@@ -177,23 +157,6 @@ struct MaxDurationFrameworkTests {
         let descriptor = try JSONDecoder().decode(PresetDescriptor.self, from: Data(json.utf8))
         #expect(descriptor.waitForCompletionEvent == false)
         #expect(descriptor.maxDuration(forSection: nil) != .infinity)
-    }
-
-    @Test("Arachne ships with wait_for_completion_event=true (BUG-011 round 8)")
-    func arachneIsCompletionGated() throws {
-        let descriptors = try loadProductionDescriptors()
-        // Bundle resources unreachable from the test target — silently skip,
-        // matching the surrounding tests' pattern.
-        guard !descriptors.isEmpty else { return }
-        guard let arachne = descriptors["Arachne"] else {
-            Issue.record("Arachne descriptor not found in production catalog")
-            return
-        }
-        #expect(arachne.waitForCompletionEvent == true, """
-            Arachne JSON must set wait_for_completion_event:true so the build cycle \
-            is allowed to complete before the orchestrator schedules a transition.
-            """)
-        #expect(arachne.maxDuration(forSection: nil) == .infinity)
     }
 
     @Test("naturalCycleSeconds caps even when formula would be longer")

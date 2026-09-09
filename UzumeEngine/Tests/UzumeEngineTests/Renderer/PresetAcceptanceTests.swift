@@ -224,7 +224,7 @@ struct PresetAcceptanceTests {
     // Catches presets that produce a single flat luma value — visually dead even when
     // audio is playing. A minimal gradient or SDF outline scores 2+ bins.
     // Mesh-shader presets are skipped for the same reason as invariant 1.
-    // Staged-composition presets (Arachne, etc.) are skipped because their
+    // Staged-composition presets are skipped because their
     // visual signature requires per-preset slot-6/7 buffer bindings + a sampled
     // WORLD texture at [[texture(13)]] which the regression harness doesn't
     // provide — they have full coverage via PresetVisualReviewTests instead.
@@ -382,47 +382,6 @@ struct PresetAcceptanceTests {
         _ = stem.contents().initializeMemory(as: UInt8.self, repeating: 0, count: MemoryLayout<StemFeatures>.size)
         _ = hist.contents().initializeMemory(as: UInt8.self, repeating: 0, count: 4096 * floatStride)
         _ = presetState.contents().initializeMemory(as: UInt8.self, repeating: 0, count: 1024)
-
-        // V.7.7C.2 / D-095 — Arachne foreground anchor block now reads
-        // `webs[0]` Row 5 BuildState (build_stage / frame_progress /
-        // radial_packed / spiral_packed). Without seeding, the zeroed buffer
-        // gives `build_stage = 0, frame_progress = 0` → frame phase at 0%
-        // progress, nothing rendered. PresetAcceptance expects a visible
-        // foreground hero at "normal music energy" (D-037 invariants 1 + 4),
-        // so write a fully-built `.stable` BuildState into webs[0]'s Row 5.
-        // CPU-side `arachneState.reset()` (in production via applyPreset) does
-        // the equivalent at preset bind; the acceptance harness doesn't run
-        // ArachneState, so we seed Row 5 directly. Other presets that bind
-        // slot 6 (Gossamer / Stalker / Staged Sandbox) read different structs
-        // and the first 96 bytes here either don't intersect their layout or
-        // are overwritten by their own initialization paths.
-        if preset.descriptor.fragmentFunction == "arachne_composite_fragment" {
-            let row5Offset = 80   // 5 rows × 16 bytes — Row 5 starts at byte 80 of webs[0]
-            let buildStage: Float = 3.0     // .stable
-            let frameProgress: Float = 1.0  // 100 %
-            let radialPacked: Float = 13.0  // CPU radialCount default; "all radials drawn"
-            let spiralPacked: Float = 1.0   // BUG-037: spiral_packed is now the CPU-normalized reveal fraction (0..1); .stable ⇒ shader uses 1.0 regardless
-            let row5: [Float] = [buildStage, frameProgress, radialPacked, spiralPacked]
-            row5.withUnsafeBytes { src in
-                let dst = presetState.contents().advanced(by: row5Offset)
-                dst.copyMemory(from: src.baseAddress!, byteCount: src.count)
-            }
-
-            // V.7.7C.3 / D-095 follow-up — pack a 5-vertex polygon (anchors
-            // [0,1,2,3,4] of branchAnchors) into webs[0].rngSeed at byte
-            // offset 28 (Row 1, 4th uint32). This drives the foreground
-            // anchor block's polygon-aware spoke clipping + irregular frame
-            // thread, keeping PresetRegression goldens sensitive to polygon-
-            // mode regressions. polyCount=0 (uninitialised) would fall back
-            // to V.7.5 circular geometry and silently mask polygon bugs.
-            let rngSeedOffset = 28
-            let polyPacked: UInt32 = ArachneState.packPolygonAnchors([0, 1, 2, 3, 4])
-            var polyPackedCopy = polyPacked
-            withUnsafeBytes(of: &polyPackedCopy) { src in
-                let dst = presetState.contents().advanced(by: rngSeedOffset)
-                dst.copyMemory(from: src.baseAddress!, byteCount: src.count)
-            }
-        }
 
         // SceneUniforms for ray-march presets provide proper camera/lighting.
         // Without them, farPlane = 0 causes every ray to return sky depth — all-black output.

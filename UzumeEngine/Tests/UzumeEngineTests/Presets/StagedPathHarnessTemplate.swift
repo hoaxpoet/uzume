@@ -35,11 +35,15 @@ struct StagedPathHarnessTemplate {
     private static let width = 256
     private static let height = 256
     private static let frameCount = 60
-    private static let subjectName = "Arachne"
+    // D-246: Arachne was this template's subject and is removed. Staged Sandbox is the
+    // paradigm's reference preset and binds no world-state buffers, so the template now
+    // exercises the staged DISPATCH (world → composite, slot wiring, per-stage formats)
+    // without a preset-owned state pool. Golden re-bootstrapped for the new subject.
+    private static let subjectName = "Staged Sandbox"
 
     /// Golden dHash of the final composite on the last silence frame. 0 ⇒ bootstrap
     /// (print + pass). Hardware-specific (D-039): Apple Silicon, macOS 14+.
-    private static let goldenCompositeHash: UInt64 = 0x0F0F070703818100
+    private static let goldenCompositeHash: UInt64 = 0   // bootstrap for the new subject
 
     @Test("staged dispatch (world → composite) is non-degenerate and matches golden")
     func stagedPath_nonDegenerate() throws {
@@ -65,15 +69,6 @@ struct StagedPathHarnessTemplate {
         let pipeline = try RenderPipeline(context: ctx, shaderLibrary: lib,
                                           fftBuffer: buffers.fft, waveformBuffer: buffers.waveform)
 
-        // Arachne's world-state → slot 6 (web pool) + slot 7 (spider). Mirror the app:
-        // reset() seeds the polygon anchors; a short silence warmup settles the pool.
-        guard let state = ArachneState(device: ctx.device, seed: 42) else {
-            throw HarnessError.setupFailed("ArachneState allocation")
-        }
-        state.reset()
-        for i in 0..<30 { state.tick(features: HarnessTemplateCore.silenceFeature(frame: i), stems: .zero) }
-        pipeline.setDirectPresetFragmentBuffer(state.webBuffer)     // slot 6
-        pipeline.setDirectPresetFragmentBuffer2(state.spiderBuffer) // slot 7
 
         // Build the production stage specs + our own readable capture textures.
         // Non-final stages: rgba16Float (the format their pipelines were compiled for).
@@ -94,7 +89,6 @@ struct StagedPathHarnessTemplate {
 
         for i in 0..<Self.frameCount {
             var features = HarnessTemplateCore.silenceFeature(frame: i)
-            state.tick(features: features, stems: .zero)
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else { throw HarnessError.commandBufferFailed }
             for spec in specs {
                 guard let target = stageTextures[spec.name] else { continue }

@@ -10,6 +10,22 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+## [dev-2026-09-09-160000] Arachne removed from the roster (D-246)
+
+Matt's call under PR.9's certify-or-remove gate. The orb-weaver preset rendered broken with zero audio
+coupling and no reference images after eight design iterations, so certifying it would have meant
+authoring it again rather than repairing it. ~6,100 lines deleted: shader, sidecar, the `Arachnid/`
+state machine, its orchestrator signalling conformance, five test suites, both design docs and the
+visual-reference directory. Roster 30 → 29 production presets.
+
+The segmented-session machinery Arachne motivated is generic and stays — `PresetMaxDuration`,
+`PlannedPresetSegment`, `PresetSignaling`. Arachne was the only conformer to the completion-signalling
+protocol, so every track now plans as a single segment, which is what non-signalling presets already
+did. Two sidecar keys are zero-adopter by design and declared as such.
+
+Consequence worth tracking: the `staged` paradigm now has **no production preset**, only the two
+diagnostic sandboxes. Its reference template was retargeted from Arachne to Staged Sandbox.
+
 ### [dev-2026-09-08-192543] BUG-065 measured for the first time — the premise does not reproduce (kept OPEN)
 
 544 seconds, one continuous track (LCD Soundsystem, *Dance Yrself Clean*), whole-track grid, meter 4. The best evidence this defect has had, and it says the defect as written is not there.

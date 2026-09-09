@@ -902,7 +902,7 @@ are the same fact seen twice.
 | **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
 | **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
 | **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
-| **Arachne** | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | Zero routes. Reference images absent from the repo. **Seen live 2026-09-09 (session `15-08-12Z`), Matt: *"Arachne is visible, but it's still a massively broken preset."*** The harness's near-black render was misleading — it does draw — but the live verdict is worse, not better: it renders and is broken. |
+| ~~**Arachne**~~ | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | **REMOVED 2026-09-09 (D-246), Matt's call.** Seen live (session `15-08-12Z`): *"Arachne is visible, but it's still a massively broken preset."* Zero routes, no reference images, broken render, eight prior design iterations — certifying meant authoring it again. ~6,100 lines deleted. |
 
 **None has curated reference images** — every `docs/VISUAL_REFERENCES/<preset>/` in this set holds a README
 and nothing else, so there is no fidelity target to certify *against* without curating one first.
@@ -917,6 +917,15 @@ render verified live before any of that is worth starting.
 iterations — and it renders broken, has zero audio coupling, and has no reference images to certify
 against. "Certify" here is not tuning or repair; it is authoring the preset again. That is the trade-off
 Matt is deciding, not a recommendation from this row.
+
+**Dispositions so far.** **Arachne — REMOVE, 2026-09-09 (D-246).** Five remain undecided: Gossamer
+(carries BUG-060), Membrane, Nebula, Plasma, and Waveform (load-bearing as the launch default — removing
+it needs a replacement chosen first).
+
+**A consequence of the first removal, for the record:** the `staged` paradigm now has **no production
+preset** — only the two diagnostic sandboxes. Its reference template was retargeted to Staged Sandbox.
+If `staged` is to stay a supported paradigm, it needs a production preset or an explicit note that it
+is infrastructure awaiting one.
 
 **Not decided here.** Per-preset disposition is Matt's; this row records the facts and stays open until he
 gives one. PR.9's done-when is unchanged: an explicit certify-or-remove decision, with a date, for each.

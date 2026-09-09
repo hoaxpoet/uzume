@@ -51,7 +51,6 @@ public enum ParticleGeometryRegistry {
 /// Keep this set and the app-side switch in sync — one row each.
 public enum StatefulRuntimeRegistry {
     public static let knownPresetNames: Set<String> = [
-        "Arachne",
         "Gossamer",
         "Skein",
         "Aurora Veil",

@@ -99,7 +99,6 @@ struct FidelityRubricReportTests {
 /// SpectralCartograph passes as lightweight. All other presets still fail M3.
 /// Update this dictionary when rubric logic or shader source is intentionally changed.
 private let expectedAutomatedGate: [String: Bool] = [
-    "Arachne":              false,   // full; V.7.5 §10.1.9 — M3 fails (chitin removed from spider)
     "Aurora Veil":          true,    // lightweight; AV.2 wired seven audio routes — L1/L2/L3 all pass
     "Cymatic Resonance":    false,   // CR.2 rebuild — lightweight; a `feedback+particles`
                                      // vibrating-sand sim whose coupling (energy→vibration /
