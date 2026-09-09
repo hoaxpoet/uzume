@@ -150,4 +150,34 @@ struct StemWindowTailProbe {
             print("    " + (lo..<hi).map { String(format: "%.3f", frames[$0].drumsEnergy) }.joined(separator: " "))
         }
     }
+
+    /// BUG-065 — does the resample to the model rate preserve DURATION?
+    ///
+    /// `BeatGridResolver` labels activation frame i as `i / 50.0` seconds, and 22050/441 is
+    /// exactly 50, so that is right IF the resampled signal has the duration the original
+    /// did. If the converter returns N' samples where N'/22050 differs from the true
+    /// duration, every beat time is scaled by that ratio — a LINEAR drift of the whole grid
+    /// against the audio, which is exactly the −0.81 ms/s measured in session
+    /// 2026-09-08T18-49-10Z.
+    ///
+    /// UZUME_RESAMPLE_PROBE=1 swift test --package-path UzumeEngine --filter StemWindowTailProbe
+    @Test("resample preserves duration",
+          .enabled(if: ProcessInfo.processInfo.environment["UZUME_RESAMPLE_PROBE"] == "1"))
+    func resampleDuration() throws {
+        let target = Double(BeatThisPreprocessor.sampleRate)
+        print("\n  target rate \(Int(target)) Hz, hop \(BeatThisPreprocessor.hopLength)"
+              + " -> nominal \(target / Double(BeatThisPreprocessor.hopLength)) fps\n")
+        print("  input rate   seconds   expected out   actual out      error (ppm)")
+        for rate in [44100.0, 48000.0, 96000.0] {
+            for seconds in [10.0, 120.0] {
+                let n = Int(rate * seconds)
+                let input = (0..<n).map { Float(sin(2.0 * Double.pi * 440.0 * Double($0) / rate)) }
+                let out = BeatThisPreprocessor.resample(input, from: rate, to: target)
+                let expected = seconds * target
+                let ppm = (Double(out.count) - expected) / expected * 1e6
+                print(String(format: "  %8.0f  %8.0f   %12.0f   %10d   %+12.0f",
+                             rate, seconds, expected, out.count, ppm))
+            }
+        }
+    }
 }

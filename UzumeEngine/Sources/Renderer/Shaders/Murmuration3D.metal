@@ -116,8 +116,9 @@ kernel void murmuration3d_update(
     float windDir = features.bass_att * 3.0 + st * 0.2;
     flockCenter.x += energyUp * 0.10 * cos(windDir);            // bass sweeping arcs
     flockCenter.y += energyUp * 0.06 * sin(windDir);
-    flockCenter.x = clamp(flockCenter.x, -0.32, 0.32);          // stay framed at viewScale 1.05
-    flockCenter.y = clamp(flockCenter.y, -0.30, 0.30);
+    // PR.6: roam bounds scaled with viewScale 1.05 → 1.30 (×0.81) so the swelled flock stays framed.
+    flockCenter.x = clamp(flockCenter.x, -0.26, 0.26);
+    flockCenter.y = clamp(flockCenter.y, -0.24, 0.24);
     flockCenter.z = clamp(flockCenter.z, -0.40, 0.40);
 
     // ── FLOCK SHAPE — a long, tapered ELLIPSOID; thickest at centre. ──

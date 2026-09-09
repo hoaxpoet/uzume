@@ -650,12 +650,125 @@ tone-map operator, on a full-track *Low* capture rather than a still, establishe
 the cause; if it is, the four presets share the operator and each gets its exposure set where Matt
 puts it; if it is not, that negative result is recorded before any brightness parameter is touched.
 
+**PR.5.1 — Dragon Bloom: the dither and the post-invert brighten ✅ (2026-09-08, `762e8862`).**
+**The tone-map candidate above was not the cause, and the A/B PR.5 asked for was run the other way
+round:** the butterchurn oracle was set to comp-identity (`invert 0, echo_alpha 0, gammaadj 1` — the
+preset carries no custom comp shader, so those baseVals genuinely disable it) and compared against
+our *accumulator*, read back through `HARNESS_DUMP_ACCUMULATOR`, on the same track and the same
+statistic. That is the comparison eleven earlier hypotheses lacked: every one of them reasoned about
+the field *through* a comp that is not invertible.
+
+The field was already at the oracle's luma (0.294 vs 0.26–0.57) and short on saturation (0.634 vs
+0.74–0.89) **before any comp ran** — so the wash-out started upstream of the tone-map question. Two
+defects, both fixed:
+
+1. **The source's `warp_18..19` dither was load-bearing, not polish.** D-137 deferred it as
+   "anti-banding polish, not the fill" — a first-principles claim with no rendering proof, the exact
+   FA #65 pattern. The R→G→B transfer above it is hard-gated at `(ret - 0.05)·99`, so pixels resting
+   just under 0.05 never transfer, never cycle hue, and integrate toward grey. Restoring it moved
+   field saturation 0.634 → **0.68–0.79** and luma 0.294 → **0.25–0.33**, both inside the oracle's band.
+   `noiseLQ` is r8Unorm — single-channel — so the source's RGB lookup is three decorrelated taps;
+   reading `.rgb` gives green and blue a constant 0, i.e. a −0.029/−0.078 per-frame drain, which
+   collapsed luma 4× on the first attempt.
+2. **Our comp carried a term butterchurn's does not:** `ret *= 1 + 0.12·bp`, applied *after* the
+   invert. The field is dark, so the invert lands near 0.74 and the darkest background inverts to
+   ≈1.0; ×1.12 pushes everything above 0.893 through the ceiling, and a clipped pixel is white with
+   the hue gone. Display clipped **0.831 → 0.353** (oracle 0.017). The beat still reads through the
+   zoom pump, which is geometry and cannot clip.
+
+**Decay stays butterchurn-faithful** (default warp only). Restoring it for the custom-warp path was
+measured and starves the field to saturation 0.254 / luma 0.116 — D-137's *observation* was right
+even though its conclusion, deleting the loop's only sink, was not.
+
+**Falsified on the way, recorded so they are not retried:** `modVol` is not starving the strands
+(saturated at 1.0 for 81–91 % of frames, mean 0.88–0.94 across all three stem arms), and
+"decay restored + stronger injection" is not the pair.
+
+**Not finished.** Display saturation barely moved (0.262 → **0.274** against the oracle's 0.67) and
+the lower field still blows out to white. The tone-map hypothesis in PR.5 is therefore still live for
+that residual, and is now testable against a field that is known-good. **PR.5's done-when is only
+half met:** clipping is confirmed as *a* cause and is halved, but the four-preset shared-operator
+question is untouched. **Gate: Matt has not seen this live.**
+
+**Follow-up (real, not cosmetic):** `DragonBloomMVWarpAccumulationTest` is env-gated and renders
+nothing — it passes in 0.001 s. There is no golden on Dragon Bloom's output, which is why the
+wash-out shipped unnoticed and why PR.5's A/B had to be built by hand.
+
+**PR.5.2 — the white-out was a TRANSIENT, and the mean was hiding it ✅ (2026-09-08, `4d5f75ff`).**
+PR.5.1 reported the residual as steady-state wash. It is not: measured per-frame rather than
+averaged over the track, display `nearWhite` runs **0.985 → 0.166 → 0.000** at frames 0 / 400 / 800.
+Dragon Bloom opened on a near-fully-white screen and faded in over ~10 s, every time it appeared —
+which is why steady-state numbers kept looking acceptable while Matt kept reporting wash-out. **A
+metric averaged over the track cannot see a transient; that is the same class of error as the span
+artifact and the `nearWhite` label in the replay harness still carries the old, wrong gloss
+("= EMPTY accumulator"), which should be corrected.**
+
+Two causes, both closed: the feedback field was cleared to **black** and the comp inverts it
+(butterchurn's `loadPreset` blends and keeps the previous buffers — it never clears, so our clear is
+a port defect); and **BUG-115** ran the per-frame zoom at 1.024 median / 1.070 p90 against the
+source's 0.99951, evacuating the frame faster than the strands refilled it, with the emptied corners
+driven to black by the R→G→B fade and stuck there — below the 0.05 transfer gate no push fires, so
+black is an absorbing state.
+
+Result on the 20:12 session: nearWhite **0.241 → 0.091**, saturation 0.354 → **0.441**, clipped
+0.191 → **0.150**, luma 0.748 → **0.700**.
+
+**Falsified first, recorded so they are not retried:** inverted black field regions (field
+`nearBlack` is 0.000–0.005), the strand `flare` term (0.182 vs 0.182), additive strand blending (the
+reference's waves are all `additive=0`, confirmed against the live oracle), and modVol starvation.
+
+**Gate: still not seen live.** Every number here is offline replay of Matt's own capture.
+
+**PR.5.4 — the blinding white was a DRAIN, and the reference's push is the cure ✅ (2026-09-08).**
+Matt on PR.5.2: *"better with respect to color, although there is still a sizable presence of blinding
+white. unfortunately, I'm sensing less connection between visuals and music."* Both true, both PR.5.2:
+its outward-only, un-kneed breathing was flat on 64 % of frames (zoom spread 0.0741 → 0.0053 — the lost
+connection), and with no outward push the field DRAINED wherever the strands were not and on every
+quiet passage; the comp inverts a drained region to white. **BUG-122 was filed on a false premise**
+("a vertical split the reference does not have"): the oracle's flat profile was one 120-frame sample.
+**Every earlier oracle time-series was a single-moment sample** — `render()` does not advance the audio
+and the hidden Browser pane throttles rAF and timers — so the oracle was rebuilt as an offline drive
+(`render({audioLevels, elapsedTime})` from the decoded track at 60 fps; `tools/dragon_bloom_reference/
+index.html` gained `__seek`/`__pos`). Measured that way on Seven Nation Army: the reference swings
+top/bottom **0.30–2.59** (harder than ours) with **nearWhite 0.000 through the drop**, and its
+`zoom *= min(1.05, max(1, max(bass,treb)))` sits at the 1.05 cap on **60 %** of frames, mean **+3.15 %**.
+**Fix:** always-on +3 % outward baseline, bass deviation to the 5 % cap. Session 21:12: nearWhite
+**0.448 → 0.000 on every sampled frame**, saturation 0.52. **PR.5.2's assertion that the old constant
+push "evacuated the frame" was inferred, not measured, and wrong** — BUG-115's real defects were the
+FA #31 routing and the uncapped 7 %. Nine more hypotheses falsified and recorded in BUG-122's entry;
+the y-mirrored strand set that fixed the symptom was tested and rejected as unfaithful and unnecessary.
+**Gate: Matt has not seen PR.5.4 live.** **Seen 2026-09-08 22:41: *"Color is better but still washed out."* Correct — and the
+metric could not see it. Same track, reference luma 0.37 / saturation 0.89; ours 0.57 / 0.65. `nearWhite`
+is blind to pale. **Matt: "stop and proceed with another PR increment."** Residual parked as BUG-123
+(one bounded increment if ever reopened). **PR.5 is CLOSED at this state:** colour restored, cold-start
+flash gone, quiet-passage white-outs gone, coupling restored; tone still paler than the reference.
+
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
 between the top and bottom of the screen and keeps its motion inside the canvas. Camera and
 composition parameters — the cheapest items in the whole review and each an unambiguous win.
 Likely folds into PR.5 as one look increment. **Done-when:** each is a before/after sheet Matt has
 approved.
+
+**PR.6 — implemented 2026-09-08, pending Matt's approval of the sheets.** Three parameter changes,
+each built to his exact words, no design invention:
+- **Murmuration** — *"flock takes more of the frame"*: `viewScale` 1.05 → **1.30**
+  (`Murmuration3DGeometry.swift`); the roam clamps scaled ×0.81 so the swelled flock stays framed
+  (`Murmuration3D.metal`). Flock bounding box ×1.24 in both axes on the audio sequence;
+  `test_framed` ("stays framed throughout") passes at the new zoom. Lever if he wants more: 1.5.
+- **Fata Morgana** — *"horizon moves so sky occupies a larger share than water"*: the source pins the
+  horizon at v = 0.5; the floor perspective, sky/water select, reflection sample and blue gradient all
+  hang off one `uv1.y`, so a single constant `kFataHorizonV = 0.62` moves the whole horizon
+  consistently. Measured: first water row 0.38–0.44 → 0.50–0.56 of the frame. **Fata Morgana has no
+  curated reference set** (`docs/VISUAL_REFERENCES/` has none) — a framing change built to Matt's
+  words does not need one, but certification work would.
+- **Glaze** — *"stops jumping between the top and bottom of the screen and keeps its motion inside
+  the canvas"*: the lift term could push the spring anchor to ≈1.7, so the tail slammed the top wall
+  and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
+  bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
+  margin; x is untouched. **And the cause, not just the symptom:** simulated to steady state the source's gravity (1.0) makes the WALLS the attractor — the tail rests at y 0.05 in silence and 0.97 under energy, so the jump is the tail flipping between two rests. The first cut bounded the anchor alone and the GLAZE.3 lift test caught it (both cases pinned at the upper wall — lift removed, not bounded). Gravity 0.3 lets the tail follow the anchor inside the band: silence ≈ 0.36, energy ≈ 0.55, nothing pinned; GLAZE.3 passes; motion gate on 600 frames: 0 spikes, 0 frozen.
+**Done-when unchanged:** Matt approves each sheet. The PR.4 hang is queued behind a fresh capture —
+no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to root-cause yet.
 
 **PR.7 — variation and longevity** (deliberately last). Cymatic Resonance (more pattern variation —
 and it is the preset he rates highest, *"one of the best to watch"*), Witchlight (more looping),
@@ -1716,13 +1829,7 @@ Deleted: `Presets/FerrofluidOcean/FerrofluidMesh.swift` (378) + `Renderer/Shader
 Pixel-identical by construction (the branch required a non-nil encoder that production never set); `PresetRegressionTests` dHash green across all 29 presets, `FerrofluidOceanVisualTests` green. Net −1,214 / +33 lines. Two superfluous SwiftLint disables fell away as the shrunken functions dropped under their gates.
 
 ### Increment BUG103.0 — BUG-103 filed + diagnosed to the throw site (docs-only) ✅ (2026-08-25)
-
-**What was done.** The parallel-suite killer RECON.14 hit (uncaught NSException `'player did not see an IO cycle'`) is now filed as **BUG-103** in `docs/QUALITY/KNOWN_ISSUES.md`, diagnosed to its throw site from fourteen on-disk `.ips` crash reports including one first-hand baseline reproduction (clean worktree at merge `8cbf936a`, fixtures linked, full suite → crash at 17:00). Established: the identical exception backtrace in all fourteen reports — `LocalFilePlaybackProvider._startLocked()` (`play()`, line 327) → `AVAudioPlayerNodeImpl::StartImpl` → NSException — and the process-kill mechanism (`play()` fails as an ObjC exception; the racing-start tests call `start()` on raw detached threads where nothing can catch it; unwinding off a pthread aborts the process, so the suite dies with no failing test line). Distinct from BUG-078 (`StopImpl`/dealloc `dispatch_sync`, SIGTRAP); same AVAudioPlayerNode-lifecycle-under-load family. NOT established (recorded as such): why the engine has no IO cycle at `play()` time — starvation vs stopped-out-from-under — and whether `resume()`'s `play()` site ever fires. One observed-once sequencing detail: the first-hand crash came from a thread the churn suite's watchdog had already abandoned and leaked. **No fix code** (evidence-before-implementation; verification criteria written in the entry). **Done-when:** entry filed with evidence, mechanism, class, and pre-written verification criteria — done. Next: the fix is its own increment against the entry's criteria (contained to the provider start path; must respect BUG-021/BUG-078 lock constraints).
-
 ### Increment RECON.14 — D-213 executed: RMENV.2/.3 gallery environment + MFX.1 temporal upscaler deleted ✅ (2026-08-25)
-
-Executes the deletion Matt decided on 2026-08-03 (D-213; queued as a RECON follow-up). Deleted: `MetalFXTemporalUpscaler.swift`, the MFX half of `RayMarchPipeline+MetalFX.swift` (renamed `RayMarchPipeline+AudioModulation.swift` — the FLY.6 audio modulation it housed is live and stayed), the motion-vector preamble + pipeline in `PresetLoader`(+Preamble), `ibl_gallery_env`/`ibl_env` + `envType` plumbing in `IBL.metal`/`IBLManager`, the `RayMarch.metal` miss-path backdrop branches, and the `environment` / `scene_backdrop` / `upscale` descriptor fields (0/29 sidecars declared any). `SceneUniforms` layout unchanged; `lightingParams.y/.z/.w` revert to reserved. KEPT per D-213: RMENV.1 `scene_lights` (3 live consumers) and PERF.11 `render_scale` → `rayMarchRenderScale` (VL at 0.5). Pixel-identical by construction (all deleted paths were unreachable: envType 0, backdrop 0, no MFX opt-in); `PresetRegressionTests` dHash gate green. `IBLEnvironmentTests` and the MFX parity blocks in `VLBudgetProbeTests`/`SessionReplayHarness` deleted with the capability. Registry rows 72–73 + the render-scale ★ note updated; D-213 marked executed.
-
 ### Increment RICERCAR-CERT.1 — Ricercar CERTIFIED ✅ (2026-08-20)
 ### Increment RICERCAR-WIRE.1 — the echo prototype becomes a selectable preset ✅ (2026-08-20)
 ### Increment PERF.16 — the ray-march cost model: no step, a mildly sublinear curve ✅ (2026-08-20)
