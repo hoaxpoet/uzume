@@ -156,14 +156,66 @@
       "pixel_format": "rgba32Float"
     },
     {
-      "name": "state",
-      "fragment_function": "alfven_state_fragment",
+      "name": "brk",
+      "fragment_function": "alfven_brackets_fragment",
       "samples": [
-        "ifftrows",
         "gphir",
         "gomer",
         "gpsir",
         "gjr"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "brkrows",
+      "fragment_function": "alfven_fft_rows_xy_fragment",
+      "samples": [
+        "brk"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "brkcols",
+      "fragment_function": "alfven_fft_cols_fragment",
+      "samples": [
+        "brkrows"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "brkmask",
+      "fragment_function": "alfven_dealias_fragment",
+      "samples": [
+        "brkcols"
+      ],
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "ibrkcols",
+      "fragment_function": "alfven_ifft_cols_fragment",
+      "samples": [
+        "brkmask"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "ibrkrows",
+      "fragment_function": "alfven_ifft_rows_fragment",
+      "samples": [
+        "ibrkcols"
+      ],
+      "iterations": 8,
+      "pixel_format": "rgba32Float"
+    },
+    {
+      "name": "state",
+      "fragment_function": "alfven_state_fragment",
+      "samples": [
+        "ifftrows",
+        "ibrkrows"
       ],
       "persistent": true,
       "pixel_format": "rgba32Float"

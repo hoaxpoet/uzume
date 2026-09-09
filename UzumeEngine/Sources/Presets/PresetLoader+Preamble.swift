@@ -105,6 +105,17 @@ extension PresetLoader {
             return uz_cmul(float2(-k.y, k.x), aH);
         }
 
+        // Orszag 2/3 dealiasing mask. A product formed in real space aliases energy into
+        // wavenumbers the grid cannot represent; without this it folds back across the
+        // whole spectrum and accumulates. The spike applies it to EVERY Poisson bracket
+        // (alfven.py:79, `* self.DA`). Zeroes everything above 2/3 of Nyquist on either
+        // axis, which is exactly the band a quadratic nonlinearity can alias into.
+        static inline float uz_dealias_23(uint2 gid, int w, int h) {
+            float2 k = uz_wavenumber(gid, w, h);
+            float cut = (2.0 / 3.0) * float(w / 2);
+            return (abs(k.x) < cut && abs(k.y) < cut) ? 1.0 : 0.0;
+        }
+
         // Matches Swift StagedPassInfo (Renderer). Bound at fragment buffer 9 on every
         // staged pass; `(0, 1)` for a stage that is not iterated. ALFVEN.1c.
         struct StagedPassInfo {

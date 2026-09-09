@@ -395,6 +395,75 @@ fragment float4 alfven_grad_j_fragment(
     return float4(uz_grad_spectrum(-dot(k, k) * psiH, k), 0.0, 1.0);
 }
 
+// ─── Nonlinear terms: brackets, then DEALIASED ─────────────────────────────
+//
+// The brackets are quadratic products formed in real space, so they alias. The spike
+// masks every bracket with the Orszag 2/3 rule (alfven.py:79); omitting it left aliased
+// energy accumulating across the spectrum and was measured as omega pinned at its clamp
+// with psi's energy sitting at k~15 instead of k~2.
+//
+// So the two nonlinear terms are evaluated here, packed as one complex field
+// (d_omega_nl + i*d_psi_nl), transformed, masked, and transformed back before `state`
+// integrates them. Packing means one transform pair covers both.
+
+fragment float4 alfven_brackets_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::sample> gradPhiTex [[texture(13)]],
+    texture2d<float, access::sample> gradOmegaTex [[texture(14)]],
+    texture2d<float, access::sample> gradPsiTex [[texture(15)]],
+    texture2d<float, access::sample> gradJTex [[texture(16)]]
+) {
+    float2 uv = in.uv;
+    // Spectral derivatives: .x = d/dx, .y = d/dy.
+    float2 gPhi   = gradPhiTex.sample(alfven_state_sampler, uv).xy;
+    float2 gOmega = gradOmegaTex.sample(alfven_state_sampler, uv).xy;
+    float2 gPsi   = gradPsiTex.sample(alfven_state_sampler, uv).xy;
+    float2 gJ     = gradJTex.sample(alfven_state_sampler, uv).xy;
+
+    // {a,b} = a_x b_y - a_y b_x
+    float brPhiOmega = gPhi.x * gOmega.y - gPhi.y * gOmega.x;
+    float brPsiJ     = gPsi.x * gJ.y     - gPsi.y * gJ.x;
+    float brPhiPsi   = gPhi.x * gPsi.y   - gPhi.y * gPsi.x;
+
+    // omega's nonlinear term as the real part, psi's as the imaginary part.
+    return float4(-brPhiOmega + brPsiJ, -brPhiPsi, 0.0, 1.0);
+}
+
+/// Forward FFT rows for a field already packed as complex in .xy (the brackets), as
+/// distinct from the state transform which lifts psi out of .g.
+fragment float4 alfven_fft_rows_xy_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    constant StagedPassInfo& p [[buffer(9)]],
+    texture2d<float, access::read> inputTex [[texture(13)]],
+    texture2d<float, access::read> prevTex [[texture(20)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int n = int(inputTex.get_width());
+    int j, wing; float angle;
+    uz_fft_indices(int(gid.x), p.index, j, wing, angle);
+    float2 a, b;
+    if (p.index == 0) {
+        a = inputTex.read(uint2(uint(j), gid.y)).xy;
+        b = inputTex.read(uint2(uint(j + n / 2), gid.y)).xy;
+    } else {
+        a = prevTex.read(uint2(uint(j), gid.y)).xy;
+        b = prevTex.read(uint2(uint(j + n / 2), gid.y)).xy;
+    }
+    return float4(uz_fft_combine(a, b, angle, wing, true), 0.0, 1.0);
+}
+
+fragment float4 alfven_dealias_fragment(
+    VertexOut in [[stage_in]],
+    constant FeatureVector& f [[buffer(0)]],
+    texture2d<float, access::read> specTex [[texture(13)]]
+) {
+    uint2 gid = uint2(in.position.xy);
+    int w = int(specTex.get_width()), h = int(specTex.get_height());
+    return float4(specTex.read(gid).xy * uz_dealias_23(gid, w, h), 0.0, 1.0);
+}
+
 // ─── STATE — the MHD advance, pseudo-spectral ───────────────────────────────
 //
 // No back-trace. Both nonlinear terms are Poisson brackets built from spectral
@@ -408,10 +477,7 @@ fragment float4 alfven_state_fragment(
     constant FeatureVector& f [[buffer(0)]],
     constant StagedPassInfo& p [[buffer(9)]],
     texture2d<float, access::sample> filteredTex [[texture(13)]],
-    texture2d<float, access::sample> gradPhiTex [[texture(14)]],
-    texture2d<float, access::sample> gradOmegaTex [[texture(15)]],
-    texture2d<float, access::sample> gradPsiTex [[texture(16)]],
-    texture2d<float, access::sample> gradJTex [[texture(17)]],
+    texture2d<float, access::sample> nonlinearTex [[texture(14)]],
     texture2d<float, access::sample> prevStateTex [[texture(20)]]
 ) {
     float2 uv    = in.uv;
@@ -434,36 +500,32 @@ fragment float4 alfven_state_fragment(
     // Both fields arrive spectrally filtered: .x = omega, .y = psi.
     c = filteredTex.sample(alfven_state_sampler, uv).xy;
 
-    // Spectral derivatives: real part = d/dx, imaginary part = d/dy.
-    float2 gPhi   = gradPhiTex.sample(alfven_state_sampler, uv).xy;
-    float2 gOmega = gradOmegaTex.sample(alfven_state_sampler, uv).xy;
-    float2 gPsi   = gradPsiTex.sample(alfven_state_sampler, uv).xy;
-    float2 gJ     = gradJTex.sample(alfven_state_sampler, uv).xy;
-
-    // {a,b} = a_x b_y - a_y b_x
-    float brPhiOmega = gPhi.x * gOmega.y - gPhi.y * gOmega.x;
-    float brPsiJ     = gPsi.x * gJ.y     - gPsi.y * gJ.x;
-    float brPhiPsi   = gPhi.x * gPsi.y   - gPhi.y * gPsi.x;
+    // The nonlinear terms, already dealiased: .x = omega's, .y = psi's.
+    float2 nl = nonlinearTex.sample(alfven_state_sampler, uv).xy;
 
     // Physical Laplacians for the explicit diffusion (texel stencil / h^2).
     float hPhys = 6.28318530718 / float(prevStateTex.get_width());
     float invH2 = 1.0 / (hPhys * hPhys);
-    float wL = prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).x;
-    float wR = prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).x;
-    float wT = prevStateTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).x;
-    float wB = prevStateTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).x;
-    float pL = prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).y;
-    float pR = prevStateTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0)).y;
-    float pT = prevStateTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y)).y;
-    float pB = prevStateTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y)).y;
+    // Neighbours MUST come from the same (filtered) field as the centre. Sampling the
+    // centre from filteredTex while taking neighbours from prevStateTex made the stencil
+    // differ by exactly the content the spectral filter had just removed — and the
+    // Laplacian multiplies that residue by 1/h^2 = 1661 at N = 256. It injected the
+    // filtered-out grid scale straight back into both diffusion terms and into the cached
+    // J that compose and the soak read, which is why jRMS measured ~216 against the
+    // reference's 4.5.
+    float4 nL = filteredTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0));
+    float4 nR = filteredTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0));
+    float4 nT = filteredTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y));
+    float4 nB = filteredTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y));
+    float wL = nL.x, wR = nR.x, wT = nT.x, wB = nB.x;
+    float pL = nL.y, pR = nR.y, pT = nT.y, pB = nB.y;
     float lapW = (wL + wR + wT + wB - 4.0 * c.x) * invH2;
     float lapP = (pL + pR + pT + pB - 4.0 * c.y) * invH2;
 
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
 
-    float omega = c.x + kAlfvenDt * (-brPhiOmega + brPsiJ - kAlfvenAlpha * c.x
-                                     + kAlfvenNu * lapW + force);
-    float psi   = c.y + kAlfvenDt * (-brPhiPsi + kAlfvenEta * lapP);
+    float omega = c.x + kAlfvenDt * (nl.x - kAlfvenAlpha * c.x + kAlfvenNu * lapW + force);
+    float psi   = c.y + kAlfvenDt * (nl.y + kAlfvenEta * lapP);
 
     // Re-seed crossfade (§5), raised cosine, as a per-step share of the blend.
     float a = clamp((f.time - cycleStart) / kAlfvenBlendTau, 0.0, 1.0);
