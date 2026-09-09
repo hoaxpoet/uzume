@@ -70,6 +70,12 @@ struct AlfvenSolverTests {
         if let a = env["ALFVEN_ALPHA"].flatMap(Float.init) { cfg.alpha = a }
         if let s = env["ALFVEN_SUBSTEPS"].flatMap(Int.init) { cfg.substeps = s }
         if let n4 = env["ALFVEN_NU4"].flatMap(Float.init) { cfg.nu4 = n4 }
+        // A huge cutoff makes the Hou-Li filter identity, which together with
+        // ALFVEN_DRIVE=0 ALFVEN_ALPHA=0 ALFVEN_NU4=0 leaves ONLY the nonlinear terms.
+        // <psi^2> is a Casimir of 2D reduced MHD and must then be conserved, so that
+        // configuration is a direct gate on the gradient/bracket/dealias chain.
+        if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
+        if let cy = env["ALFVEN_CYCLE"].flatMap(Float.init) { cfg.cycleSeconds = cy }
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
                                       configuration: cfg)
 
@@ -83,25 +89,33 @@ struct AlfvenSolverTests {
         #expect(abs(seeded.psiRMS - Double(cfg.seedAmpPsi)) < 0.05,
                 "seed did not produce the requested psi amplitude (\\(seeded.psiRMS))")
 
-        var trace: [(Int, Stats, Float)] = []
-        for frame in 1...300 {
+        var trace: [(Int, Stats, Float, Double)] = []
+        var simTime = 0.0
+        let frames = env["ALFVEN_FRAMES"].flatMap(Int.init) ?? 300
+        for frame in 1...frames {
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                 throw HarnessError.commandBufferFailed
             }
             solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
             cmd.commit(); cmd.waitUntilCompleted()
             guard cmd.status == .completed else { throw HarnessError.renderFailed }
+            // Accumulated SIMULATION time, which is not frame/60: every substep takes its
+            // own CFL-limited dt. Without this the harness cannot say what instant its
+            // numbers describe, and comparisons against the spike ("at matched sim time")
+            // are unfalsifiable. Approximate to the extent dt varies WITHIN a frame,
+            // which is slight — the CFL speed moves on the eddy timescale, not per substep.
+            simTime += Double(cfg.substeps) * Double(solver.lastAdaptiveDt)
             if frame % 60 == 0 {
                 trace.append((frame, Self.measure(solver, clampW: Double(cfg.clampOmega)),
-                              solver.lastAdaptiveDt))
+                              solver.lastAdaptiveDt, simTime))
             }
         }
 
         print("[alfven-solver] \(cfg.edge)², \(cfg.substeps) substeps/frame, adaptive dt")
-        for (frame, s, dt) in trace {
-            print(String(format: "[alfven-solver] f%3d  wRMS %8.4f  psi %7.4f  J %9.4f  "
-                                 + "wMax %8.3f  clamped %5.2f%%  dt %.6f",
-                         frame, s.omegaRMS, s.psiRMS, s.jRMS, s.omegaMax,
+        for (frame, s, dt, t) in trace {
+            print(String(format: "[alfven-solver] f%3d  t=%6.3f  wRMS %8.4f  psi %7.4f  "
+                                 + "J %9.4f  wMax %8.3f  clamped %5.2f%%  dt %.6f",
+                         frame, t, s.omegaRMS, s.psiRMS, s.jRMS, s.omegaMax,
                          s.clampedFraction * 100, dt))
         }
 
@@ -117,11 +131,22 @@ struct AlfvenSolverTests {
             load-bearing, so adaptive dt has not removed the dependence.
             """)
 
-        // psi has no source term; the reference conserves it to 0.01%.
-        let drift = abs(last.psiRMS - first.psiRMS) / max(first.psiRMS, 1e-9)
-        #expect(drift < 0.10, """
-            psi drifted \\(drift * 100)% (\\(first.psiRMS) -> \\(last.psiRMS)); it has no \
-            source term and the reference conserves it.
+        // psi must stay BOUNDED and must never collapse. This replaces a "psi is conserved
+        // to within 10%" assertion, whose premise ("psi has no source term") stopped being
+        // true when the re-seed cycle started actually firing: the crossfade is both a
+        // source and a sink. A partial mix of two UNCORRELATED fields of equal rms has
+        // lower rms than either — ((1-r)^2 + r^2) < 1 — so continuous crossfading sits
+        // psi below the seed amplitude by design. Measured over 1800 frames (t = 22.5 sim
+        // s) it oscillates in 0.43...0.80 about ~0.65 against a 0.9 seed and does not
+        // trend down. Conservation is therefore the WRONG property to gate now; not going
+        // to zero is the right one, because psi -> 0 means J -> 0 means a black frame
+        // (D-037). The band is deliberately wide: it is a collapse/blow-up gate, not a
+        // tuning lock.
+        #expect(trace.allSatisfy { $0.1.psiRMS > 0.25 && $0.1.psiRMS < 1.5 }, """
+            psi left its safe band (first \\(first.psiRMS), last \\(last.psiRMS), \
+            min \\(trace.map(\\.1.psiRMS).min() ?? 0), \
+            max \\(trace.map(\\.1.psiRMS).max() ?? 0)) — at the low end J goes to zero \
+            and the frame goes black (D-037).
             """)
 
         // And the adaptive timestep must actually be adapting, not pinned at its ceiling.

@@ -43,7 +43,12 @@ struct AlfvenFilmPreviewTests {
     }
     /// Frames to capture: early in the arc, mid-arc, and late — the fold-to-filament
     /// progression §3 calls the cycle.
-    private static let captureAt: Set<Int> = [30, 120, 300, 600]
+    private static var captureAt: Set<Int> {
+        if let list = ProcessInfo.processInfo.environment["ALFVEN_CAPTURE"] {
+            return Set(list.split(separator: ",").compactMap { Int($0) })
+        }
+        return [30, 120, 300, 600]
+    }
 
     @Test("render the live MHD field through film.py's mapping")
     func filmPreview() throws {
@@ -55,6 +60,17 @@ struct AlfvenFilmPreviewTests {
         let lib = try ShaderLibrary(context: ctx)
         var cfg = AlfvenSolverConfiguration()
         cfg.edge = edge
+        // Same override set as AlfvenSolverTests, so the film harness can be pointed at a
+        // decay run (ALFVEN_DRIVE=0) — the cleanest comparison against the spike, because
+        // an unforced field just relaxes from a statistically identical seed instead of
+        // diverging chaotically.
+        let env = ProcessInfo.processInfo.environment
+        if let d = env["ALFVEN_DRIVE"].flatMap(Float.init) { cfg.drive = d }
+        if let a = env["ALFVEN_ALPHA"].flatMap(Float.init) { cfg.alpha = a }
+        if let n4 = env["ALFVEN_NU4"].flatMap(Float.init) { cfg.nu4 = n4 }
+        if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
+        if let cy = env["ALFVEN_CYCLE"].flatMap(Float.init) { cfg.cycleSeconds = cy }
+        if let jc = env["ALFVEN_JCUT"].flatMap(Float.init) { cfg.jCutoff = jc }
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
                                       pixelFormat: ctx.pixelFormat, configuration: cfg)
 
@@ -67,6 +83,33 @@ struct AlfvenFilmPreviewTests {
         }
         solver.reseed(time: 0, commandBuffer: seedCmd)
         seedCmd.commit(); seedCmd.waitUntilCompleted()
+
+        // ALFVEN_SWEEP: report brightness across a LONG run instead of four stills. The
+        // re-seed cadence can only be judged over several cycles, and mean(aJ) is the
+        // right per-frame proxy — it tracks film.py's delivered luma closely (0.061 ->
+        // meanLum 0.130, 0.116 -> 0.188, 0.290 -> 0.324) and needs no blur.
+        if env["ALFVEN_SWEEP"] == "1" {
+            let frames = Int(env["ALFVEN_FRAMES"] ?? "900") ?? 900
+            var samples: [Double] = []
+            for frame in 1...frames {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+                cmd.commit(); cmd.waitUntilCompleted()
+                guard frame % 10 == 0 else { continue }
+                let aJ = Self.autoexp(Self.readJ(solver).map(abs))
+                samples.append(aJ.reduce(0, +) / Double(aJ.count))
+            }
+            let mean = samples.reduce(0, +) / Double(samples.count)
+            // 0.20 is the mean(aJ) that lands near REF 01's meanLum 0.283.
+            let good = Double(samples.filter { $0 > 0.20 }.count) / Double(samples.count)
+            print(String(format: "[alfven-sweep] cycle=%.1f simClock=%.2f  mean(aJ) avg %.3f "
+                                 + "min %.3f max %.3f  frac(>0.20) %.3f",
+                         cfg.cycleSeconds, solver.simClock, mean,
+                         samples.min() ?? 0, samples.max() ?? 0, good))
+            return
+        }
 
         let last = Self.captureAt.max() ?? 0
         for frame in 1...last {
@@ -95,9 +138,42 @@ struct AlfvenFilmPreviewTests {
                               to: dir.appendingPathComponent(
                                   String(format: "raw_J_f%04d.png", frame)))
 
+            // Raw J as float64 little-endian, so film.py itself can be run on the very
+            // same field. That is the only way to tell "our field's |J| distribution is
+            // wrong" apart from "the Swift port of film.py is wrong".
+            var raw = Data(capacity: j.count * 8)
+            for value in j { withUnsafeBytes(of: value.bitPattern.littleEndian) { raw.append(contentsOf: $0) } }
+            try raw.write(to: dir.appendingPathComponent(String(format: "J_f%04d.f64", frame)))
+            for (channel, tag) in [(0, "W"), (1, "P")] {
+                var out = Data(capacity: j.count * 8)
+                for value in Self.readChannel(solver, channel) {
+                    withUnsafeBytes(of: value.bitPattern.littleEndian) { out.append(contentsOf: $0) }
+                }
+                try out.write(to: dir.appendingPathComponent(
+                    String(format: "%@_f%04d.f64", tag, frame)))
+            }
+
             let rgb = Self.film(j, width: Self.edge, height: Self.edge)
             let url = dir.appendingPathComponent(String(format: "alfven_film_f%04d.png", frame))
             try Self.writePNG(rgb, width: Self.edge, height: Self.edge, to: url)
+            // Delivered brightness, the only number that can be compared against the
+            // reference PNGs: film.py's own value curve, then Rec.709 luma of the final
+            // RGB. REF 05 (the silence target) is meanLum 0.422; REF 01 is 0.283.
+            let aJ = Self.autoexp(j.map(abs))
+            let meanAJ = aJ.reduce(0, +) / Double(aJ.count)
+            var lumSum = 0.0
+            var bright = 0
+            for i in 0..<(Self.edge * Self.edge) {
+                let lum = 0.2126 * Double(rgb[i * 4 + 2]) / 255.0
+                        + 0.7152 * Double(rgb[i * 4 + 1]) / 255.0
+                        + 0.0722 * Double(rgb[i * 4 + 0]) / 255.0
+                lumSum += lum
+                if lum > 0.25 { bright += 1 }
+            }
+            let meanLum = lumSum / Double(Self.edge * Self.edge)
+            print(String(format: "[alfven-film] f%4d  mean(aJ) %.3f  meanLum %.3f  "
+                                 + "frac>0.25 %.3f", frame, meanAJ, meanLum,
+                         Double(bright) / Double(Self.edge * Self.edge)))
             print(String(format: "[alfven-film] f%4d  J p2 %+.5f p99.6 %+.5f std %.5f "
                                  + "| dynamic range %.1fx | %@",
                          frame, stats.p2, stats.p996, stats.std,
@@ -108,6 +184,11 @@ struct AlfvenFilmPreviewTests {
 
     /// `.b` of the solver's state texture is J = lap(psi) — what the fragment colours (§4).
     private static func readJ(_ solver: AlfvenSolver) -> [Double] {
+        readChannel(solver, 2)
+    }
+
+    /// `.x` = omega, `.y` = psi, `.z` = J.
+    private static func readChannel(_ solver: AlfvenSolver, _ channel: Int) -> [Double] {
         let tex = solver.stateTexture
         let n = tex.width
         var raw = [Float](repeating: 0, count: n * n * 4)
@@ -118,7 +199,7 @@ struct AlfvenFilmPreviewTests {
                                          size: MTLSize(width: n, height: n, depth: 1)),
                          mipmapLevel: 0)
         }
-        return (0..<(n * n)).map { Double(raw[$0 * 4 + 2]) }
+        return (0..<(n * n)).map { Double(raw[$0 * 4 + channel]) }
     }
 
     // MARK: film.py, ported
