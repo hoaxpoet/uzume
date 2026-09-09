@@ -203,8 +203,10 @@ private let expectedAutomatedGate: [String: Bool] = [
     // score, so `false` is the correct locked value rather than a deficiency:
     //   Alfvén      — the fragment is only the D-037 non-black ground; the field is
     //                 drawn by `AlfvenSolver` through the ParticleGeometry seam, and
-    //                 the shipping look still awaits film.py's percentile
-    //                 auto-exposure (needs a reduction surface). excludeFromCycling.
+    //                 the shipping look still awaits film.py's percentile auto-exposure
+    //                 and its seam bloom (both need a reduction/blur surface). Cyclable
+    //                 since ALFVEN.4d, but still `certified: false`, so the Orchestrator
+    //                 does not plan it (D-074).
     //   FFT Sandbox — a diagnostic (ALFVEN.1c), never user-facing.
     "Alfvén": false,
     "FFT Sandbox": false

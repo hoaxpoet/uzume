@@ -119,9 +119,11 @@ struct PresetLoaderCompileFailureTest {
     /// moved to a COMPUTE pipeline at ALFVEN.4 (`AlfvenSolver`) because the staged
     /// fragment path can host neither a mid-frame reduction for adaptive dt nor real
     /// substeps. PLACEHOLDER exposure until a reduction/mip surface exists for film.py's
-    /// percentile auto-exposure. `certified: false`, `exclude_from_cycling: true` while
-    /// the look is a placeholder, no audio routing until ALFVEN.3. See
-    /// docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
+    /// percentile auto-exposure. `certified: false` — so the Orchestrator never plans it
+    /// (D-074) — but `exclude_from_cycling` was flipped to FALSE at ALFVEN.4d so the
+    /// manual next-preset control can reach it: with both flags set it was unreachable in
+    /// the app by ANY route, which made a live look-check impossible. No audio routing
+    /// until ALFVEN.3. See docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
     /// 31 → 32 at ALFVEN.1c (FFT Sandbox added — a GPU 2D Stockham FFT on the staged
     /// surface, one butterfly pass per stage iteration, gated by a round-trip identity
     /// test. Infrastructure for Alfvén's spectral stabiliser, proven standalone first.

@@ -30,5 +30,5 @@
   },
   "certified": false,
   "rubric_profile": "lightweight",
-  "exclude_from_cycling": true
+  "exclude_from_cycling": false
 }
