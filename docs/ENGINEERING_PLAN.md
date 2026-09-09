@@ -318,6 +318,44 @@ Filigree's motion rate measurably differs between a fast and a slow track from t
 harness, the coupling is declared in the sidecar's `audio_routes` (so QG.1 route coverage gates it),
 and Matt has confirmed the Filigree proof before any other preset is touched.
 
+**Gate re-checked 2026-09-09 (Matt: *"check if pr.2 is unblocked"*) — PARTIALLY CLEARED, and the
+remaining half need not block PR.2.** The gate was PR.1 §3.3: *"the grid's tempo is wrong on the
+ambient side"*, Weeping Wall reading 142.3 BPM.
+
+**The instrument could not ask the question.** `analyzeBeatGrid(samples:sampleRate:)` — the two-arg
+convenience — defaults to `wholeTrack: false`, and its own doc keeps it that way "so the many
+existing call sites (tests, diagnostics, **BeatBench**) are unchanged". So BeatBench measured the
+30 s clamp, not the local-file path PR.12 actually changed. A first re-measure reproduced 142.25 on
+Weeping Wall and would have reported "still broken" from the wrong arm — the span-artifact class
+again. BeatBench gained `--whole-track` to close that hole.
+
+**Measured on the whole-track grid (`--whole-track`), *Low*:**
+
+| track | BPM | beatsPerBar | barConfidence | grid span |
+|---|---:|---:|---:|---|
+| Speed Of Life | 116.05 | 4 | **1.00** | 3.3-164.5 s of 167 |
+| Sound And Vision | 106.28 | 4 | **1.00** | 1.6-179.9 s of 183 |
+| Breaking Glass | 94.87 | 2 | 0.73 | 1.1-108.6 s of 113 |
+| Art Decade | 78.52 | 4 | 0.86 | 0.4-220.8 s of 227 |
+| Warszawa | 75.08 | 4 | 0.43 | 0.5-368.4 s of 384 |
+| **Weeping Wall** | **171.73** | **1** | **0.37** | 0.0-203.5 s of 208 |
+
+- **Coverage is fixed.** Grids span whole tracks, not 30 s. PR.12 works.
+- **The rhythmic side is trustworthy** - barConfidence 1.00 on the 4/4 material.
+- **The ambient side is still not.** Weeping Wall answers `beatsPerBar 1` - BUG-117's "no bar
+  information" - at confidence 0.37, and its BPM moved 142.25 to 171.73 between the two arms. Two
+  answers 20 % apart on one file is itself the finding; neither is a foundation for a motion rate.
+  That is the wrong-metrical-level gap D-210 declined and FT.3.1 owns. It is not closing soon.
+
+**Why PR.2 is nonetheless unblocked.** The gate's fear was *baking a compensation for a bad number
+into a preset*. The grid now carries the signal needed to avoid that: `barConfidence`, and
+`BeatGrid.hasBarInformation` (BUG-117) which makes "this grid does not know" expressible rather than
+silently reading as 1 beat per bar. So the mechanism ships as **tempo-scaled when the grid is
+confident, default rate when it is not** - Weeping Wall gets the fallback, Speed Of Life gets the
+coupling, and no compensation is baked in anywhere. **Both tracks in the done-when's fast/slow pair
+should be confident ones** (e.g. Speed Of Life 116 vs Art Decade 78.5) so the proof measures the
+mechanism rather than the gap.
+
 **PR.3 — chasing the downbeat, not tolerating it** 🔨 (2026-09-04). **Scope changed by Matt
 mid-increment.** This began as "surface the corroboration and let Matt decide" and then as a
 proposal to keep the estimator's *meter* while declining its *phase* — a right-length bar on a
