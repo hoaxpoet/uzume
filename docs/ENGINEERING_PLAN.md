@@ -329,8 +329,16 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Staged Sandbox** | *"Get rid of it."* — refined by Matt at PR.0 to *"I want to hide Staged Sandbox, the other diagnostic presets can still remain in the list"* | ✅ **CLOSED.** Hidden from the cycle at PR.0; Matt confirmed 2026-09-09: *"No need to get rid of Staged Sandbox. Hiding it was the right call, and this work has already occurred."* It remains the subject of the staged harness template (D-246), which is a legitimate use of a diagnostic fixture. |
 | **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
 
-**Nine of the open rows are blocked on parked engine work** (D-206 beat drift, BUG-028 meter). Those
-are not preset deep dives and must not be worked around inside presets.
+**Four rows touch parked engine work, not nine** (an unchecked count in the first draft of this
+register, corrected 2026-09-09 when Matt asked which they were):
+
+- **Lumen Mosaic** — fully blocked on **D-206** (beat-phase drift, BUG-065).
+- **Ferrofluid Ocean** — fully blocked on **BUG-028** (meter assumed simple).
+- **Witchlight** — *partly*: the downbeat half is D-206; *"want more looping"* is preset work and is **not** blocked.
+- **Meniscus** — *partly*: only the timing half is D-206; the ripple look is preset work.
+
+The parked halves are engine work and must not be worked around inside presets. **Cytokinesis is
+blocked on something else** — a capture of the hang from Matt, not engine work.
 
 **Material note that shapes PR.1.** *Low* is two half-albums: tracks 1–7 are rhythmic (Speed Of
 Life, Breaking Glass, What In The World, Sound And Vision, Always Crashing In The Same Car, Be My
