@@ -31,22 +31,28 @@ extension AlfvenSolver {
             body(enc)
             enc.endEncoding()
         }
+        // ROWS is dispatched as (1, edge) and COLS as (edge, 1): one threadgroup per
+        // LINE. Dispatching (edge, edge) launched edge^2 groups, so every line was
+        // transformed `edge` times by groups all writing identical values — benign, which
+        // is why the FFT gate passed, but 256x the work at N = 256.
         func fft(_ pso: MTLComputePipelineState, _ input: MTLTexture,
-                 _ output: MTLTexture, forward: Bool) {
+                 _ output: MTLTexture, forward: Bool, rows: Bool) {
             compute { enc in
                 enc.setComputePipelineState(pso)
                 enc.setTexture(input, index: 0)
                 enc.setTexture(output, index: 1)
                 var fwd: UInt32 = forward ? 1 : 0
                 enc.setBytes(&fwd, length: MemoryLayout<UInt32>.size, index: 0)
-                enc.dispatchThreadgroups(MTLSize(width: edge, height: edge, depth: 1),
-                                         threadsPerThreadgroup: MTLSize(width: edge / 2, height: 1, depth: 1))
+                enc.dispatchThreadgroups(
+                    rows ? MTLSize(width: 1, height: edge, depth: 1)
+                         : MTLSize(width: edge, height: 1, depth: 1),
+                    threadsPerThreadgroup: MTLSize(width: edge / 2, height: 1, depth: 1))
             }
         }
 
         // state -> spectrum -> filtered spectrum
-        fft(fftRows, source, fields.scratchB, forward: true)
-        fft(fftCols, fields.scratchB, fields.scratchA, forward: true)
+        fft(fftRows, source, fields.scratchB, forward: true, rows: true)
+        fft(fftCols, fields.scratchB, fields.scratchA, forward: true, rows: false)
         compute { enc in
             enc.setComputePipelineState(filterPSO)
             enc.setTexture(fields.scratchA, index: 0)
@@ -54,6 +60,11 @@ extension AlfvenSolver {
             enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
             enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
         }
+
+        // Bring the filtered spectrum back to real space: this is the state the step
+        // actually advances from.
+        fft(fftCols, fields.scratchB, fields.scratchC, forward: false, rows: false)
+        fft(fftRows, fields.scratchC, fields.filtered, forward: false, rows: true)
 
         // Four derivative-spectra chains. Each yields both partials of one field from a
         // single inverse transform, because the x- and y-derivatives are separately real.
@@ -73,8 +84,8 @@ extension AlfvenSolver {
             // i.e. it treats the TEXEL INDEX as a wavenumber, so on a real-space field it
             // zeroes ~55% of the image by position. Dealiasing belongs only on the
             // brackets, in k-space, which is where it is applied below.
-            fft(fftCols, fields.scratchA, fields.scratchC, forward: false)
-            fft(fftRows, fields.scratchC, gradTarget, forward: false)
+            fft(fftCols, fields.scratchA, fields.scratchC, forward: false, rows: false)
+            fft(fftRows, fields.scratchC, gradTarget, forward: false, rows: true)
         }
 
         encodeCFL(&params, into: cmd, gridSize: gridSize, tgSize: tgSize)
@@ -125,8 +136,12 @@ extension AlfvenSolver {
             body(enc)
             enc.endEncoding()
         }
+        // ROWS is dispatched as (1, edge) and COLS as (edge, 1): one threadgroup per
+        // LINE. Dispatching (edge, edge) launched edge^2 groups, so every line was
+        // transformed `edge` times by groups all writing identical values — benign, which
+        // is why the FFT gate passed, but 256x the work at N = 256.
         func fft(_ pso: MTLComputePipelineState, _ input: MTLTexture,
-                 _ output: MTLTexture, forward: Bool) {
+                 _ output: MTLTexture, forward: Bool, rows: Bool) {
             compute { enc in
                 enc.setComputePipelineState(pso)
                 enc.setTexture(input, index: 0)
@@ -134,7 +149,8 @@ extension AlfvenSolver {
                 var fwd: UInt32 = forward ? 1 : 0
                 enc.setBytes(&fwd, length: MemoryLayout<UInt32>.size, index: 0)
                 enc.dispatchThreadgroups(
-                    MTLSize(width: edge, height: edge, depth: 1),
+                    rows ? MTLSize(width: 1, height: edge, depth: 1)
+                         : MTLSize(width: edge, height: 1, depth: 1),
                     threadsPerThreadgroup: MTLSize(width: edge / 2, height: 1, depth: 1))
             }
         }
@@ -148,8 +164,8 @@ extension AlfvenSolver {
             enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
             enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
         }
-        fft(fftRows, fields.nonlinear, fields.scratchA, forward: true)
-        fft(fftCols, fields.scratchA, fields.scratchB, forward: true)
+        fft(fftRows, fields.nonlinear, fields.scratchA, forward: true, rows: true)
+        fft(fftCols, fields.scratchA, fields.scratchB, forward: true, rows: false)
         compute { enc in
             enc.setComputePipelineState(dealiasPSO)
             enc.setTexture(fields.scratchB, index: 0)
@@ -157,12 +173,17 @@ extension AlfvenSolver {
             enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
             enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
         }
-        fft(fftCols, fields.scratchA, fields.scratchB, forward: false)
-        fft(fftRows, fields.scratchB, fields.nonlinear, forward: false)
+        fft(fftCols, fields.scratchA, fields.scratchB, forward: false, rows: false)
+        fft(fftRows, fields.scratchB, fields.nonlinear, forward: false, rows: true)
 
         compute { enc in
             enc.setComputePipelineState(integratePSO)
-            enc.setTexture(source, index: 0)
+            // The FILTERED state, not the raw one. The filter was previously computed
+            // and used only for the derivative chains, so it never reached the state and
+            // grid-scale energy accumulated forever — visible as axis-aligned hatching
+            // over the whole frame. The spike applies FILT to w and p themselves every
+            // step (alfven.py:104-105).
+            enc.setTexture(fields.filtered, index: 0)
             enc.setTexture(fields.nonlinear, index: 1)
             enc.setTexture(fields.gradPsi, index: 2)
             enc.setTexture(target, index: 3)

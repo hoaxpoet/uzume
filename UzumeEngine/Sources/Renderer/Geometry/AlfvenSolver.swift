@@ -178,6 +178,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         let gradPsi: MTLTexture
         let gradJ: MTLTexture
         let nonlinear: MTLTexture
+        /// The spectrally filtered state — what each step advances FROM.
+        let filtered: MTLTexture
     }
     var fields: Fields
 
@@ -276,7 +278,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
             gradOmega: try make(),
             gradPsi: try make(),
             gradJ: try make(),
-            nonlinear: try make())
+            nonlinear: try make(),
+            filtered: try make())
         return (pair, fields)
     }
 

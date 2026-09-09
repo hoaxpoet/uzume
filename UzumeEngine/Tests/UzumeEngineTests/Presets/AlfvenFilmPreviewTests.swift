@@ -35,6 +35,7 @@ import UniformTypeIdentifiers
 struct AlfvenFilmPreviewTests {
 
     private static let edge = 256
+    private var edge: Int { Self.edge }
     /// Palette centre. 0.72 = the late (magenta <-> teal) end Matt selected; overridable
     /// so the drift range can be inspected without an edit.
     private static var hueCentre: Double {
@@ -42,7 +43,7 @@ struct AlfvenFilmPreviewTests {
     }
     /// Frames to capture: early in the arc, mid-arc, and late — the fold-to-filament
     /// progression §3 calls the cycle.
-    private static let captureAt: Set<Int> = [60, 240, 600, 1080]
+    private static let captureAt: Set<Int> = [30, 120, 300, 600]
 
     @Test("render the live MHD field through film.py's mapping")
     func filmPreview() throws {
@@ -52,47 +53,56 @@ struct AlfvenFilmPreviewTests {
         }
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        let loader = PresetLoader(device: ctx.device, pixelFormat: ctx.pixelFormat)
-        guard let preset = loader.presets.first(where: { $0.descriptor.name == "Alfvén" }) else {
-            Issue.record("Alfvén not found"); return
-        }
-        let specs = preset.stages.map {
-            StagedStageSpec(name: $0.name, pipelineState: $0.pipelineState, samples: $0.samples,
-                            writesToDrawable: $0.writesToDrawable, persistent: $0.persistent,
-                            iterations: $0.iterations, pixelFormat: $0.pixelFormat)
-        }
-        let buffers = try HarnessTemplateCore.makeSilenceBuffers(ctx)
-        let pipeline = try RenderPipeline(context: ctx, shaderLibrary: lib,
-                                          fftBuffer: buffers.fft, waveformBuffer: buffers.waveform)
-        pipeline.setStagedRuntime(specs, drawableSize: CGSize(width: Self.edge, height: Self.edge))
+        var cfg = AlfvenSolverConfiguration()
+        cfg.edge = edge
+        let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
+                                      pixelFormat: ctx.pixelFormat, configuration: cfg)
 
         let dir = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("uzume-alfven2-film")
+            .appendingPathComponent("uzume-alfven4-film")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        let last = (Self.captureAt.max() ?? 0)
-        for i in 0...last {
-            var features = HarnessTemplateCore.silenceFeature(frame: i)
+        guard let seedCmd = ctx.commandQueue.makeCommandBuffer() else {
+            throw HarnessError.commandBufferFailed
+        }
+        solver.reseed(time: 0, commandBuffer: seedCmd)
+        seedCmd.commit(); seedCmd.waitUntilCompleted()
+
+        let last = Self.captureAt.max() ?? 0
+        for frame in 1...last {
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                 throw HarnessError.commandBufferFailed
             }
-            pipeline.encodeOffscreenStages(commandBuffer: cmd, features: &features,
-                                           stemFeatures: .zero)
-            cmd.commit()
-            cmd.waitUntilCompleted()
-            guard Self.captureAt.contains(i) else { continue }
+            solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+            cmd.commit(); cmd.waitUntilCompleted()
+            guard Self.captureAt.contains(frame) else { continue }
 
-            let j = try Self.readJ(pipeline)
+            let j = Self.readJ(solver)
             let stats = Self.fieldStats(j)
             let rgb = Self.film(j, width: Self.edge, height: Self.edge)
-            let url = dir.appendingPathComponent(String(format: "alfven_film_f%04d.png", i))
+            let url = dir.appendingPathComponent(String(format: "alfven_film_f%04d.png", frame))
             try Self.writePNG(rgb, width: Self.edge, height: Self.edge, to: url)
             print(String(format: "[alfven-film] f%4d  J p2 %+.5f p99.6 %+.5f std %.5f "
                                  + "| dynamic range %.1fx | %@",
-                         i, stats.p2, stats.p996, stats.std,
+                         frame, stats.p2, stats.p996, stats.std,
                          stats.p996 / max(abs(stats.p2), 1e-9), url.lastPathComponent))
         }
         print("[alfven-film] wrote to \(dir.path)")
+    }
+
+    /// `.b` of the solver's state texture is J = lap(psi) — what the fragment colours (§4).
+    private static func readJ(_ solver: AlfvenSolver) -> [Double] {
+        let tex = solver.stateTexture
+        let n = tex.width
+        var raw = [Float](repeating: 0, count: n * n * 4)
+        raw.withUnsafeMutableBytes { buf in
+            guard let base = buf.baseAddress else { return }
+            tex.getBytes(base, bytesPerRow: n * 16,
+                         from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                         size: MTLSize(width: n, height: n, depth: 1)),
+                         mipmapLevel: 0)
+        }
+        return (0..<(n * n)).map { Double(raw[$0 * 4 + 2]) }
     }
 
     // MARK: film.py, ported
