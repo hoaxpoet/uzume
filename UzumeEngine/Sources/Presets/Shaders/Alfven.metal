@@ -104,7 +104,10 @@ constant constexpr float kAlfvenDt        = 0.016;
 // substeps collapsed psi 0.90 -> 0.049 while appearing to "improve" omega, because the
 // stale RHS suppressed growth rather than resolving it.
 constant constexpr int   kAlfvenSubsteps  = 1;
-constant constexpr float kAlfvenAlpha     = 0.16;   // linear drag on omega (spike value)
+constant constexpr float kAlfvenAlphaW    = 0.16;   // linear drag on omega (spike value),
+                                                    // now applied via the integrating factor
+constant constexpr float kAlfvenNu4       = 2.5e-7; // k^4 hyperdiffusion (spike's nu4)
+constant constexpr float kAlfvenSpectralCutoff = 100.0;  // ~0.85x => effective k_max ~35
 constant constexpr float kAlfvenNu        = 0.002;  // omega diffusion, PHYSICAL units
                                                     // (was 0.9 in texel^2; derivatives are
                                                     // physical now and the spectral filter
@@ -274,7 +277,45 @@ fragment float4 alfven_fft_filter_fragment(
 ) {
     uint2 gid = uint2(in.position.xy);
     int w = int(specTex.get_width()), h = int(specTex.get_height());
-    return float4(specTex.read(gid).xy * uz_houli_filter(gid, w, h), 0.0, 1.0);
+    float2 k = uz_wavenumber(gid, w, h);
+    float k2 = dot(k, k);
+
+    // INTEGRATING FACTOR, the spike's Ew/Ep (alfven.py `step`): exp(-(nu4 k^4 + alpha) dt).
+    //
+    // This is the damping the port was missing, and it is what makes an explicit scheme
+    // survive here at all. Alfven waves are purely oscillatory, and BOTH Euler and Heun
+    // are unconditionally unstable on the imaginary axis — |R(iy)| = sqrt(1 + y^4/4) > 1
+    // for Heun — so no explicit integrator fixes this on its own. What the spike relies on
+    // is k^4 damping that bites precisely where the oscillation is fastest: at N = 256 it
+    // is x1.0000 per frame at k = 2 and x0.81 at k = 85, i.e. invisible to the lobes and
+    // strong at the grid scale. Design §4 descoped it to plain `nu lap`, which is
+    // negligible at high k; that descope is what left the scheme unstable.
+    //
+    // Applied here rather than inside the step because the spectrum is already computed:
+    // it costs nothing, and once per frame is the right cadence for a per-frame dt.
+    // omega and psi need DIFFERENT factors — the spike has Ew = exp(-(nu4 k^4 + alpha) dt)
+    // but Ep = exp(-nu4 k^4 dt), i.e. only omega carries the linear drag. They ride one
+    // packed transform, so unpack, scale separately, repack. Applying omega's drag to psi
+    // as well decayed psi 0.90 -> 0.076 over a soak: psi has no drag term in the equations
+    // at all, and the reference conserves it.
+    uint2 mir = uint2(uint((w - int(gid.x)) % w), uint((h - int(gid.y)) % h));
+    float2 omegaH, psiH;
+    uz_unpack_pair(specTex.read(gid).xy, specTex.read(mir).xy, omegaH, psiH);
+
+    // Hou-Li shape, but the cutoff is chosen from OUR CFL limit rather than copied from
+    // the spike's. The spike's cutoff (~0.85 * N/2 = 109) is matched to its adaptive
+    // dt ~ 0.0027; at our fixed dt = 0.016 the Alfven CFL dt*k*B stays below ~1 only for
+    // k < ~35, and above that an explicit scheme grows the mode faster than any k^4
+    // damping removes it. Band-limiting to the stable range is the honest alternative to
+    // pretending the timestep is smaller than it is.
+    float kr    = clamp(sqrt(k2) / kAlfvenSpectralCutoff, 0.0, 1.0);
+    float filt  = exp(-36.0 * pow(kr, 36.0));
+    float hyper = exp(-kAlfvenNu4 * k2 * k2 * kAlfvenDt);
+    omegaH *= filt * hyper * exp(-kAlfvenAlphaW * kAlfvenDt);
+    psiH   *= filt * hyper;
+
+    // Repack: F = omega_h + i * psi_h.
+    return float4(omegaH.x - psiH.y, omegaH.y + psiH.x, 0.0, 1.0);
 }
 
 fragment float4 alfven_ifft_cols_fragment(
@@ -524,8 +565,11 @@ fragment float4 alfven_state_fragment(
 
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
 
-    float omega = c.x + kAlfvenDt * (nl.x - kAlfvenAlpha * c.x + kAlfvenNu * lapW + force);
-    float psi   = c.y + kAlfvenDt * (nl.y + kAlfvenEta * lapP);
+    // Drag and diffusion are NOT here any more: both are folded into the spectral
+    // integrating factor in the filter stage, which is where the spike puts them and the
+    // only place k^4 damping can be expressed.
+    float omega = c.x + kAlfvenDt * (nl.x + force);
+    float psi   = c.y + kAlfvenDt * nl.y;
 
     // Re-seed crossfade (§5), raised cosine, as a per-step share of the blend.
     float a = clamp((f.time - cycleStart) / kAlfvenBlendTau, 0.0, 1.0);
