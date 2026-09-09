@@ -300,7 +300,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 
 | Preset | Matt's ask (abbreviated) | Status |
 |---|---|---|
-| **Gossamer** | *"Tuning for sync with music, has potential."* | 🔨 **in progress.** Ten real routes declared (2026-09-09); BUG-124 restored the vocal-pitch signal it is keyed to; Matt saw it live — *"looks pretty good"*. **Remaining:** BUG-060 (force-quit hang on switching to it, uninvestigated), certification (no curated references), the particles idea he raised, and whether "hue on vocal pitch" survives knowing the vocals stem carries periodic bleed on instrumentals. |
+| **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | 🔨 **PR.18, in progress.** Sync half largely addressed: ten routes declared, BUG-124 restored the vocal-pitch signal, Matt live *"looks pretty good"*. The open ask is **fidelity** — see PR.18 below for the measured diagnosis and the decision owed. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
@@ -328,6 +328,124 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Spectral Cartograph** | *"Opportunities to clean up eventually"* | ⏸ deferred; it is `is_diagnostic`, so it never auto-installs. |
 | **Staged Sandbox** | *"Get rid of it."* — refined by Matt at PR.0 to *"I want to hide Staged Sandbox, the other diagnostic presets can still remain in the list"* | ✅ **CLOSED.** Hidden from the cycle at PR.0; Matt confirmed 2026-09-09: *"No need to get rid of Staged Sandbox. Hiding it was the right call, and this work has already occurred."* It remains the subject of the staged harness template (D-246), which is a legitimate use of a diagnostic fixture. |
 | **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
+
+### PR.18 — Gossamer deep dive 🔨 OPEN (2026-09-09, Matt: *"open it as Gossamer's deep dive"*)
+
+The first increment under the restructured phase, and the template for the rest. Steps 1 and 2 are
+done here; step 3 is **blocked on one decision from Matt** (below).
+
+#### Step 1 — definition
+
+**Matt's ask, verbatim.** Roster review: *"Tuning for sync with music, has potential."* Then, on
+2026-09-09 after seeing it live: *"I'm not happy with the level of visual quality — it looks very
+childlike in construction. How can we increase the fidelity without impacting performance?"* and
+*"It looks like a child's drawing of a spider web, or a basic computer program from 30 years ago."*
+
+Note that these are **two different asks** and the second supersedes nothing. The sync half is
+largely addressed — ten routes are declared, BUG-124 restored the vocal-pitch signal they key on,
+and Matt's live look was *"looks pretty good."* The open ask is **fidelity**.
+
+**Musical role.** A single web is the resonating body of the band: bass tightens the silk, the
+guitar/keys stem sets how often it is struck, and each strike sends a colour wave outward whose hue
+is the vocal's pitch. The web is an instrument that is being played, not a diagram that is being
+lit.
+
+**Reference set — a finding.** `docs/VISUAL_REFERENCES/gossamer/README.md` is complete: 11 fully
+annotated slots with per-image trait-trustability notes, caveats, and two documented gaps. **The
+images themselves were never committed.** `docs/VISUAL_REFERENCES/**/*.jpg` has been gitignored
+since `33cebe25`, so no `.jpg` under that directory has ever been tracked — the curation was done
+and the artifacts are gone. This is the lost-reference-images class fixed on
+2026-08-25 by adding a force-add step to the README; Gossamer's set predates the fix. **The written
+annotations are precise enough to build from; they are not enough to certify against.**
+
+#### Step 2 — diagnosis, measured
+
+**Cost, measured for the first time: 6.61 / 7.11 ms at 1920×1080 — 0.9–1.0× the roster median,
+18th of 22.** Gossamer had been on `uncoveredPresets` since the harness existed, so its declared
+`complexity_cost.tier1 = 6.0` was an estimate nothing had checked. It is close, and the answer to
+Matt's question is that **there is roughly 9 ms of headroom under the 16.6 ms budget** and the
+expensive rows (Stave, Skein, Cytokinesis, Volumetric Lithograph) are all ray-marchers, which
+Gossamer is not. `PresetFrameBudgetTests` now covers it, warmed to a live wave pool with a cold
+control (`gossamerIsMeasuredWithWavesAlive`, PERF.17's lesson).
+
+**The fidelity gap is not a trade-off. The documented design was never implemented.** Against
+`SHADER_CRAFT.md` §10.2 / the reference README's V.8 target, `Gossamer.metal` (272 lines) contains:
+
+| V.8 target trait | In the shader |
+|---|---|
+| Silk Marschner-lite material (`azimuthal_r 0.08`, `azimuthal_tt 0.5`, `absorption 0.3`) | **absent** — strand colour is a two-stop radial lerp |
+| ≥4 noise octaves (quality floor) | **zero** — no `fbm`, no `noise`, anywhere |
+| ≥3 materials (quality floor) | **zero** — no `mat_*` call |
+| Physical wave displacement perpendicular to the local tangent | **absent** — see below |
+| Fine glints at thread intersections | `spokeCov * spirCov` only, i.e. where two ~1 px hard cores overlap; effectively no pixels |
+| Chromatic aberration on high-amplitude wave peaks | **absent** |
+| Bioluminescent haze halo (~0.5 radius) | **absent** — background is a flat two-stop vertical gradient |
+| Dust motes drawn inward at high vocal energy | **absent** |
+| SSGI fill from web emission | **absent** |
+
+Geometry is **not** the problem and should not be touched: the 17 explicit spoke angles (D-042),
+the 7-turn spiral and the off-centre hub are all present and correct. That is precisely why it reads
+as a diagram — the layout is right and every surface property that would make it read as a
+photographed object is missing. *"Correct geometry, no shading"* is what a 30-year-old program looks
+like, and the README already names the failure in its own words: the web must read as *"an
+instrument body, **not a geometry study**."*
+
+**The shader is currently its own anti-reference.** `99_anti_reference.jpg` is annotated *"NOT this
+— uniform palette-shift waves with no perpendicular strand displacement; silk reads as static
+grid."* Line 211 is `waveContrib *= strandCov` — the waves are an additive tint on strands that were
+already drawn, exactly the palette-shift the anti-reference rules out.
+
+**Two defects found by reading, to fix regardless of the uplift's scope:**
+
+1. **`strandCov` is applied to the wave layer twice.** Line 211 multiplies `waveContrib` by
+   `strandCov`, then line 226 does `strandCov * (baseStrand + waveContrib)` — so the waves are
+   attenuated by `strandCov²`. On a halo pixel at 0.3 coverage the wave arrives at 0.09, 3.3× dimmer
+   than intended; only the ~1 px hard cores (coverage ≈ 1) are unaffected. **The preset's signature
+   audio-visual layer is being squared away on every soft pixel**, which is a plausible contributor
+   to *"more connection between visuals and music"* complaints on this preset. Single-character fix.
+2. **FA #31 — an absolute AGC-normalised band drives brightness.** Line 189:
+   `brightness = 0.12 + f.bass * 0.76 + bassRel * 0.12`. The absolute term carries 6× the weight of
+   the deviation term, so how bright the web is depends on the AGC's running-average denominator and
+   therefore on mix density — the same kick reads differently across tracks. D-026 says drive from
+   deviation.
+
+**Not a defect, but worth Matt knowing:** the dewdrop layer (line 213) is annotated in the reference
+README as an *Arachne* trait, *"explicitly not Gossamer's."* Slot 03 does want node glints — body
+teal, tip a brighter different colour — so the layer's *idea* is wanted; its current form is not.
+
+#### The decision Matt owes before step 3
+
+The V.8 target is a large, fully-specified body of work and the reference images that would settle
+its look no longer exist. Two questions, in product terms:
+
+1. **How far into the V.8 target do we build?** The four layers below are ordered by visible return
+   per unit of work, and each is cheap in a 2D fragment shader (arithmetic and texture lookups, not
+   ray marching). Stopping after any of them leaves a coherent preset.
+   - **Silk material** — every strand today is a uniform-width, uniform-colour stroke. A fiber BRDF
+     gives a bright specular core with soft falloff and back-lit warmth where threads cross: the
+     difference between a drawn line and a lit filament. Biggest single change.
+   - **Strand irregularity** — width and brightness varying along each thread. Real silk is not
+     ruler-gauge; this is what kills the drafting-table quality.
+   - **Node glints** — small bright points where spoke meets spiral, reading as wet silk catching
+     light. Specified, effectively absent today.
+   - **Atmosphere** — the haze halo and dust motes, so the web sits in a space rather than floating
+     on flat black.
+2. **Do we recurate the reference images?** Without them "increase the fidelity" has no target other
+   than Matt's eye, and the preset cannot be certified (`certified: false` today). The README says
+   exactly what each of the 11 slots must show, so recuration is a sourcing task, not a design task.
+
+**Per FA #73, the material is already built — and it was built for this preset.**
+`mat_silk_thread` (`Utilities/Materials/Organic.metal:101`, a verbatim transcription of
+`SHADER_CRAFT.md §4.3`) takes a `FiberParams` whose fields are `azimuthal_r`, `azimuthal_tt`,
+`absorption` and `tint` — **the exact three coefficients the Gossamer README specifies**
+(`0.08 / 0.5 / 0.3`). Underneath it, `Utilities/PBR/Fiber.metal` provides the R, TT and approximated
+TRT lobes. Both ship, both are tested, and **no preset in the roster calls either.** Do not write a
+new one.
+
+⚠ One gap to close when it is used: `mat_silk_thread` never reads `p.absorption`, so the README's
+`absorption = 0.3` currently has nowhere to land. Either the recipe grows the term or the README's
+coefficient is wrong; decide when the material is wired, not before.
+
 
 **Four rows touch parked engine work, not nine** (an unchecked count in the first draft of this
 register, corrected 2026-09-09 when Matt asked which they were):
