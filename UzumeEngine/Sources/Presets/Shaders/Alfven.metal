@@ -115,6 +115,8 @@ constant constexpr float kAlfvenCycleSeconds = 22.0;
 constant constexpr float kAlfvenBlendTau     = 1.1;   // spike: advance_blend(tau=1.1)
 constant constexpr float kAlfvenSeedOmega    = 1.2;   // spike: _rand(1.2, 3)
 constant constexpr float kAlfvenSeedPsi      = 0.9;   // spike: _rand(0.9, 2)
+constant constexpr int   kAlfvenSeedKOmega   = 3;     // spike: _rand(_, 3)
+constant constexpr int   kAlfvenSeedKPsi     = 2;     // spike: _rand(_, 2)
 
 // ── Seed field ──────────────────────────────────────────────────────────────
 //
@@ -128,21 +130,41 @@ constant constexpr float kAlfvenSeedPsi      = 0.9;   // spike: _rand(0.9, 2)
 // preset needing a specific initial state must re-seed itself. Keying the seed off a
 // near-zero field makes that automatic and covers both first-frame and post-watchdog.
 
-static inline float alfven_seed(float2 uv, float phase, float amp) {
+// Deterministic per-mode phase. Standard hash; only needs to decorrelate modes.
+static inline float alfven_hash(float2 p) {
+    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+// Band-limited random-phase seed over INTEGER wavevectors.
+//
+// The spike seeds in Fourier space: random phase per mode on an annulus 1 <= |k| <= kmax,
+// amplitude k^-1.6, normalised to std = amp. The first port approximated that with five
+// separable sin(x)*cos(y) products, which is inherently symmetric under reflection and
+// produced a visible 4-fold cross late in the arc — the "never a regular grid, never
+// radially symmetric" anti-reference in the reference README.
+//
+// This sums plane waves over integer (m,n) instead, so wavevectors point at arbitrary
+// angles rather than along the axes, with an independent hashed phase per mode. Integer
+// (m,n) keeps the field periodic on the unit box, which `address::repeat` requires.
+// Amplitudes follow the spike's k^-1.6, and the sum is normalised by its own analytic RMS
+// (sqrt(sum a^2 / 2) for random phases) so `amp` means what it means in the spike.
+static inline float alfven_seed_band(float2 uv, float seedPhase, float amp, int kmax) {
     constexpr float kTau = 6.28318530718;
     float s = 0.0;
-    // k in [1,3] carries the composition (3-6 lobes across the frame, README 01).
-    s += pow(1.0, -1.6) * sin(kTau * (1.0 * uv.x + 0.31) + phase * 0.7)
-                        * cos(kTau * (1.0 * uv.y - 0.12) + phase * 0.5);
-    s += pow(2.0, -1.6) * sin(kTau * (2.0 * uv.x - 0.44) + phase * 1.1)
-                        * cos(kTau * (1.0 * uv.y + 0.53) + phase * 0.9);
-    s += pow(2.0, -1.6) * sin(kTau * (1.0 * uv.x + 0.77) + phase * 0.6)
-                        * cos(kTau * (2.0 * uv.y - 0.28) + phase * 1.3);
-    s += pow(3.0, -1.6) * sin(kTau * (3.0 * uv.x - 0.19) + phase * 1.7)
-                        * cos(kTau * (2.0 * uv.y + 0.66) + phase * 0.4);
-    s += pow(3.0, -1.6) * sin(kTau * (2.0 * uv.x + 0.05) + phase * 0.3)
-                        * cos(kTau * (3.0 * uv.y + 0.41) + phase * 1.5);
-    return s * amp;
+    float norm = 0.0;
+    // Half-plane only: the field is real, so (m,n) and (-m,-n) are the same mode.
+    for (int m = -kmax; m <= kmax; ++m) {
+        for (int n = 0; n <= kmax; ++n) {
+            if (n == 0 && m <= 0) { continue; }      // skip DC and the duplicate half-row
+            float k2 = float(m * m + n * n);
+            if (k2 < 1.0 || k2 > float(kmax * kmax)) { continue; }
+            float a = pow(k2, -0.8);                  // k^-1.6
+            float ph = kTau * alfven_hash(float2(float(m), float(n)) + seedPhase);
+            s += a * sin(kTau * (float(m) * uv.x + float(n) * uv.y) + ph);
+            norm += a * a * 0.5;
+        }
+    }
+    return s * amp / sqrt(max(norm, 1e-9));
 }
 
 // Band-limited stirring, the real-space stand-in for the spike's random-phase
@@ -215,8 +237,8 @@ fragment float4 alfven_state_fragment(
     float seedPhase  = 7.31 * cycle + 1.7;   // a different braid every cycle
 
     if (presence < kAlfvenSeedFloor) {
-        float omega0 = alfven_seed(uv, seedPhase, kAlfvenSeedOmega);
-        float psi0   = alfven_seed(uv, seedPhase + 8.0, kAlfvenSeedPsi);
+        float omega0 = alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega);
+        float psi0   = alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi);
         return float4(omega0, psi0, 0.0, 1.0);
     }
 
@@ -309,8 +331,8 @@ fragment float4 alfven_state_fragment(
     if (a < 1.0) {
         float g = 0.5 - 0.5 * cos(M_PI_F * a);
         float r = g * (kAlfvenDt / kAlfvenBlendTau) * M_PI_F;
-        float omegaSeed = alfven_seed(uv, seedPhase, kAlfvenSeedOmega);
-        float psiSeed   = alfven_seed(uv, seedPhase + 8.0, kAlfvenSeedPsi);
+        float omegaSeed = alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega);
+        float psiSeed   = alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi);
         omega = mix(omega, omegaSeed, clamp(r, 0.0, 1.0));
         psi   = mix(psi,   psiSeed,   clamp(r, 0.0, 1.0));
     }
