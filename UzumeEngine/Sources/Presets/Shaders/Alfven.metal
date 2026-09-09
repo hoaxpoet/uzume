@@ -464,103 +464,68 @@ fragment float4 alfven_dealias_fragment(
     return float4(specTex.read(gid).xy * uz_dealias_23(gid, w, h), 0.0, 1.0);
 }
 
-// ─── RK2 PREDICTOR (Heun stage 1) ───────────────────────────────────────────
+// ─── STATE — the MHD advance, pseudo-spectral ───────────────────────────────
 //
-// Forward Euler has no stability region on the imaginary axis, and Alfven waves are
-// purely oscillatory, so an explicit Euler step grows them no matter how small dt is.
-// Measured with the clamps disabled: at dt 0.0005 the field is CORRECT at frame 120
-// (psi conserved to 0.01%, matching the spike; J 1.83 against the reference's 4.5; grid
-// scale 1e-4) and diverges anyway by frame 900. That is the signature, and it is why the
-// spike uses RK2 (alfven.py `step`) rather than Euler.
-//
-// Heun:  k1 = RHS(y_n);  y* = y_n + dt*k1;  k2 = RHS(y*);  y_n+1 = y_n + dt/2*(k1 + k2)
-// So the RHS is evaluated twice, which means a second derivative-spectra chain. This
-// stage emits BOTH the predictor state and k1, packed into one rgba32Float:
-//   .xy = (omega*, psi*)      .zw = (k1_omega, k1_psi)
-// so the corrector needs no extra sample slot to recover k1.
-
-fragment float4 alfven_predictor_fragment(
-    VertexOut in [[stage_in]],
-    constant FeatureVector& f [[buffer(0)]],
-    texture2d<float, access::sample> filteredTex [[texture(13)]],
-    texture2d<float, access::sample> nonlinearTex [[texture(14)]]
-) {
-    float2 uv    = in.uv;
-    float2 texel = 1.0 / float2(filteredTex.get_width(), filteredTex.get_height());
-    float hPhys  = 6.28318530718 / float(filteredTex.get_width());
-    float invH2  = 1.0 / (hPhys * hPhys);
-
-    float2 c  = filteredTex.sample(alfven_state_sampler, uv).xy;
-    float4 nL = filteredTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0));
-    float4 nR = filteredTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0));
-    float4 nT = filteredTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y));
-    float4 nB = filteredTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y));
-    float lapW = (nL.x + nR.x + nT.x + nB.x - 4.0 * c.x) * invH2;
-    float lapP = (nL.y + nR.y + nT.y + nB.y - 4.0 * c.y) * invH2;
-
-    float2 nl = nonlinearTex.sample(alfven_state_sampler, uv).xy;
-    float force = kAlfvenDrive * alfven_forcing(uv, f.time);
-
-    float k1w = nl.x - kAlfvenAlpha * c.x + kAlfvenNu * lapW + force;
-    float k1p = nl.y + kAlfvenEta * lapP;
-
-    return float4(c.x + kAlfvenDt * k1w, c.y + kAlfvenDt * k1p, k1w, k1p);
-}
-
-// ─── STATE — RK2 corrector (Heun stage 2) ───────────────────────────────────
-//
-// y_n+1 = y_n + dt/2 * (k1 + k2). k1 arrives packed in the predictor's .zw; k2 is
-// evaluated here from the SECOND derivative-spectra chain, which ran on the predictor
-// state. Everything is physical units — spectral derivatives are d/dx directly.
+// No back-trace. Both nonlinear terms are Poisson brackets built from spectral
+// derivatives, which is the spike's own formulation and the only version that respects
+// the inverse cascade. Everything here is in PHYSICAL units: the spectral derivatives
+// come out as d/dx and d/dy directly, so no h-scaling appears in the brackets — the
+// class of unit bug that cost this port the Lorentz coupling earlier simply cannot arise.
 
 fragment float4 alfven_state_fragment(
     VertexOut in [[stage_in]],
     constant FeatureVector& f [[buffer(0)]],
     constant StagedPassInfo& p [[buffer(9)]],
     texture2d<float, access::sample> filteredTex [[texture(13)]],
-    texture2d<float, access::sample> predTex [[texture(14)]],
-    texture2d<float, access::sample> nonlinear2Tex [[texture(15)]],
+    texture2d<float, access::sample> nonlinearTex [[texture(14)]],
     texture2d<float, access::sample> prevStateTex [[texture(20)]]
 ) {
     float2 uv    = in.uv;
     float2 texel = 1.0 / float2(prevStateTex.get_width(), prevStateTex.get_height());
-    float hPhys  = 6.28318530718 / float(prevStateTex.get_width());
-    float invH2  = 1.0 / (hPhys * hPhys);
 
     float cycle      = floor(f.time / kAlfvenCycleSeconds);
     float cycleStart = cycle * kAlfvenCycleSeconds;
     float seedPhase  = 7.31 * cycle + 1.7;
 
-    // Re-seed when the field is empty: first frame after a preset switch (ALFVEN.1 zeroes
+    // Re-seed when the field is empty: frame 1 after a preset switch (ALFVEN.1 zeroes
     // persistent pairs) and recovery after a watchdog re-zero.
-    float2 prev = prevStateTex.sample(alfven_state_sampler, uv).xy;
-    float2 n1   = prevStateTex.sample(alfven_state_sampler, uv + texel * 37.0).xy;
-    float2 n2   = prevStateTex.sample(alfven_state_sampler, uv - texel * 53.0).xy;
-    if (abs(prev.x) + abs(prev.y) + abs(n1.y) + abs(n2.y) < kAlfvenSeedFloor) {
+    float2 c  = prevStateTex.sample(alfven_state_sampler, uv).xy;
+    float2 n1 = prevStateTex.sample(alfven_state_sampler, uv + texel * 37.0).xy;
+    float2 n2 = prevStateTex.sample(alfven_state_sampler, uv - texel * 53.0).xy;
+    if (abs(c.x) + abs(c.y) + abs(n1.y) + abs(n2.y) < kAlfvenSeedFloor) {
         return float4(alfven_seed_band(uv, seedPhase, kAlfvenSeedOmega, kAlfvenSeedKOmega),
                       alfven_seed_band(uv, seedPhase + 8.0, kAlfvenSeedPsi, kAlfvenSeedKPsi),
                       0.0, 1.0);
     }
+    // Both fields arrive spectrally filtered: .x = omega, .y = psi.
+    c = filteredTex.sample(alfven_state_sampler, uv).xy;
 
-    float2 yn   = filteredTex.sample(alfven_state_sampler, uv).xy;   // y_n
-    float4 pred = predTex.sample(alfven_state_sampler, uv);          // .xy = y*, .zw = k1
+    // The nonlinear terms, already dealiased: .x = omega's, .y = psi's.
+    float2 nl = nonlinearTex.sample(alfven_state_sampler, uv).xy;
 
-    // k2 = RHS(y*): nonlinear term from the predictor's own bracket chain, plus the
-    // linear terms evaluated at the PREDICTOR state.
-    float4 pL = predTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0));
-    float4 pR = predTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0));
-    float4 pT = predTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y));
-    float4 pB = predTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y));
-    float lapWs = (pL.x + pR.x + pT.x + pB.x - 4.0 * pred.x) * invH2;
-    float lapPs = (pL.y + pR.y + pT.y + pB.y - 4.0 * pred.y) * invH2;
+    // Physical Laplacians for the explicit diffusion (texel stencil / h^2).
+    float hPhys = 6.28318530718 / float(prevStateTex.get_width());
+    float invH2 = 1.0 / (hPhys * hPhys);
+    // Neighbours MUST come from the same (filtered) field as the centre. Sampling the
+    // centre from filteredTex while taking neighbours from prevStateTex made the stencil
+    // differ by exactly the content the spectral filter had just removed — and the
+    // Laplacian multiplies that residue by 1/h^2 = 1661 at N = 256. It injected the
+    // filtered-out grid scale straight back into both diffusion terms and into the cached
+    // J that compose and the soak read, which is why jRMS measured ~216 against the
+    // reference's 4.5.
+    float4 nL = filteredTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0));
+    float4 nR = filteredTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0));
+    float4 nT = filteredTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y));
+    float4 nB = filteredTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y));
+    float wL = nL.x, wR = nR.x, wT = nT.x, wB = nB.x;
+    float pL = nL.y, pR = nR.y, pT = nT.y, pB = nB.y;
+    float lapW = (wL + wR + wT + wB - 4.0 * c.x) * invH2;
+    float lapP = (pL + pR + pT + pB - 4.0 * c.y) * invH2;
 
-    float2 nl2  = nonlinear2Tex.sample(alfven_state_sampler, uv).xy;
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
-    float k2w = nl2.x - kAlfvenAlpha * pred.x + kAlfvenNu * lapWs + force;
-    float k2p = nl2.y + kAlfvenEta * lapPs;
 
-    float omega = yn.x + 0.5 * kAlfvenDt * (pred.z + k2w);
-    float psi   = yn.y + 0.5 * kAlfvenDt * (pred.w + k2p);
+    float omega = c.x + kAlfvenDt * (nl.x - kAlfvenAlpha * c.x + kAlfvenNu * lapW + force);
+    float psi   = c.y + kAlfvenDt * (nl.y + kAlfvenEta * lapP);
 
     // Re-seed crossfade (§5), raised cosine, as a per-step share of the blend.
     float a = clamp((f.time - cycleStart) / kAlfvenBlendTau, 0.0, 1.0);
@@ -574,13 +539,8 @@ fragment float4 alfven_state_fragment(
     omega = clamp(omega, -kAlfvenClampW, kAlfvenClampW);
     psi   = clamp(psi,   -kAlfvenClampP, kAlfvenClampP);
 
-    // J = lap(psi), physical, from a consistent (filtered) stencil.
-    float4 fL = filteredTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0));
-    float4 fR = filteredTex.sample(alfven_state_sampler, uv + float2(texel.x, 0.0));
-    float4 fT = filteredTex.sample(alfven_state_sampler, uv + float2(0.0, texel.y));
-    float4 fB = filteredTex.sample(alfven_state_sampler, uv - float2(0.0, texel.y));
-    float J = (fL.y + fR.y + fT.y + fB.y - 4.0 * yn.y) * invH2;
-
+    // J is cached for the compose stage: J = lap(psi), physical.
+    float J = (pL + pR + pT + pB - 4.0 * c.y) * invH2;
     return float4(omega, psi, J, 1.0);
 }
 

@@ -55,7 +55,7 @@
       "name": "gphik",
       "fragment_function": "alfven_grad_phi_fragment",
       "samples": [
-        "fftfilt"
+        "fftcols"
       ],
       "pixel_format": "rgba32Float"
     },
@@ -81,7 +81,7 @@
       "name": "gomek",
       "fragment_function": "alfven_grad_omega_fragment",
       "samples": [
-        "fftfilt"
+        "fftcols"
       ],
       "pixel_format": "rgba32Float"
     },
@@ -107,7 +107,7 @@
       "name": "gpsik",
       "fragment_function": "alfven_grad_psi_fragment",
       "samples": [
-        "fftfilt"
+        "fftcols"
       ],
       "pixel_format": "rgba32Float"
     },
@@ -133,7 +133,7 @@
       "name": "gjk",
       "fragment_function": "alfven_grad_j_fragment",
       "samples": [
-        "fftfilt"
+        "fftcols"
       ],
       "pixel_format": "rgba32Float"
     },
@@ -211,198 +211,11 @@
       "pixel_format": "rgba32Float"
     },
     {
-      "name": "pred",
-      "fragment_function": "alfven_predictor_fragment",
-      "samples": [
-        "ifftrows",
-        "ibrkrows"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2rows",
-      "fragment_function": "alfven_fft_rows_xy_fragment",
-      "samples": [
-        "pred"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2cols",
-      "fragment_function": "alfven_fft_cols_fragment",
-      "samples": [
-        "p2rows"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gphik",
-      "fragment_function": "alfven_grad_phi_fragment",
-      "samples": [
-        "p2cols"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gphic",
-      "fragment_function": "alfven_ifft_cols_fragment",
-      "samples": [
-        "p2gphik"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gphir",
-      "fragment_function": "alfven_ifft_rows_fragment",
-      "samples": [
-        "p2gphic"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gomek",
-      "fragment_function": "alfven_grad_omega_fragment",
-      "samples": [
-        "p2cols"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gomec",
-      "fragment_function": "alfven_ifft_cols_fragment",
-      "samples": [
-        "p2gomek"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gomer",
-      "fragment_function": "alfven_ifft_rows_fragment",
-      "samples": [
-        "p2gomec"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gpsik",
-      "fragment_function": "alfven_grad_psi_fragment",
-      "samples": [
-        "p2cols"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gpsic",
-      "fragment_function": "alfven_ifft_cols_fragment",
-      "samples": [
-        "p2gpsik"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gpsir",
-      "fragment_function": "alfven_ifft_rows_fragment",
-      "samples": [
-        "p2gpsic"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gjk",
-      "fragment_function": "alfven_grad_j_fragment",
-      "samples": [
-        "p2cols"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gjc",
-      "fragment_function": "alfven_ifft_cols_fragment",
-      "samples": [
-        "p2gjk"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2gjr",
-      "fragment_function": "alfven_ifft_rows_fragment",
-      "samples": [
-        "p2gjc"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2brk",
-      "fragment_function": "alfven_brackets_fragment",
-      "samples": [
-        "p2gphir",
-        "p2gomer",
-        "p2gpsir",
-        "p2gjr"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2brkrows",
-      "fragment_function": "alfven_fft_rows_xy_fragment",
-      "samples": [
-        "p2brk"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2brkcols",
-      "fragment_function": "alfven_fft_cols_fragment",
-      "samples": [
-        "p2brkrows"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2brkmask",
-      "fragment_function": "alfven_dealias_fragment",
-      "samples": [
-        "p2brkcols"
-      ],
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2ibrkcols",
-      "fragment_function": "alfven_ifft_cols_fragment",
-      "samples": [
-        "p2brkmask"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
-      "name": "p2ibrkrows",
-      "fragment_function": "alfven_ifft_rows_fragment",
-      "samples": [
-        "p2ibrkcols"
-      ],
-      "iterations": 8,
-      "pixel_format": "rgba32Float"
-    },
-    {
       "name": "state",
       "fragment_function": "alfven_state_fragment",
       "samples": [
         "ifftrows",
-        "pred",
-        "p2ibrkrows"
+        "ibrkrows"
       ],
       "persistent": true,
       "pixel_format": "rgba32Float"
