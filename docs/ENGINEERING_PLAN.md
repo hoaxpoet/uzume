@@ -854,6 +854,16 @@ walk, and returns **every** preset with excluded ones sorted last and ties broke
 the strength of a ranking dump; nothing exercised the walk itself. A one-line behavioural change to
 an interactive path shipped with no test of that path, and the person who found it was Matt.
 
+**PR.8.3 — the walk is alphabetical again, on Matt's call ✅ (2026-09-09).** *"I just want the presets
+to be listed in alphabetical order, so that I can easily navigate to the preset I want."* Ranked order
+is per-track and therefore unpredictable to navigate — the trade-off PR.8's own recommendation named,
+now settled by living with both. **The ordering reverts; the reachability fix stays:** the walk covers
+every loaded preset with no eligibility filter, which is what actually made Arachne unreachable.
+`DefaultPresetScorer.walkOrder` and its engine test are deleted — a `sorted { $0.name < $1.name }` in
+the router needs neither. Both properties are now pinned in `DefaultPlaybackActionRouterTests`
+(alphabetical stepping, and full reachability including diagnostics and over-budget presets), which
+is where a router behaviour belongs and where PR.8 should have put a test in the first place.
+
 **Matt: "do all three" — done 2026-09-09 (D-245).** Immediate nudge walks scorer-ranked order; the
 section quarter is gated on real section data (three-weight normalisation when nil); undeclared stem
 affinity scores the mean deviation. Result on the measured tracks: Seven Nation Army opener Filigree by

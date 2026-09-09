@@ -403,19 +403,17 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         immediate: Bool,
         catalog: [PresetDescriptor]
     ) -> Bool {
-        // PR.8 (Matt): walk SCORER-RANKED order, as this protocol's contract says — not the
-        // catalog by name. PR.8.2 fix: rank through `walkOrder`, which neutralises the
-        // history-dependent multipliers and returns EVERY preset. Ranking under the live context
-        // made the order shift on every press (the current preset is penalised by its own
-        // family-repeat multiplier, so it sank to last and "next" wrapped to the top), and
-        // filtering to score > 0 dropped diagnostics and over-budget presets from a manual
-        // override path. Matt could reach two presets of thirty.
-        let fields = adaptationFields(at: getSessionTime())
-        let eligible = DefaultPresetScorer().walkOrder(
-            presets: catalog,
-            track: getTrackProfile() ?? TrackProfile.empty,
-            context: getScoringContext(fields)
-        )
+        // ALPHABETICAL, over EVERY loaded preset (Matt, 2026-09-09: "I just want the presets to
+        // be listed in alphabetical order, so that I can easily navigate to the preset I want").
+        //
+        // PR.8 made this walk scorer-ranked because the protocol's doc said "scorer-ranked order".
+        // Ranked order is per-track and therefore unpredictable to navigate, and PR.8's version was
+        // also recomputed per press — the current preset sank to last by its own family-repeat
+        // multiplier, so "next" wrapped to the top and the walk oscillated between two presets
+        // (PR.8.2). Matt's call reverses the ORDER; the reachability half of the PR.8.2 fix stays:
+        // no eligibility filter here. This is a manual override, so it must reach anything loaded —
+        // diagnostics and over-budget presets included, which PR.8's `filter { $0.1 > 0 }` dropped.
+        let eligible = catalog.sorted { $0.name < $1.name }
         guard !eligible.isEmpty else {
             logger.warning("U.6b: presetNudge — empty catalog")
             return false
