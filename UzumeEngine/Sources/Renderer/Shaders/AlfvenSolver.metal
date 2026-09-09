@@ -144,7 +144,7 @@ struct AlfvenParams {
     float cutoff;       // spectral filter cutoff in mode numbers
     float clampW;
     float clampP;
-    uint  n;            // grid edge
+    uint  gridEdge;     // grid edge
     uint  seedKOmega;
     uint  seedKPsi;
     float seedAmpOmega;
@@ -195,8 +195,8 @@ kernel void alfven_seed_state(
     constant AlfvenParams& p            [[buffer(0)]],
     uint2 gid                           [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
-    float2 uv = (float2(gid) + 0.5) / float(p.n);
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    float2 uv = (float2(gid) + 0.5) / float(p.gridEdge);
     dst.write(float4(alf_seed(uv, p.seedPhase, p.seedAmpOmega, p.seedKOmega),
                      alf_seed(uv, p.seedPhase + 8.0, p.seedAmpPsi, p.seedKPsi),
                      0.0, 1.0), gid);
@@ -210,12 +210,12 @@ kernel void alfven_spectral_filter(
     constant AlfvenParams& p            [[buffer(0)]],
     uint2 gid                           [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
-    uint2 mir = uint2((p.n - gid.x) % p.n, (p.n - gid.y) % p.n);
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    uint2 mir = uint2((p.gridEdge - gid.x) % p.gridEdge, (p.gridEdge - gid.y) % p.gridEdge);
     float2 omegaH, psiH;
     alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
 
-    float2 k = alf_wavenumber(gid, p.n);
+    float2 k = alf_wavenumber(gid, p.gridEdge);
     float k2 = dot(k, k);
     float kr = clamp(sqrt(k2) / p.cutoff, 0.0, 1.0);
     float filt  = exp(-36.0 * pow(kr, 36.0));
@@ -235,11 +235,11 @@ kernel void alfven_grad_spectrum(
     constant uint& mode                 [[buffer(1)]],
     uint2 gid                           [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
-    uint2 mir = uint2((p.n - gid.x) % p.n, (p.n - gid.y) % p.n);
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    uint2 mir = uint2((p.gridEdge - gid.x) % p.gridEdge, (p.gridEdge - gid.y) % p.gridEdge);
     float2 omegaH, psiH;
     alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
-    float2 k = alf_wavenumber(gid, p.n);
+    float2 k = alf_wavenumber(gid, p.gridEdge);
     float k2 = dot(k, k);
 
     float2 field;
@@ -267,7 +267,7 @@ kernel void alfven_brackets(
     constant AlfvenParams& p             [[buffer(0)]],
     uint2 gid                            [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
     float2 a = gPhi.read(gid).xy, b = gOme.read(gid).xy;
     float2 c = gPsi.read(gid).xy, d = gJ.read(gid).xy;
     float brPhiOmega = a.x * b.y - a.y * b.x;
@@ -283,9 +283,9 @@ kernel void alfven_dealias(
     constant AlfvenParams& p            [[buffer(0)]],
     uint2 gid                           [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
-    float2 k = alf_wavenumber(gid, p.n);
-    float cut = (2.0 / 3.0) * float(p.n / 2);
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    float2 k = alf_wavenumber(gid, p.gridEdge);
+    float cut = (2.0 / 3.0) * float(p.gridEdge / 2);
     float mask = (abs(k.x) < cut && abs(k.y) < cut) ? 1.0 : 0.0;
     dst.write(float4(src.read(gid).xy * mask, 0.0, 1.0), gid);
 }
@@ -302,9 +302,9 @@ kernel void alfven_integrate(
     device const float* dtBuf             [[buffer(1)]],
     uint2 gid                             [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
     constexpr float kTau = 6.28318530718;
-    float2 uv = (float2(gid) + 0.5) / float(p.n);
+    float2 uv = (float2(gid) + 0.5) / float(p.gridEdge);
     float dt = dtBuf[0];
 
     float2 c = state.read(gid).xy;
@@ -330,10 +330,10 @@ kernel void alfven_integrate(
 
     // J = lap(psi), recovered from psi's spectral gradient magnitude is not available
     // here, so use the local stencil in PHYSICAL units for the cached diagnostic value.
-    float h = kTau / float(p.n);
+    float h = kTau / float(p.gridEdge);
     float invH2 = 1.0 / (h * h);
-    uint2 l = uint2((gid.x + p.n - 1) % p.n, gid.y), r2 = uint2((gid.x + 1) % p.n, gid.y);
-    uint2 u = uint2(gid.x, (gid.y + 1) % p.n),       d = uint2(gid.x, (gid.y + p.n - 1) % p.n);
+    uint2 l = uint2((gid.x + p.gridEdge - 1) % p.gridEdge, gid.y), r2 = uint2((gid.x + 1) % p.gridEdge, gid.y);
+    uint2 u = uint2(gid.x, (gid.y + 1) % p.gridEdge),       d = uint2(gid.x, (gid.y + p.gridEdge - 1) % p.gridEdge);
     float J = (state.read(l).y + state.read(r2).y + state.read(u).y + state.read(d).y
                - 4.0 * c.y) * invH2;
 
@@ -351,7 +351,7 @@ kernel void alfven_cfl_reduce(
     constant AlfvenParams& p            [[buffer(1)]],
     uint2 gid                           [[thread_position_in_grid]]
 ) {
-    if (gid.x >= p.n || gid.y >= p.n) { return; }
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
     float u = length(gPhi.read(gid).xy);     // |grad phi| = |u|
     float b = length(gPsi.read(gid).xy);     // |grad psi| = |B|
     float c = max(u, b);
@@ -367,6 +367,6 @@ kernel void alfven_cfl_finish(
 ) {
     if (tid != 0) { return; }
     float c = as_type<float>(atomic_load_explicit(scratch, memory_order_relaxed));
-    float dx = 6.28318530718 / float(p.n);
+    float dx = 6.28318530718 / float(p.gridEdge);
     dtOut[0] = min(p.dt, 0.25 * dx / max(c, 1e-3));
 }
