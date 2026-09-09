@@ -9412,6 +9412,59 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.4e — palette drift over time ✅ (2026-09-09)
+
+**Matt's live verdict on 4d: "it's wonderful."** First positive M7 for this preset. His one ask,
+verbatim: *"the only change i would want to see is a cycling of colors over time. i LOVE the color
+palette right now and would want to preserve this exact state, but introducing more complementary
+colors would add greater visual interest."*
+
+**This un-pins a drift that was designed in, rather than inventing one.** film.py already drifts
+the opponent centre (`hue = 0.46 + 0.26*centroid01`) and `04_palette_opponent_drift.png` annotates
+both ends — "left = early (acid green ↔ violet), right = late (magenta ↔ teal)". ALFVEN.2 pinned it
+at 0.72 because that is the column Matt picked. So the traverse stays inside the approved family
+instead of touring the wheel, and both endpoints are reference frames he has already seen.
+
+**Anchored so his state is preserved, not replaced.** `hueCentre(at:)` is a raised cosine away
+from `displayHueCentre` and back: exactly 0.72 at t = 0 and again every period, reaching
+0.72 − `displayHueSpan` (0.46) at the half period, no discontinuity and no wrap. The fragment still
+opposes ±0.30 about the centre, so what changes is WHICH complementary pair is on screen, not how
+complementary it is.
+
+`displayHueDwell` (2.0) biases where the traverse lingers. A plain raised cosine has zero
+derivative at BOTH ends, so it would dwell as long in acid-green↔violet as in the magenta↔teal he
+asked to keep; the exponent puts **50 % of each cycle within 0.065 of the anchor** while still
+reaching the far end. `displayHuePeriodSeconds` (80) is one there-and-back.
+
+**Clock: the listener's, not the field's.** Deliberately `features.time` ("seconds since
+visualization start", monotonic across tracks) rather than `simClock`. The field's rate moves with
+the CFL, i.e. with its own energy; a palette that sped up when the field energised would be wrong,
+and 80 s is far slower than the 2 s re-seed so colour and structure do not beat.
+
+Measured across the traverse, displayed-linear luma stays in 0.220…0.252 — the drift does not pump
+brightness.
+
+**⚠ Finding that changes ALFVEN.3, from Matt's own capture** (`uzume_sessions/2026-09-09T22-39-14Z`,
+local file, chain verdict clean): our `spectralCentroid` spans **p05 0.061 → p95 0.169**, median
+0.111 — NOT 0…1. Feed that into film.py's `0.46 + 0.26*centroid01` and the centre moves 0.028 and
+sits near 0.49, i.e. almost no drift and nowhere near the palette Matt signed off. film.py's
+`centroid01` is a differently normalised quantity than ours. **Binding centroid at ALFVEN.3 must
+renormalise against the real distribution** (the FA #31 shape: never assume a nominal range on a
+primitive whose scale is set elsewhere) and must keep 0.72 as the anchor.
+
+**Also established by that capture — the perf question 4b/4c left open is answered.** Alfvén ran
+live from 22:39:31 at 1080p on an M2 Pro. Frames between `DRAWABLE_LIFECYCLE` heartbeats: 599, 612,
+602, 586, 614, 600 per 10 s — **~60 fps sustained for 65+ s, `failures=0 unpresented=0`**, GPU
+193 MB (1.6 % of budget), thermal nominal. So 4 Heun substeps at 256² holds the target in Release.
+
+**Split:** `AlfvenSolver+Display.swift` (new) — the 400-line ceiling again, cut at a real seam:
+nothing in it touches physics, and everything in it stands in for a reduction film.py does on the
+CPU and a fragment cannot.
+
+**Still open:** the seam bloom is still absent (film.py's two Gaussian blurs over the brightest
+decile), so the live frame reads flatter than the stills; the re-seed cadence (2.0 sim s) remains
+Matt's call; motion verdict still CANNOT VERIFY.
+
 ### Increment ALFVEN.4d — make it testable, and calibrate the live look ✅ (2026-09-09)
 
 **Done-when:** Alfvén can be put on screen in the app, and what it draws there matches the

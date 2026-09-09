@@ -92,6 +92,7 @@ struct AlfvenFilmPreviewTests {
         // `displayExposure` has to be calibrated against.
         if env["ALFVEN_LIVE"] == "1" {
             if let ex = env["ALFVEN_EXPOSURE"].flatMap(Float.init) { solver.displayExposure = ex }
+            if let hu = env["ALFVEN_HUE"].flatMap(Float.init) { solver.displayHueCentre = hu }
             let frames = Int(env["ALFVEN_FRAMES"] ?? "300") ?? 300
             let target = try Self.makeTarget(ctx, edge: Self.edge)
             var lums: [Double] = []
@@ -109,7 +110,13 @@ struct AlfvenFilmPreviewTests {
                     guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
                         throw HarnessError.commandBufferFailed
                     }
-                    solver.render(encoder: enc, features: FeatureVector())
+                    // ALFVEN_TIME_SCALE compresses the listener clock so a whole palette
+                    // cycle can be sampled in a few hundred frames. The FIELD still
+                    // advances at its own rate; only the drift's clock is scaled.
+                    let scale = Float(env["ALFVEN_TIME_SCALE"] ?? "1") ?? 1
+                    var features = FeatureVector()
+                    features.time = Float(frame) / 60.0 * scale
+                    solver.render(encoder: enc, features: features)
                     enc.endEncoding()
                 }
                 cmd.commit(); cmd.waitUntilCompleted()

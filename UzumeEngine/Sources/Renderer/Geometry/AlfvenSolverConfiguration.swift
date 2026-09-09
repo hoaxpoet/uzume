@@ -77,6 +77,32 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// the visible range as grid-scale striping. psi has no real content up there, so
     /// this removes numerical noise only. The state is not filtered by it.
     public var jCutoff: Float
+    /// Half-range of the palette drift, in hue turns. film.py drifts the opponent centre
+    /// (`hue = 0.46 + 0.26*centroid01`) and `04_palette_opponent_drift.png` annotates both
+    /// ends — "left = early (acid green ↔ violet), right = late (magenta ↔ teal)". We had
+    /// pinned it at the late end because that is the column Matt picked; this un-pins the
+    /// drift that was designed in rather than inventing one, so the traverse stays inside
+    /// the referenced palette family instead of touring the whole wheel.
+    ///
+    /// 0.26 is film.py's own span: the centre travels 0.72 → 0.46 and back.
+    public var displayHueSpan: Float
+    /// Seconds for one full there-and-back palette traverse, on the LISTENER's clock.
+    ///
+    /// Deliberately not `simClock`: the field's evolution rate is a numerics matter (it
+    /// moves with the CFL), whereas the palette is perceptual and should not speed up or
+    /// slow down with the field's energy. Slow by design — the design doc calls the centre
+    /// "slowly drifting" — and much slower than the 2 s re-seed so structure and colour do
+    /// not beat against each other.
+    public var displayHuePeriodSeconds: Float
+    /// How strongly the traverse LINGERS at the anchor rather than at the far end.
+    ///
+    /// A plain raised cosine has zero derivative at both ends, so it dwells equally at
+    /// 0.72 and at 0.46 — which would spend as much time in acid-green<->violet as in the
+    /// magenta<->teal Matt asked to keep. Raising the normalised traverse to this power
+    /// biases the dwell toward the anchor while still reaching the far end: at 2.0 the
+    /// centre spends roughly twice as long in the near half of the range as the far half.
+    /// 1.0 restores the symmetric cosine.
+    public var displayHueDwell: Float
 
     public init(
         edge: Int = 256,
@@ -94,7 +120,10 @@ public struct AlfvenSolverConfiguration: Sendable {
         seedAmpPsi: Float = 0.9,
         cycleSeconds: Float = 2.0,   // SIM seconds; see the property comment
         blendTau: Float = 1.1,
-        jCutoff: Float = 48.0
+        jCutoff: Float = 48.0,
+        displayHueSpan: Float = 0.26,
+        displayHuePeriodSeconds: Float = 80.0,
+        displayHueDwell: Float = 2.0
     ) {
         self.edge = edge
         self.maxDt = maxDt
@@ -114,6 +143,9 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.cycleSeconds = cycleSeconds
         self.blendTau = blendTau
         self.jCutoff = jCutoff
+        self.displayHueSpan = displayHueSpan
+        self.displayHuePeriodSeconds = displayHuePeriodSeconds
+        self.displayHueDwell = displayHueDwell
     }
 }
 
