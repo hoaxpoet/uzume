@@ -1304,7 +1304,13 @@ because the correlation is expected to improve, but so the claim is checked rath
 2. Recovered frames discriminate loud from quiet vocal 3x better than before - signal, not noise.
 3. Recovered pitch lands in a plausible vocal register; boundary-pinning falls 73 % -> 25.5 %.
 4. Engine suite 1915 tests pass; PitchTrackerTests 7/7 (its sine-wave cases are unaffected).
-5. **Not seen live.** No preset consumes this well enough yet to show the difference on screen.
+5. ✅ **Seen live 2026-09-09** (session `19-09-58Z`, Matt on Gossamer: *"looks pretty good"*). Independent
+   generalisation, not a repeat: **different track, different singer, different register, and the LIVE tap
+   path** rather than the offline capture chain — Metric, *Combat Baby*, a female vocal, 5367 frames.
+   conf > 0.35 **17.1 % → 85.6 %**; median **0.000 → 0.614**; frames with 0 < c < 0.85 **0.0 % → 83.0 %**;
+   pitch reported **17.1 % → 51.8 %**; median pitch **76 → 142 Hz**; floor-pinning **73.0 % → 5.9 %**.
+   The floor-pinning being far lower here than Seven Nation Army's 25.5 % supports the residual there being
+   bass bleed in the separated stem rather than a tracker fault.
 
 ### BUG-123 — Dragon Bloom remains paler than the reference (2026-09-08, PARKED)
 
