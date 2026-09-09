@@ -18,6 +18,7 @@
       "fragment_function": "alfven_state_fragment",
       "samples": ["phi"],
       "persistent": true,
+      "iterations": 8,
       "pixel_format": "rgba32Float"
     },
     {

@@ -91,16 +91,28 @@ static inline float2 alfven_sample_catrom(texture2d<float, access::sample> tex,
 // ── Tunables ────────────────────────────────────────────────────────────────
 // Spelled as named constants so the soak can move one at a time. Values are the
 // spike's where the spike has one (alpha 0.16, forcing shell k in [2,5]).
-constant constexpr float kAlfvenDt        = 0.016;  // s per frame; fixed, not render dt (BUG-097)
+// SUBSTEP timestep, not the frame time. Restoring the Lorentz coupling made the Alfven
+// wave speed the binding CFL constraint, and one step of 0.016 s per frame pinned omega at
+// its clamp (measured: omegaMax 24.0, wRMS ~21). The spike runs dt <= 0.005 with many
+// substeps per output frame; we do the same by giving the `state` stage `iterations: 8`,
+// which is exactly what ALFVEN.1's iterated-stage surface is for. 0.016/8 = 0.002 sits
+// inside the spike's bound. Fixed, never the render dt (BUG-097).
+constant constexpr float kAlfvenDt        = 0.002;
+constant constexpr int   kAlfvenSubsteps  = 8;      // must match the sidecar's iterations
 constant constexpr float kAlfvenAlpha     = 0.16;   // linear drag on omega (spike value)
 constant constexpr float kAlfvenNu        = 0.9;    // omega diffusion, texel^2 units
 constant constexpr float kAlfvenEta       = 0.5;    // psi diffusion
-constant constexpr float kAlfvenHyper     = 0.35;   // grid-scale damping on omega (Hou-Li analogue)
+// Grid-scale damping expressed as a RATE (per second), not a per-step fraction. Every
+// other term here carries `* dt`; these did not, so introducing substeps multiplied the
+// damping by the substep count and collapsed psi from 0.90 to 0.046 in a single soak. The
+// rates reproduce the previously-tuned per-FRAME fractions (0.35 and 0.30 at 1/0.016 s)
+// independently of how many substeps a frame is split into.
+constant constexpr float kAlfvenHyperRate    = 0.35 / 0.016;   // omega, Hou-Li analogue
 // ...and on psi — the spike filters BOTH (alfven.py:104-105). Applied through a 3x3 tent
 // high-pass whose eigenvalue is 1 on the checkerboard and falls smoothly to 0 on smooth
 // fields, so h is a direct per-step damping fraction of the top of the spectrum and is
 // stable for any h <= 1.
-constant constexpr float kAlfvenHyperPsi  = 0.30;
+constant constexpr float kAlfvenHyperPsiRate = 0.30 / 0.016;   // psi — the spike filters BOTH
 constant constexpr float kAlfvenDrive     = 0.020;  // forcing amplitude (spike: 0.020 * ...)
 constant constexpr float kAlfvenMaxTrace  = 3.0;    // CFL: max back-trace, texels (§8.4)
 constant constexpr float kAlfvenClampW    = 24.0;   // hard clamp on omega (§8.2)
@@ -300,7 +312,24 @@ fragment float4 alfven_state_fragment(
                 - 4.0 * pB);
     float2 gradPsi = float2((pR - pL) * 0.5, (pT - pB) * 0.5);
     float2 gradJ   = float2((jR - jL) * 0.5, (jT - jB) * 0.5);
-    float lorentz  = gradPsi.x * gradJ.y - gradPsi.y * gradJ.x;
+
+    // UNIT SCALING — the Lorentz term is the one place this port silently lost its
+    // physics. Every derivative above is in TEXEL units (h = 1), so:
+    //     J_texel       = lap_texel(psi)          = h^2 * lap_phys(psi)
+    //     gradPsi_texel = h   * grad_phys(psi)
+    //     gradJ_texel   = h^3 * grad_phys(J_phys)
+    // and therefore the texel-space bracket is h^4 times the physical {psi,J}. With the
+    // spike's 2*pi box, h = 2*pi/N = 0.0245 at N = 256, so h^4 = 3.6e-7: the term came out
+    // 2.45e-5 of the drag term, i.e. ZERO. Without it there is no Lorentz force, no
+    // reconnection, and no "M" in MHD — the preset was advecting two passive scalars.
+    //
+    // h is derived from the texture width rather than hardcoded, because staged textures
+    // are drawable-sized. Note the consequence: 1/h^4 grows as N^4, so the Alfven-wave CFL
+    // limit tightens fast with resolution — this term, not the flow speed, is what sets
+    // the stable timestep.
+    float h = 6.28318530718 / float(prevStateTex.get_width());
+    float invH4 = 1.0 / (h * h * h * h);
+    float lorentz = (gradPsi.x * gradJ.y - gradPsi.y * gradJ.x) * invH4;
 
     // ── Diffusion ──
     float wL = prevStateTex.sample(alfven_state_sampler, uv - float2(texel.x, 0.0)).x;
@@ -349,8 +378,8 @@ fragment float4 alfven_state_fragment(
     float force = kAlfvenDrive * alfven_forcing(uv, f.time);
     omega += kAlfvenDt * (lorentz - kAlfvenAlpha * c.x + force)
            + kAlfvenNu * kAlfvenDt * lapW
-           - kAlfvenHyper * checker;
-    psi   += kAlfvenEta * kAlfvenDt * lapP - kAlfvenHyperPsi * pHighPass;
+           - kAlfvenHyperRate * kAlfvenDt * checker;
+    psi   += kAlfvenEta * kAlfvenDt * lapP - kAlfvenHyperPsiRate * kAlfvenDt * pHighPass;
 
     // ── Re-seed crossfade (§5) ──
     // Ported from the spike's advance_blend: a raised cosine so the dissolve has no
