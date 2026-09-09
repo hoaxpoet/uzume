@@ -1297,6 +1297,16 @@ because the correlation is expected to improve, but so the claim is checked rath
 
 **Residual, not chased:** 25.5 % still floor-pinned, most likely the bass riff bleeding into the separated vocal stem.
 
+**Caveat found 2026-09-09, same day: the fix recovers PERIODICITY, not VOCALS.** Measured through the
+capture chain, *Weeping Wall* — a purely instrumental Bowie piece — scores a **94.8 %** pitch-confidence
+duty cycle, **above** Seven Nation Army's 79.9 % and Combat Baby's 85.6 %. Its separated "vocals" stem
+carries median energy **0.301** and reads as pitched at **132 Hz**, against Seven Nation Army's 0.339
+and 130 Hz — statistically indistinguishable. The stem is full of periodic bleed on instrumentals.
+So `vocalsPitchConfidence` is a *pitched-content* signal, not a vocal-presence signal, and must not be
+used as one: it cannot gate "is someone singing", and Gossamer's emission gate now opens on 94.8 % of
+an instrumental's frames. This does not diminish the fix — the primitive went from unusable to usable —
+but it bounds what it can be used for.
+
 **What this invalidates.** This file recorded `vocalsPitchHz`/`vocalsPitchConfidence` as SPARSE at 0.1 % nonzero and called the pair "garnish"; WL.1 measured 4.5 % and called it garnish there too. Both were measuring this defect. Whether the primitive is a usable hero driver is an open question again, not a settled one.
 
 **Verification.**
