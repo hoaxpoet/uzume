@@ -79,6 +79,22 @@ struct AlfvenFilmPreviewTests {
 
             let j = Self.readJ(solver)
             let stats = Self.fieldStats(j)
+            // Raw autoexp(|J|) as grey — no colour mapping, no blur. Keep this: when
+            // the frames showed fine diagonal hatching on the steepest ridges, this dump
+            // is what separated "the FIELD has grid-scale energy" from "the film mapping
+            // is amplifying it" in one look. film.py's hue term is a periodic function of
+            // J, so it turns a ripple far too small to see in grey into a vivid colour
+            // band — the colour frame alone cannot tell you which half is at fault.
+            let g = Self.autoexp(j.map(abs))
+            var grey = [UInt8](repeating: 255, count: Self.edge * Self.edge * 4)
+            for i in 0..<(Self.edge * Self.edge) {
+                let v = UInt8(min(max(g[i], 0), 1) * 255)
+                grey[i * 4 + 0] = v; grey[i * 4 + 1] = v; grey[i * 4 + 2] = v
+            }
+            try Self.writePNG(grey, width: Self.edge, height: Self.edge,
+                              to: dir.appendingPathComponent(
+                                  String(format: "raw_J_f%04d.png", frame)))
+
             let rgb = Self.film(j, width: Self.edge, height: Self.edge)
             let url = dir.appendingPathComponent(String(format: "alfven_film_f%04d.png", frame))
             try Self.writePNG(rgb, width: Self.edge, height: Self.edge, to: url)

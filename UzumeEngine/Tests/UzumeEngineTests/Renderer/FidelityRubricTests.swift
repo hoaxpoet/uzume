@@ -200,6 +200,15 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // CPU wave field (the Skein / Lumen / Filigree precedent).
                                      // It also has NO audio coupling at all until MEN.2b/MEN.3,
                                      // so L2 cannot pass yet by design. certified: false.
+    // Both are ALFVEN-program entries that render nothing a still-frame rubric can
+    // score, so `false` is the correct locked value rather than a deficiency:
+    //   Alfvén      — the fragment is only the D-037 non-black ground; the field is
+    //                 drawn by `AlfvenSolver` through the ParticleGeometry seam, and
+    //                 the shipping look still awaits film.py's percentile
+    //                 auto-exposure (needs a reduction surface). excludeFromCycling.
+    //   FFT Sandbox — a diagnostic (ALFVEN.1c), never user-facing.
+    "Alfvén": false,
+    "FFT Sandbox": false
 ]
 
 @Suite("Fidelity Rubric — Automated Gate")

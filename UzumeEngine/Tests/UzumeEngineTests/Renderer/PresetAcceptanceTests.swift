@@ -292,6 +292,13 @@ struct PresetAcceptanceTests {
         // CymaticSandSketchRenderTests (multi-frame sand render + non-degenerate metric) and
         // the MultiPassFlashHarness (real geometry dispatch).
         guard preset.descriptor.name != "Cymatic Resonance" else { return }
+        // Alfvén (ALFVEN.4): same as Cytokinesis — the readable content is the MHD field
+        // `AlfvenSolver` renders through the particles seam; `alfven_ground_fragment` is
+        // the intentionally flat D-037 non-black floor, so this fragment-only harness sees
+        // only it → formComplexity 1. Coverage: AlfvenSolverTests (the field holds without
+        // the clamp doing the work, checked against the runnable spike at matched sim time)
+        // and AlfvenFilmPreviewTests (RENDER_VISUAL contact sheet + raw-J dump).
+        guard preset.descriptor.name != "Alfvén" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)

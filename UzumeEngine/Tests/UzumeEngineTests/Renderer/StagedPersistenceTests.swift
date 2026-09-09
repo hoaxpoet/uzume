@@ -350,41 +350,55 @@ struct StagedPersistenceTests {
         #expect(pipeline.stagedWatchdogTripCount == 1, "the trip was not recorded")
     }
 
-    @Test("the watchdog probe's per-frame cost is small enough to run every frame")
+    @Test("the watchdog probe's cost is set by the block, not by the texture")
     func watchdogProbeCostIsMeasured() throws {
         let ctx = try MetalContext()
-        let pipeline = try makePipeline(ctx)
-        let stage = try makeAccumulatorStage(ctx, persistent: true, iterations: 1)
-        // Measure at a realistic 1080p size, not the 16×16 used elsewhere.
-        pipeline.setStagedRuntime([stage], drawableSize: CGSize(width: 1920, height: 1080))
-        try renderFrame(ctx, pipeline)
 
-        let iterations = 2000
-        let start = DispatchTime.now().uptimeNanoseconds
-        for _ in 0..<iterations { pipeline.probeStagedPersistentState() }
-        let elapsed = DispatchTime.now().uptimeNanoseconds - start
-        let perFrameMicros = Double(elapsed) / Double(iterations) / 1000.0
+        // WHAT THIS ASSERTS, AND WHY IT IS A RATIO. The probe must stay O(block), never
+        // O(texture) — the defect it guards is the probe growing back into a full-texture
+        // readback. An earlier version asserted an absolute wall-clock ceiling (400 µs
+        // Debug / 5 µs Release). That measures the MACHINE as much as the code: it passed
+        // 3/3 in isolation and failed at 402 µs and then 508 µs inside the full suite,
+        // where swift-testing runs suites in parallel and the box is loaded. Widening the
+        // budget would only have moved the tripwire (deterministic tests over
+        // budget-widening). Scaling the drawable 4x in AREA and comparing the two costs
+        // measured in the SAME run divides the machine out: a block probe stays flat, a
+        // full-texture readback grows with the area.
+        func probeCost(width: Int, height: Int) throws -> Double {
+            let pipeline = try makePipeline(ctx)
+            let stage = try makeAccumulatorStage(ctx, persistent: true, iterations: 1)
+            pipeline.setStagedRuntime([stage],
+                                      drawableSize: CGSize(width: width, height: height))
+            try renderFrame(ctx, pipeline)
+            for _ in 0..<200 { pipeline.probeStagedPersistentState() }   // warm
+
+            let iterations = 2000
+            let start = DispatchTime.now().uptimeNanoseconds
+            for _ in 0..<iterations { pipeline.probeStagedPersistentState() }
+            let elapsed = DispatchTime.now().uptimeNanoseconds - start
+            #expect(pipeline.stagedWatchdogTripCount == 0,
+                    "clean state must not trip the watchdog")
+            return Double(elapsed) / Double(iterations) / 1000.0
+        }
+
+        let hd = try probeCost(width: 1920, height: 1080)
+        let uhd = try probeCost(width: 3840, height: 2160)   // 4x the texels
+        let growth = uhd / max(hd, 1e-9)
 
         let edge = RenderPipeline.stagedProbeBlockEdge
-        print(String(format: "[alfven.1] watchdog probe: %.2f µs/frame at 1920×1080 rgba32Float "
-                             + "(one %d×%d block, %d bytes) — BUILD: %@",
-                     perFrameMicros, edge, edge, edge * edge * 16,
+        print(String(format: "[alfven.1] watchdog probe: %.2f µs at 1920×1080, %.2f µs at "
+                             + "3840×2160 (4x area) — growth %.2fx, one %d×%d block, %d bytes "
+                             + "— BUILD: %@",
+                     hd, uhd, growth, edge, edge, edge * edge * 16,
                      Self.isDebugBuild ? "Debug/-Onone" : "Release"))
-        #expect(pipeline.stagedWatchdogTripCount == 0, "clean state must not trip the watchdog")
 
-        // Build-dependent budget (CLAUDE.md §Build & Test; PREP.1 / D-242 §Amendment).
-        // `swift test` defaults to Debug/-Onone, where the 1024-element finiteness
-        // scan is ~500× slower than optimised — measured 2026-09-08 on M-series:
-        //   getBytes alone   0.17 µs (-O) / 0.34 µs (-Onone)
-        //   getBytes + scan  0.21 µs (-O) / 110 µs   (-Onone)
-        // The SHIPPING figure is the Release one: ~0.2 µs/frame, ~0.001 % of a
-        // 60 fps frame. The Debug ceiling is set only so the gate still fails if
-        // the probe grows back into a full-texture readback.
-        let budgetMicros = Self.isDebugBuild ? 400.0 : 5.0
-        #expect(perFrameMicros < budgetMicros,
+        // A full-texture readback would grow ~4x with the area. A block probe is flat.
+        // 2.0 sits clear of both, so this fails on the regression and not on load.
+        #expect(growth < 2.0,
                 """
-                watchdog probe costs \(perFrameMicros) µs/frame, over the \
-                \(budgetMicros) µs budget for this build configuration
+                watchdog probe cost grew \(growth)x when the drawable area grew 4x \
+                (\(hd) µs -> \(uhd) µs): the probe is scaling with the TEXTURE, not with \
+                its fixed \(edge)×\(edge) block
                 """)
     }
 }
