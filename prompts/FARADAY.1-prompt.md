@@ -52,17 +52,36 @@ Motivating design: `docs/presets/FARADAY_DESIGN.md` §7. Nothing here is Faraday
 
 ## Pre-flight invariants (each failure stops the session)
 
-- **Branch from `claude/alfven-2-preset` at its head, NOT from `main`.** `main` does not contain
-  `AlfvenSolver` at all — starting there gives you nothing to extract. Verify
-  `git log --oneline -1` shows `[ALFVEN.4b] docs: module map, capability registry, plan entry`.
-- Gates green at that head before any edit: `swiftlint lint --strict` = 0;
+- **`claude/alfven-2-preset` is checked out in a live worktree** at
+  `.claude/worktrees/ds2-prompt-execution-f4e847`, so `git checkout claude/alfven-2-preset`
+  will fail with *"already used by worktree"*. That is correct, not a fault. Create the working
+  branch **from** it instead — allowed even while it is checked out elsewhere:
+
+  ```
+  git checkout -b claude/faraday-1-spectral claude/alfven-2-preset
+  git merge main          # picks up the FARADAY.0 design + references; disjoint paths
+  ```
+
+  **Do NOT run `git worktree prune`** to "free" the branch. That worktree is live.
+
+- **The Alfvén branch must be quiescent before this increment starts.** FARADAY.1 moves kernels
+  *out of* `AlfvenSolver.metal` and `AlfvenSolver+Ops.swift`; an ALFVEN increment in flight is
+  editing exactly those files, and the merge afterwards would be miserable. Check
+  `git log --oneline -3 claude/alfven-2-preset` — if the newest commit is hours old and no
+  ALFVEN session is running, proceed. If ALFVEN work is still landing, **stop and tell Matt**;
+  this increment waits.
+- Do **not** pin to a specific Alfvén commit message — that branch moves. Branch from whatever
+  its tip is when you start, and record the SHA you branched from in the closeout.
+- Gates green on your new branch before any edit: `swiftlint lint --strict` = 0;
   `xcodebuild -scheme UzumeApp -destination 'platform=macOS' build` = SUCCEEDED;
   `swift test --package-path UzumeEngine --filter Alfven` = pass.
 - Record the FFT gate numbers **before** you touch anything, and put them in the closeout beside
-  the after numbers: round-trip max relative error and the Parseval ratio. The published values
-  are 8.868e-07 and 1.000000.
+  the after numbers: round-trip max relative error and the Parseval ratio. The values published
+  at ALFVEN.4 were 8.868e-07 and 1.000000 — confirm what they are at your branch point rather
+  than assuming those.
 - `docs/presets/FARADAY_DESIGN.md` and `docs/VISUAL_REFERENCES/faraday/` are present and
-  committed. If either is missing, STOP — design is authored in Matt's seat, never mid-session.
+  committed (they land on `main` in `[FARADAY.0]`). If either is missing, you have not merged
+  `main` — do that first.
 
 ## Numbered tasks
 
