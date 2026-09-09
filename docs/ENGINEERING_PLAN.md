@@ -318,6 +318,44 @@ Filigree's motion rate measurably differs between a fast and a slow track from t
 harness, the coupling is declared in the sidecar's `audio_routes` (so QG.1 route coverage gates it),
 and Matt has confirmed the Filigree proof before any other preset is touched.
 
+**Gate re-checked 2026-09-09 (Matt: *"check if pr.2 is unblocked"*) — PARTIALLY CLEARED, and the
+remaining half need not block PR.2.** The gate was PR.1 §3.3: *"the grid's tempo is wrong on the
+ambient side"*, Weeping Wall reading 142.3 BPM.
+
+**The instrument could not ask the question.** `analyzeBeatGrid(samples:sampleRate:)` — the two-arg
+convenience — defaults to `wholeTrack: false`, and its own doc keeps it that way "so the many
+existing call sites (tests, diagnostics, **BeatBench**) are unchanged". So BeatBench measured the
+30 s clamp, not the local-file path PR.12 actually changed. A first re-measure reproduced 142.25 on
+Weeping Wall and would have reported "still broken" from the wrong arm — the span-artifact class
+again. BeatBench gained `--whole-track` to close that hole.
+
+**Measured on the whole-track grid (`--whole-track`), *Low*:**
+
+| track | BPM | beatsPerBar | barConfidence | grid span |
+|---|---:|---:|---:|---|
+| Speed Of Life | 116.05 | 4 | **1.00** | 3.3-164.5 s of 167 |
+| Sound And Vision | 106.28 | 4 | **1.00** | 1.6-179.9 s of 183 |
+| Breaking Glass | 94.87 | 2 | 0.73 | 1.1-108.6 s of 113 |
+| Art Decade | 78.52 | 4 | 0.86 | 0.4-220.8 s of 227 |
+| Warszawa | 75.08 | 4 | 0.43 | 0.5-368.4 s of 384 |
+| **Weeping Wall** | **171.73** | **1** | **0.37** | 0.0-203.5 s of 208 |
+
+- **Coverage is fixed.** Grids span whole tracks, not 30 s. PR.12 works.
+- **The rhythmic side is trustworthy** - barConfidence 1.00 on the 4/4 material.
+- **The ambient side is still not.** Weeping Wall answers `beatsPerBar 1` - BUG-117's "no bar
+  information" - at confidence 0.37, and its BPM moved 142.25 to 171.73 between the two arms. Two
+  answers 20 % apart on one file is itself the finding; neither is a foundation for a motion rate.
+  That is the wrong-metrical-level gap D-210 declined and FT.3.1 owns. It is not closing soon.
+
+**Why PR.2 is nonetheless unblocked.** The gate's fear was *baking a compensation for a bad number
+into a preset*. The grid now carries the signal needed to avoid that: `barConfidence`, and
+`BeatGrid.hasBarInformation` (BUG-117) which makes "this grid does not know" expressible rather than
+silently reading as 1 beat per bar. So the mechanism ships as **tempo-scaled when the grid is
+confident, default rate when it is not** - Weeping Wall gets the fallback, Speed Of Life gets the
+coupling, and no compensation is baked in anywhere. **Both tracks in the done-when's fast/slow pair
+should be confident ones** (e.g. Speed Of Life 116 vs Art Decade 78.5) so the proof measures the
+mechanism rather than the gap.
+
 **PR.3 — chasing the downbeat, not tolerating it** 🔨 (2026-09-04). **Scope changed by Matt
 mid-increment.** This began as "surface the corroboration and let Matt decide" and then as a
 proposal to keep the estimator's *meter* while declining its *phase* — a right-length bar on a
@@ -767,8 +805,19 @@ each built to his exact words, no design invention:
   and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
   bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
   margin; x is untouched. **And the cause, not just the symptom:** simulated to steady state the source's gravity (1.0) makes the WALLS the attractor — the tail rests at y 0.05 in silence and 0.97 under energy, so the jump is the tail flipping between two rests. The first cut bounded the anchor alone and the GLAZE.3 lift test caught it (both cases pinned at the upper wall — lift removed, not bounded). Gravity 0.3 lets the tail follow the anchor inside the band: silence ≈ 0.36, energy ≈ 0.55, nothing pinned; GLAZE.3 passes; motion gate on 600 frames: 0 spikes, 0 frozen.
-**Done-when unchanged:** Matt approves each sheet. The PR.4 hang is queued behind a fresh capture —
-no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to root-cause yet.
+**✅ APPROVED 2026-09-09 (session `16-46-30Z`), Matt: *"All three look good."*** Seen live, not from the
+sheets — Murmuration, Fata Morgana and Glaze all appear in that session. **PR.6 is COMPLETE**; its
+done-when (each a before/after sheet Matt has approved) is met for all three.
+
+Glaze was the one that needed the live look: its complaint was *jumping*, a temporal defect a still
+cannot show, and the first fix attempt had flattened the vertical response rather than bounding it.
+Approved with gravity 0.3 — a deliberate departure from the source spring, because the request was
+itself a departure from the source behaviour.
+
+**The same session independently confirms PR.8.3 at roster scale:** 18 distinct presets reached in one
+pass, against the 2 the PR.8 ranked walk could reach. The PR.4 hang is still queued behind a fresh
+capture — no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to
+root-cause yet.
 
 **PR.7 — variation and longevity** (deliberately last). Cymatic Resonance (more pattern variation —
 and it is the preset he rates highest, *"one of the best to watch"*), Witchlight (more looping),
@@ -828,6 +877,42 @@ not install at wire (0.6 s) either — Dragon Bloom appeared **150 s** after `wi
   if not intended, score undeclared presets at the track's mean deviation rather than 0.5.
 - **PR.8.1 (small): capture one session with info logging** to see why the planned install waits.
 
+**PR.8.2 — the ranked walk was a regression, found by Matt in 25 minutes ✅ (2026-09-09).** *"I was
+unable to access Arachne and a dozen other presets were missing as well."* PR.8's one-line change
+made the walk unusable, and it shipped and merged.
+
+**Mechanism.** `reactiveWalkNudge` ranked through `rank(...)` under the LIVE scoring context.
+`familyRepeatMultiplier` penalises the **current** preset too — its family is by definition the
+current family — so each press sank the current preset to the bottom of a freshly-computed ranking
+and `(currentIdx + 1) % count` wrapped to index 0. The walk oscillated between the top two entries
+of the moment. Matt's log: `Aurora Veil → Dragon Bloom → Aurora Veil → …`, later
+`Ricercar ↔ Fata Morgana` once the live adapter had moved him elsewhere. Seven distinct presets
+appeared in his session because the planner and mood-override switches changed *which pair* the walk
+then bounced between. Nothing was missing from the build — all 30 sidecars are bundled.
+Second defect in the same line: `filter { $0.1 > 0 }` dropped every planner-excluded preset from a
+**manual override** path — all three diagnostics categorically, plus Volumetric Lithograph
+(24 ms > the 16.6 ms budget). The alphabetical walk it replaced had reached those by accident.
+
+**Fix.** `DefaultPresetScorer.walkOrder(presets:track:context:)` (new file, `PresetScorer+Walk.swift`):
+ranks by track fit with `currentPreset`/`recentHistory` cleared, so the order is stable under the
+walk, and returns **every** preset with excluded ones sorted last and ties broken by name.
+`PresetWalkOrderTests` pins all three properties and was **verified to fail against the PR.8 code**
+— reaching 2 of 7 presets, the same ratio Matt hit.
+
+**What this cost and what it says.** PR.8's closeout claimed the walk change as an unambiguous win on
+the strength of a ranking dump; nothing exercised the walk itself. A one-line behavioural change to
+an interactive path shipped with no test of that path, and the person who found it was Matt.
+
+**PR.8.3 — the walk is alphabetical again, on Matt's call ✅ (2026-09-09).** *"I just want the presets
+to be listed in alphabetical order, so that I can easily navigate to the preset I want."* Ranked order
+is per-track and therefore unpredictable to navigate — the trade-off PR.8's own recommendation named,
+now settled by living with both. **The ordering reverts; the reachability fix stays:** the walk covers
+every loaded preset with no eligibility filter, which is what actually made Arachne unreachable.
+`DefaultPresetScorer.walkOrder` and its engine test are deleted — a `sorted { $0.name < $1.name }` in
+the router needs neither. Both properties are now pinned in `DefaultPlaybackActionRouterTests`
+(alphabetical stepping, and full reachability including diagnostics and over-budget presets), which
+is where a router behaviour belongs and where PR.8 should have put a test in the first place.
+
 **Matt: "do all three" — done 2026-09-09 (D-245).** Immediate nudge walks scorer-ranked order; the
 section quarter is gated on real section data (three-weight normalisation when nil); undeclared stem
 affinity scores the mean deviation. Result on the measured tracks: Seven Nation Army opener Filigree by
@@ -845,6 +930,54 @@ coupling from scratch, not tuning it: this is preset-authoring work per preset, 
 honest default for any that does not earn the effort. **Done-when:** every `certified: false` preset
 has an explicit certify-or-remove decision from Matt with a date, and none remains undecided at the
 beta cut.
+
+**PR.9 inventory ✅ (2026-09-09) — facts gathered; every disposition is Matt's call, undecided until he says.**
+
+**The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
+which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
+diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
+to it. That leaves **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
+Plasma, Waveform.
+
+**Why Matt is seeing them at all.** `uzume.settings.visuals.showUncertifiedPresets = 1` in his defaults, so
+the uncertified six are in his roster today. The five zero-route presets PR.1 flagged as *"no audio coupling
+declared at all"* are **exactly** this set minus Waveform — the roster complaint and the certification gap
+are the same fact seen twice.
+
+| Preset | Size / history | What it is | State |
+|---|---|---|---|
+| **Waveform** | 101 lines, 2026-04-06, 2 commits | A spectrum-and-waveform bar display — a signal readout rather than a visualizer | **Load-bearing:** `VisualizerEngine.swift:936` installs it as the launch default before any plan wires, and `PresetLoaderTests` asserts it exists. Removing it needs a replacement default first. |
+| **Nebula** | 77 lines, 2026-04-06, 2 commits | Radial starburst on black | Day-one demo shader; zero routes |
+| **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
+| **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
+| **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
+| ~~**Arachne**~~ | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | **REMOVED 2026-09-09 (D-246), Matt's call.** Seen live (session `15-08-12Z`): *"Arachne is visible, but it's still a massively broken preset."* Zero routes, no reference images, broken render, eight prior design iterations — certifying meant authoring it again. ~6,100 lines deleted. |
+
+**None has curated reference images** — every `docs/VISUAL_REFERENCES/<preset>/` in this set holds a README
+and nothing else, so there is no fidelity target to certify *against* without curating one first.
+
+**What certifying one costs.** For the five zero-route presets it is not tuning — there is no coupling to
+tune. It is designing the musical role, curating references, authoring the routes, and running the §12
+rubric: preset-authoring work per preset, comparable to a preset uplift. Arachne additionally needs its
+render verified live before any of that is worth starting.
+
+**Arachne's case is now fully informed** (2026-09-09). It is the largest investment in the uncertified set —
+1652 lines, 48 commits, an 872-line design doc whose name (`ARACHNE_V8_DESIGN`) records eight prior
+iterations — and it renders broken, has zero audio coupling, and has no reference images to certify
+against. "Certify" here is not tuning or repair; it is authoring the preset again. That is the trade-off
+Matt is deciding, not a recommendation from this row.
+
+**Dispositions so far.** **Arachne — REMOVE, 2026-09-09 (D-246).** Five remain undecided: Gossamer
+(carries BUG-060), Membrane, Nebula, Plasma, and Waveform (load-bearing as the launch default — removing
+it needs a replacement chosen first).
+
+**A consequence of the first removal, for the record:** the `staged` paradigm now has **no production
+preset** — only the two diagnostic sandboxes. Its reference template was retargeted to Staged Sandbox.
+If `staged` is to stay a supported paradigm, it needs a production preset or an explicit note that it
+is infrastructure awaiting one.
+
+**Not decided here.** Per-preset disposition is Matt's; this row records the facts and stays open until he
+gives one. PR.9's done-when is unchanged: an explicit certify-or-remove decision, with a date, for each.
 
 **PR.10 — session-driven replay across every paradigm** ✅ (2026-09-04). **The premise in PR.1 was
 half wrong and the increment is much smaller than it scoped.** PR.1 reported that 23 of 26 flagged

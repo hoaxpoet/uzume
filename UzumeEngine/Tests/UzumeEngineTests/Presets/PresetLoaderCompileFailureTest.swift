@@ -114,7 +114,7 @@ struct PresetLoaderCompileFailureTest {
     /// `certified:false`, and `exclude_from_cycling:true` so it never lands in the
     /// manual cycle; it is a harness fixture in the same class as Staged Sandbox,
     /// not aesthetic content. See docs/DECISIONS.md D-244.)
-    static let expectedProductionPresetCount = 30
+    static let expectedProductionPresetCount = 29   // D-246: Arachne removed (was 30)
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

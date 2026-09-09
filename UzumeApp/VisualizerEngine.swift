@@ -184,11 +184,6 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Set in `applyPreset` when a ray march preset is activated; cleared otherwise.
     var currentRayMarchPipeline: RayMarchPipeline?
 
-    /// Arachne web-pool state — allocated when the Arachne preset is active,
-    /// nil otherwise. Tick closure and webBuffer are wired into the render pipeline
-    /// via `setMeshPresetTick` / `setDirectPresetFragmentBuffer` in `applyPreset`.
-    var arachneState: ArachneState?
-
     /// Latest bass stem attack ratio — updated each per-frame stem analysis pass,
     /// forwarded into MIRDiagnostics for the spider debug overlay.
     var latestBassAttackRatio: Float = 0

@@ -403,18 +403,17 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         immediate: Bool,
         catalog: [PresetDescriptor]
     ) -> Bool {
-        // PR.8 (Matt): walk SCORER-RANKED order, as this protocol's contract says — not the catalog
-        // by name. From the Waveform launch default the alphabetical walk gave Witchlight first
-        // (the only name after "Waveform") and then wrapped to Arachne; the planner itself ranked
-        // Witchlight 23rd of 30 on that track. Ranked order means "next" is the planner's next-best
-        // fit for THIS track. Excluded presets (total 0) are left out of the walk.
-        let fields = adaptationFields(at: getSessionTime())
-        let ranked = DefaultPresetScorer().rank(
-            presets: catalog,
-            track: getTrackProfile() ?? TrackProfile.empty,
-            context: getScoringContext(fields)
-        )
-        let eligible = ranked.filter { $0.1 > 0 }.map { $0.0 }
+        // ALPHABETICAL, over EVERY loaded preset (Matt, 2026-09-09: "I just want the presets to
+        // be listed in alphabetical order, so that I can easily navigate to the preset I want").
+        //
+        // PR.8 made this walk scorer-ranked because the protocol's doc said "scorer-ranked order".
+        // Ranked order is per-track and therefore unpredictable to navigate, and PR.8's version was
+        // also recomputed per press — the current preset sank to last by its own family-repeat
+        // multiplier, so "next" wrapped to the top and the walk oscillated between two presets
+        // (PR.8.2). Matt's call reverses the ORDER; the reachability half of the PR.8.2 fix stays:
+        // no eligibility filter here. This is a manual override, so it must reach anything loaded —
+        // diagnostics and over-budget presets included, which PR.8's `filter { $0.1 > 0 }` dropped.
+        let eligible = catalog.sorted { $0.name < $1.name }
         guard !eligible.isEmpty else {
             logger.warning("U.6b: presetNudge — empty catalog")
             return false

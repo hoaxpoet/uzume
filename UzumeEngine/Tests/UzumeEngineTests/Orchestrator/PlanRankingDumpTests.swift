@@ -29,7 +29,7 @@ struct PlanRankingDumpTests {
             let rows = catalog.map { ($0, scorer.breakdown(preset: $0, track: p, context: ctx)) }
                 .sorted { $0.1.total > $1.1.total }
             print("[plan-dump] tier \(tier) — empty history (the opener context):")
-            for (d, b) in rows.prefix(12) {
+            for (d, b) in rows {
                 let ex = b.excluded ? "  EXCLUDED: \(b.exclusionReason ?? "?")" : ""
                 print(String(format: "[plan-dump]   %-22@ total %.3f  mood %.2f tempo %.2f aff %.2f sect %.2f fam×%.2f fat×%.2f boost %.2f%@",
                              d.name as NSString, b.total, b.mood, b.tempoMotion, b.stemAffinity, b.sectionSuitability,
