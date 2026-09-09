@@ -64,6 +64,8 @@ struct AlfvenStabilitySoakTests {
         var checker = 0.0
         var clampedFraction = 0.0
         var phiRMS = 0.0
+        var eKin = 0.0        // 1/2 <|u|^2>,  u = grad(phi)
+        var eMag = 0.0        // 1/2 <|B|^2>,  B = grad(psi)
         var uMaxTexels = 0.0
         var finite = true
     }
@@ -113,6 +115,8 @@ struct AlfvenStabilitySoakTests {
             if i % 30 == 0 || i == total - 1 {
                 var sample = try Self.measure(pipeline)
                 try Self.measurePhi(pipeline, ctx, into: &sample)
+                sample.eKin = try Self.gradEnergy(pipeline, ctx, "gphir")
+                sample.eMag = try Self.gradEnergy(pipeline, ctx, "gpsir")
                 trace.append(sample)
             }
         }
@@ -123,9 +127,9 @@ struct AlfvenStabilitySoakTests {
         print("[alfven-soak] \(total) frames at \(Self.edge)² — omega/psi/J RMS and grid-scale energy")
         for (idx, s) in trace.enumerated() where idx % 4 == 0 || idx == trace.count - 1 {
             print(String(format: "[alfven-soak] f%4d  wRMS %8.4f | pRMS %7.4f | jRMS %8.5f "
-                                 + "| checker %8.5f | clamped %6.3f%% | phiRMS %8.3f",
+                                 + "| checker %8.5f | clamped %5.2f%% | Ekin %9.4f Emag %8.4f Etot %9.4f",
                          idx * 30, s.omegaRMS, s.psiRMS, s.jRMS, s.checker,
-                         s.clampedFraction * 100.0, s.phiRMS))
+                         s.clampedFraction * 100.0, s.eKin, s.eMag, s.eKin + s.eMag))
         }
         print("[alfven-soak] watchdog trips: \(pipeline.stagedWatchdogTripCount)")
 
@@ -175,6 +179,39 @@ struct AlfvenStabilitySoakTests {
                 it has not reached an equilibrium.
                 """)
         }
+    }
+
+    /// Mean of (x^2 + y^2) over a gradient texture — twice the corresponding energy.
+    private static func gradEnergy(_ pipeline: RenderPipeline, _ ctx: MetalContext,
+                                   _ stage: String) throws -> Double {
+        guard let tex = pipeline.stagedTexture(named: stage) else {
+            throw HarnessError.setupFailed("no texture for \(stage)")
+        }
+        let w = tex.width, h = tex.height
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: tex.pixelFormat, width: w, height: h, mipmapped: false)
+        desc.usage = [.shaderRead]; desc.storageMode = .shared
+        guard let staging = ctx.device.makeTexture(descriptor: desc),
+              let cmd = ctx.commandQueue.makeCommandBuffer(),
+              let blit = cmd.makeBlitCommandEncoder() else {
+            throw HarnessError.setupFailed("staging blit")
+        }
+        blit.copy(from: tex, to: staging); blit.endEncoding()
+        cmd.commit(); cmd.waitUntilCompleted()
+        var raw = [Float](repeating: 0, count: w * h * 4)
+        raw.withUnsafeMutableBytes { buf in
+            guard let base = buf.baseAddress else { return }
+            staging.getBytes(base, bytesPerRow: w * 16,
+                             from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                             size: MTLSize(width: w, height: h, depth: 1)),
+                             mipmapLevel: 0)
+        }
+        var sum = 0.0
+        for i in 0..<(w * h) {
+            let x = Double(raw[i * 4]), y = Double(raw[i * 4 + 1])
+            sum += x * x + y * y
+        }
+        return 0.5 * sum / Double(w * h)
     }
 
     /// Read phi and derive the velocity the advection actually sees. This is the
