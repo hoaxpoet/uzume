@@ -185,15 +185,21 @@ struct PresetVisualReviewTests {
     // that produces raw G-buffer output instead of the deferred lit result.
     @Test("Render preset to PNGs + contact sheet (RENDER_VISUAL=1)",
           arguments: ["Arachne", "Aurora Veil", "Gossamer", "Volumetric Lithograph", "Lumen Mosaic", "Nimbus",
+                      "Root Choir",
                       // BUG-034: remaining ray-march presets, so before/after step-budget
                       // pairs cover the full affected set. Ferrofluid Ocean renders its
                       // legacy SDF path here (no mesh encoder / height texture in this
                       // harness); both halves of an A/B pair use the identical harness,
                       // so deltas isolate the uniform change.
                       "Ferrofluid Ocean"])
+    @MainActor
     func renderPresetVisualReview(_ presetName: String) throws {
         guard ProcessInfo.processInfo.environment["RENDER_VISUAL"] == "1" else {
             print("[PresetVisualReview] RENDER_VISUAL not set, skipping \(presetName)")
+            return
+        }
+        if let requestedPreset = ProcessInfo.processInfo.environment["RENDER_PRESET"],
+           requestedPreset != presetName {
             return
         }
 
@@ -266,7 +272,10 @@ struct PresetVisualReviewTests {
         // saturated regime.
         //
         // All other presets keep the existing 3-fixture set.
-        let fixtures: [(name: String, fv: FeatureVector, trackSeed: SIMD4<Float>?)] = {
+        let fixtures: [(name: String, fv: FeatureVector, trackSeed: SIMD4<Float>?)] = try {
+            if presetName == "Root Choir" {
+                return try rootChoirRealMusicFixtures()
+            }
             if presetName == "Lumen Mosaic" {
                 // LM.3.2 round 8 (2026-05-10): beat envelope removed. Cells
                 // hold their previous state until the next beat advances the
@@ -390,6 +399,84 @@ struct PresetVisualReviewTests {
                                   to: sheetURL)
             print("[PresetVisualReview] wrote \(sheetURL.lastPathComponent)")
         }
+    }
+
+    /// Five review states selected from a committed real-music capture. The rows are
+    /// chosen by the actual tonal/bass measurements rather than hand-authored FeatureVectors.
+    @MainActor
+    private func rootChoirRealMusicFixtures()
+        throws -> [(name: String, fv: FeatureVector, trackSeed: SIMD4<Float>?)] {
+        guard let fixtureRoot = Bundle.module.url(forResource: "route_coverage", withExtension: nil) else {
+            throw VisualReviewError.preconditionFailed("so_what real-music fixture missing")
+        }
+        let url = fixtureRoot.appendingPathComponent("so_what/features.csv")
+        let rows = try SessionReplayHarness.loadRowsForReplay(url)
+        guard rows.count > 8 else {
+            throw VisualReviewError.preconditionFailed("so_what fixture has no usable rows")
+        }
+        let rest = rows.min { $0.tonalConsonance < $1.tonalConsonance }!
+        let stable = rows.max {
+            ($0.tonalConsonance - 0.8 * $0.harmonicFlux)
+                < ($1.tonalConsonance - 0.8 * $1.harmonicFlux)
+        }!
+        let movement = rows.max { $0.harmonicFlux < $1.harmonicFlux }!
+        let tension = rows.max { $0.tonalTension < $1.tonalTension }!
+        let bass = rows.max { $0.bassAttRel < $1.bassAttRel }!
+        let aspect = Float(Self.renderWidth) / Float(Self.renderHeight)
+        return [
+            ("silence_atonal_rest", SessionReplayHarness.featureForReplay(from: rest, aspect: aspect), nil),
+            ("stable_harmony", SessionReplayHarness.featureForReplay(from: stable, aspect: aspect), nil),
+            ("harmonic_movement", SessionReplayHarness.featureForReplay(from: movement, aspect: aspect), nil),
+            ("high_tension", SessionReplayHarness.featureForReplay(from: tension, aspect: aspect), nil),
+            ("bass_heavy", SessionReplayHarness.featureForReplay(from: bass, aspect: aspect), nil),
+        ]
+    }
+
+    /// Temporal review for Root Choir using the committed So What feature capture in row order.
+    /// The state is ticked at every recorded analysis row and every third row is rendered,
+    /// preserving the real harmonic trajectory at ~14 fps while keeping the review tractable.
+    @MainActor
+    @Test("Render Root Choir real-music motion sequence (RENDER_ROOT_CHOIR_SEQUENCE=1)")
+    func renderRootChoirMotionSequence() throws {
+        guard ProcessInfo.processInfo.environment["RENDER_ROOT_CHOIR_SEQUENCE"] == "1" else {
+            return
+        }
+        guard let fixtureRoot = Bundle.module.url(forResource: "route_coverage", withExtension: nil) else {
+            throw VisualReviewError.preconditionFailed("so_what real-music fixture missing")
+        }
+        let rows = try SessionReplayHarness.loadRowsForReplay(
+            fixtureRoot.appendingPathComponent("so_what/features.csv")
+        )
+        let ctx = try MetalContext()
+        guard let preset = _acceptanceFixture.presets.first(where: {
+            $0.descriptor.name == "Root Choir"
+        }) else {
+            throw VisualReviewError.preconditionFailed("Root Choir preset missing")
+        }
+        let outputDir = try makeOutputDirectory()
+        let aspect = Float(Self.renderWidth) / Float(Self.renderHeight)
+        var written = 0
+        for (index, row) in rows.enumerated() {
+            var features = SessionReplayHarness.featureForReplay(from: row, aspect: aspect)
+            guard index % 3 == 0 else { continue }
+            let pixels = try renderFrame(
+                preset: preset,
+                context: ctx,
+                arachneState: nil,
+                features: &features
+            )
+            let url = outputDir.appendingPathComponent(
+                String(format: "root_choir_seq_%04d.png", written)
+            )
+            try writePNG(
+                bgraPixels: pixels,
+                width: Self.renderWidth,
+                height: Self.renderHeight,
+                to: url
+            )
+            written += 1
+        }
+        print("[PresetVisualReview] wrote \(written) Root Choir real-music sequence frames to \(outputDir.path)")
     }
 
     // MARK: - Lumen Mosaic palette-library contact sheet (LM.4.7)

@@ -188,6 +188,9 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Lumen Mosaic":         false,   // slot-8 pattern engine is CPU-side (the original precedent)
     "Nacre":                true,    // lightweight; L1/L2/L3 pass in-shader (band routes visible
                                      // to the heuristic even though TIV palette is CPU-fed)
+    "Root Choir":           false,   // lightweight Liquid Script; intentionally uncertified
+                                     // through slot 6, so the source heuristic cannot see them.
+                                     // Uncertified pending visual M7.
     "Nimbus":               false,   // direct-fragment; heuristic sees no deviation primitives
     "Ricercar":             false,   // FL.13 flow-field coupling CPU-side; not yet certified
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate

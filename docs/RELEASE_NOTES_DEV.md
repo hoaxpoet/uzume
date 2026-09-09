@@ -10,6 +10,18 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-09-205204] ROOTCHOIR.2 / BUG-122 — remove the particle ring and make harmony reshape instead of spin
+
+Matt's first live review rejected Root Choir: *“There is still white particles in a circular ring pattern,” “the center … looks like a muddle,” “not understanding the connection to the music,”* and *“the spin is odd and somewhat disorienting.”* The attached “Combat Baby” capture is clean and all five declared inputs fire, so this was the preset—not the audio or renderer.
+
+The causes were authored and measurable. A radial orbit trap (`abs(length(z) - radius)`) was promoted into near-white highlights, directly drawing the ring. Live `tonal_tension` topped out at 0.091 while the aperture expected 0…1, leaving the centre nearly closed. Fifths/thirds changed by about 0.86/0.89 rad per analysis update, yet fifths was mapped directly to the whole organism's angle, making rotation the dominant response.
+
+ROOTCHOIR.2 deletes the radial trap and white seam colour, uses dark leadwork with sparse amber light, maps the real tension/consonance ranges across their visual spans, grows a clean five-sided aperture, and bounds fifths orientation to ±0.34 rad. Thirds and tension now rotate/deepen a complex quadratic/cubic fold of the Newton starting domain, so harmony reorganizes basin topology rather than turning the frame. The preset remains uncertified and BUG-122 remains pending M7.
+
+Evidence: clean session `2026-09-09T20-25-49Z`; route replay at `/private/tmp/root-choir-session-review/replay_report.md`; before sheet `/tmp/uzume_visual/20260909T203906/root_choir_compare.png`; after frames `/tmp/uzume_visual/20260909T204953/`; motion sequence `/tmp/uzume_visual/20260909T205058/` (430 frames). Focused tests, performance, lint, and app build are recorded in the closeout.
+
+---
+
 ### [dev-2026-09-08-181826] BUG-065 — the drift evidence has always measured the correction, not the error
 
 Matt: *"Work on drift first."* The first thing to look at was what `drift_ms` actually is, and it is not what every diagnosis of this defect has assumed.
@@ -1968,4 +1980,3 @@ The fast gate had been red on every `main` push since 2026-06-29, always at the 
 ### [dev-2026-07-07-201922] CENSUS.1–.2 — corpus batch-analysis harness
 
 Phase CENSUS opens (from `docs/research/CORPUS_ML_OPPORTUNITIES.md §10 item 1`, Matt's go-ahead). **CENSUS.1** landed the corpus tooling: `tools/corpus_manifest.py` (scan/tag/pilot; mutagen; resumable) + the deterministic seed-42 stratified `tools/data/corpus_pilot_1000.csv` (jazz/classical/long-form/non-44.1 kHz/FLAC strata + proportional fill) over the 27,639-track archive, plus an ~800 KB gz repo copy of the full manifest. **CENSUS.2** added the `CorpusCensusRunner` executable target (retained-diagnostic; deps DSP/ML/Session): it drives the **existing** pipeline over the manifest and emits one CSV row per track — full-mix + drums-stem Beat This! grids, the continuous octave-folded BPM disagreement (D-154's evidence, not just its boolean), the MoodClassifier's 10 input-feature means + valence/arousal, K-S key + correlations, and the MIR tempo estimate. Resumable (skips already-written relpaths), `--dual-rate` emits 44.1/48 kHz MIR rows for the cross-path mood-skew calibration. The only production change is the **behaviour-identical** `foldedBPMDisagreement` extraction in `BPMMismatchCheck.swift`, now shared by the D-154 gate and the census (existing tests green; a new unit test pins the fold values incl. the just-under-2.0 edge). Fixed a real CRLF-parsing bug found on the pilot manifest (Swift treats `\r\n` as one grapheme cluster, so `split(separator: "\n")` silently made the whole file one line — now splits on `isNewline`). The census MEASURES only; every retune is a separate D-numbered increment. Dev-local validation: 12 real files (4 flac / 4 mp3 / 4 m4a, 44.1 + 48 kHz), sane BPMs, no empty feature columns, per-track <5 s, kill-and-resume lossless (zero duplicates). Next: CENSUS.3 (1,000-track pilot run + distribution report on the Mac mini).
-

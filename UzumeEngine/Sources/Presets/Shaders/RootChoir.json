@@ -1,0 +1,32 @@
+{
+  "name": "Root Choir",
+  "family": "drawing",
+  "duration": 40,
+  "description": "Liquid Script: tapered amber, magenta, and violet ink gestures write themselves across a charcoal field, braid through a persistent non-radial liquid flow, and dissolve before they congeal. Bass deviation continuously changes advection; beat onsets accent newly written local gestures. No global rotation, particle rings, central knot, or white bloom.",
+  "author": "Matt",
+  "inspired_by": {
+    "milkdrop_filename": "Martin - liquid arrows",
+    "original_artist": "Martin",
+    "pack": "jberg/butterchurn-presets",
+    "sha256": "10c8ad8fe49bd58a9c0b2658df1677f1a001f53a2bc193434dcb91ba85066336",
+    "source_form": "butterchurn built-in JSON rendered as a motion oracle; source JSON is not redistributed"
+  },
+  "passes": ["direct", "mv_warp"],
+  "fragment_function": "root_choir_fragment",
+  "vertex_function": "fullscreen_vertex",
+  "decay": 0.982,
+  "feedback_pixel_format": "bgra8Unorm",
+  "visual_density": 0.42,
+  "motion_intensity": 0.46,
+  "color_temperature_range": [0.24, 0.82],
+  "fatigue_risk": "low",
+  "transition_affordances": ["crossfade", "morph"],
+  "section_suitability": ["ambient", "buildup", "bridge", "comedown"],
+  "complexity_cost": { "tier1": 1.8, "tier2": 0.9 },
+  "audio_routes": [
+    { "route": "liquid_advection", "primitive": "bassDev", "kind": "continuous" },
+    { "route": "local_script_seed", "primitive": "beatComposite", "kind": "accent" }
+  ],
+  "certified": false,
+  "rubric_profile": "lightweight"
+}

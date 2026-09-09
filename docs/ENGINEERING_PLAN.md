@@ -1716,13 +1716,7 @@ Deleted: `Presets/FerrofluidOcean/FerrofluidMesh.swift` (378) + `Renderer/Shader
 Pixel-identical by construction (the branch required a non-nil encoder that production never set); `PresetRegressionTests` dHash green across all 29 presets, `FerrofluidOceanVisualTests` green. Net −1,214 / +33 lines. Two superfluous SwiftLint disables fell away as the shrunken functions dropped under their gates.
 
 ### Increment BUG103.0 — BUG-103 filed + diagnosed to the throw site (docs-only) ✅ (2026-08-25)
-
-**What was done.** The parallel-suite killer RECON.14 hit (uncaught NSException `'player did not see an IO cycle'`) is now filed as **BUG-103** in `docs/QUALITY/KNOWN_ISSUES.md`, diagnosed to its throw site from fourteen on-disk `.ips` crash reports including one first-hand baseline reproduction (clean worktree at merge `8cbf936a`, fixtures linked, full suite → crash at 17:00). Established: the identical exception backtrace in all fourteen reports — `LocalFilePlaybackProvider._startLocked()` (`play()`, line 327) → `AVAudioPlayerNodeImpl::StartImpl` → NSException — and the process-kill mechanism (`play()` fails as an ObjC exception; the racing-start tests call `start()` on raw detached threads where nothing can catch it; unwinding off a pthread aborts the process, so the suite dies with no failing test line). Distinct from BUG-078 (`StopImpl`/dealloc `dispatch_sync`, SIGTRAP); same AVAudioPlayerNode-lifecycle-under-load family. NOT established (recorded as such): why the engine has no IO cycle at `play()` time — starvation vs stopped-out-from-under — and whether `resume()`'s `play()` site ever fires. One observed-once sequencing detail: the first-hand crash came from a thread the churn suite's watchdog had already abandoned and leaked. **No fix code** (evidence-before-implementation; verification criteria written in the entry). **Done-when:** entry filed with evidence, mechanism, class, and pre-written verification criteria — done. Next: the fix is its own increment against the entry's criteria (contained to the provider start path; must respect BUG-021/BUG-078 lock constraints).
-
 ### Increment RECON.14 — D-213 executed: RMENV.2/.3 gallery environment + MFX.1 temporal upscaler deleted ✅ (2026-08-25)
-
-Executes the deletion Matt decided on 2026-08-03 (D-213; queued as a RECON follow-up). Deleted: `MetalFXTemporalUpscaler.swift`, the MFX half of `RayMarchPipeline+MetalFX.swift` (renamed `RayMarchPipeline+AudioModulation.swift` — the FLY.6 audio modulation it housed is live and stayed), the motion-vector preamble + pipeline in `PresetLoader`(+Preamble), `ibl_gallery_env`/`ibl_env` + `envType` plumbing in `IBL.metal`/`IBLManager`, the `RayMarch.metal` miss-path backdrop branches, and the `environment` / `scene_backdrop` / `upscale` descriptor fields (0/29 sidecars declared any). `SceneUniforms` layout unchanged; `lightingParams.y/.z/.w` revert to reserved. KEPT per D-213: RMENV.1 `scene_lights` (3 live consumers) and PERF.11 `render_scale` → `rayMarchRenderScale` (VL at 0.5). Pixel-identical by construction (all deleted paths were unreachable: envType 0, backdrop 0, no MFX opt-in); `PresetRegressionTests` dHash gate green. `IBLEnvironmentTests` and the MFX parity blocks in `VLBudgetProbeTests`/`SessionReplayHarness` deleted with the capability. Registry rows 72–73 + the render-scale ★ note updated; D-213 marked executed.
-
 ### Increment RICERCAR-CERT.1 — Ricercar CERTIFIED ✅ (2026-08-20)
 ### Increment RICERCAR-WIRE.1 — the echo prototype becomes a selectable preset ✅ (2026-08-20)
 ### Increment PERF.16 — the ray-march cost model: no step, a mildly sublinear curve ✅ (2026-08-20)
@@ -8983,3 +8977,61 @@ full engine suite green.
 **Capability registry:** no rows changed. No renderer capability was added, promoted, or blocked.
 
 **Remaining:** nothing. `UzumeApp` builds clean from a fresh `xcodebuild`.
+
+---
+
+### Increment ROOTCHOIR.2 — first-M7 structural redesign; pending live verdict (2026-09-09)
+
+**Done when:** the white circular particle mechanism is removed; the centre remains visibly open
+across the real tonal-tension range; harmonic geometry reads through bounded orientation,
+chirality, and topology rather than continuous spin; production still/motion artifacts are
+inspected; focused tests and the app build pass; and the preset remains uncertified for M7.
+
+**Implemented.** BUG-122 documents the clean “Combat Baby” session and first screenshot before
+the fix. The radial orbit trap and near-white seam colour are gone. `RootChoirState` now maps the
+measured tension range 0.004…0.085 and consonance range 0.05…0.20 across their visual spans,
+bounds fifths orientation to ±0.34 rad, and uses a slow ±0.10 rad pendular rest drift. The shader
+opens a 0.135…0.250 central aperture and applies a quadratic/cubic complex preimage whose bounded
+angle follows thirds and whose depth follows tension; this makes harmony alter basin topology
+without free field rotation. Recursive boundaries are dark leadwork with sparse amber filaments.
+
+**Evidence.** Before sheet:
+`/tmp/uzume_visual/20260909T203906/root_choir_compare.png`. Final after sheet:
+`/tmp/uzume_visual/20260909T205631/root_choir_compare.png`. The real-music sequence at
+`/tmp/uzume_visual/20260909T205529/` contains 430 frames; sampled frames keep a stable centre and
+show bounded morphing rather than full turns. The motion signal reports median/max 0.69/5.38,
+47 >3×-median event transitions and 182 near-zero transitions; this is not an automated pass and
+is explicitly owed live judgment because Newton boundary changes are nonlinear.
+
+**Verdict:** continue to one M7, do not certify. The named ring, muddle, and free-spin mechanisms
+are removed. If the stronger fold still reads as decorated petals rather than a psychedelic
+organism—or if its event transitions feel like popping—retire the concept instead of starting a
+third cosmetic tuning round.
+
+---
+
+### Increment ROOTCHOIR.1 — reviewable uncertified harmonic Newton preset ✅ (2026-09-09)
+
+**Done when:** a production `geometric` / `direct` preset named Root Choir loads uncertified;
+five ordered Newton roots are driven by the existing fifths, thirds, tension, consonance, and
+bass primitives; circular phases are CPU-smoothed across ±π; silence remains alive; focused
+geometry/render/performance gates pass; and both real-music still and motion artifacts exist.
+
+**Delivered.** `RootChoir.metal` runs eight guarded damped Newton steps (λ 0.78) over five
+ordered roots and derives jewel identity, convergence depth, orbit detail, derivative-stabilized
+recursive seams, a tension aperture, and one asymmetrical five-lobed silhouette. `RootChoirState`
+uses the shared unit-vector circular smoother at τ 1.4 s and writes a 32-byte slot-6 block;
+low-confidence input blends toward a dim canonical rotating constellation. The app allocates and
+ticks that state through the existing direct-preset hooks. No `FeatureVector` field was added.
+
+**Verification.** Nine focused tests cover load/compile, non-black silence, fifths rotation,
+thirds chirality with stable indices, tension aperture/separation, bounded bass scale, phase-wrap
+continuity, a 50,000-step finite/collision-free math sweep, and a 121-frame non-collapse GPU sweep.
+Final isolated 1080p direct timing is 2.72 ms/frame best-of-three (no readback; Tier-2 preset-work ceiling 7 ms). The So What
+fixture produced five named 1920×1280 review frames plus a 430-frame real-music temporal sequence;
+the motion gate reports median/max difference 1.81/7.43, 21 event-cluster spikes, and 2/429 near-
+frozen transitions. Reader verdict: smooth, coherent macro motion; live M7 remains deliberately
+open because the preset is uncertified.
+
+**Decision:** D-244. **Next:** one live M7 and a material-depth tuning pass if the central recursive
+seams still read decorative rather than transmitted-glass. Do not certify from offline evidence.

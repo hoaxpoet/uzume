@@ -108,7 +108,9 @@ struct PresetLoaderCompileFailureTest {
     /// conversion, jaggedness fix, and camera-orbit removal each landed correctly, but
     /// Matt's verdict stayed negative through every round ("a loser across the board").
     /// See docs/DECISIONS.md D-224.)
-    static let expectedProductionPresetCount = 29
+    /// 29 → 30 at ROOTCHOIR.1 (Root Choir — direct five-root Newton-fractal,
+    /// geometric family, circular tonal runtime at slot 6; uncertified).
+    static let expectedProductionPresetCount = 30
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {
