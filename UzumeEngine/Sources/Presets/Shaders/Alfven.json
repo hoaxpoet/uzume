@@ -1,0 +1,34 @@
+{
+  "name": "Alfv\u00e9n",
+  "description": "Driven 2D incompressible MHD in vorticity / flux-function form. The solver is a COMPUTE pipeline (AlfvenSolver, ALFVEN.4) \u2014 spectral Poisson, spectral Poisson brackets, Hou-Li filter, 2/3 dealiasing and the spike's integrating factor, stepped by a Swift substep loop with a CFL-adaptive timestep. Moved off the staged fragment path because substeps saw stale derivatives and adaptive dt was inexpressible there. PLACEHOLDER exposure until a reduction surface exists for film.py's percentile auto-exposure; no audio routing until ALFVEN.3.",
+  "author": "Uzume engine",
+  "family": "hypnotic",
+  "passes": [
+    "particles"
+  ],
+  "stages": [],
+  "vertex_function": "fullscreen_vertex",
+  "fragment_function": "alfven_ground_fragment",
+  "duration": 30,
+  "visual_density": 0.55,
+  "motion_intensity": 0.35,
+  "color_temperature_range": [
+    0.3,
+    0.7
+  ],
+  "fatigue_risk": "high",
+  "transition_affordances": [
+    "crossfade"
+  ],
+  "section_suitability": [
+    "ambient",
+    "comedown"
+  ],
+  "complexity_cost": {
+    "tier1": 2.2,
+    "tier2": 1.5
+  },
+  "certified": false,
+  "rubric_profile": "lightweight",
+  "exclude_from_cycling": true
+}

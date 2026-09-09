@@ -45,9 +45,14 @@ struct PresetStageDecodeTests {
         let descriptors = loader.presets.map(\.descriptor)
         #expect(!descriptors.isEmpty, "no sidecars found — the sweep would be vacuous")
 
-        // `Poisson Sandbox` is the ALFVEN.1 diagnostic and is the one preset that
-        // is SUPPOSED to use the new keys; every other stage must be untouched.
-        for descriptor in descriptors where descriptor.name != "Poisson Sandbox" {
+        // The presets that are SUPPOSED to use the new keys, named explicitly so the
+        // sweep still proves nothing else acquired them silently. Adding a name here is
+        // a deliberate act; a preset drifting into the keys without one fails this test.
+        let deliberateUsers: Set<String> = [
+            "Poisson Sandbox",   // ALFVEN.1 diagnostic — proves the surface
+            "FFT Sandbox",       // ALFVEN.1c — 8-iteration butterfly stages
+        ]
+        for descriptor in descriptors where !deliberateUsers.contains(descriptor.name) {
             for stage in descriptor.stages {
                 #expect(stage.persistent == false,
                         "\(descriptor.name)/\(stage.name) unexpectedly persistent")

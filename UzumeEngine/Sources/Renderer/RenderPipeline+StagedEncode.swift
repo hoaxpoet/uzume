@@ -81,7 +81,7 @@ extension RenderPipeline {
         /// One render pass of this stage into `target`, reading `previous` at the
         /// persistent slot. Nested so it can share `features` without pushing the
         /// parameter list past what a reader can hold.
-        func encodePass(into target: MTLTexture, previous: MTLTexture?) {
+        func encodePass(into target: MTLTexture, previous: MTLTexture?, index: Int) {
             let descriptor = MTLRenderPassDescriptor()
             descriptor.colorAttachments[0].texture = target
             descriptor.colorAttachments[0].loadAction = .clear
@@ -96,13 +96,15 @@ extension RenderPipeline {
                         features: &features,
                         stemFeatures: stemFeatures,
                         textures: sampled,
-                        previousPersistent: previous)
+                        previousPersistent: previous,
+                        pass: StagedPassInfo(index: Int32(index),
+                                             count: Int32(stage.iterations)))
             encoder.endEncoding()
         }
 
         // Plain single-shot stage: one pass into its own texture, no pair.
         guard stage.needsPingPongPair, let spare = textures.back[stage.name] else {
-            encodePass(into: current, previous: nil)
+            encodePass(into: current, previous: nil, index: 0)
             return
         }
 
@@ -111,8 +113,8 @@ extension RenderPipeline {
         // other half.
         var read = current
         var write = spare
-        for _ in 0..<stage.iterations {
-            encodePass(into: write, previous: read)
+        for iteration in 0..<stage.iterations {
+            encodePass(into: write, previous: read, index: iteration)
             swap(&read, &write)
         }
         // `read` now holds the newest output — it becomes the front texture.
@@ -132,7 +134,8 @@ extension RenderPipeline {
         features: inout FeatureVector,
         stemFeatures: StemFeatures,
         textures: [String: MTLTexture],
-        previousPersistent: MTLTexture? = nil
+        previousPersistent: MTLTexture? = nil,
+        pass: StagedPassInfo = StagedPassInfo(index: 0, count: 1)
     ) {
         encoder.setRenderPipelineState(stage.pipelineState)
         encoder.setFragmentBytes(&features,
@@ -168,6 +171,16 @@ extension RenderPipeline {
         if let presetBuf3 = directPresetFragmentBuffer3Lock.withLock({ directPresetFragmentBuffer3 }) {
             encoder.setFragmentBuffer(presetBuf3, offset: 0, index: 8)
         }
+
+        // Which pass of an iterated stage this is (ALFVEN.1c). `iterations` alone runs N
+        // byte-identical passes, which is right for a relaxation sweep but cannot express
+        // any algorithm whose passes differ — an FFT butterfly span, a multigrid level, a
+        // jump-flood step. Binding the index makes those authorable without a stage per
+        // pass in the sidecar. Slot 9, unallocated since the §5.8 stage-rig removal.
+        var passInfo = pass
+        encoder.setFragmentBytes(&passInfo,
+                                 length: MemoryLayout<StagedPassInfo>.stride,
+                                 index: 9)
 
         bindNoiseTextures(to: encoder)
 

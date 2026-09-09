@@ -297,6 +297,8 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Reaction–diffusion cell colony for the Mitosis preset — attached via
     /// `ParticleGeometry` (D-097, MITOSIS.1). Built eagerly like Filigree.
     var mitosisGeometry: (any ParticleGeometry)?
+    /// Alfvén's MHD solver (ALFVEN.4) — a compute pipeline, not a fragment path.
+    var alfvenSolver: (any ParticleGeometry)?
 
     /// Vibrating-sand Chladni simulation for the Cymatic Resonance preset —
     /// attached via `ParticleGeometry` (D-097, CR.2 rebuild). Built eagerly.
@@ -966,6 +968,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         self.murmurationGeometry = Self.makeMurmurationGeometry(context: ctx, library: lib)
         self.filigreeGeometry = Self.makeFiligreeGeometry(context: ctx, library: lib)
         self.mitosisGeometry = Self.makeMitosisGeometry(context: ctx, library: lib)
+        self.alfvenSolver = Self.makeAlfvenSolver(context: ctx, library: lib)
         self.cytokinesisGeometry = Self.makeCytokinesisGeometry(context: ctx, library: lib)
         self.ricercarGeometry = Self.makeRicercarGeometry(context: ctx, library: lib)
         self.cymaticSandGeometry = Self.makeCymaticSandGeometry(context: ctx, library: lib)
@@ -1291,6 +1294,24 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         return web
     }
 
+    /// Alfvén's MHD solver (ALFVEN.4). Optional like every other geometry: a construction
+    /// failure logs and leaves the preset rendering its ground rather than taking the app
+    /// down. Unlike the other conformers this owns a PDE, not particles — the protocol fits
+    /// because it is really "compute per frame, then draw".
+    private static func makeAlfvenSolver(
+        context: MetalContext,
+        library: Renderer.ShaderLibrary
+    ) -> (any ParticleGeometry)? {
+        do {
+            return try AlfvenSolver(device: context.device,
+                                    library: library.library,
+                                    pixelFormat: context.pixelFormat)
+        } catch {
+            Logging.renderer.error("AlfvenSolver unavailable: \(error)")
+            return nil
+        }
+    }
+
     /// Build the reaction–diffusion cell colony for the Mitosis preset
     /// (`MitosisGeometry` + `Mitosis.metal`, MITOSIS.1). Returns
     /// `any ParticleGeometry` (D-097, siblings not subclasses).
@@ -1370,19 +1391,24 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// caller is expected to log + fall through. Exposed as `internal` so
     /// `applyPreset .particles:` and `ParticleDispatchResolutionTests` share
     /// a single mapping (D-097).
+    ///
+    /// A table rather than a `switch`: the eleventh preset pushed the switch past the
+    /// cyclomatic-complexity limit, and a name-to-geometry mapping is what this actually
+    /// is. Adding a preset is now one row.
     func resolveParticleGeometry(forPresetName name: String) -> (any ParticleGeometry)? {
-        switch name {
-        case "Murmuration": return murmurationGeometry
-        case "Filigree":    return filigreeGeometry
-        case "Mitosis":     return mitosisGeometry
-        case "Cytokinesis": return cytokinesisGeometry
-        case "Ricercar":    return ricercarGeometry
-        case "Cymatic Resonance": return cymaticSandGeometry
-        case "Witchlight":  return witchlightGeometry
-        case "Meniscus":    return meniscusGeometry
-        case "Stave":       return staveGeometry
-        default:            return nil
-        }
+        let table: [String: (any ParticleGeometry)?] = [
+            "Murmuration": murmurationGeometry,
+            "Filigree": filigreeGeometry,
+            "Mitosis": mitosisGeometry,
+            "Cytokinesis": cytokinesisGeometry,
+            "Ricercar": ricercarGeometry,
+            "Cymatic Resonance": cymaticSandGeometry,
+            "Witchlight": witchlightGeometry,
+            "Meniscus": meniscusGeometry,
+            "Stave": staveGeometry,
+            "Alfvén": alfvenSolver,
+        ]
+        return table[name].flatMap { $0 }
     }
 
     /// Build the serpentine line-strip water surface for the Meniscus preset
