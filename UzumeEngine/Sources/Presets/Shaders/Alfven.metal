@@ -97,7 +97,7 @@ static inline float2 alfven_sample_catrom(texture2d<float, access::sample> tex,
 // substeps per output frame; we do the same by giving the `state` stage `iterations: 8`,
 // which is exactly what ALFVEN.1's iterated-stage surface is for. 0.016/8 = 0.002 sits
 // inside the spike's bound. Fixed, never the render dt (BUG-097).
-constant constexpr float kAlfvenDt        = 0.016;
+constant constexpr float kAlfvenDt        = 0.002;
 // NOTE: the `state` stage must run ONCE per frame. Substepping is invalid in this
 // architecture: the four derivative spectra are computed once per frame upstream, so
 // substeps 2..N would evaluate the brackets against STALE derivatives. Measured — 8
@@ -399,9 +399,17 @@ fragment float4 alfven_grad_phi_fragment(
     uint2 gid = uint2(in.position.xy);
     float2 omegaH, psiH, k;
     alfven_field_spectra(specTex, gid, omegaH, psiH, k);
-    // lap(phi) = -omega  =>  phi_h = omega_h / k^2, the exact Poisson solve.
+    // SIGN. The relation is omega = lap(phi) (ALFVEN_DESIGN §4), so lap(phi) = +omega and
+    // therefore phi_h = -omega_h / k^2 — which is exactly what the spike does
+    // (alfven.py:82, `phi = -w_h * self.K2inv`).
+    //
+    // This was inverted. The sandbox helper `uz_inv_laplacian_k` solves lap(phi) = -src,
+    // and I fed it omega directly without accounting for that sign, giving phi_h =
+    // +omega_h/k^2. That reverses the entire velocity field u = (-phi_y, phi_x), so the
+    // advection term FEEDS energy instead of transporting it — a runaway by construction,
+    // and the reason every stabiliser in turn failed to stop it.
     float k2 = dot(k, k);
-    float2 phiH = (k2 < 0.5) ? float2(0.0) : omegaH / k2;
+    float2 phiH = (k2 < 0.5) ? float2(0.0) : (-omegaH / k2);
     return float4(uz_grad_spectrum(phiH, k), 0.0, 1.0);
 }
 
