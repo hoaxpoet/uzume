@@ -120,7 +120,11 @@ struct PresetLoaderCompileFailureTest {
     /// reduction/mip surface exists for film.py's percentile auto-exposure. `certified:
     /// false`, `exclude_from_cycling: true` while the look is a placeholder, no audio
     /// routing until ALFVEN.3. See docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
-    static let expectedProductionPresetCount = 31
+    /// 31 → 32 at ALFVEN.1c (FFT Sandbox added — a GPU 2D Stockham FFT on the staged
+    /// surface, one butterfly pass per stage iteration, gated by a round-trip identity
+    /// test. Infrastructure for Alfvén's spectral stabiliser, proven standalone first.
+    /// `is_diagnostic`, `exclude_from_cycling`.)
+    static let expectedProductionPresetCount = 32
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {
