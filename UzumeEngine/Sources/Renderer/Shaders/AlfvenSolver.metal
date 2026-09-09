@@ -151,7 +151,7 @@ struct AlfvenParams {
     float seedAmpPsi;
     float seedPhase;
     float blendRate;    // per-substep share of the re-seed crossfade
-    float _pad;
+    float jCutoff;      // band limit for the DISPLAY quantity J; see alfven_j_spectrum
 };
 
 static inline float2 alf_wavenumber(uint2 gid, uint n) {
@@ -495,5 +495,21 @@ kernel void alfven_j_spectrum(
     float2 omegaH, psiH;
     alf_unpack(src.read(gid).xy, src.read(mir).xy, omegaH, psiH);
     float2 k = alf_wavenumber(gid, p.gridEdge);
-    dst.write(float4(-dot(k, k) * psiH, 0.0, 1.0), gid);
+    float k2 = dot(k, k);
+
+    // Band-limit J to where psi actually HAS content. This is not taste, it is the
+    // single-precision noise floor made visible by the k^2 in J = lap(psi):
+    //
+    //   psi carries 99.9% of its energy below k = 8 and its peak (k = 2) has power
+    //   ~1.9e-3. Measured anomalous energy on the ky = 0 row at k = 32..128 is ~1.5e-10,
+    //   i.e. 1e-7 of the peak — float32 epsilon exactly. It sits on ky = 0 because the
+    //   transform is separable: the row pass leaves round-off of order eps*|psi| at high
+    //   kx, and the column pass averages it over y straight into the ky = 0 bin. J then
+    //   multiplies it by k^4 in power (1.7e7 at k = 64), lifting round-off to J's own
+    //   scale — visible as fine VERTICAL stripes over the whole frame, i.e. exactly the
+    //   `07_anti_grid_speckle` anti-reference. The float64 spike never shows it.
+    //
+    // So this filters numerical noise, not physics; the state itself is untouched.
+    float kr = clamp(sqrt(k2) / max(p.jCutoff, 1.0), 0.0, 1.0);
+    dst.write(float4(-k2 * psiH * exp(-36.0 * pow(kr, 36.0)), 0.0, 1.0), gid);
 }

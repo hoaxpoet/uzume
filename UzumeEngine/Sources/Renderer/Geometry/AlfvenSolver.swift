@@ -52,7 +52,8 @@ struct AlfvenParams {
     var seedAmpPsi: Float = 0
     var seedPhase: Float = 0
     var blendRate: Float = 0
-    var pad: Float = 0
+    /// Band limit for the DISPLAY quantity J; see `alfven_j_spectrum`.
+    var jCutoff: Float = 0
 }
 
 public enum AlfvenSolverError: Error {
@@ -134,6 +135,17 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
 
     /// Cycle index at the last step, so a re-seed is detected rather than recomputed.
     private var lastCycle: Int = -1
+
+    /// Accumulated SIMULATION time — the clock the field actually evolves on.
+    ///
+    /// The re-seed cycle, its crossfade and the forcing phase were all driven off the
+    /// caller's REAL time (`frame / 60`), while everything they control evolves in sim
+    /// time, which advances by `substeps * dt` with `dt` set by the CFL — i.e. by the
+    /// field's own energy. The two ran ~4.4x apart here (f300 = 5.0 real s but t = 2.75
+    /// sim s) and the ratio is not even constant. Same class as BUG-097: a render-clock
+    /// duration used for something that lives on another clock. Reading the PREVIOUS
+    /// frame's dt keeps this stall-free — the reduction writes `dtBuffer` on the GPU.
+    public private(set) var simClock: Float = 0
 
     public init(device: MTLDevice, library: MTLLibrary,
                 pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb,
@@ -256,11 +268,19 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// adaptive timestep costs no stall — the reduction writes `dtBuffer` on the GPU and
     /// the integrate kernel reads it there.
     public func update(time: Float, commandBuffer: MTLCommandBuffer) {
-        var params = makeParams(time: time)
+        // `time` is deliberately unused for anything the FIELD sees; see `simClock`.
+        _ = time
+        if lastCycle >= 0 { simClock += Float(configuration.substeps) * lastAdaptiveDt }
+        var params = makeParams(time: simClock)
 
         // Re-seed on a cycle boundary (§5): the look is a sequence of transients, because
-        // a sustained driven 2D MHD state condenses to a static quilt.
-        let cycle = Int(floor(time / configuration.cycleSeconds))
+        // a sustained driven 2D MHD state condenses to a static quilt. Measured brightness
+        // across one transient (drive 0, N=256, film.py's own mapping): meanLum 0.33 at
+        // t = 0.35-1.31, collapsing to 0.13 by t = 2.75 and recovering only to 0.19 by
+        // t = 5.5. The reference look — REF 01 meanLum 0.283, REF 05 (silence) 0.422 — is
+        // the FIRST ~1.5 sim seconds after a re-seed, so the cycle length is what decides
+        // whether the preset lives in that window or in the trough.
+        let cycle = Int(floor(simClock / configuration.cycleSeconds))
         if cycle != lastCycle {
             lastCycle = cycle
             params.seedPhase = 7.31 * Float(cycle) + 1.7
@@ -274,8 +294,11 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
 
     /// Force a fresh seed — first frame, or recovery after a non-finite blow-up.
     public func reseed(time: Float, commandBuffer: MTLCommandBuffer) {
-        var params = makeParams(time: time)
-        params.seedPhase = 7.31 * floor(time / configuration.cycleSeconds) + 1.7
+        _ = time
+        simClock = 0
+        lastCycle = 0
+        var params = makeParams(time: 0)
+        params.seedPhase = 1.7
         encodeSeed(&params, into: commandBuffer)
     }
 
@@ -285,8 +308,12 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         // advance_blend). Zero outside the blend window.
         let cycleStart = floor(time / cfg.cycleSeconds) * cfg.cycleSeconds
         let blendPhase = min(max((time - cycleStart) / cfg.blendTau, 0), 1)
+        // Per-substep share of the crossfade, raised cosine (the spike's advance_blend,
+        // alfven.py:115-127). The spike divides by its ACTUAL dt; this used `cfg.maxDt`,
+        // the 0.005 ceiling, so the crossfade ran ~2.5x fast whenever the CFL was biting.
+        let stepDt = lastAdaptiveDt > 0 ? lastAdaptiveDt : cfg.maxDt
         let blendRate: Float = blendPhase < 1
-            ? (0.5 - 0.5 * cos(.pi * blendPhase)) * (cfg.maxDt / cfg.blendTau) * .pi
+            ? (0.5 - 0.5 * cos(.pi * blendPhase)) * (stepDt / cfg.blendTau) * .pi
             : 0
         return AlfvenParams(
             dt: cfg.maxDt,
@@ -303,7 +330,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
             seedAmpOmega: cfg.seedAmpOmega,
             seedAmpPsi: cfg.seedAmpPsi,
             seedPhase: 7.31 * floor(time / cfg.cycleSeconds) + 1.7,
-            blendRate: blendRate)
+            blendRate: blendRate,
+            jCutoff: cfg.jCutoff)
     }
 
     func grid() -> (MTLSize, MTLSize) {

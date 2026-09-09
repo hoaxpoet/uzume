@@ -47,11 +47,36 @@ public struct AlfvenSolverConfiguration: Sendable {
     public var seedKPsi: Int
     public var seedAmpOmega: Float
     public var seedAmpPsi: Float
-    /// Seconds per re-seed. §5: a sustained driven MHD state condenses into a static
-    /// quilt, so the look is a sequence of transients.
+    /// SIMULATION seconds per re-seed — not real seconds; see `AlfvenSolver.simClock`.
+    /// §5: a sustained driven MHD state condenses into a static quilt, so the look is a
+    /// sequence of transients.
+    ///
+    /// This length IS the look. Brightness across one transient (drive 0, N=256, through
+    /// film.py's own mapping) peaks at meanLum 0.33 for the first ~1.5 sim seconds, falls
+    /// to 0.13 by t = 2.75 and recovers only to 0.19 by t = 5.5 — so the cycle decides
+    /// whether the preset lives in the reference look or in the trough. Measured over
+    /// 900 frames, mean(aJ) averaged / fraction of frames at-or-above REF 01:
+    ///
+    ///     cycle  2.0 -> 0.233, 70%   (min 0.114 — never reaches the trough)
+    ///     cycle  3.0 -> 0.185, 40%
+    ///     cycle  4.0 -> 0.164, 27%
+    ///     cycle  6.0 -> 0.154, 26%   (~the spike film's own 7.9 s cadence)
+    ///     cycle 22.0 -> 0.143, 18%   (the previous value, and it was in REAL seconds)
+    ///
+    /// 2.0 is set because the silence target (`05_atmosphere_relaxed_state`, meanLum
+    /// 0.422) is explicitly the broad-lobed, soft-seamed, few-seamed state, and that is
+    /// the early transient. It is a TRADE: with `blendTau` 1.1 the crossfade fills over
+    /// half of each cycle, so the field re-braids continuously and never fully sharpens
+    /// its current sheets — and the seam, not the lobe, is what REF 02 says the eye should
+    /// land on. Longer cycles buy sharper seams and pay in darkness. Matt's call.
     public var cycleSeconds: Float
     /// Crossfade duration for a re-seed, seconds (the spike's advance_blend tau).
     public var blendTau: Float
+    /// Band limit for the DISPLAY quantity J, in mode numbers. See `alfven_j_spectrum`:
+    /// J = lap(psi) multiplies psi by k^2, which lifts the float32 FFT noise floor into
+    /// the visible range as grid-scale striping. psi has no real content up there, so
+    /// this removes numerical noise only. The state is not filtered by it.
+    public var jCutoff: Float
 
     public init(
         edge: Int = 256,
@@ -67,8 +92,9 @@ public struct AlfvenSolverConfiguration: Sendable {
         seedKPsi: Int = 2,
         seedAmpOmega: Float = 1.2,
         seedAmpPsi: Float = 0.9,
-        cycleSeconds: Float = 22.0,
-        blendTau: Float = 1.1
+        cycleSeconds: Float = 2.0,   // SIM seconds; see the property comment
+        blendTau: Float = 1.1,
+        jCutoff: Float = 48.0
     ) {
         self.edge = edge
         self.maxDt = maxDt
@@ -87,6 +113,7 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.seedAmpPsi = seedAmpPsi
         self.cycleSeconds = cycleSeconds
         self.blendTau = blendTau
+        self.jCutoff = jCutoff
     }
 }
 
