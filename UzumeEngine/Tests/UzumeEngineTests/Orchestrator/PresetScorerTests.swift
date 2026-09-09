@@ -164,7 +164,7 @@ struct PresetScorerTests {
 
     // MARK: 8 — Empty stem_affinity is exactly neutral (0.5)
 
-    @Test("Empty stem_affinity yields stemAffinity = 0.5")
+    @Test("Empty stem_affinity scores the mean stem deviation — 0 when no stem deviates (PR.8)")
     func emptyStemAffinityIsNeutral() {
         let preset  = makePreset(name: "NoAffinity", stemAffinity: [:])
         let track   = makeTrack(stemBalance: StemFeatures(drumsEnergy: 0.9))
@@ -172,7 +172,7 @@ struct PresetScorerTests {
 
         let bd = scorer.breakdown(preset: preset, track: track, context: context)
 
-        #expect(bd.stemAffinity == 0.5)
+        #expect(bd.stemAffinity == 0.0)   // PR.8: mean deviation over all four stems; dev fields are 0 here
     }
 
     // MARK: 9 — Fatigue cooldown

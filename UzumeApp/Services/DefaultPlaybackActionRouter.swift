@@ -403,7 +403,18 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         immediate: Bool,
         catalog: [PresetDescriptor]
     ) -> Bool {
-        let eligible = catalog.sorted { $0.name < $1.name }
+        // PR.8 (Matt): walk SCORER-RANKED order, as this protocol's contract says — not the catalog
+        // by name. From the Waveform launch default the alphabetical walk gave Witchlight first
+        // (the only name after "Waveform") and then wrapped to Arachne; the planner itself ranked
+        // Witchlight 23rd of 30 on that track. Ranked order means "next" is the planner's next-best
+        // fit for THIS track. Excluded presets (total 0) are left out of the walk.
+        let fields = adaptationFields(at: getSessionTime())
+        let ranked = DefaultPresetScorer().rank(
+            presets: catalog,
+            track: getTrackProfile() ?? TrackProfile.empty,
+            context: getScoringContext(fields)
+        )
+        let eligible = ranked.filter { $0.1 > 0 }.map { $0.0 }
         guard !eligible.isEmpty else {
             logger.warning("U.6b: presetNudge — empty catalog")
             return false
