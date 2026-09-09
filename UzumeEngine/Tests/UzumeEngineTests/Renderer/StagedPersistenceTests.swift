@@ -33,6 +33,36 @@ private enum PersistenceTestError: Error {
 /// `out = previous + 1`. Reads the persistent/iteration slot the engine binds
 /// (`kStagedPersistentTextureSlot` = 20); if that binding were missing the
 /// fragment would read zero every pass and every count below would come out 1.
+/// Writes the bound pass index, so a readback proves each iteration of an iterated stage
+/// sees a DIFFERENT value. Before ALFVEN.1c every iteration was byte-identical and this
+/// would read back 0 on the final pass regardless of the iteration count.
+private let kPassIndexShader = """
+#include <metal_stdlib>
+using namespace metal;
+
+struct VOut {
+    float4 position [[position]];
+    float2 uv;
+};
+
+struct StagedPassInfo { int index; int count; };
+
+vertex VOut pass_vertex(uint vid [[vertex_id]]) {
+    float2 pts[3] = { float2(-1, -1), float2(3, -1), float2(-1, 3) };
+    VOut o;
+    o.position = float4(pts[vid], 0.0, 1.0);
+    o.uv = (pts[vid] + 1.0) * 0.5;
+    return o;
+}
+
+fragment float4 pass_fragment(
+    VOut in [[stage_in]],
+    constant StagedPassInfo& p [[buffer(9)]]
+) {
+    return float4(float(p.index), float(p.count), 0.0, 1.0);
+}
+"""
+
 private let kAccumulatorShader = """
 #include <metal_stdlib>
 using namespace metal;
@@ -224,6 +254,64 @@ struct StagedPersistenceTests {
         try renderFrame(ctx, pipeline)
         #expect(try readRed(pipeline, stage: "accum") == 16.0,
                 "iteration 1 of frame 2 must warm-start from frame 1's state")
+    }
+
+    // MARK: ALFVEN.1c — per-pass index
+
+    @Test("each iteration of an iterated stage sees its own pass index")
+    func iteratedStageSeesPassIndex() throws {
+        let ctx = try MetalContext()
+        let pipeline = try makePipeline(ctx)
+
+        let options = MTLCompileOptions()
+        options.languageVersion = .version3_0
+        guard let library = try? ctx.device.makeLibrary(source: kPassIndexShader, options: options),
+              let vfn = library.makeFunction(name: "pass_vertex"),
+              let ffn = library.makeFunction(name: "pass_fragment") else {
+            throw PersistenceTestError.shaderCompileFailed
+        }
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vfn
+        descriptor.fragmentFunction = ffn
+        descriptor.colorAttachments[0].pixelFormat = .rgba32Float
+        let stage = StagedStageSpec(
+            name: "passidx",
+            pipelineState: try ctx.device.makeRenderPipelineState(descriptor: descriptor),
+            samples: [], writesToDrawable: false,
+            persistent: false, iterations: 6, pixelFormat: .rgba32Float)
+        pipeline.setStagedRuntime([stage], drawableSize: Self.size)
+        try renderFrame(ctx, pipeline)
+
+        // The front texture holds the LAST pass, so index must be iterations - 1.
+        #expect(try readRed(pipeline, stage: "passidx") == 5.0, """
+            the final pass of a 6-iteration stage did not see index 5 — every iteration is \
+            still byte-identical, and no per-pass algorithm (FFT butterfly, multigrid \
+            level, jump flood step) is authorable
+            """)
+    }
+
+    @Test("a non-iterated stage sees pass (0, 1)")
+    func singleShotStageSeesZeroIndex() throws {
+        let ctx = try MetalContext()
+        let pipeline = try makePipeline(ctx)
+        let options = MTLCompileOptions()
+        options.languageVersion = .version3_0
+        guard let library = try? ctx.device.makeLibrary(source: kPassIndexShader, options: options),
+              let vfn = library.makeFunction(name: "pass_vertex"),
+              let ffn = library.makeFunction(name: "pass_fragment") else {
+            throw PersistenceTestError.shaderCompileFailed
+        }
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vfn
+        descriptor.fragmentFunction = ffn
+        descriptor.colorAttachments[0].pixelFormat = .rgba32Float
+        let stage = StagedStageSpec(
+            name: "single",
+            pipelineState: try ctx.device.makeRenderPipelineState(descriptor: descriptor),
+            samples: [], writesToDrawable: false, pixelFormat: .rgba32Float)
+        pipeline.setStagedRuntime([stage], drawableSize: Self.size)
+        try renderFrame(ctx, pipeline)
+        #expect(try readRed(pipeline, stage: "single") == 0.0)
     }
 
     // MARK: Task 8 — non-finite watchdog

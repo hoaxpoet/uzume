@@ -99,6 +99,23 @@ struct StagedFrameSnapshot {
     let textures: StagedTextureSet
 }
 
+/// Which pass of an iterated staged stage is being encoded (ALFVEN.1c).
+///
+/// Bound at fragment buffer 9 for every staged pass. `index` counts from 0 and `count`
+/// is the stage's declared `iterations`, so a shader can branch on where it is in the
+/// sequence — the butterfly span of an FFT stage, the level of a multigrid V-cycle, the
+/// step size of a jump flood. A non-iterated stage sees `(0, 1)`.
+///
+/// Layout must match `StagedPassInfo` in the shader preamble.
+public struct StagedPassInfo: Sendable, Equatable {
+    public var index: Int32
+    public var count: Int32
+    public init(index: Int32, count: Int32) {
+        self.index = index
+        self.count = count
+    }
+}
+
 /// First fragment-texture binding slot used by staged sampled inputs.
 /// Slots 0–12 are reserved (noise textures 4–8, IBL 9–11, text overlay 12).
 /// Sampled outputs occupy 13…19 — `PresetStage.maxSamples` caps a stage at 7.

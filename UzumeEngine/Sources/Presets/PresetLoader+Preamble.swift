@@ -23,6 +23,13 @@ extension PresetLoader {
         #define FFT_BIN_COUNT 512
         #define WAVEFORM_CAPACITY 2048
 
+        // Matches Swift StagedPassInfo (Renderer). Bound at fragment buffer 9 on every
+        // staged pass; `(0, 1)` for a stage that is not iterated. ALFVEN.1c.
+        struct StagedPassInfo {
+            int index;
+            int count;
+        };
+
         // Matches Swift FeedbackParams layout (8 floats = 32 bytes).
         struct FeedbackParams {
             float decay, base_zoom, base_rot;
