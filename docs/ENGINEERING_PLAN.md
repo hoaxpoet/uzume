@@ -767,8 +767,19 @@ each built to his exact words, no design invention:
   and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
   bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
   margin; x is untouched. **And the cause, not just the symptom:** simulated to steady state the source's gravity (1.0) makes the WALLS the attractor — the tail rests at y 0.05 in silence and 0.97 under energy, so the jump is the tail flipping between two rests. The first cut bounded the anchor alone and the GLAZE.3 lift test caught it (both cases pinned at the upper wall — lift removed, not bounded). Gravity 0.3 lets the tail follow the anchor inside the band: silence ≈ 0.36, energy ≈ 0.55, nothing pinned; GLAZE.3 passes; motion gate on 600 frames: 0 spikes, 0 frozen.
-**Done-when unchanged:** Matt approves each sheet. The PR.4 hang is queued behind a fresh capture —
-no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to root-cause yet.
+**✅ APPROVED 2026-09-09 (session `16-46-30Z`), Matt: *"All three look good."*** Seen live, not from the
+sheets — Murmuration, Fata Morgana and Glaze all appear in that session. **PR.6 is COMPLETE**; its
+done-when (each a before/after sheet Matt has approved) is met for all three.
+
+Glaze was the one that needed the live look: its complaint was *jumping*, a temporal defect a still
+cannot show, and the first fix attempt had flattened the vertical response rather than bounding it.
+Approved with gravity 0.3 — a deliberate departure from the source spring, because the request was
+itself a departure from the source behaviour.
+
+**The same session independently confirms PR.8.3 at roster scale:** 18 distinct presets reached in one
+pass, against the 2 the PR.8 ranked walk could reach. The PR.4 hang is still queued behind a fresh
+capture — no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to
+root-cause yet.
 
 **PR.7 — variation and longevity** (deliberately last). Cymatic Resonance (more pattern variation —
 and it is the preset he rates highest, *"one of the best to watch"*), Witchlight (more looping),
