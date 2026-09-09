@@ -28,14 +28,6 @@ import Metal
 import simd
 import Shared
 
-/// Mirrors `AlfvenDisplayParams` in AlfvenSolver.metal. Layout is the GPU contract.
-struct AlfvenDisplayParams {
-    var exposure: Float
-    var polarityScale: Float
-    var hueCentre: Float
-    var pad0: Float
-}
-
 /// Mirrors `AlfvenParams` in AlfvenSolver.metal. Layout is the GPU contract.
 struct AlfvenParams {
     var dt: Float = 0
@@ -76,32 +68,6 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// Accepted for protocol conformance; this solver has no particles. The frame-budget
     /// lever for an MHD field is the substep count, not a dispatch fraction.
     public var activeParticleFraction: Float = 1.0
-
-    /// Fixed stand-in for film.py's percentile auto-exposure (`1/(p99.6 - p2)`), which
-    /// needs a reduction surface that does not exist yet. Calibrated against the measured
-    /// field at ALFVEN.4d, in DISPLAYED-LINEAR space against `05_atmosphere_relaxed_state`
-    /// (the silence target Matt named): 0.085 puts the production path at 0.229, which is
-    /// REF 05's own value. Note this is BRIGHTER than our film.py port's stills (0.159),
-    /// deliberately — the port still undershoots REF 05, and matching the port would just
-    /// reproduce that shortfall.
-    ///
-    /// ⚠ Calibrating this needs sRGB care, and getting it wrong cost a round: the render
-    /// target is `.bgra8Unorm_srgb` so its bytes are gamma-ENCODED, while film.py and the
-    /// reference PNGs write LINEAR values straight to bytes. Comparing raw byte means
-    /// across the two conventions made the live path look 2x too dark.
-    ///
-    /// ⚠ The previous 0.55 was never calibrated against anything and blew the value
-    /// channel out at BOTH field scales — `|J| * 0.55` reached 2.99 at ALFVEN.4's J (rms
-    /// 5.43) and still saturates at 4c's (rms 1.55). Measured on the production path it
-    /// gave meanLum 0.701 against film.py's 0.309...0.332.
-    public var displayExposure: Float = 0.085
-    /// Fixed stand-in for film.py's `1/(std(J) * 1.2)` — the current-sheet POLARITY scale
-    /// that drives hue opponency. Separate from `displayExposure` on purpose: they
-    /// normalise by different statistics, and collapsing them onto one constant is what
-    /// made the live frame flat lavender. J's std runs 1.54...1.64, so 1/(1.6*1.2) ~ 0.52.
-    public var displayPolarityScale: Float = 0.52
-    /// Late magenta<->teal end of film.py's palette drift (Matt, 2026-09-09).
-    public var displayHueCentre: Float = 0.72
 
     public private(set) var configuration: AlfvenSolverConfiguration
 
@@ -152,7 +118,7 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
 
     let dtBuffer: MTLBuffer
     let cflScratch: MTLBuffer
-    private let displayPipeline: MTLRenderPipelineState?
+    let displayPipeline: MTLRenderPipelineState?
 
     /// Cycle index at the last step, so a re-seed is detected rather than recomputed.
     private var lastCycle: Int = -1
@@ -270,22 +236,6 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         update(time: features.time, commandBuffer: commandBuffer)
     }
 
-    /// Draw the current field. `J` is what the fragment colours (§4); omega and psi are
-    /// state and supply nothing visual on their own.
-    public func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {
-        guard let displayPipeline else { return }
-        var params = AlfvenDisplayParams(exposure: displayExposure,
-                                         polarityScale: displayPolarityScale,
-                                         hueCentre: displayHueCentre,
-                                         pad0: 0)
-        encoder.setRenderPipelineState(displayPipeline)
-        encoder.setFragmentBytes(&params,
-                                 length: MemoryLayout<AlfvenDisplayParams>.stride,
-                                 index: 0)
-        encoder.setFragmentTexture(stateTexture, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-    }
-
     /// Advance the field by one frame: `substeps` explicit steps, each with its own full
     /// RHS evaluation and its own CFL-adapted timestep.
     ///
@@ -374,6 +324,35 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
         enc.endEncoding()
     }
+
+    /// Fixed stand-in for film.py's percentile auto-exposure (`1/(p99.6 - p2)`), which
+    /// needs a reduction surface that does not exist yet. Calibrated against the measured
+    /// field at ALFVEN.4d, in DISPLAYED-LINEAR space against `05_atmosphere_relaxed_state`
+    /// (the silence target Matt named): 0.085 puts the production path at 0.229, which is
+    /// REF 05's own value. Note this is BRIGHTER than our film.py port's stills (0.159),
+    /// deliberately — the port still undershoots REF 05, and matching the port would just
+    /// reproduce that shortfall.
+    ///
+    /// ⚠ Calibrating this needs sRGB care, and getting it wrong cost a round: the render
+    /// target is `.bgra8Unorm_srgb` so its bytes are gamma-ENCODED, while film.py and the
+    /// reference PNGs write LINEAR values straight to bytes. Comparing raw byte means
+    /// across the two conventions made the live path look 2x too dark.
+    ///
+    /// ⚠ The previous 0.55 was never calibrated against anything and blew the value
+    /// channel out at BOTH field scales — `|J| * 0.55` reached 2.99 at ALFVEN.4's J (rms
+    /// 5.43) and still saturates at 4c's (rms 1.55). Measured on the production path it
+    /// gave meanLum 0.701 against film.py's 0.309...0.332.
+    public var displayExposure: Float = 0.085
+    /// Fixed stand-in for film.py's `1/(std(J) * 1.2)` — the current-sheet POLARITY scale
+    /// that drives hue opponency. Separate from `displayExposure` on purpose: they
+    /// normalise by different statistics, and collapsing them onto one constant is what
+    /// made the live frame flat lavender. J's std runs 1.54...1.64, so 1/(1.6*1.2) ~ 0.52.
+    public var displayPolarityScale: Float = 0.52
+    /// ANCHOR of the palette drift: the late magenta<->teal end of film.py's drift, and
+    /// the state Matt signed off on live (2026-09-09). The drift is arranged so this exact
+    /// value is what you see at t = 0 and again every period — his ask was to keep this
+    /// state and add colours around it, not to replace it.
+    public var displayHueCentre: Float = 0.72
 
     /// The timestep the CFL reduction chose on the last substep. Diagnostics only.
     public var lastAdaptiveDt: Float {
