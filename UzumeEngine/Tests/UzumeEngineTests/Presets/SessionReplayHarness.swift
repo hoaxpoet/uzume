@@ -64,6 +64,7 @@ struct SessionReplayHarness {
         // both read as "not working" until these were mapped).
         var barPhase01: Float = 0
         var bassDev: Float = 0
+        var trebRel: Float = 0
         var pulseAmp01: Float = 0
         var pulsePhase01: Float = 0
         var pulseBeatIndex: Float = 0
@@ -132,6 +133,7 @@ struct SessionReplayHarness {
             // the session logs bar phase in PERMILLE
             r.barPhase01 = get(f, "barPhase01_permille") / 1000.0
             r.bassDev = get(f, "bassDev")
+            r.trebRel = get(f, "trebRel")
             r.pulseAmp01 = get(f, "pulse_amp01")
             r.pulsePhase01 = get(f, "pulse_phase01")
             r.pulseBeatIndex = get(f, "pulse_beat_index")
@@ -169,6 +171,7 @@ struct SessionReplayHarness {
         f.valence = r.valence; f.arousal = r.arousal
         f.bassAttRel = r.bassAttRel; f.beatPhase01 = r.beatPhase01
         f.barPhase01 = r.barPhase01; f.bassDev = r.bassDev; f.pulseAmp01 = r.pulseAmp01
+        f.trebRel = r.trebRel
         f.pulsePhase01 = r.pulsePhase01
         f.pulseBeatIndex = r.pulseBeatIndex
         f.pulseRegionalBlend01 = r.pulseRegionalBlend01

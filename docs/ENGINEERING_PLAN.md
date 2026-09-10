@@ -9819,6 +9819,69 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.3 — audio routing (3 of 5 routes) ⏳ (2026-09-10)
+
+**Done-when (design §7):** five routes declared and green on `RouteCoverageTests`; M7. **Three
+continuous routes land here**; the per-bar accent and the section-boundary re-seed do not — see
+below.
+
+**⚠ §7's PRIMARY ROUTE WAS INERT, and that is the finding.** `bassDev` → stirring vigour routes to
+`drive`. Measured before writing any routing code: sweeping drive 0 → 0.080 moves J std by **0.08 %**
+and mean luma not at all, at both re-seed cadences. The response only begins near drive ≈ 1 and
+spans the reference set by ≈ 16. So the design's nominal **0.012…0.020 is two to three orders of
+magnitude too small** — a number inherited from the spike, where it is equally inert (putting our
+forcing into the spike changed its result by nothing at ALFVEN.4c). Nobody had checked the preset's
+primary audio lever moved the picture.
+
+Recalibrated to **0.02…16**, the route does exactly what §7 promises and the span lands on the
+reference set: silence → two broad lobes with soft seams (`05_atmosphere_relaxed_state`), p95 →
+thin seams braided across the frame (`01_macro_braided_lobes`). Stability checked at the ceiling:
+**0.00 % clamped**, wMax 57 against a clamp of 200.
+
+**Routes (one primitive per layer, separate timescales — FA #67):**
+
+| layer | primitive | τ | calibration |
+|---|---|---|---|
+| stirring vigour → seam density | `bassDev` | 100 ms | soft-saturated at the p75 knee (0.094) |
+| seam bloom / sizzle | `trebRel` | 30 ms | film.py's `0.30 + 0.85·sizzle`, restored |
+| palette hue centre | `spectralCentroid` | 2.5 s | renormalised + anchored, see below |
+
+**Calibrated against ~20k frames** — 7 canonical fixture tracks plus a live capture. Raw `bassDev`
+is **zero for 58 % of frames** (a one-sided deviation), and a τ-100 ms envelope sits at p50 0.033 /
+p95 0.296 / p99 0.647. A linear map from zero would park the field at its silence look through most
+of a track, so the drive map is `tanh(env/knee)`: tuned against p99, never against 1.0 (D-026).
+Verified end-to-end through the production `update(features:)` path — p99 lands where p95 does, so
+rare spikes saturate rather than blow out.
+
+**The palette keeps the ALFVEN.4e time drift, deliberately against a literal reading of §7.**
+Centroid alone would have deleted Matt's approved feature on the tracks that need it most: its
+within-track span is median 0.35 of the range but only **0.16 on `there_there`** and 0.27 on
+`10_-_Weeping_Wall` — frozen. So centroid PLACES the palette and the drift GUARANTEES motion, as a
+convex blend that cannot leave the referenced family. FA #67 holds: one audio primitive on the
+layer; wall-clock is not a primitive.
+
+**`hueAnchorBias` on Matt's "anchor it harder toward 0.72".** At the first build only **5.4 %** of
+the time sat within 0.03 of his palette (mean hue 0.581 — it read green). Modelled against the real
+centroid distribution: bias 1.0 → 5.4 % / 30.2 % reaching past 0.55; **3.0 → 39.2 % / 9.3 %**;
+5.0 → 69.3 % / 5.7 % (anchored but nearly static). 3.0 makes 0.72 the home palette without
+collapsing the cycling he asked for. Note `centroidWeight` is NOT the knob for this — both terms
+average ~0.4, so trading one for the other leaves the mean where it was.
+
+**Gates:** `RouteCoverageTests` — every declared route fires on the canonical fixtures — **green**.
+`ReplayHarnessRouteCoverageTests` caught a real trap first: `SessionReplayHarness` did not carry
+`trebRel`, so a replay would have measured the bloom against **ZERO**; mapped and registered.
+
+**NOT done — the remaining two §7 routes:**
+- **Reconnection flash ← `barPhase01`** (accent, per bar) with 4-bar cold-start suppression.
+- **Re-seed ← section boundary** (structural). This one is **blocked on a product decision**: §7
+  wants re-seeds to be rare structural events with a ~35 s ceiling, while `cycleSeconds` is
+  currently **2.0 sim s**. A structural re-seed is imperceptible if the field re-seeds every two
+  seconds anyway. ALFVEN.4g's motion gate did establish the fast cadence is not popping, and the
+  drive route works at it — so the cadence is now a look choice, not a stability one. Matt's call.
+
+**Certification remains blocked** on those two routes plus a live M7 with audio; the preset stays
+`certified: false`.
+
 ### Increment ALFVEN.4g — the motion verdict, and what the capture's own artifacts look like ✅ (2026-09-10)
 
 **Done-when:** `Scripts/motion_gate.sh` has run on a contiguous Alfvén sequence and the reader has

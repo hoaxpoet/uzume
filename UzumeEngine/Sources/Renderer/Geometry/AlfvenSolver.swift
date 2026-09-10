@@ -115,6 +115,13 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// frame's dt keeps this stall-free — the reduction writes `dtBuffer` on the GPU.
     public private(set) var simClock: Float = 0
 
+    /// ALFVEN.3 audio envelopes (see AlfvenSolver+Audio). Real-time smoothed, per §7's
+    /// timescales; zero at silence, which is the state the preset relaxes to (D-037).
+    var bassEnvelope: Float = 0
+    var trebleEnvelope: Float = 0
+    var centroidEnvelope: Float = 0
+    private var lastFeatureTime: Float = 0
+
     public init(device: MTLDevice, library: MTLLibrary,
                 pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb,
                 configuration: AlfvenSolverConfiguration = .init()) throws {
@@ -220,6 +227,11 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// the simulation's" — which is exactly the bug 4c fixed.
     public func update(features: FeatureVector, stemFeatures: StemFeatures,
                        commandBuffer: MTLCommandBuffer) {
+        let dt = features.deltaTime > 0
+            ? features.deltaTime
+            : max(features.time - lastFeatureTime, 1.0 / 60.0)
+        lastFeatureTime = features.time
+        advanceAudio(features, dt: dt)
         update(time: features.time, commandBuffer: commandBuffer)
     }
 
@@ -282,7 +294,7 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
             dt: cfg.maxDt,
             alpha: cfg.alpha,
             nu4: cfg.nu4,
-            drive: cfg.drive,
+            drive: audioDrive,   // ALFVEN.3: bassDev envelope -> stirring vigour (§7)
             time: time,
             cutoff: cfg.spectralCutoff,
             clampW: cfg.clampOmega,

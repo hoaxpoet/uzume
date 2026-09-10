@@ -30,5 +30,10 @@
   },
   "certified": false,
   "rubric_profile": "lightweight",
+  "audio_routes": [
+    { "route": "stirring_vigour", "primitive": "bassDev", "kind": "continuous" },
+    { "route": "seam_bloom", "primitive": "trebRel", "kind": "continuous" },
+    { "route": "palette_hue_centre", "primitive": "spectralCentroid", "kind": "continuous" }
+  ],
   "exclude_from_cycling": false
 }

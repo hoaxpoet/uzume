@@ -119,7 +119,7 @@ struct AlfvenSolverTests {
                          s.clampedFraction * 100, dt))
         }
 
-        guard let last = trace.last?.1, let first = trace.first?.1 else {
+        guard let last = trace.last?.1 else {
             throw HarnessError.setupFailed("no samples")
         }
         #expect(trace.allSatisfy { $0.1.finite }, "the field went non-finite")
