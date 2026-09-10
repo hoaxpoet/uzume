@@ -103,6 +103,64 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// centre spends roughly twice as long in the near half of the range as the far half.
     /// 1.0 restores the symmetric cosine.
     public var displayHueDwell: Float
+    /// ── ALFVEN.3 audio routing (design §7, one primitive per layer — FA #67) ──
+    ///
+    /// Stirring vigour at silence and at full bass. `drive` is the forcing amplitude, and
+    /// its range here is 3 ORDERS OF MAGNITUDE above the design's nominal 0.012…0.020 —
+    /// deliberately, because that number was inherited from the spike and MEASURED INERT
+    /// in both implementations: sweeping it 0 → 0.080 moves J std by 0.08% and mean luma
+    /// not at all. The response only begins near drive ~1 and spans the reference set by
+    /// ~16: at 0.02 the field is two broad lobes with soft seams
+    /// (`05_atmosphere_relaxed_state`), at 16 it is many thin bright seams braided across
+    /// the frame (`01_macro_braided_lobes`). Those are exactly the two states §7 asks the
+    /// bass to move between. Stability was checked at the ceiling: 0.00% clamped, wMax 57
+    /// against a clamp of 200.
+    public var driveFloor: Float
+    public var driveCeil: Float
+    /// Soft-saturation knee for the bass envelope, in `bassDev` units.
+    ///
+    /// Measured over 7 canonical fixture tracks plus a live capture (~20k frames): raw
+    /// `bassDev` is ZERO for 58% of frames (it is a one-sided deviation), and a tau-100ms
+    /// envelope — the timescale §7 specifies — sits at p50 0.033, p95 0.296, p99 0.647.
+    /// A linear map from 0 would therefore park the field at its silence look through most
+    /// of a track. `tanh(env / knee)` with the knee near p75 (0.094) spreads the COMMON
+    /// range across the drive range instead. Tuned against p99, never against 1.0 (D-026).
+    public var bassKnee: Float
+    /// Envelope time constants, seconds. §7's timescales: bass ~100 ms, treble ~30 ms,
+    /// centroid seconds. Different timescales per layer is the point — two layers sharing
+    /// one would read as the music fighting itself (FA #67).
+    public var bassTau: Float
+    public var trebleTau: Float
+    public var centroidTau: Float
+    /// Centroid range actually observed on real music, for the hue map.
+    ///
+    /// ⚠ NOT 0…1. Measured across the same 8 sessions: p05 0.047, p50 0.120, p95 0.186.
+    /// film.py's `hue = 0.46 + 0.26*centroid01` assumes a normalised 0…1 and would move
+    /// the centre by 0.028 — no visible drift, and nowhere near the palette Matt approved.
+    public var centroidLo: Float
+    public var centroidHi: Float
+    /// How much of the palette excursion the centroid owns versus the time drift.
+    /// 0.6 = centroid-led, with the drift guaranteeing movement on spectrally-flat tracks
+    /// (`there_there` moves the centroid driver only 0.16 of its range).
+    public var centroidWeight: Float
+    /// How hard the palette is anchored on `displayHueCentre` (Matt's 0.72).
+    ///
+    /// The excursion away from the anchor is raised to this power, so typical values are
+    /// pushed toward the anchor while the extremes still reach the far end. It is the only
+    /// knob that actually moves the anchoring: `centroidWeight` barely does, because the
+    /// centroid term and the drift term both average ~0.4, so trading one for the other
+    /// leaves the mean where it was.
+    ///
+    /// Modelled against the real centroid distribution (7 fixture tracks) crossed with the
+    /// drift — fraction of time within 0.03 of 0.72 / fraction reaching below 0.55:
+    ///
+    ///     bias 1.0 ->  5.4% / 30.2%   (mean hue 0.581 — read as green, not his palette)
+    ///     bias 3.0 -> 39.2% /  9.3%   (mean hue 0.657)
+    ///     bias 5.0 -> 69.3% /  5.7%   (mean hue 0.682 — anchored, but nearly static)
+    ///
+    /// 3.0 on Matt's "anchor it harder toward 0.72" (2026-09-10): it makes 0.72 the clear
+    /// home palette while keeping the traverse he asked for at 4e from collapsing.
+    public var hueAnchorBias: Float
 
     public init(
         edge: Int = 256,
@@ -123,7 +181,17 @@ public struct AlfvenSolverConfiguration: Sendable {
         jCutoff: Float = 48.0,
         displayHueSpan: Float = 0.26,
         displayHuePeriodSeconds: Float = 80.0,
-        displayHueDwell: Float = 2.0
+        displayHueDwell: Float = 2.0,
+        driveFloor: Float = 0.02,
+        driveCeil: Float = 16.0,
+        bassKnee: Float = 0.094,
+        bassTau: Float = 0.10,
+        trebleTau: Float = 0.03,
+        centroidTau: Float = 2.5,
+        centroidLo: Float = 0.047,
+        centroidHi: Float = 0.186,
+        centroidWeight: Float = 0.6,
+        hueAnchorBias: Float = 3.0
     ) {
         self.edge = edge
         self.maxDt = maxDt
@@ -146,6 +214,16 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.displayHueSpan = displayHueSpan
         self.displayHuePeriodSeconds = displayHuePeriodSeconds
         self.displayHueDwell = displayHueDwell
+        self.driveFloor = driveFloor
+        self.driveCeil = driveCeil
+        self.bassKnee = bassKnee
+        self.bassTau = bassTau
+        self.trebleTau = trebleTau
+        self.centroidTau = centroidTau
+        self.centroidLo = centroidLo
+        self.centroidHi = centroidHi
+        self.centroidWeight = centroidWeight
+        self.hueAnchorBias = hueAnchorBias
     }
 }
 
