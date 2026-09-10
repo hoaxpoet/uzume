@@ -29,7 +29,7 @@ extension AlfvenSolver {
             return current + alpha * (target - current)
         }
 
-        bassEnvelope = ema(bassEnvelope, max(0, features.bassDev), configuration.bassTau)
+        bassEnvelope = ema(bassEnvelope, features.bassRel, configuration.bassTau)
         trebleEnvelope = ema(trebleEnvelope,
                              max(0, features.trebRel),
                              configuration.trebleTau)
@@ -46,9 +46,13 @@ extension AlfvenSolver {
     /// the usable span and lets the rare p99 spikes approach the ceiling without clipping
     /// the everyday response into it.
     var audioDrive: Float {
-        let x = tanh(bassEnvelope / max(configuration.bassKnee, 1e-4))
+        // Two-sided: `bassRel` sits negative when the bass is below its running average
+        // and positive above, so the field keeps stirring through steady passages instead
+        // of dropping to its silence look. See `bassRelShift` for the M7 this fixes.
+        let scale = max(configuration.bassRelScale, 1e-4)
+        let x = 0.5 * (1.0 + tanh((bassEnvelope + configuration.bassRelShift) / scale))
         return configuration.driveFloor
-            + (configuration.driveCeil - configuration.driveFloor) * x
+            + (configuration.driveCeil - configuration.driveFloor) * min(max(x, 0), 1)
     }
 
     /// Seam-bloom strength — film.py's `amt = 0.30 + 0.85 * clip(sizzle, 0, 1.6)` with its
