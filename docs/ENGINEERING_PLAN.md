@@ -1395,6 +1395,78 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) 📋 DESIGNED, not built (2026-09-10, Matt: *"i'm voting for true transport"*)
+
+**Why this and not the cheaper option.** The ~145 ms on every continuous primitive decomposes into
+band smoothing (τ 77 ms bass / 116 ms mid-treble, `BandEnergyProcessor.instantSmoothers`) plus
+~40–60 ms of real transport. Shortening the smoothers is hours of work against a session of
+architecture — and Matt declined it: *"i don't like that the smoothing constants will change the
+feel of every preset - too risky."* That is a D-004 judgement (smooth continuous energy is what
+makes visuals feel locked to music) and it is his to make.
+
+**The path this targets is the one he is actually testing on.** The session behind *"still feels
+slightly out of sync"* (`2026-09-10T22-07-34Z`) is a LOCAL FILE at **10.1 Hz**, not streaming.
+
+#### The defect is CADENCE, not staleness — and that is a correction
+
+`FFTProcessor.process` fills its window from `sourceOffset = max(0, samples.count - fftLength)` —
+**the NEWEST 1024 samples of each delivered buffer**. So audio is not stale when it arrives; a
+buffer is analysed at its own leading edge. The defect is that nothing happens between arrivals:
+every `FeatureVector` field freezes for ~100 ms, which adds **~50 ms of lag on average** (uniform
+over the window, up to 100 ms) and shows as a visible 100 ms staircase. Any design premised on
+"the audio is old when we see it" would be aimed at the wrong thing.
+
+#### Design
+
+In `.localFilePlayback` mode **only**, drive `AudioInputRouter.onAudioSamples` from a file-reading
+clock at render rate instead of from the tap callback.
+
+- **Source:** the already-decoded `AVAudioFile` held by `LocalFilePlaybackProvider`.
+- **Position:** `AVAudioPlayerNode.playerTime`, smoothed by the existing `PlaybackClockSmoother`
+  (LFSTEM.1d) — which exists precisely to dead-reckon between coarse ticks, is already gated by
+  `PlaybackClockSmootherTests`, and was built after a first version rewound the position on 27 of
+  1,871 frames.
+- **Each tick** reads the 1024 samples ENDING at the playhead and calls the same callback, so
+  **the MIR chain is untouched** — `onAudioSamples` is a single funnel and every analyzer
+  downstream is unaware of the change.
+
+**Precedent, not invention:** LFSTEM.1 already replaced live stem separation on this path with a
+pre-analysed series sampled by playback position. This is the same move for MIR — *"a pre-analysed
+series is an array lookup and is not bounded by audio arrival, which is the advantage LFSTEM.1
+created and has not spent."*
+
+**Expected win, from the measured basis:** cadence 10 Hz → ~60 Hz; cadence-induced lag ~50 ms →
+~8 ms; the 100 ms staircase disappears. It does **not** touch band smoothing (τ 77–116 ms), and it
+does **not** affect streaming, which already runs at 58.8 Hz through a different capture path.
+Honest ceiling: this recovers ~40–50 ms of ~145 ms on the local path, plus the staircase.
+
+#### Risks that must be gated, not assumed
+
+- **Playhead accuracy is the whole thing.** If the read position drifts from what is audible, the
+  analysis desynchronises — which is *worse* than being uniformly late, because a constant offset
+  is at least consistent. Needs a drift gate, not just the smoother.
+- **File IO off the render path.** 1024 frames per frame is small, but it must not run on the audio
+  or render thread; a read-ahead buffer is required.
+- **Check the tap's other consumers before retiring it.** `SilenceDetector` is fed from the router
+  callback and `SignalHealthMonitor` watches the chain. Removing the tap's role without checking is
+  the BUG-070 shape — the same "check every consumer first" step LFSTEM.2 had to do.
+- **Loop and seek.** `scheduleFileLoop` restarts the file; the clock has to follow, and a
+  restart-with-a-stale-position is a silent desync.
+
+#### Verification criteria (written BEFORE the fix, per the defect protocol)
+
+- **Automated:** a local-file session's feature-change rate ≥ 50 Hz, measured the way BUG-087's
+  evidence was — how often a `FeatureVector` column actually CHANGES across render rows, not how
+  often the analyzer is called. BUG087.3 shipped a regression test asserting `hz >= 40` from *slice
+  count* that passed while the live rate was 16.4 Hz; the metric must be the observed one.
+- **Automated:** read-position-vs-audible-position drift bounded across a whole file, including a
+  loop boundary.
+- **Manual:** Matt's M7. This changes what every preset sees on the local path; a ~6× change in
+  update rate is not a silent change.
+
+**Not started in code.** Scoped and committed as a definition so the next session begins from the
+measured premise rather than re-deriving it.
+
 ### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
 
 **Matt, on the PR.21 streaming build:** *"audio sync is still a little loose, not perfectly

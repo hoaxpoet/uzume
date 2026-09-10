@@ -36,12 +36,12 @@
   "audio_routes": [
     {
       "route": "ring_reach",
-      "primitive": "bassAttRel",
+      "primitive": "bassDev",
       "kind": "continuous"
     },
     {
       "route": "ring_reach",
-      "primitive": "midAttRel",
+      "primitive": "midDev",
       "kind": "continuous"
     },
     {

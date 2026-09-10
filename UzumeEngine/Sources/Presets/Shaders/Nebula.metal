@@ -117,9 +117,32 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     // mix and a loud one — mechanism 4. `bass`/`mid`/`treble` are AGC-smoothed, so
     // they also give the envelope a temporal steadiness the raw bins do not have
     // (measured temporal volatility 0.40x mean even after aggregation).
+    // ★ MEASURED, AND NOT THE STORY I FIRST WROTE HERE. The raw attenuated band `bass_att`
+    //   comes off `attenuatedSmoother` at `rate30: 0.95` — τ ≈ 650 ms — and lags **+365 ms**
+    //   against offline onset strength, by far the slowest thing in the FeatureVector. I
+    //   extrapolated from that to its `_rel` sibling and was WRONG:
+    //
+    //       transient_rise   +30…+45 ms   r 0.18–0.33   (the event layer, PR.22)
+    //       bassDev            +135 ms    r 0.202
+    //       bassRel            +140 ms    r 0.190
+    //       bass / mid_dev     +145 ms    r 0.219 / **0.250**
+    //       bassAttRel         +145 ms    r 0.159       ← NOT slow
+    //       mid_att_rel        +170 ms    r 0.142
+    //       bass_att           +365 ms    r 0.143
+    //
+    //   **The deviation transform removes almost all of the attenuation lag** — `bassAttRel`
+    //   is +145 ms where the band it derives from is +365 ms. So D-026's "drive from
+    //   deviation" is better advice than it looks: it buys latency as well as AGC-independence.
+    //
+    //   Which makes this change worth ~10–25 ms of latency, not the 170–365 ms an earlier
+    //   version of this comment claimed. It is kept for the OTHER measured reason: `mid_dev`
+    //   carries r 0.250 against `mid_att_rel`'s 0.142 — a substantially better-correlated
+    //   signal, i.e. one that tracks what is actually audible rather than merely arriving
+    //   sooner. The remaining ~135 ms on every continuous primitive is band smoothing
+    //   (τ 77–116 ms) plus transport, and belongs to BUG-087, not to this preset.
     float activity = saturate(0.35
-                            + max(0.0, features.bass_att_rel) * 0.40
-                            + max(0.0, features.mid_att_rel) * 0.30
+                            + max(0.0, features.bass_dev) * 0.40
+                            + max(0.0, features.mid_dev) * 0.30
                             + max(0.0, features.treb_dev) * 0.20);
     float presence = saturate((features.bass + features.mid + features.treble) * 0.5);
 
