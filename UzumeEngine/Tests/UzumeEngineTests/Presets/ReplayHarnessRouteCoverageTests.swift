@@ -66,7 +66,7 @@ struct ReplayHarnessRouteCoverageTests {
     static let carriedPrimitives: Set<String> = [
         // ALFVEN.3: the seam-bloom route. Mapped in SessionReplayHarness alongside
         // bassDev — without it a replay measures the bloom against ZERO.
-        "trebRel",
+        "trebRel", "bassRel",
         // FeatureVector — bands + spectral + mood
         "bass", "mid", "treble", "subBass", "lowBass",
         "spectralCentroid", "spectralFlux", "valence", "arousal",

@@ -9900,6 +9900,50 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.3c — "only a loose connection is perceived" ✅ (2026-09-10)
+
+**Matt's M7 on the first fully-routed build** (`2026-09-10T20-01-22Z`): *"Looks good. Only a loose
+connection is perceived between the visuals and audio signal."*
+
+**⚠ Chain verdict on that capture was `degraded`, not clean** (`tap_reinstalls(1)`, peak −5.99 dBFS
+against −0.13 on the local-file runs) — flagged per ASH.2 / D-184 rather than folded in silently.
+Checked before using it: the system-audio tap installed dead (rms 0.000000), reinstalled, and was
+**healthy at −6.0 dBFS from 20:02:21** — 7 s into the 88 s Alfvén window. So the finding below
+rests on ~81 s of healthy signal, but the verdict is stated.
+
+**What I now believe about why it read loose** — and it was not latency, which was my first guess.
+`bassDev` is a ONE-SIDED deviation from a running average, so steady music with no bass surprises
+reads as **zero**: 62 % of frames in that window were exactly zero. Delivered drive therefore sat
+**below 1 — the silence look — for 40 % of the music**. The field was rendering its relaxed
+two-lobe state while a track played. That is not a loose coupling; it is the coupling being
+*absent* for much of the time, which is what the eye reports as disconnection.
+
+**Fix: `bassRel`, the two-sided sibling.** Still a D-026 deviation primitive, so FA #67 holds — one
+primitive on the layer. Measured on the same window: **0 % below 1** (was 40 %), p50 9.44, p95
+14.55, still 3 % near the ceiling. Across the 7 canonical fixtures the map puts quiet at drive 0.8,
+median 9.8, loud 15.8. Rendered through the production path, the silence look is now reserved for
+genuinely quiet passages while steady music shows a stirred, seam-rich field.
+
+**This is the SECOND thing in §7's row for this route that did not survive real music.** ALFVEN.3
+found its amplitude inert (two to three orders too small); this finds its primitive one-sided.
+The design's routing table was written from the spike's parameters, not from measurement.
+
+**Both replay gates caught their own trap again:** `SessionReplayHarness` carried neither `trebRel`
+(3b) nor `bassRel` (here), so a replay would have measured each new route against ZERO. Mapped and
+registered both times. Worth noting the gate that keeps firing is the one testing the HARNESS, not
+the preset.
+
+**Still not addressed — the other half of "loose".** There is no event-locked accent: every route
+is a slow continuous envelope, and §7's per-bar reconnection flash (`barPhase01`, with 4-bar
+cold-start suppression) remains unimplemented. Continuous energy is the correct PRIMARY driver
+(the audio hierarchy is explicit), but a bounded per-bar event is the layer that produces crisp
+perceived sync. That is the next lever if the coupling still reads loose after this.
+
+**And the re-seed is still on a free-running 2 sim-second timer**, uncorrelated with the music — so
+the single most salient visual event in the frame currently has no musical cause. §7 routes it to
+section boundaries. This remains blocked on Matt's cadence decision and is a plausible contributor
+to the same complaint.
+
 ### Increment ALFVEN.3b — the seam-bloom route was dead on arrival ✅ (2026-09-10)
 
 **Found by reviewing Matt's first audio-driven capture** (`2026-09-10T19-34-42Z`, local file,

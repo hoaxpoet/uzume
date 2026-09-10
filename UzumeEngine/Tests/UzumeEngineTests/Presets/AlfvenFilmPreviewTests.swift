@@ -110,7 +110,8 @@ struct AlfvenFilmPreviewTests {
                     var f = FeatureVector()
                     f.time = Float(frame) / 60.0
                     f.deltaTime = 1.0 / 60.0
-                    f.bassDev = bd
+                    f.bassRel = bd
+                    f.bassDev = max(bd, 0)
                     f.trebRel = env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0
                     f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.12
                     solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
