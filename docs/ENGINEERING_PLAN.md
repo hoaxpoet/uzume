@@ -9900,6 +9900,93 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.3e — the drive map had no room at the top ✅ (2026-09-10)
+
+**The question that started it.** Matt: *"how are you planning to improve the preset's musical
+reactivity — how will Alfvén behave like an accompanist to the music?"* The honest first answer was
+not "add an event layer" but "the continuous route we already have is broken in a way nobody had
+measured."
+
+**The defect.** Re-measuring the `bassRel` tau-100ms envelope over Matt's two clean captures
+(`2026-09-10T21-24-18Z`, `T19-34-42Z`; 12 925 frames, `chain_health` verdict **`clean`** on both)
+gives p05 −0.18, p50 0.00, p95 +0.26, p99 +0.49. The ALFVEN.3c window mapped those onto drive p50
+**10.5**, p95 **15.7**, p99 **16.0** — the *median* frame already at 65 % of the ceiling, and the
+loudest 5 % of a track compressed into the last 0.3 of the range. Rendered through the production
+display path, the top of the map was flat: p95 → p99 moved mean frame-to-frame motion by **0.06**.
+
+Every drop, hit and chorus rendered the same amount of motion. That is the mechanism behind
+"coupled to the signal but arbitrary to the listener" — not latency, and not a missing route.
+
+**The fix** — `bassRelShift` 0.05 → 0, `bassRelScale` 0.16 → 0.45, `driveCeil` 16 → 18:
+
+| | p05 | p50 | p95 | p99 | p95→p99 |
+|---|---|---|---|---|---|
+| ALFVEN.3c | 1.52 | 2.95 | 4.30 | 4.36 | **0.06** |
+| ALFVEN.3e | 2.15 | 3.07 | 3.88 | **4.50** | **0.62** |
+
+The baseline Matt signed off is preserved (p50 +4 %, below perception), the top of the range is
+marginally brighter, and the loud moments are **ten times** more separated from each other.
+
+**⚠ The ceiling is not the lever.** The first plan was to raise `driveCeil` to ~21 and give loud
+moments room above the current top. Measured at steady state, that is wrong: the rendered response
+saturates near 18 (drive 16 → 4.37, 20 → 4.55, 24 → 4.47), so range has to be won by spending 0…18
+better. Two traps found on the way:
+
+- **A 240-frame run is still energising.** At 240 frames the curve looks linear all the way to 24
+  (1.20 → 1.53); at steady state it is flat above 18. The first measurement was of a transient.
+- **The saturation is in the DISPLAY, not the physics.** From drive 16 → 24 the field keeps
+  energising — `wRMS` 6.61 → 11.16, **+69 %** — while rendered motion moves +2 %. The top of the
+  solver's dynamic range is being discarded by the J → display mapping. `displayExposure` /
+  `polarityScale` is an unexplored reactivity lever, plausibly larger than this one.
+
+**BUG-127 — `ALFVEN_DRIVE` had been inert since ALFVEN.3.** `AlfvenSolverConfiguration.drive` was
+written by the initialiser and never read; ALFVEN.3 replaced it with `audioDrive` and left the field
+behind. The stability sweep in this increment returned byte-identical numbers for drive 16, 18 and
+20, which is what exposed it. **Every `ALFVEN_DRIVE=` measurement taken since ALFVEN.3 is void**,
+including the film harness's documented "`ALFVEN_DRIVE=0` gives an unforced decay run" — it did not.
+The dead field is removed and both harnesses now pin `ALFVEN_DRIVEFLOOR`/`ALFVEN_DRIVECEIL`.
+
+**Stability re-checked at the new ceiling** with a knob that works: drive 18 → `wMax` 67.4, 0.00 %
+clamped against a clamp of 200 (~3× margin); 24 is still clean at 94.2. Drive 16 reproduces the
+previously documented `wMax 57` exactly, which is the cross-check that the new override is live.
+
+**New diagnostic — `ALFVEN_VIGOUR`.** Mean per-frame absolute pixel delta on the production display
+path at a held `bassRel`; the metric that made every decision above. Deterministic (repeat runs are
+bit-identical, so differences are signal, not noise). Defaults to frames 600–900 because anything
+shorter measures the seed transient.
+
+**Regression gate:** `driveMapSeparatesLoudMoments` — CPU-side, asserts the median is not parked
+against the ceiling, that p95 → p99 spans more than 1.0 of drive, and that p99 is not pinned.
+Verified to FAIL on the ALFVEN.3c constants with exactly that diagnosis.
+
+**Not done, and not claimed:** this is a measured improvement to a continuous route, not the event
+layer. Alfvén still marks no moments. Pending live M7 — a fidelity claim on this needs Matt's ears,
+not a pixel-delta table.
+
+### Increment ALFVEN.3d — BUG-126, the seam bloom strobed ✅ (2026-09-10)
+
+**Matt's M7** (`2026-09-10T21-24-18Z`, `chain_health` **`clean`**): *"There's a strobing effect that
+is clearly attached to the music, but the timing is loose and the effect itself is jarring due to the
+bright white light that the strobing emits. It is also sporadic."*
+
+Measured max frame-to-frame Δluma **0.4153** against D-157's gate of **0.05** — 8.3× over, 15 frames
+in breach. Not pixel clipping (0.0 % of frames carried a pixel > 250/255): the whole frame jumped.
+Cause was ALFVEN.3b's own change — film.py's `amt` reaches 1.66 multiplying a whole-frame additive
+glow, while §7's ~30 ms treble τ moves the envelope 43 % toward target in a single frame at 60 fps.
+
+Fixed with `bloomMaxAmount` 0.85 + `bloomSlewPerSecond` 6.0/s, calibrated on the production path
+(unbounded 0.1041 Δluma / 3 frames over → shipped 0.0124 / 0 over). `ALFVEN_FLASH=1` added as the
+regression guard; it renders **every** frame, because a sampled harness cannot see a single-frame
+strobe. Filed BUG-126 (P1).
+
+**Only the brightness half of Matt's report was fixed.** The timing is still loose and the effect
+still sporadic: `trebRel` fires on incidental treble — hi-hats, cymbal wash — so it can be tightly
+coupled to the signal and still feel arbitrary. That is ALFVEN.3e's finding generalised, and the
+remaining lever is §7's unbuilt accent route on `barPhase01`.
+
+(This row was missing — ALFVEN.3d's closeout updated `KNOWN_ISSUES.md` but not the plan. Added at
+ALFVEN.3e.)
+
 ### Increment ALFVEN.3c — "only a loose connection is perceived" ✅ (2026-09-10)
 
 **Matt's M7 on the first fully-routed build** (`2026-09-10T20-01-22Z`): *"Looks good. Only a loose

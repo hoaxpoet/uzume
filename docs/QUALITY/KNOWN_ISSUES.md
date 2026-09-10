@@ -2173,6 +2173,39 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 
 ## Resolved (recent)
 
+### BUG-127 — RESOLVED (ALFVEN.3e): `ALFVEN_DRIVE` was inert, voiding every sweep since ALFVEN.3 (2026-09-10)
+
+**Expected.** `ALFVEN_DRIVE=<x>` sets the MHD forcing amplitude, so the solver's equilibrium and the
+film harness's decay run can be bisected without editing a test. Both harnesses documented it, and
+the film harness's comment specifically promised `ALFVEN_DRIVE=0` yields *"a decay run — the cleanest
+comparison against the spike, because an unforced field just relaxes"*.
+
+**Actual.** It set `AlfvenSolverConfiguration.drive`, which **nothing reads**. ALFVEN.3 replaced the
+constant with the audio-driven `audioDrive` (`AlfvenSolver.swift`, `drive: audioDrive`) and left the
+config field behind — written by the initialiser, never consumed. `ALFVEN_DRIVE=0` did not produce an
+unforced field; it produced whatever the audio map resolved to at a zero bass envelope.
+
+**How it surfaced.** A stability sweep across drive 16 / 18 / 20 returned **byte-identical** output
+for all three values, including the same `wMax` to three decimals. Identical numbers from a swept
+parameter are the signature of a dead knob, not of a flat response.
+
+**Blast radius.** Any measurement taken with `ALFVEN_DRIVE` between ALFVEN.3 and ALFVEN.3e is void
+and must not be cited. Measurements from before ALFVEN.3 are unaffected — the field was live then.
+No shipped behaviour was ever wrong: the knob is diagnostic-only, and production always ran
+`audioDrive`. The cost was to evidence, not to users.
+
+**Fix.** The dead `drive` field is removed from `AlfvenSolverConfiguration`. Both harnesses now
+override `ALFVEN_DRIVEFLOOR` / `ALFVEN_DRIVECEIL`, pinning them together to hold forcing at one
+value. Cross-check that the replacement is live: drive 16 reproduces the previously documented
+`wMax 57.029`, and 18 / 20 / 24 now differ as they should (67.4 / 77.1 / 94.2).
+
+**Lesson, already in memory as a recurring class.** An override placed on a field the production path
+stopped reading fails silently and *looks like* a measurement. When a sweep returns the same number
+twice, verify the knob before drawing a conclusion from the flatness.
+
+---
+
+
 ### BUG-114 — RESOLVED (PR.3): the bar-line estimator ran at half its calibrated analysis window (2026-09-04)
 
 **Expected.** `BarLineEstimator` is a verbatim port of `tools/barline_probe.py`, and
