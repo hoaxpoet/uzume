@@ -96,5 +96,8 @@ extension SpectralAnalyzer {
         /// 0.6–1.4/s on all of them and silence produces nothing, so a consumer needs no
         /// gate. Full evidence: `docs/diagnostics/FTR15_SIZE_READS_LEVEL_2026-08-13.md` §9.
         public var levelRise: Float
+        /// PR.22 — short-window sibling of `levelRise`: peaks ~120 ms earlier where the
+        /// analysis rate allows. Use for an accent that must land ON the hit.
+        public var transientRise: Float
     }
 }

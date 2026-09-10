@@ -1395,6 +1395,87 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
+
+**Matt, on the PR.21 streaming build:** *"audio sync is still a little loose, not perfectly
+synced."* BUG-087's measurement split that into two terms — **~145 ms of transport** (engine work,
+still open) and **~130 ms of feature shape** (preset-side, this increment).
+
+**The shape term is `spectral_level_rise`'s own design, not a defect.** It is a fixed-lag
+difference — `level(t) − level(t−0.15)` on a level pre-smoothed at τ 40 ms — so it stays elevated
+until the lagged term catches up and its PEAK sits inside `[t, t+0.15]`. Nebula's event layer
+(PR.21) was keyed to it because it is the most event-SHAPED primitive available; nobody had checked
+*when it peaks*.
+
+**`transientRise` is a sibling, not a retune** — `levelRise` has consumers (FTR.24) whose behaviour
+must not move under them. Same statistic, shorter windows: pre-smooth τ **15 ms**, lag **40 ms**.
+
+#### Every constant came from measurement, and two of them inverted my assumptions
+
+**Timing** — both arms computed from the same `raw_tap.wav` and correlated against offline onset
+strength, so neither carries pipeline delay and the difference is purely detector shape:
+
+| detector | lag (streaming / local) | r |
+|---|---|---|
+| 40 ms smooth / 150 ms lag (the parent) | **+150 / +145 ms** | 0.225 / 0.166 |
+| 20 / 60 ms | +45 / +50 ms | 0.297 / 0.207 |
+| **15 / 40 ms** | **+30 / +30 ms** | 0.327 / 0.224 |
+| 10 / 25 ms | +20 / +20 ms | 0.339 / 0.235 |
+
+Shorter is **both faster and better correlated** — not the trade I expected. 15/40 over the faster
+10/25 because a 25 ms lag is 1.5 render frames at 60 Hz, too tight against frame-timing jitter, for
+10 ms.
+
+**★ And the dB band had to be re-calibrated, which the correlation could not have told me.**
+Cross-correlation is **scale-invariant** — a detector that never fires still reports a lag. Measured
+on real audio, the short window at the parent's 2–7 dB band fires **~3× more often** (1.87/s
+streaming, 1.66/s local against the parent's 0.53 and 0.67), because real transients are sharp
+enough that a 40 ms window captures nearly the whole rise. **4–10 dB** brackets the parent's fire
+rate on both sessions (0.63 / 0.57) — and the timing win survives the higher threshold, still
+**+30 ms**. Only *when* it peaks changes; *how often* it fires does not.
+
+#### Three wrong unit tests before a right one — recorded, because the mechanism is the lesson
+
+The synthetic probe kept measuring the wrong quantity:
+
+1. **A +10 dB step** — saturates the 2–7 dB band within two frames at *any* window. 33 ms apparent
+   lead. This is precisely the failure `SpectralAnalyzer+Density` already warns about for the old
+   `LevelRiseTests`.
+2. **A 250 ms ramp** — the opposite error: too gradual, so a 40 ms window spans only 1.6 dB and
+   never leaves the floor. The test asserted the sibling was *broken*.
+3. **A 50 ms burst** — both filters' differences return to zero at the same instant and the shared
+   release dominates. 17 ms.
+4. **A SUSTAINED step, measuring how long each stays elevated** — the parent keeps comparing now
+   against quiet-150-ms-ago while the sibling stops at 40 ms. **150 ms of separation**, matching
+   the mechanism (150 − 40, plus quantisation).
+
+The real-material evidence is the cross-correlation above; the unit test exists so the ordering
+cannot silently invert if the constants ever drift together.
+
+#### Degradation, stated rather than assumed
+
+`lagFrames` is a duration, so at the 10 Hz local-file rate (BUG-087) a 40 ms lag rounds to **one
+frame = 100 ms**. `transientRise` is never worse than `levelRise` there — gated by
+`degradesGracefullyAt10Hz` — and is ~120 ms better wherever the analysis rate is high. That is a
+property of the input, not of the statistic. ⚠ Also: the offline A/B computes from `raw_tap.wav` at
+5 ms in **both** cases, so it isolates detector shape and says **nothing** about rate invariance.
+The two sessions agreeing there is a consequence of the method, not evidence about the paths.
+
+#### Wiring
+
+FeatureVector float 55 (`_pad55` reclaimed) + both MSL sites + `SessionRecorder` CSV +
+`SessionReplayHarness` + `AudioRoutePrimitives`. Nebula's `core_pulse` and `ring_event_push` routes
+now name `transientRise`. QG.1 records a FIXTURE GAP — ⚠ **unlike `track_hue_anchor01`, this one IS
+verifiable**: it varies within a track, so regenerating the three route-coverage fixtures would gate
+it properly. It is listed only because the fixtures predate the column and the source audio is not
+in this checkout. A TODO with a known fix, not a permanent hole.
+
+**Available to every preset**, not just Nebula — Membrane, Meniscus, Mitosis and Plasma all carry
+sync complaints in the roster review.
+
+⚠ `AudioFeatures+Analyzed.swift` is now **at its 400-line cap**, hit twice in one day. Float 56 is
+the last pad; the next field needs the struct split before it needs a slot.
+
 ### PR.21 — Nebula: make the coupling legible 🔨 code complete, M7 owed (2026-09-10)
 
 **Matt, on the PR.20 build:** *"looks good, but I'm not getting a clear understanding of how the

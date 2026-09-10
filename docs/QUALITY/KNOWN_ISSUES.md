@@ -1342,6 +1342,17 @@ and AGC-normalised band energy are different quantities; the corroboration is th
 capture → feature in a rendered row: it **excludes** output-device buffering between the tap point
 and the speaker, and display presentation. The true eye-vs-ear gap is ≥ these figures.
 
+#### The feature-shape half is FIXED (PR.22); the ~145 ms transport half is what remains
+
+The +275 ms measured on `spectral_level_rise` decomposed into ~145 ms transport and ~130 ms of the
+field's own fixed-lag design. **PR.22 recovers the second half** with `transientRise` — the same
+statistic at 15 ms pre-smooth / 40 ms lag, band re-calibrated to 4–10 dB so its fire rate still
+matches the parent's. Measured against offline onset strength: **+30 ms against the parent's
++150 ms**, on both a streaming and a local session.
+
+**So BUG-087's remaining scope is the ~145 ms transport term only.** A preset keyed to
+`transientRise` should now sit ~145 ms behind the audio rather than ~275 ms.
+
 **The remaining route is smaller buffers from AVAudioEngine** — manual rendering mode, an
 `AUAudioUnit` render block with a smaller `maximumFramesPerSlice`, or tapping a different
 node. BUG087.1 measured that a plain `installTap(bufferSize:)` request is ignored. **Filed as

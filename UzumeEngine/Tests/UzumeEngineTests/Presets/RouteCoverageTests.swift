@@ -97,7 +97,15 @@ struct RouteCoverageTests {
     /// construction, so re-capturing a single fixture would still not exercise it — the
     /// property that matters (different tracks land on different anchors) is covered by
     /// `TrackHueAnchorTests.anchorsSpreadAcrossTracks` instead.
-    static let columnsPostdatingFixtures: Set<String> = ["track_hue_anchor01"]
+    static let columnsPostdatingFixtures: Set<String> = [
+        "track_hue_anchor01",
+        // PR.22. ⚠ UNLIKE the anchor above, this one IS verifiable — it varies within a track,
+        // so re-capturing the three route-coverage fixtures would gate it properly. It is
+        // listed here only because the fixtures predate the column and the source audio
+        // (`Scripts/fetch_tempo_fixtures.sh`) is not present in this checkout. This is a TODO
+        // with a known fix, not a permanent hole: regenerate the fixtures and delete this line.
+        "transient_rise"
+    ]
 
     // MARK: - Fixtures
 

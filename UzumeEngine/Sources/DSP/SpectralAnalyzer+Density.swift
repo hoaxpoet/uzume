@@ -52,6 +52,53 @@ extension SpectralAnalyzer {
     static let levelRiseHighDB: Float = 7.0
     static let levelRiseReleaseTau: Float = 0.20
 
+    /// PR.22 — `transientRise`: the SAME statistic with much shorter windows, and a sibling
+    /// rather than a retune, because `levelRise` has consumers (FTR.24) whose behaviour must
+    /// not move under them.
+    ///
+    /// ★ WHY IT EXISTS, measured. `levelRise`'s peak lands ~150 ms after the transient — not a
+    ///   bug, a consequence of a fixed-lag difference: `level(t) − level(t−0.15)` stays elevated
+    ///   until the lagged term catches up, so the PEAK sits inside [t, t+0.15]. Cross-correlated
+    ///   against offline onset strength on two real sessions, both arms computed from the same
+    ///   `raw_tap.wav` so neither carries pipeline delay:
+    ///
+    ///       40 ms smooth / 150 ms lag  →  +150 ms   (r 0.225 streaming, 0.166 local)
+    ///       20 ms smooth /  60 ms lag  →   +45 ms   (r 0.297 / 0.207)
+    ///       15 ms smooth /  40 ms lag  →   +30 ms   (r 0.327 / 0.224)
+    ///       10 ms smooth /  25 ms lag  →   +20 ms   (r 0.339 / 0.235)
+    ///
+    ///   Shorter is both FASTER AND BETTER CORRELATED, which was not the expected trade — the
+    ///   reference is a fast transient measure, and a fast detector matches it more closely.
+    ///
+    /// 15/40 rather than the fastest 10/25: a 25 ms lag is 1.5 render frames at 60 Hz, too
+    /// tight to be robust to frame-timing jitter, and it buys only 10 ms.
+    ///
+    /// ⚠ It degrades on a slow path and cannot do otherwise. `lagFrames` is a duration, so at
+    ///   the 10 Hz local-file rate (BUG-087) 40 ms rounds to ONE frame = 100 ms. It is never
+    ///   worse than `levelRise` there, and it is ~120 ms better wherever the analysis rate is
+    ///   high. That is a property of the input, not of this statistic.
+    ///
+    /// USE WHICH: `transientRise` for an accent that must land ON the hit; `levelRise` for a
+    /// held "this passage has arrived" signal.
+    /// ★ AND THE dB BAND IS RE-CALIBRATED, which the correlation alone could not have told me.
+    ///   Cross-correlation is SCALE-INVARIANT: a detector that never fires still reports a lag.
+    ///   Measured on real audio, the short window at the parent's 2–7 dB band fires **~3× more
+    ///   often** (1.87/s streaming, 1.66/s local, against the parent's 0.53 and 0.67) — real
+    ///   transients are sharp, so a 40 ms window captures nearly the whole rise.
+    ///
+    ///   The criterion is the one this file already states: match a DISTRIBUTION on real
+    ///   material. 4–10 dB brackets the parent's fire rate on both sessions —
+    ///
+    ///       parent 40/150, 2–7 dB      duty 14.8 % / 14.9 %   fires 0.53 /s, 0.67 /s
+    ///       fast   15/40,  4–10 dB     duty 13.9 % /  9.9 %   fires 0.63 /s, 0.57 /s
+    ///
+    ///   — and the timing win survives the higher threshold: still **+30 ms** against the
+    ///   parent's +150 ms. Only WHEN it peaks changes; how often it fires does not.
+    static let transientPreSmoothTau: Float = 0.015
+    static let transientLagSeconds: Float = 0.040
+    static let transientLowDB: Float = 4.0
+    static let transientHighDB: Float = 10.0
+
     /// FALLBACK band in dB of TOTAL SPECTRAL ENERGY — note the scale, it is NOT RMS dBFS.
     /// The first calibration confused the two and the surge saturated 14 s before the
     /// event. Measured: ≈ −37 dB in an intro, −28…−19 before a guitar arrival, −17…−10
@@ -206,6 +253,39 @@ extension SpectralAnalyzer {
             let releaseAlpha = LoudnessProfile.emaAlpha(deltaTime: deltaTime,
                                                        tau: Self.levelRiseReleaseTau)
             levelRise += (target - levelRise) * releaseAlpha
+        }
+
+        advanceTransientRise(deltaTime: deltaTime, levelDB: levelDB)
+    }
+
+    /// PR.22 — the short-window sibling. Same shape as above, same dB band and release, so the
+    /// only difference between the two signals is WHEN they peak.
+    func advanceTransientRise(deltaTime: Float, levelDB: Float) {
+        let preAlpha = LoudnessProfile.emaAlpha(deltaTime: deltaTime,
+                                                tau: Self.transientPreSmoothTau)
+        if preSmoothedFastDB <= -119 {
+            preSmoothedFastDB = levelDB
+        } else {
+            preSmoothedFastDB += (levelDB - preSmoothedFastDB) * preAlpha
+        }
+
+        let lagFrames = max(1, Int((Self.transientLagSeconds / max(deltaTime, 1e-4)).rounded()))
+        let laggedDB = recentFastDB.count > lagFrames
+            ? recentFastDB[recentFastDB.count - lagFrames - 1]
+            : (recentFastDB.first ?? preSmoothedFastDB)
+        recentFastDB.append(preSmoothedFastDB)
+        if recentFastDB.count > lagFrames + 2 {
+            recentFastDB.removeFirst(recentFastDB.count - (lagFrames + 2))
+        }
+
+        let riseFastDB = preSmoothedFastDB - laggedDB
+        let target = Self.smoothstepf(Self.transientLowDB, Self.transientHighDB, riseFastDB)
+        if target > transientRise {
+            transientRise = target
+        } else {
+            let releaseAlpha = LoudnessProfile.emaAlpha(deltaTime: deltaTime,
+                                                       tau: Self.levelRiseReleaseTau)
+            transientRise += (target - transientRise) * releaseAlpha
         }
     }
 
