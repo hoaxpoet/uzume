@@ -102,7 +102,21 @@ struct AlfvenFilmPreviewTests {
                 guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                     throw HarnessError.commandBufferFailed
                 }
-                solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+                // ALFVEN.3: when audio values are supplied, go through the PRODUCTION
+                // `update(features:stemFeatures:)` entry point so the envelopes, the
+                // soft-saturating drive map and the hue blend are all exercised — not a
+                // back door that sets the solver's constants directly.
+                if let bd = env["ALFVEN_BASSDEV"].flatMap(Float.init) {
+                    var f = FeatureVector()
+                    f.time = Float(frame) / 60.0
+                    f.deltaTime = 1.0 / 60.0
+                    f.bassDev = bd
+                    f.trebRel = env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0
+                    f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.12
+                    solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                } else {
+                    solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+                }
                 if frame % 60 == 0 {
                     let pass = MTLRenderPassDescriptor()
                     pass.colorAttachments[0].texture = target
