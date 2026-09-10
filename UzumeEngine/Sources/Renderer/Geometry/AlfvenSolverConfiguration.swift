@@ -33,7 +33,6 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// as omega climbing. What should be held fixed is the dissipation RATE at the cutoff,
     /// so nu4 = C / k_cut^4 with C taken from the spike's own operating point.
     public var nu4: Float
-    public var drive: Float
     /// Hou-Li filter kmax. DERIVED, like `nu4`, and for the same reason: the spike uses
     /// `kmax = N/2` (alfven.py:37,41-42) — the Nyquist wavenumber — so the filter's shape
     /// relative to the grid is resolution-independent. A fixed constant here (it was 100)
@@ -115,6 +114,16 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// the frame (`01_macro_braided_lobes`). Those are exactly the two states §7 asks the
     /// bass to move between. Stability was checked at the ceiling: 0.00% clamped, wMax 57
     /// against a clamp of 200.
+    ///
+    /// ALFVEN.3e raised the ceiling 16 -> 18. Re-checked with a knob that works (see
+    /// below): at 18, wMax 67.4 and 0.00% clamped, ~3x margin on the clamp; 24 is still
+    /// clean at 94.2. The ceiling is bounded by the DISPLAY, not stability.
+    ///
+    /// ⚠ Do not raise it further expecting more motion. Between drive 16 and 24 the field
+    /// keeps energising — wRMS 6.61 -> 11.16, +69% — while rendered frame-to-frame motion
+    /// moves +2% (4.37 -> 4.47). The top of the solver's dynamic range is being discarded
+    /// by the J -> display mapping, so the lever up there is `displayExposure` /
+    /// `polarityScale`, not this number. Unexplored as of ALFVEN.3e.
     public var driveFloor: Float
     public var driveCeil: Float
     /// Soft-saturation knee for the bass envelope, in `bassDev` units.
@@ -146,6 +155,40 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// route was already falsified at ALFVEN.3 (measured inert); its choice of the
     /// one-sided primitive is the second thing about that row that does not survive
     /// contact with real music.
+    ///
+    /// ## ALFVEN.3e — shift 0.05 -> 0, scale 0.16 -> 0.45
+    ///
+    /// The 3c window was centred on the wrong place and far too narrow. Re-measured over
+    /// Matt's two clean captures (2026-09-10T21-24-18Z and T19-34-42Z, 12 925 frames,
+    /// `chain_health` verdict `clean` on both), the tau-100ms `bassRel` envelope sits at
+    /// p05 -0.18, p50 0.00, p95 +0.26, p99 +0.49. Under the 3c window that mapped to
+    /// drive p50 10.5, p95 15.7, p99 16.0 — the MEDIAN frame already at 65 % of the
+    /// ceiling and the loudest 5 % of the track compressed into the last 0.3 of it.
+    ///
+    /// Rendered through the production display path (`ALFVEN_VIGOUR`, mean per-frame
+    /// absolute pixel delta at steady state, frames 600-900):
+    ///
+    ///                  p05    p50    p95    p99   p95->p99
+    ///     3c window    1.52   2.95   4.30   4.36     0.06
+    ///     this         2.15   3.07   3.88   4.50     0.62
+    ///
+    /// The baseline Matt signed off is preserved (p50 +4 %, below perception) and the top
+    /// of the range is marginally brighter, but the loud moments are now TEN TIMES more
+    /// separated from each other. That was the defect: every drop, hit and chorus rendered
+    /// the same frame-to-frame motion, so the field could be perfectly coupled to the
+    /// signal and still read as arbitrary.
+    ///
+    /// ⚠ The ceiling is NOT the lever, and raising it further does nothing. The same
+    /// harness, sweeping drive directly at steady state, measures the solver's own
+    /// response saturating: drive 16 -> 4.37, 20 -> 4.55, 24 -> 4.47. Above ~18 the field
+    /// stops answering, so range must be won by spending 0…18 better, not by extending it.
+    /// (Do not re-measure this on a short run: at 240 frames the field is still
+    /// energising and the curve looks linear to 24. It is not.)
+    ///
+    /// Setting the shift to 0 does not undo 3c's M7 fix — the wider scale now carries it.
+    /// Steady music (`bassRel` ~ 0) renders MORE motion than before (3.07 vs 2.95), and
+    /// quiet passages more still (2.15 vs 1.52), so "drops to its silence look during
+    /// music" is further away than it was, not closer.
     public var bassRelShift: Float
     public var bassRelScale: Float
     public var bassKnee: Float
@@ -237,7 +280,6 @@ public struct AlfvenSolverConfiguration: Sendable {
         substeps: Int = 4,
         alpha: Float = 0.16,
         nu4: Float? = nil,     // nil => derived from `edge`, see the property comment
-        drive: Float = 0.020,
         spectralCutoff: Float? = nil,  // nil => Nyquist, edge/2
         clampOmega: Float = 200.0,     // a genuine backstop: ~25x the measured equilibrium
         clampPsi: Float = 100.0,
@@ -252,9 +294,9 @@ public struct AlfvenSolverConfiguration: Sendable {
         displayHuePeriodSeconds: Float = 80.0,
         displayHueDwell: Float = 2.0,
         driveFloor: Float = 0.02,
-        driveCeil: Float = 16.0,
-        bassRelShift: Float = 0.05,
-        bassRelScale: Float = 0.16,
+        driveCeil: Float = 18.0,
+        bassRelShift: Float = 0.0,
+        bassRelScale: Float = 0.45,
         bassKnee: Float = 0.094,
         bassTau: Float = 0.10,
         trebleTau: Float = 0.03,
@@ -275,7 +317,6 @@ public struct AlfvenSolverConfiguration: Sendable {
         // C = 2.5e-7 * ((2/3)*128)^4 — the spike's dissipation rate at its own cutoff.
         let kCut = (2.0 / 3.0) * (Float(edge) / 2.0)
         self.nu4 = nu4 ?? (13.256 / (kCut * kCut * kCut * kCut))
-        self.drive = drive
         self.spectralCutoff = spectralCutoff ?? (Float(edge) / 2.0)
         self.clampOmega = clampOmega
         self.clampPsi = clampPsi

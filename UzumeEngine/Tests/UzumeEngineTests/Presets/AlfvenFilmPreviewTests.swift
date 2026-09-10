@@ -61,11 +61,11 @@ struct AlfvenFilmPreviewTests {
         var cfg = AlfvenSolverConfiguration()
         cfg.edge = edge
         // Same override set as AlfvenSolverTests, so the film harness can be pointed at a
-        // decay run (ALFVEN_DRIVE=0) — the cleanest comparison against the spike, because
+        // decay run (ALFVEN_DRIVEFLOOR=0 ALFVEN_DRIVECEIL=0) — the cleanest comparison
+        // against the spike, because
         // an unforced field just relaxes from a statistically identical seed instead of
         // diverging chaotically.
         let env = ProcessInfo.processInfo.environment
-        if let d = env["ALFVEN_DRIVE"].flatMap(Float.init) { cfg.drive = d }
         if let a = env["ALFVEN_ALPHA"].flatMap(Float.init) { cfg.alpha = a }
         if let n4 = env["ALFVEN_NU4"].flatMap(Float.init) { cfg.nu4 = n4 }
         if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
@@ -73,6 +73,10 @@ struct AlfvenFilmPreviewTests {
         if let jc = env["ALFVEN_JCUT"].flatMap(Float.init) { cfg.jCutoff = jc }
         if let bc = env["ALFVEN_BLOOMCEIL"].flatMap(Float.init) { cfg.bloomMaxAmount = bc }
         if let bs = env["ALFVEN_BLOOMSLEW"].flatMap(Float.init) { cfg.bloomSlewPerSecond = bs }
+        if let df = env["ALFVEN_DRIVEFLOOR"].flatMap(Float.init) { cfg.driveFloor = df }
+        if let dc = env["ALFVEN_DRIVECEIL"].flatMap(Float.init) { cfg.driveCeil = dc }
+        if let bh = env["ALFVEN_BASSSHIFT"].flatMap(Float.init) { cfg.bassRelShift = bh }
+        if let bl = env["ALFVEN_BASSSCALE"].flatMap(Float.init) { cfg.bassRelScale = bl }
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
                                       pixelFormat: ctx.pixelFormat, configuration: cfg)
 
@@ -187,6 +191,70 @@ struct AlfvenFilmPreviewTests {
                          solver.displayExposure, solver.displayHueCentre,
                          lums.reduce(0, +) / Double(lums.count),
                          lums.min() ?? 0, lums.max() ?? 0))
+            return
+        }
+
+        // ALFVEN_VIGOUR: does more drive actually LOOK more vigorous? The drive map is a
+        // curve onto the forcing amplitude, but nothing guarantees the display responds
+        // to the top
+        // of it: substeps are fixed at 4 and dt is CFL-reduced, so a harder-forced field
+        // advances LESS sim time per frame. Whether net stirring still rises with drive is
+        // an empirical question about the whole pipeline, not a property of the map.
+        //
+        // Metric: mean per-frame absolute pixel delta on the PRODUCTION display path —
+        // "how much of the frame changed", which is what stirring vigour looks like. Held
+        // at a CONSTANT bassRel per run so the only variable is the drive level; sweep by
+        // re-running across the measured envelope percentiles.
+        if env["ALFVEN_VIGOUR"] == "1" {
+            let frames = Int(env["ALFVEN_FRAMES"] ?? "240") ?? 240
+            let settle = Int(env["ALFVEN_SETTLE"] ?? "60") ?? 60
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            var previous: [UInt8] = []
+            var deltas: [Double] = []
+            var drives: [Float] = []
+            for frame in 1...frames {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                f.bassRel = env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? 0.0
+                f.bassDev = max(f.bassRel, 0)
+                f.trebRel = env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0
+                f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.125
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = target
+                pass.colorAttachments[0].loadAction = .clear
+                pass.colorAttachments[0].storeAction = .store
+                pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.render(encoder: enc, features: f)
+                enc.endEncoding()
+                cmd.commit(); cmd.waitUntilCompleted()
+                let now = Self.pixels(target)
+                // Skip the settle window: the seeded field's initial transient is not the
+                // steady-state stirring the metric is meant to describe.
+                if frame > settle, !previous.isEmpty {
+                    var sum = 0.0
+                    for i in stride(from: 0, to: now.count, by: 4) {
+                        sum += abs(Double(now[i]) - Double(previous[i]))
+                            + abs(Double(now[i + 1]) - Double(previous[i + 1]))
+                            + abs(Double(now[i + 2]) - Double(previous[i + 2]))
+                    }
+                    deltas.append(sum / Double(now.count / 4 * 3))
+                    drives.append(solver.audioDrive)
+                }
+                previous = now
+            }
+            let mean = deltas.reduce(0, +) / Double(max(deltas.count, 1))
+            print(String(format: "[alfven-vigour] bassRel %+.4f -> drive %.2f   "
+                                 + "meanPixelDelta %.4f   n %d",
+                         env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? 0.0,
+                         drives.last ?? 0, mean, deltas.count))
             return
         }
 
@@ -371,6 +439,20 @@ struct AlfvenFilmPreviewTests {
     /// Targets in this space: our film.py port 0.159, REF 01 0.114, REF 05 0.229.
     private static func srgbToLinear(_ c: Double) -> Double {
         c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+    }
+
+    /// Raw BGRA bytes of a rendered frame — the input to the vigour delta.
+    private static func pixels(_ tex: MTLTexture) -> [UInt8] {
+        var bgra = [UInt8](repeating: 0, count: tex.width * tex.height * 4)
+        bgra.withUnsafeMutableBytes { buf in
+            guard let base = buf.baseAddress else { return }
+            tex.getBytes(base, bytesPerRow: tex.width * 4,
+                         from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                         size: MTLSize(width: tex.width,
+                                                       height: tex.height, depth: 1)),
+                         mipmapLevel: 0)
+        }
+        return bgra
     }
 
     private static func meanLuma(_ tex: MTLTexture) -> Double {
