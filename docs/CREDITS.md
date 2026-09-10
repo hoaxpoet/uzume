@@ -90,7 +90,7 @@ retraining or fine-tuning.
 ## Milkdrop-inspired preset attribution
 
 **Status:** **Active — populated per D-111 (as amended by the D-113
-inspired-by reframe).** Seven presets are Milkdrop-inspired works; each
+inspired-by reframe).** Eight presets are Milkdrop-inspired works; each
 declares its source in an `inspired_by` sidecar block. (`Meniscus` is the
 newest and is not yet certified — MEN.2a.)
 
@@ -132,7 +132,7 @@ normalised across all seven sidecars at MD.0 / D-215 §13.3):**
 
 `sha256` is the hash of the source artifact **actually read**, and `source_form`
 names what that artifact was — the two fields are read together. Six of the
-seven were authored against a **butterchurn built-in JSON** rendered as a live
+eight were authored against a **butterchurn built-in JSON** rendered as a live
 oracle through `tools/milkdrop-render/`; only Dragon Bloom read a `.milk`.
 Where no hash was taken at authoring, `sha256` is omitted rather than invented.
 
@@ -145,6 +145,7 @@ Where no hash was taken at authoring, `sha256` is omitted rather than invented.
 | `Floret` | `suksma - Rovastar - Sunflower Passion (Enlightment Mix)_Phat_edit + flexi und martin shaders - circumflex in character classes in regular expression` | suksma, Rovastar, Flexi, Martin | butterchurn built-in JSON (no hash taken) | ✅ |
 | `Meniscus` | `Martin - QBikal - Surface Turbulence IIb` | Martin, QBikal | butterchurn built-in JSON (hashed) | ✅ |
 | `Witchlight` | `martin - witchcraft reloaded` | Martin | butterchurn built-in JSON (hashed) | ✅ |
+| `RootChoir` | `Martin - liquid arrows` | Martin | butterchurn built-in JSON (hashed) | — |
 
 **Reference-image attribution (`docs/VISUAL_REFERENCES/`).** The Witchlight
 reference set (WL.1) is eleven license-verified images from Wikimedia
