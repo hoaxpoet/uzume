@@ -93,6 +93,8 @@ struct AlfvenFilmPreviewTests {
         if env["ALFVEN_LIVE"] == "1" {
             if let ex = env["ALFVEN_EXPOSURE"].flatMap(Float.init) { solver.displayExposure = ex }
             if let hu = env["ALFVEN_HUE"].flatMap(Float.init) { solver.displayHueCentre = hu }
+            if let bl = env["ALFVEN_BLOOM"].flatMap(Float.init) { solver.displayBloomAmount = bl }
+            if let be = env["ALFVEN_BLOOMEXP"].flatMap(Float.init) { solver.displayBloomExposure = be }
             let frames = Int(env["ALFVEN_FRAMES"] ?? "300") ?? 300
             let target = try Self.makeTarget(ctx, edge: Self.edge)
             var lums: [Double] = []
@@ -122,6 +124,29 @@ struct AlfvenFilmPreviewTests {
                 cmd.commit(); cmd.waitUntilCompleted()
                 guard frame % 60 == 0 else { continue }
                 lums.append(Self.meanLuma(target))
+                // Dump the bloom chain so film.py's own gaussian_filter can be run on the
+                // same field and compared field-to-field — percentages of frame brightness
+                // are not comparable across the sRGB/linear split.
+                for (tex, tag) in [(solver.bloomCoreTexture, "core"),
+                                   (solver.bloomNearTexture, "b0"),
+                                   (solver.bloomFarTexture, "b1")] {
+                    let n = tex.width
+                    var raw = [Float](repeating: 0, count: n * n * 4)
+                    raw.withUnsafeMutableBytes { buf in
+                        guard let base = buf.baseAddress else { return }
+                        tex.getBytes(base, bytesPerRow: n * 16,
+                                     from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                                     size: MTLSize(width: n, height: n, depth: 1)),
+                                     mipmapLevel: 0)
+                    }
+                    var out = Data(capacity: n * n * 8)
+                    for i in 0..<(n * n) {
+                        withUnsafeBytes(of: Double(raw[i * 4]).bitPattern.littleEndian) {
+                            out.append(contentsOf: $0)
+                        }
+                    }
+                    try out.write(to: dir.appendingPathComponent("bloom_\(tag).f64"))
+                }
                 let dir = URL(fileURLWithPath: NSTemporaryDirectory())
                     .appendingPathComponent("uzume-alfven4-film")
                 try FileManager.default.createDirectory(at: dir,

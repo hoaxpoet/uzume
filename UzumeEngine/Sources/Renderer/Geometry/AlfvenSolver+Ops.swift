@@ -128,6 +128,27 @@ struct Ops {
         }
     }
 
+    /// A separable Gaussian: horizontal into `via`, vertical into `dst`.
+    func blur(_ params: inout AlfvenParams, from src: MTLTexture, via: MTLTexture,
+              into dst: MTLTexture, sigma: Float) {
+        for (axis, input, output) in [(SIMD2<Float>(1, 0), src, via),
+                                      (SIMD2<Float>(0, 1), via, dst)] {
+            encode { enc in
+                enc.setComputePipelineState(solver.blurPSO)
+                enc.setTexture(input, index: 0)
+                enc.setTexture(output, index: 1)
+                enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+                var dir = axis
+                enc.setBytes(&dir, length: MemoryLayout<SIMD2<Float>>.size, index: 1)
+                var sigmaValue = sigma
+                enc.setBytes(&sigmaValue,
+                             length: MemoryLayout<Float>.size,
+                             index: 2)
+                enc.dispatchThreads(dims.grid, threadsPerThreadgroup: dims.threadgroup)
+            }
+        }
+    }
+
     func copy(_ src: MTLTexture, to dst: MTLTexture) {
         guard let blit = cmd.makeBlitCommandEncoder() else { return }
         blit.copy(from: src, to: dst)
