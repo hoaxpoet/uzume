@@ -143,7 +143,14 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // heuristic can't see it (Filigree/Skein precedent). Certified via
                                      // Matt's M7 sign-off (MITOSIS.2c, "psychedelic cell division")
     "Murmuration":          false,   // full; M3 fails (file: Murmuration.metal)
-    "Nebula":               false,   // lightweight; L2 fails — no deviation primitives in source
+    // PR.19 (2026-09-10): flipped false -> true. L2 failed for the whole of this preset's
+    // life because the v1 shader contained no deviation primitive at all — everything was
+    // raw `fftMagnitudes` with fixed gains, which is the same defect Matt's roster note
+    // was describing from the other side. The v2 rewrite drives the ring's REACH from
+    // bass_att_rel / mid_att_rel / treb_dev (D-026) and now clears L1-L3. L4 stays manual
+    // and Nebula stays `certified: false` — the automated gate is not certification, and
+    // this preset's reference set is still an unfilled template.
+    "Nebula":               true,    // lightweight; L1-L3 pass since PR.19
     "Plasma":               false,   // lightweight; L2 fails — no deviation primitives in source
     "Skein":                false,   // lightweight; L2 fails BY CONSTRUCTION — Skein's deviation
                                      // primitives (stems.*EnergyDev, midAttRel — D-026) are consumed

@@ -688,6 +688,10 @@ struct MultiPassRenderHarness {
         }
     }
 
+    /// Real per-frame FFT magnitudes for the `direct` path, or nil for the LCG fill.
+    /// Set by a diagnostic before calling `render`; reset it afterwards.
+    nonisolated(unsafe) static var realSpectrum: [[Float]]?
+
     /// Read the mv_warp accumulator rather than the composed drawable.
     static var dumpAccumulator: Bool {
         ProcessInfo.processInfo.environment["HARNESS_DUMP_ACCUMULATOR"] == "1"
@@ -1007,6 +1011,25 @@ struct MultiPassRenderHarness {
         let wavPtr = wav.contents().assumingMemoryBound(to: Float.self)
         for sample in 0..<2048 { wavPtr[sample] = nextNoise() * 0.6 }
 
+        // ★★ PR.19 — AND THAT NOISE IS WHY NO STILL OF A `direct` PRESET HAS EVER SHOWN
+        //    WHAT IT LOOKS LIKE ON MUSIC. The LCG fill above is right for the frame-budget
+        //    gate (deterministic, dense, no early-outs) and wrong for anything that LOOKS
+        //    at the frame: all four `direct` presets — Nebula, Plasma, Spectral Cartograph,
+        //    Waveform — read the spectrum as their primary driver, so a broadband-noise
+        //    spectrum renders a preset nobody will ever see. Three of the four are on
+        //    Matt's roster review with sync complaints, and every artifact anyone could
+        //    have checked them against was noise.
+        //
+        //    `realSpectrum`, when set, replaces the fill with REAL magnitudes measured off
+        //    a session's `raw_tap.wav` through the production FFTProcessor (FA #27), one
+        //    entry per frame, cycling if the render outruns the capture. Left nil, nothing
+        //    changes and the budget gate is untouched.
+        let injected = Self.realSpectrum
+        if let injected, !injected.isEmpty {
+            print("[direct-render] REAL spectrum injected: \(injected.count) frames "
+                  + "(the LCG fill is bypassed)")
+        }
+
         let history = SpectralHistoryBuffer(device: ctx.device)
         // The real generated textures, not placeholders — see the note above.
         let textures = try TextureManager(context: ctx, shaderLibrary: lib)
@@ -1018,6 +1041,10 @@ struct MultiPassRenderHarness {
             }
             guard let enc = cmd.makeRenderCommandEncoder(descriptor: clearRPD(target)) else {
                 throw HarnessError.renderFailed
+            }
+            if let injected, !injected.isEmpty {
+                let bins = injected[frame % injected.count]
+                for bin in 0..<min(512, bins.count) { fftPtr[bin] = bins[bin] }
             }
             var features = drive[frame]
             var stem = stems[frame]
