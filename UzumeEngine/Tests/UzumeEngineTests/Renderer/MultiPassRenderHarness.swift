@@ -70,7 +70,12 @@ struct MultiPassRenderHarness {
         // first with a geometry-owned resolution-dependent target (ensureAllocated). Absent
         // until this increment: PresetFrameBudgetTests carried "Ricercar" in its UNVERIFIED
         // list, so its mandatory performance and D-157 flash gates had never actually run.
-        "Ricercar"
+        "Ricercar",
+        // PR.18 — Gossamer. `mv_warp` with a bespoke wave pool (`GossamerState`) on slot 6,
+        // the shape `uncoveredPresets` predicted. Its cost scales with the number of ALIVE
+        // waves (the fragment loops `wave_count`, capped at 32), so it is warmed before the
+        // timed frames for the same reason Skein is — PERF.17.
+        "Gossamer"
     ]
 
     /// Render `presetName` over `features`/`stems` (row-aligned), returning `reduce(bgra)`
@@ -98,7 +103,7 @@ struct MultiPassRenderHarness {
         case "Nacre":        return try renderBespokeMVWarp("Nacre", features, stems, reduce)
         case "Floret":       return try renderBespokeMVWarp("Floret", features, stems, reduce)
         case "Glaze":        return try renderBespokeMVWarp("Glaze", features, stems, reduce)
-        case "Dragon Bloom", "Skein", "Root Choir":
+        case "Dragon Bloom", "Skein", "Gossamer", "Root Choir":
             return try renderMVWarp(presetName, features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)
@@ -617,6 +622,21 @@ struct MultiPassRenderHarness {
         pipeline.currentDrawableSize = size
         try configureMVWarp(pipeline: pipeline, preset: preset, context: ctx, size: size)
 
+        // PR.18 — Gossamer's wave pool. Mirrors `bindGossamerRuntime`: allocate, bind at
+        // slot 6, tick once per frame. Warmed first, because a cold pool holds the 2 seeded
+        // ambient waves and the fragment's cost is a loop over `wave_count`.
+        let gossamer: GossamerState?
+        if presetName == "Gossamer" {
+            guard let state = GossamerState(device: ctx.device, seed: 42) else {
+                throw HarnessError.setupFailed("GossamerState allocation")
+            }
+            pipeline.setDirectPresetFragmentBuffer(state.waveBuffer)   // slot 6
+            Self.warmGossamer(state)
+            gossamer = state
+        } else {
+            gossamer = nil
+        }
+
         let skein: SkeinState?
         if presetName == "Skein" {
             guard let state = SkeinState(device: ctx.device, seed: 42) else {
@@ -640,6 +660,7 @@ struct MultiPassRenderHarness {
                 skein.tick(deltaTime: fv.deltaTime, features: fv, stems: stem)
                 pipeline.setMVWarpWetnessDecay(skein.wetnessDecay)
             }
+            gossamer?.tick(deltaTime: fv.deltaTime, features: fv, stems: stem)
             guard let cmd = ctx.commandQueue.makeCommandBuffer(),
                   let warpState = pipeline.mvWarpState else { throw HarnessError.renderFailed }
             pipeline.renderMVWarpToTexture(
@@ -886,6 +907,25 @@ struct MultiPassRenderHarness {
                        features: PresetFrameBudgetTests.driveFeature(frame: i),
                        stems: PresetFrameBudgetTests.driveStems(frame: i))
             if state.colorBreakpoints.count >= SkeinState.maxColorBreaks { return }
+        }
+    }
+
+    /// PR.18 — warm Gossamer's wave pool to its STEADY STATE before the timed frames.
+    ///
+    /// `gossamer_fragment` loops `wave_count` (capped at 32) and evaluates a Gaussian ring per
+    /// wave per fragment, so the pool size IS the preset's variable cost. A fresh `GossamerState`
+    /// holds the **two** seeded ambient waves; live it emits at 0.5–2.5 waves/s against a 6 s
+    /// lifetime. Twenty-four timed frames buy 0.4 s and would never leave the seeded pair — the
+    /// Skein shape exactly (PERF.17).
+    ///
+    /// The loop runs 10 s of drive rather than stopping on a target count: past `maxWaveLifetime`
+    /// the pool is at whatever size the DRIVE produces, which is the number to record. Stopping on
+    /// a count would manufacture one — *fix the drive, never the floor*. `tick` is CPU-only.
+    static func warmGossamer(_ state: GossamerState, frames: Int = 600) {
+        for i in 0..<frames {
+            state.tick(deltaTime: 1.0 / 60.0,
+                       features: PresetFrameBudgetTests.driveFeature(frame: i),
+                       stems: PresetFrameBudgetTests.driveStems(frame: i))
         }
     }
 

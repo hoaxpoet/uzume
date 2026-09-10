@@ -300,7 +300,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 
 | Preset | Matt's ask (abbreviated) | Status |
 |---|---|---|
-| **Gossamer** | *"Tuning for sync with music, has potential."* | 🔨 **in progress.** Ten real routes declared (2026-09-09); BUG-124 restored the vocal-pitch signal it is keyed to; Matt saw it live — *"looks pretty good"*. **Remaining:** BUG-060 (force-quit hang on switching to it, uninvestigated), certification (no curated references), the particles idea he raised, and whether "hue on vocal pitch" survives knowing the vocals stem carries periodic bleed on instrumentals. |
+| **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | ✅ **PR.18 — CERTIFIED 2026-09-09, the 22nd.** Matt: *"looks great. looks ready to certify."* Sync half addressed (14 routes, BUG-124); fidelity half built (silk material, strand irregularity, node glints, atmosphere, wave displacement, catenary scallop). Rubric 4/15 → 8/15; cost 6.6 → ~9.8 ms, inside budget. Reference set recurated (12 images). Open items listed under PR.18 step 4. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
@@ -326,11 +326,287 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Nimbus** | *"Doesn't do much and yet people seem to really like it"* | ⏸ no ask. |
 | **Skein** | *"Fine enough"* | ⏸ no ask. |
 | **Spectral Cartograph** | *"Opportunities to clean up eventually"* | ⏸ deferred; it is `is_diagnostic`, so it never auto-installs. |
-| **Staged Sandbox** | *"Get rid of it."* | 🔨 hidden from the cycle at PR.0 rather than removed — **and PR.9 then retargeted the staged harness template onto it**, so infrastructure now depends on something Matt asked to be gone. Needs a decision. |
+| **Staged Sandbox** | *"Get rid of it."* — refined by Matt at PR.0 to *"I want to hide Staged Sandbox, the other diagnostic presets can still remain in the list"* | ✅ **CLOSED.** Hidden from the cycle at PR.0; Matt confirmed 2026-09-09: *"No need to get rid of Staged Sandbox. Hiding it was the right call, and this work has already occurred."* It remains the subject of the staged harness template (D-246), which is a legitimate use of a diagnostic fixture. |
 | **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
 
-**Nine of the open rows are blocked on parked engine work** (D-206 beat drift, BUG-028 meter). Those
-are not preset deep dives and must not be worked around inside presets.
+### PR.18 — Gossamer deep dive 🔨 OPEN (2026-09-09, Matt: *"open it as Gossamer's deep dive"*)
+
+The first increment under the restructured phase, and the template for the rest. Steps 1 and 2 are
+done here; step 3 is **blocked on one decision from Matt** (below).
+
+#### Step 1 — definition
+
+**Matt's ask, verbatim.** Roster review: *"Tuning for sync with music, has potential."* Then, on
+2026-09-09 after seeing it live: *"I'm not happy with the level of visual quality — it looks very
+childlike in construction. How can we increase the fidelity without impacting performance?"* and
+*"It looks like a child's drawing of a spider web, or a basic computer program from 30 years ago."*
+
+Note that these are **two different asks** and the second supersedes nothing. The sync half is
+largely addressed — ten routes are declared, BUG-124 restored the vocal-pitch signal they key on,
+and Matt's live look was *"looks pretty good."* The open ask is **fidelity**.
+
+**Musical role.** A single web is the resonating body of the band: bass tightens the silk, the
+guitar/keys stem sets how often it is struck, and each strike sends a colour wave outward whose hue
+is the vocal's pitch. The web is an instrument that is being played, not a diagram that is being
+lit.
+
+**Reference set — a finding.** `docs/VISUAL_REFERENCES/gossamer/README.md` is complete: 11 fully
+annotated slots with per-image trait-trustability notes, caveats, and two documented gaps. **The
+images themselves were never committed.** `docs/VISUAL_REFERENCES/**/*.jpg` has been gitignored
+since `33cebe25`, so no `.jpg` under that directory has ever been tracked — the curation was done
+and the artifacts are gone. This is the lost-reference-images class fixed on
+2026-08-25 by adding a force-add step to the README; Gossamer's set predates the fix. **The written
+annotations are precise enough to build from; they are not enough to certify against.**
+
+#### Step 2 — diagnosis, measured
+
+**Cost, measured for the first time: 6.61 / 7.11 ms at 1920×1080 — 0.9–1.0× the roster median,
+18th of 22.** Gossamer had been on `uncoveredPresets` since the harness existed, so its declared
+`complexity_cost.tier1 = 6.0` was an estimate nothing had checked. It is close, and the answer to
+Matt's question is that **there is roughly 9 ms of headroom under the 16.6 ms budget** and the
+expensive rows (Stave, Skein, Cytokinesis, Volumetric Lithograph) are all ray-marchers, which
+Gossamer is not. `PresetFrameBudgetTests` now covers it, warmed to a live wave pool with a cold
+control (`gossamerIsMeasuredWithWavesAlive`, PERF.17's lesson).
+
+**The fidelity gap is not a trade-off. The documented design was never implemented.** Against
+`SHADER_CRAFT.md` §10.2 / the reference README's V.8 target, `Gossamer.metal` (272 lines) contains:
+
+| V.8 target trait | In the shader |
+|---|---|
+| Silk Marschner-lite material (`azimuthal_r 0.08`, `azimuthal_tt 0.5`, `absorption 0.3`) | **absent** — strand colour is a two-stop radial lerp |
+| ≥4 noise octaves (quality floor) | **zero** — no `fbm`, no `noise`, anywhere |
+| ≥3 materials (quality floor) | **zero** — no `mat_*` call |
+| Physical wave displacement perpendicular to the local tangent | **absent** — see below |
+| Fine glints at thread intersections | `spokeCov * spirCov` only, i.e. where two ~1 px hard cores overlap; effectively no pixels |
+| Chromatic aberration on high-amplitude wave peaks | **absent** |
+| Bioluminescent haze halo (~0.5 radius) | **absent** — background is a flat two-stop vertical gradient |
+| Dust motes drawn inward at high vocal energy | **absent** |
+| SSGI fill from web emission | **absent** |
+
+Geometry is **not** the problem and should not be touched: the 17 explicit spoke angles (D-042),
+the 7-turn spiral and the off-centre hub are all present and correct. That is precisely why it reads
+as a diagram — the layout is right and every surface property that would make it read as a
+photographed object is missing. *"Correct geometry, no shading"* is what a 30-year-old program looks
+like, and the README already names the failure in its own words: the web must read as *"an
+instrument body, **not a geometry study**."*
+
+**The shader is currently its own anti-reference.** `99_anti_reference.jpg` is annotated *"NOT this
+— uniform palette-shift waves with no perpendicular strand displacement; silk reads as static
+grid."* Line 211 is `waveContrib *= strandCov` — the waves are an additive tint on strands that were
+already drawn, exactly the palette-shift the anti-reference rules out.
+
+**Two defects found by reading, to fix regardless of the uplift's scope:**
+
+1. **`strandCov` is applied to the wave layer twice.** Line 211 multiplies `waveContrib` by
+   `strandCov`, then line 226 does `strandCov * (baseStrand + waveContrib)` — so the waves are
+   attenuated by `strandCov²`. On a halo pixel at 0.3 coverage the wave arrives at 0.09, 3.3× dimmer
+   than intended; only the ~1 px hard cores (coverage ≈ 1) are unaffected. **The preset's signature
+   audio-visual layer is being squared away on every soft pixel**, which is a plausible contributor
+   to *"more connection between visuals and music"* complaints on this preset. Single-character fix.
+2. **Brightness is driven by an absolute AGC-normalised band at 6× the weight of its deviation
+   term.** Line 189: `brightness = 0.12 + f.bass * 0.76 + bassRel * 0.12`. The web's dynamics
+   therefore track the AGC's running-average denominator — mix density — rather than musical
+   events, and the same kick reads differently across tracks.
+
+   ⚠ **This entry first read "FA #31 exactly" and that was too strong — corrected here after the
+   over-literal fix broke a gate.** FA #31 bans absolute *thresholds*
+   (`smoothstep(0.22, 0.32, f.bass)`), whose breakpoint lands somewhere different on every track. A
+   smooth proportional term has no breakpoint to misplace, and **D-037 requires a silence state
+   distinguishable from a playing one** — for which absolute energy is the only available signal,
+   since every deviation primitive sits at ~0 in both. Removing the term outright made silence and
+   a steady mid-energy passage render identically; `PresetAcceptanceTests`' beat-vs-continuous
+   invariant went red with continuous motion at **zero and beat motion at 7.58**, i.e. an inversion
+   of D-004 introduced while trying to honour D-026. **The fault is the RATIO, and the fix is to
+   invert it** — absolute for presence, deviation for dynamics — not to delete the absolute term.
+   The rubric's own M4 check agrees: it looks for `f.band > 0.x` threshold patterns, not for
+   proportional use.
+
+**Not a defect, but worth Matt knowing:** the dewdrop layer (line 213) is annotated in the reference
+README as an *Arachne* trait, *"explicitly not Gossamer's."* Slot 03 does want node glints — body
+teal, tip a brighter different colour — so the layer's *idea* is wanted; its current form is not.
+
+#### Step 3 — implementation ✅ (2026-09-09, Matt: *"do all four, and recurate the reference images"*)
+
+**All four layers, plus the wave displacement the anti-reference names.** The fifth was not in
+the four offered; it is added because the curated anti-reference forbids exactly what v3 did
+(`waveContrib *= strandCov` — a palette tint on strands already drawn) and no amount of material
+work fixes a static grid. `Gossamer.metal` 272 → ~560 lines.
+
+| Layer | What landed |
+|---|---|
+| **Silk material** | `mat_silk_thread` at the README's own coefficients, plus `fiber_trt_lobe` for the third lobe §4.3 specifies and the cookbook recipe omits. Each strand carries a **cylindrical cross-section normal** derived from its signed offset, so a thread reads as a round lit filament rather than a flat stroke. |
+| **Strand irregularity** | `fbm4` along each thread, decorrelated per strand, driving width (±45 %), brightness, out-of-plane tilt and a transverse **sag** under a zero-at-both-ends envelope. |
+| **Node glints** | On the strands' proximity FIELDS rather than v3's `spokeCov * spirCov` — the product of two ~1 px hard cores, which intersect on almost no pixels. Warm-white against teal silk, per slot 03's body-vs-tip annotation, and modulated by the strand noise so not every node beads. |
+| **Atmosphere** | Haze halo carrying the waves' own colour into the air (the SSGI fill this 2D preset can express), with low-frequency density structure; dust motes on a jittered lattice drifting inward at high vocal energy, outward at silence. |
+| **+ Wave displacement** | The wave field is resolved BEFORE the geometry and pushes the sample point radially, signed by which side of the front the pixel is on. The silk now bows as a front passes. |
+
+**And the one thing that changed the read more than any of them: the catenary scallop.** A real
+orb-weaver's spiral is strung between consecutive spokes and sags outward in between; v3 drew
+true concentric ellipses, which is most of why it read as a polar grid. Amplitude scales as
+`r × gap`, so D-042's 0.77 rad open sector droops visibly more than its 0.27 rad clusters —
+the irregular anchor array finally has a visible consequence. First cut sagged uniformly and
+read as a doily; the chord-length term fixed it.
+
+**Both PR.18-diagnosed defects fixed:** the `strandCov²` double-multiply, and the absolute-vs-
+deviation brightness ratio — **the latter across two attempts.** The first deleted the absolute
+term entirely and `PresetAcceptanceTests` caught the result: silence and a steady passage rendered
+identically, so continuous motion was zero and the preset's only remaining motion was beat
+response. Final form is `0.11 + presence × 0.40 + max(0, bassRel) × 0.32 + max(0, midRel) × 0.14`
+with the beat flash cut 0.30 → 0.18, because a flash sized against v3's brightness range is an
+over-reaction against this one (D-004: beats are accents). See the corrected diagnosis note above.
+
+**Calibrated against v3 through the FEEDBACK path, not the direct render** — `mv_warp` at decay
+0.955 has ~22× gain on anything that holds still, so a scene that looks right as one frame
+arrives far hotter once it accumulates. The first cut measured meanLuma 0.300 against v3's 0.219
+and clipped 3.2× as many pixels on the same replay.
+
+**Final A/B, both arms on session `2026-09-09T21-16-47Z`, 240 frames at 1280×720:**
+
+| | clipped | saturation | meanLuma |
+|---|---|---|---|
+| v3 | 0.001 | 0.359 | 0.207 |
+| v4 | **0.002** | **0.316** | **0.248** |
+
+Clipping is level with v3. The extra luma is midtone — haze filling what used to be flat black,
+which is the atmosphere layer doing its job. **Saturation is genuinely down**, and the cause is
+deliberate: this metric is measured over BRIGHT pixels only, and v4's brightest pixels are the
+node glints, which are near-white *by design* (slot 03's body-vs-tip annotation — a glint reads as
+a glint because it differs in colour from the filament, not only in brightness). Reported rather
+than tuned away.
+
+⚠ **The earlier figures in this entry (0.003 / 0.340 / 0.267 against 0.005 / 0.288 / 0.219) were
+measured on session `2026-09-09T19-09-58Z`, which has since been rotated away.** They are left in
+the paragraph above as the record of the first cut, but the table is the comparable pair — both
+arms re-run on a surviving session after the brightness rebalance.
+
+**Cost — reported, not smoothed. ~10.0 ms at 1080p against v3's ~6.6 ms; 1.2–1.4× the roster
+median where v3 was 1.0×; 4th of 22 where v3 was 18th.** Inside the 16.6 ms budget with ~6.6 ms
+to spare, and `complexity_cost` is updated to `tier1 10.0 / tier2 5.8` so the planner budgets it
+honestly. Three ablations (displacement, motes, the silk BRDF) each moved it under 0.6 ms, so the
+cost is diffuse — most likely register pressure — rather than one hot layer. Two real savings
+were found on the way and kept: **the spoke direction table is now precomputed** (v3 evaluated 17
+`cos` + 17 `sin` per pixel to rebuild a constant table, and `GossamerStateTests` holds the table
+against the angles so the two cannot silently diverge), and **the haze noise is one octave, not
+four** — the first cut hid an `fbm4` behind `if (halo > 0.01)`, a threshold true out to r = 0.64,
+which is a guard in appearance only and cost 1.4× → 1.8× median.
+
+**Fidelity rubric 4/15 → 8/15**, above every certified preset on the automated gate (Lumen Mosaic
+is CERTIFIED at 3/15). Newly passing: M1 detail cascade (three distinct noise scales — haze 2.2,
+strand 5.5, grain 48.0), M2 octaves, E4 advanced BRDF, P1 hero specular, P3 dust motes. **Still
+failing and left failing:** M3 wants three cookbook materials and Gossamer draws one substance —
+two more `mat_*` calls would be decoration for a gate. E1/E2/P2 are 3D surface techniques with no
+surfaces here. E3 and P4 are implemented but undetectable: the fog utility is for ray-marched
+volumes and `chromatic_aberration_radial` is a texture post-process, neither of which can express
+a 2D radial halo or aberration on an analytic ring.
+
+**Gates.** `PresetRegressionTests`: only the QUIET golden had broken tolerance (distance 9 against
+8) — steady and beatHeavy still matched, a fair reading of how much of this preset is geometry
+that did not change; regenerated. QG.1 caught `node_glint` declared as an `accent` when `trebDev`
+never reaches an accent's 0.9 peak — corrected to continuous rather than the threshold moved.
+Motion gate: **96 frozen frames of 149 against v3's 105** on the same replay, so v4 moves *more*;
+the freezing is BUG-109's held analysis rows in the replay drive, not the preset.
+
+#### Step 3b — the reference set, recurated ✅
+
+**Eleven images, sourced from Wikimedia Commons with author and licence recorded per file** —
+the `cymatic_resonance` precedent. Nine CC BY / CC BY-SA / BSD / public-domain photographs, one
+1914 plate figure with no known restrictions, and `99_anti_flat_palette_grid.jpg`, which is
+Uzume's own v3 render — the literal state Matt described. Force-added past the `.gitignore` that
+lost the last set. `CheckVisualReferences` clean.
+
+**Every annotation was rewritten against the image actually in the folder.** Carrying over
+prose written for an image nobody could open is how the original set stayed wrong for months.
+
+**Twelve images, not eleven — and one recorded gap turned out to be a stale rule.** Slot 02
+(thread fineness) was first reported uncovered because every usable candidate was dew-beaded and
+the set excluded beading as *Arachne's* trait. Matt: *"Arachne has been retired, so beading overlap
+is no longer an issue"* — D-246 removed the preset there was anything to stay distinct from, so the
+constraint went with it and the slot is filled. Worth noting as a class: **a curated set inherits
+exclusions from presets that may no longer exist**, and nothing re-checks them.
+
+One genuine gap remains: **slot 04 covers zero-ambient emission but not emission falling onto a
+surface** (the fungi have no surroundings to catch their light). Slot 07 was also renamed: `temporal` is not one of the
+eight scales `_NAMING_CONVENTION.md` permits, so `07_temporal_mv_warp_echo.jpg` could never have
+passed the lint — more evidence the old set was never on disk.
+
+**Sources are Matt's choice per the curation process** — these are proposals he can swap.
+
+#### Step 4 — M7 ✅ PASSED, and **Gossamer is CERTIFIED — the 22nd** (2026-09-09)
+
+Matt, on session [`2026-09-09T22-36-18Z`](../../uzume_sessions): *"looks great. looks ready to
+certify."* Certified on his sign-off per `SHADER_CRAFT.md §12.1` M7; `certified: true` in the
+sidecar and added to `FidelityRubricTests.certifiedPresets`.
+
+**Session health, since a felt pass still wants a number beside it.** Gossamer was live from
+22:36:43 to the end of the session — **81 s, 5414 frames, `failures=0`, `unpresented=0`** across
+every `DRAWABLE_LIFECYCLE` heartbeat, on the Release build of this branch at `3c07fa0c`.
+
+**One incidental datum on BUG-060** (app hang on a `preset → Gossamer` switch, uninvestigated,
+last recurrence 2026-08-03): this session performed exactly that switch and ran ~81 s clean
+afterwards. That is **one instance of non-recurrence, not a fix** — the defect was always
+intermittent and nothing here addresses a mechanism. The row stays open.
+
+**What certification does NOT close.** Recorded so a later session does not read `certified: true`
+as "finished":
+- **Wave displacement is RADIAL, not perpendicular-to-local-tangent.** The §10.2.2 target asks for
+  the latter; the difference is small on a radially-propagating wave, which is why it passes, but
+  the item is half-done.
+- **Wave propagation velocity is still the constant `kWaveSpeed`.** §10.2.7's
+  `2.0 + vocals_energy_dev × 5.0` is not implemented.
+- **M3 still fails** — one cookbook material against a floor of three.
+- **Thread crispness and the R-lobe sheen read partial** against the curated references; our halo
+  terms are softer than the reference's silver hairlines.
+- **Reference slot 04** covers zero-ambient emission but not emission falling onto a surface.
+- `mat_silk_thread` never reads `p.absorption`, so a coefficient the reference set specifies has
+  nowhere to land.
+
+#### The decision Matt owed before step 3 — answered 2026-09-09
+
+> Matt: *"do all four, and recurate the reference images."* Both done above. Retained for the
+> record of what was asked.
+
+The V.8 target is a large, fully-specified body of work and the reference images that would settle
+its look no longer exist. Two questions, in product terms:
+
+1. **How far into the V.8 target do we build?** The four layers below are ordered by visible return
+   per unit of work, and each is cheap in a 2D fragment shader (arithmetic and texture lookups, not
+   ray marching). Stopping after any of them leaves a coherent preset.
+   - **Silk material** — every strand today is a uniform-width, uniform-colour stroke. A fiber BRDF
+     gives a bright specular core with soft falloff and back-lit warmth where threads cross: the
+     difference between a drawn line and a lit filament. Biggest single change.
+   - **Strand irregularity** — width and brightness varying along each thread. Real silk is not
+     ruler-gauge; this is what kills the drafting-table quality.
+   - **Node glints** — small bright points where spoke meets spiral, reading as wet silk catching
+     light. Specified, effectively absent today.
+   - **Atmosphere** — the haze halo and dust motes, so the web sits in a space rather than floating
+     on flat black.
+2. **Do we recurate the reference images?** Without them "increase the fidelity" has no target other
+   than Matt's eye, and the preset cannot be certified (`certified: false` today). The README says
+   exactly what each of the 11 slots must show, so recuration is a sourcing task, not a design task.
+
+**Per FA #73, the material is already built — and it was built for this preset.**
+`mat_silk_thread` (`Utilities/Materials/Organic.metal:101`, a verbatim transcription of
+`SHADER_CRAFT.md §4.3`) takes a `FiberParams` whose fields are `azimuthal_r`, `azimuthal_tt`,
+`absorption` and `tint` — **the exact three coefficients the Gossamer README specifies**
+(`0.08 / 0.5 / 0.3`). Underneath it, `Utilities/PBR/Fiber.metal` provides the R, TT and approximated
+TRT lobes. Both ship, both are tested, and **no preset in the roster calls either.** Do not write a
+new one.
+
+⚠ One gap to close when it is used: `mat_silk_thread` never reads `p.absorption`, so the README's
+`absorption = 0.3` currently has nowhere to land. Either the recipe grows the term or the README's
+coefficient is wrong; decide when the material is wired, not before.
+
+
+**Four rows touch parked engine work, not nine** (an unchecked count in the first draft of this
+register, corrected 2026-09-09 when Matt asked which they were):
+
+- **Lumen Mosaic** — fully blocked on **D-206** (beat-phase drift, BUG-065).
+- **Ferrofluid Ocean** — fully blocked on **BUG-028** (meter assumed simple).
+- **Witchlight** — *partly*: the downbeat half is D-206; *"want more looping"* is preset work and is **not** blocked.
+- **Meniscus** — *partly*: only the timing half is D-206; the ripple look is preset work.
+
+The parked halves are engine work and must not be worked around inside presets. **Cytokinesis is
+blocked on something else** — a capture of the hang from Matt, not engine work.
 
 **Material note that shapes PR.1.** *Low* is two half-albums: tracks 1–7 are rhythmic (Speed Of
 Life, Breaking Glass, What In The World, Sound And Vision, Always Crashing In The Same Car, Be My
@@ -1026,7 +1302,11 @@ beta cut.
 **The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
 which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
 diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
-to it. That leaves **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
+to it. ⚠ **Superseded by the PR.18 recount (2026-09-09): five, not six** — Arachne was removed
+at D-246, Gossamer certified at PR.18, and Alfven arrived from ALFVEN.4d/4e. The live figure is
+Alfven, Membrane, Nebula, Plasma, Waveform;
+the sentence below is kept as written for the record of what the survey said at the time.
+That left **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
 Plasma, Waveform.
 
 **Why Matt is seeing them at all.** `uzume.settings.visuals.showUncertifiedPresets = 1` in his defaults, so
@@ -7443,7 +7723,7 @@ These milestones map to product-level outcomes, not implementation phases.
 
 **Milestone C — Device-Aware Show Quality.** ✅ **MET (2026-04-25).** The same playlist produces an excellent show on M1 and a richer one on M4 without jank. *Requires: ~~Phase 6 complete~~ ✅.*
 
-**Milestone D — Library Depth.** ⏳ **IN PROGRESS — 21 / 27 production presets certified (recounted from the tree at RICERCAR-CERT.1, 2026-08-20).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **29 JSON sidecars, 21 with `certified: true`**, of which 2 (StagedSandbox, SpectralCartograph) are diagnostics rather than roster presets → **27 production presets, 21 certified**. Uncertified roster presets: Arachne, Gossamer, Membrane, Nebula, Plasma, Waveform. *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
+**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 27 production presets certified (recounted from the sidecars at PR.18, 2026-09-09, and RE-counted after merging `origin/main`).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **31 JSON sidecars, 22 with `certified: true`**, of which 4 (StagedSandbox, SpectralCartograph, PoissonSandbox, **FFTSandbox**) carry `is_diagnostic` and are not roster presets → **27 production presets, 22 certified**. Uncertified roster presets: **Alfven**, Membrane, Nebula, Plasma, Waveform. ⚠ **This line said "22 / 26" and "four uncertified" an hour earlier and was already wrong by the time it was pushed** — ALFVEN.4d/4e landed Alfven and FFTSandbox on `main` in parallel (PRs #214/#215), adding one roster preset and one diagnostic. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before.** *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
 
 **Roster survey (2026-07-19) — the production presets (`FidelityRubricTests.certifiedPresets` = ground truth; 27 → 26 at Glass Brutalist's retirement GBRETIRE.1 / D-186, then 26 → 25 at Kinetic Sculpture's retirement KSRETIRE.1 / D-188, 2026-07-20):**
 - **Certified (14):** Lumen Mosaic, Ferrofluid Ocean, Dragon Bloom, Fata Morgana, Murmuration, Nimbus, Skein, Nacre, Floret, Glaze, Filigree, Mitosis, Cytokinesis (Mitosis gen-2), Aurora Veil (AV.7).

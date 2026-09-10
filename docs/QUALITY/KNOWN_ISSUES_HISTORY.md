@@ -199,6 +199,7 @@ architectural risk) — approved by Matt in the same session ("yes, fix the aspe
 
 ---
 
+
 ### BUG-094 — Meniscus clamps `arousal` to 0…1 when its contract is −1…+1, and a beat-locked region goes dead on calm material (2026-08-17)
 
 **Status: ✅ CLOSED 2026-08-24.** The fix WAS applied — in the very commit that wrote the
