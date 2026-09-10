@@ -9691,6 +9691,255 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.4e — palette drift over time ✅ (2026-09-09)
+
+**Matt's live verdict on 4d: "it's wonderful."** First positive M7 for this preset. His one ask,
+verbatim: *"the only change i would want to see is a cycling of colors over time. i LOVE the color
+palette right now and would want to preserve this exact state, but introducing more complementary
+colors would add greater visual interest."*
+
+**This un-pins a drift that was designed in, rather than inventing one.** film.py already drifts
+the opponent centre (`hue = 0.46 + 0.26*centroid01`) and `04_palette_opponent_drift.png` annotates
+both ends — "left = early (acid green ↔ violet), right = late (magenta ↔ teal)". ALFVEN.2 pinned it
+at 0.72 because that is the column Matt picked. So the traverse stays inside the approved family
+instead of touring the wheel, and both endpoints are reference frames he has already seen.
+
+**Anchored so his state is preserved, not replaced.** `hueCentre(at:)` is a raised cosine away
+from `displayHueCentre` and back: exactly 0.72 at t = 0 and again every period, reaching
+0.72 − `displayHueSpan` (0.46) at the half period, no discontinuity and no wrap. The fragment still
+opposes ±0.30 about the centre, so what changes is WHICH complementary pair is on screen, not how
+complementary it is.
+
+`displayHueDwell` (2.0) biases where the traverse lingers. A plain raised cosine has zero
+derivative at BOTH ends, so it would dwell as long in acid-green↔violet as in the magenta↔teal he
+asked to keep; the exponent puts **50 % of each cycle within 0.065 of the anchor** while still
+reaching the far end. `displayHuePeriodSeconds` (80) is one there-and-back.
+
+**Clock: the listener's, not the field's.** Deliberately `features.time` ("seconds since
+visualization start", monotonic across tracks) rather than `simClock`. The field's rate moves with
+the CFL, i.e. with its own energy; a palette that sped up when the field energised would be wrong,
+and 80 s is far slower than the 2 s re-seed so colour and structure do not beat.
+
+Measured across the traverse, displayed-linear luma stays in 0.220…0.252 — the drift does not pump
+brightness.
+
+**⚠ Finding that changes ALFVEN.3, from Matt's own capture** (`uzume_sessions/2026-09-09T22-39-14Z`,
+local file, chain verdict clean): our `spectralCentroid` spans **p05 0.061 → p95 0.169**, median
+0.111 — NOT 0…1. Feed that into film.py's `0.46 + 0.26*centroid01` and the centre moves 0.028 and
+sits near 0.49, i.e. almost no drift and nowhere near the palette Matt signed off. film.py's
+`centroid01` is a differently normalised quantity than ours. **Binding centroid at ALFVEN.3 must
+renormalise against the real distribution** (the FA #31 shape: never assume a nominal range on a
+primitive whose scale is set elsewhere) and must keep 0.72 as the anchor.
+
+**Also established by that capture — the perf question 4b/4c left open is answered.** Alfvén ran
+live from 22:39:31 at 1080p on an M2 Pro. Frames between `DRAWABLE_LIFECYCLE` heartbeats: 599, 612,
+602, 586, 614, 600 per 10 s — **~60 fps sustained for 65+ s, `failures=0 unpresented=0`**, GPU
+193 MB (1.6 % of budget), thermal nominal. So 4 Heun substeps at 256² holds the target in Release.
+
+**Split:** `AlfvenSolver+Display.swift` (new) — the 400-line ceiling again, cut at a real seam:
+nothing in it touches physics, and everything in it stands in for a reduction film.py does on the
+CPU and a fragment cannot.
+
+**Still open:** the seam bloom is still absent (film.py's two Gaussian blurs over the brightest
+decile), so the live frame reads flatter than the stills; the re-seed cadence (2.0 sim s) remains
+Matt's call; motion verdict still CANNOT VERIFY.
+
+### Increment ALFVEN.4d — make it testable, and calibrate the live look ✅ (2026-09-09)
+
+**Done-when:** Alfvén can be put on screen in the app, and what it draws there matches the
+reference rather than the harness stills.
+
+**It was unreachable by any route.** Cycling skips `exclude_from_cycling`
+(`PresetLoader.isCycleExcluded`) and `certified: false` keeps it out of Orchestrator scoring
+(D-074). Both flags were right while the look was unproven — but together they mean no live
+look-check is possible. `exclude_from_cycling` → false; `certified: false` stays, so the planner
+still never selects it and it is reachable only by the manual next-preset control.
+
+**The shipping fragment was not drawing what the harness stills show**, in two ways, neither of
+them a recalibration:
+
+1. **`sJ` was tied to the exposure.** film.py normalises by two *different* statistics —
+   `aJ = autoexp(|J|)` ≈ `1/(p99.6-p2)` for value, and `sJ = tanh(J/(std*1.2))` ≈ `1/(std*1.2)`
+   for current-sheet polarity, which is what drives hue opponency. The shader collapsed both onto
+   `exposure`, so any exposure low enough not to blow out the value channel also drove `sJ` to
+   ~0.09 and killed the opponency — a flat lavender frame. Split out as `displayPolarityScale`
+   (0.52, from J's measured std 1.54…1.64).
+2. **The exposure had never been calibrated against anything.** 0.55 blew out at *both* field
+   scales: `|J|*0.55` reaches 2.99 at ALFVEN.4's J (rms 5.43) and still saturates at 4c's (1.55).
+   Measured on the production path it gave displayed-linear luma 0.353 against REF 05's 0.229.
+   Now **0.085**, which puts the production path at 0.229 — REF 05's own value.
+
+**⚠ The sRGB trap, recorded because it cost a round and will recur.** The render target is
+`.bgra8Unorm_srgb`, so its bytes are gamma-**encoded**; film.py and the reference PNGs write
+**linear** values straight to bytes (`(rgb*255).astype(uint8)`) and are then decoded as sRGB by
+any viewer — which is why the references look much darker than their byte values suggest, and
+that darker appearance is what was approved. Comparing raw byte means across the two conventions
+made the live path look 2× too *dark* and sent me to an exposure of 0.05, which is also what
+produced the hue-flat frame. Every brightness target in the harness is now stated in
+**displayed-linear** space: our film.py port 0.159, REF 01 0.114, REF 05 0.229. `meanLuma`
+sRGB-decodes before averaging.
+
+The live exposure is deliberately set to REF 05 (0.229) rather than to our own film.py port
+(0.159): the port still undershoots the reference Matt named, so matching the port would only
+reproduce that shortfall.
+
+**Harness:** `ALFVEN_LIVE` renders through `AlfvenSolver.render` — the actual production display
+fragment — and reports its displayed-linear luma, because every other measurement in that file
+describes the CPU port of film.py instead. Plus `ALFVEN_EXPOSURE` for sweeping, and a PNG dump of
+the live frame.
+
+**Known gap:** the shipping fragment still has no seam bloom (film.py's two Gaussian blurs over
+the brightest decile), so the live frame reads flatter and less contrasty than the stills. That
+needs the same reduction/blur surface as the percentile auto-exposure, and until it exists a
+fixed exposure cannot track a field whose scale moves — expect one adjustment round after a live
+look.
+
+**Also fixed:** a comment on `update(features:...)` claiming the re-seed cycle stays "on the
+listener's clock rather than the simulation's" — the exact opposite of what 4c established — and
+two test comments still asserting `exclude_from_cycling: true` for Alfvén.
+
+**Note, not fixed (out of scope):** `PostProcessChainTests.test_fullChain_under2ms_at1080p` flakes
+under parallel load (5.25 ms against a 5 ms Debug budget; clean 3/3 in isolation). Unrelated
+subsystem, and widening a budget is the wrong fix — flagged rather than touched.
+
+### Increment ALFVEN.4c — the silence state ✅ (2026-09-09)
+
+**Done-when:** the rendered field matches `05_atmosphere_relaxed_state`'s character — broad,
+fully-coloured lobes, soft and few seams, never black — sustained rather than as one lucky frame.
+
+**Matt's report:** the silence state is darker than the reference. Quantified first, against the
+reference PNGs (Rec.709 mean luma): REF 05 (the silence target) **0.422**, REF 01 (macro) 0.283,
+ours **0.130**. Saturation already matched (0.75 vs 0.77), so this was purely a VALUE problem.
+
+**What it was not.** Three hypotheses died, each to a measurement, and each is worth recording
+because they all looked right:
+
+- *My Swift port of film.py.* Ruled out by dumping our own J field to disk and running film.py
+  ITSELF on it: 0.132 against my port's 0.130. The port is faithful term-for-term.
+- *The forcing.* Our forcing is real-space `drive*0.25*(4 sinusoids)`, std `0.354*drive`, against
+  the spike's random-phase shell at std `drive` — genuinely 2.8x under-driven. But putting OUR
+  forcing into the spike changed its result by nothing (mean(aJ) 0.110 vs 0.109): at these times
+  the field is seed-dominated. **Fixing it would have been an unattributed change.** Left alone,
+  recorded here; it will matter at ALFVEN.3 when drive carries `bassDev`, since `ALFVEN_DRIVE=0`
+  currently moves J by 0.04%.
+- *A solver bug.* Our J spectrum sits at higher k than the spike's, and ψ's tail runs 2-3x its.
+  But ⟨ψ²⟩ — a Casimir of 2D reduced MHD — is CONSERVED by our nonlinear chain (0.8962 -> 0.9025
+  with dissipation off), which clears the gradient/bracket/dealias path; and running the spike
+  across 8 seeds put mean(aJ) at t=2.75 in 0.072...0.131 (sd 0.019) against our 0.061, with our
+  ω comfortably inside its 2.45...4.66. ψ's seed has only ~6 independent modes at k<=2, so the
+  ensemble is tiny and most of that "discrepancy" was realization spread. No bug.
+
+**Two things it actually was.**
+
+1. **The re-seed cycle ran on the wrong clock.** `cycleSeconds` was compared against the caller's
+   REAL time (`frame/60`) while everything it controls evolves in SIMULATION time, which advances
+   by `substeps*dt` with `dt` set by the CFL — i.e. by the field's own energy. They ran ~4.4x
+   apart (f300 = 5.0 real s but t = 2.75 sim s) and not by a constant. `blendRate` had the same
+   disease, dividing by the `maxDt` ceiling instead of the actual dt, so the crossfade ran ~2.5x
+   fast whenever the CFL bit. Same class as BUG-097. `AlfvenSolver.simClock` now accumulates sim
+   time and drives the cycle, the crossfade and the forcing phase.
+
+   This matters because **brightness is a function of position within a transient**, measured
+   through film.py's own mapping: meanLum 0.33 for the first ~1.5 sim seconds after a re-seed,
+   0.13 by t = 2.75, recovering only to 0.19 by t = 5.5. The reference look IS the early
+   transient — which the design doc says outright ("the look is a sequence of transients"), and
+   which explains why the curated references are brighter than any sustained state. So the cycle
+   length decides whether the preset lives in the reference look or in the trough. Measured over
+   900 frames (avg mean(aJ) / fraction of frames at-or-above REF 01): 2.0 s -> 0.233/70%,
+   3.0 -> 0.185/40%, 4.0 -> 0.164/27%, 6.0 -> 0.154/26%, 22.0 -> 0.143/18%. Default now **2.0 sim
+   seconds**; the spike agrees closely at the same cadence (0.237/min 0.107 vs our 0.233/0.114).
+
+2. **The display quantity amplified the float32 noise floor.** Shortening the cycle exposed fine
+   VERTICAL striping over the whole frame — the `07_anti_grid_speckle` anti-reference — which had
+   been masked by the dark, busy field. It is not physics: ψ's anomalous energy on the ky = 0 row
+   is ~1.5e-10 against a peak of 1.9e-3, i.e. 1e-7, which is float32 epsilon. It lands on ky = 0
+   because the transform is separable — the row pass leaves round-off of order eps·|ψ| at high kx
+   and the column pass averages it over y into the ky = 0 bin — and `J = -k²ψ` then multiplies it
+   by k⁴ in power (1.7e7 at k = 64), lifting round-off to J's own scale. The float64 spike is
+   immune, which is what told us it was ours. ψ carries 99.9% of its energy below k = 8, so the
+   new `jCutoff` (48, Hou-Li shaped) band-limits **J for display only** — numerical noise, not
+   physics; the state is untouched. Swept: 32 was worse (seams broaden and a real diagonal ripple
+   emerges), 64/128 leave the striping.
+
+**Result:** meanLum **0.309...0.332** across frames, against 0.130 before and REF 01's 0.283 — now
+between REF 01 and REF 05 rather than three times darker than the target.
+
+**Costs, stated plainly.** A 2 s cycle with `blendTau` 1.1 means the crossfade is almost always
+active, so the field stays young: ω settles near 1.0 (was 3.05) and J near 1.5, and the current
+sheets never fully sharpen — and REF 02 says the SEAM, not the lobe, is what the eye should land
+on. It also sits ψ ~30% below the seed amplitude, because a partial mix of two uncorrelated equal-
+rms fields has lower rms than either. Bounded and stable (0.43...0.80 about 0.65 over t = 22.5 sim
+s, no downward trend, 0% clamped), so `AlfvenSolverTests`' psi assertion moved from "conserved to
+within 10%" — whose premise died with the re-seed — to a collapse/blow-up band, since ψ -> 0 means
+J -> 0 means a black frame (D-037).
+
+**⚠ The cadence is a product decision, not an engineering one**, and it is the one thing here that
+should be Matt's: shorter buys brightness and continuous re-braiding and pays in seam sharpness;
+longer buys sharp seams and pays in darkness. 2.0 is set because it is what makes the SILENCE
+target reachable, which is what was asked for.
+
+**Also:** the film harness gained `mean(aJ)`/`meanLum`/`frac>0.25` per frame (the only numbers
+comparable to the reference PNGs), an `ALFVEN_SWEEP` long-run mode for judging cadence over several
+cycles, `ALFVEN_CAPTURE` for choosing frames, the `ALFVEN_DRIVE/ALPHA/NU4/CUTOFF/CYCLE/JCUT`
+overrides, and raw `ω/ψ/J` dumps so film.py and numpy can be run on our own fields.
+`AlfvenSolverTests` now prints accumulated SIM time, without which "at matched sim time" was
+unfalsifiable — and I had in fact been comparing t = 2.75 against t = 2.2 for most of the session.
+
+### Increment ALFVEN.4b — the integrator, and the end of the seam aliasing ✅ (2026-09-09)
+
+**Done-when:** the rendered J field carries no grid-scale hatching, and the solver's bulk
+statistics track the spike's at matched simulation time.
+
+Matt's report was "fix the seam aliasing" — fine diagonal hatching on the steepest bright ridges.
+Three things were wrong, found in this order, and only the third was the cause:
+
+1. **J was computed with a local 5-point stencil on the RAW state** while everything else in the
+   solver is spectral. Replaced with `alfven_j_spectrum` (`J_h = -k² psi_h`) reading the FILTERED
+   spectrum. Real defect — the display quantity was the one field carrying unfiltered content —
+   but not the cause. ⚠ My stated diagnosis for it ("a high-pass amplifying grid scale by 1/h²")
+   was **wrong in sign**: the stencil's effective wavenumber `(2/h²)(1-cos kh)` UNDER-reads
+   curvature at high k, which is why spectral J reads ~15 % higher (6.21 → 7.12 at f300) while
+   being the smoother field. Recorded because the number looks like a regression and is not.
+2. **The Hou-Li filter used a fixed `kmax = 100`** where the spike uses `kmax = N/2` (Nyquist).
+   Now derived from `edge`, for the same reason `nu4` is: both are violently
+   resolution-dependent. Correct, but it did not move the hatching either.
+3. **Forward Euler.** The cause. Euler's amplification on the imaginary axis is `|1 + iy| =
+   sqrt(1+y²)` — growth O(y²), strongest at the highest wavenumbers and localised where advection
+   is fastest, which is exactly where the hatching appeared. Replaced with the spike's own
+   integrating-factor Heun (alfven.py:93-105), whose `sqrt(1+y⁴/4)` the integrating factor then
+   damps. Split `alfven_spectral_filter` into `alfven_efactor` and `alfven_houli`, since Ew/Ep act
+   INSIDE the RK2 stages and FILT acts once at the end — and the fused version had also been
+   applying dissipation with the fixed `p.dt` ceiling rather than the adaptive dt the step
+   advances by.
+
+**⚠ Process failure worth keeping.** RK2 had been tried at ALFVEN.4 and reverted as "worse than
+Euler". That measurement was taken while the **Poisson sign bug was still live** (`phi =
++omega/k²`), so advection was feeding energy and no integrator could have been stable. The
+revert was reasoned from void evidence, and it cost this increment. **When a root cause is fixed,
+re-run the experiments that were rejected before it** — their verdicts do not survive it.
+
+**The reference is runnable, and running it ended the guessing.** Three rounds of theorising about
+filter cutoffs preceded simply executing `docs/presets/alfven_spike/alfven.py` (numpy + scipy in a
+throwaway venv, ~40 s) and looking at its J. It was clean, which converted "is this inherent to 2D
+MHD at N=256?" from speculation into a measured no. FA #73 covers porting; this is the same rule
+one step earlier — **the oracle answers behavioural questions too, not just API ones.** Matched
+sim time, spike vs ours: t≈2.2 ω 2.98 / 3.05, t≈4.8 J 5.95 / 5.98. Before the fix ours was ω 5.33.
+
+**Also:** the film harness now dumps raw `autoexp(|J|)` as greyscale next to each colour frame.
+That dump is what separated "the FIELD has grid-scale energy" from "the film mapping is amplifying
+it" in one look — film.py's hue is a periodic function of J, so it turns a ripple invisible in
+grey into a vivid band. The colour frame alone cannot tell you which half is at fault.
+
+**Files:** `AlfvenSolver.metal` (efactor/houli/accumulate/finalize/j_spectrum),
+`AlfvenSolver+Substep.swift` (rewritten as the scheme), `AlfvenSolver+Ops.swift` (new — dispatch
+vocabulary), `AlfvenSolverConfiguration.swift` (new — 400-line split), `AlfvenSolver.swift`,
+`AlfvenFilmPreviewTests.swift`, `docs/ARCHITECTURE.md` §Module Map (five rows; three of the
+Alfvén files had never been added and `DocIntegrityTests` was red on them).
+
+**Still open:** silence state darker than `05_atmosphere_relaxed_state`; motion verdict CANNOT
+VERIFY (needs a contiguous sequence + `Scripts/motion_gate.sh`); film.py's percentile auto-exposure
+still needs a reduction/mip surface (fixed 0.55 placeholder); no audio routing until ALFVEN.3.
+
 **Next:** ALFVEN.2 — `Alfven.metal` + sidecar, MHD advance, silence state, re-seed cycle. **No audio
 routing.** Its first task is the §11 look comparison against the reference set, before any tuning.
 Open it by deciding the **solver grid resolution** — [D-244] §Iteration count records why sweep

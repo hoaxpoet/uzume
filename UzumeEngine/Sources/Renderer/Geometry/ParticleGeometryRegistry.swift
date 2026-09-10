@@ -36,7 +36,12 @@ public enum ParticleGeometryRegistry {
         "Cymatic Resonance",
         "Witchlight",
         "Meniscus",
-        "Stave"
+        "Stave",
+        // Alfvén's "particles" pass draws no particles: `AlfvenSolver` is a
+        // pseudo-spectral MHD solver that owns a compute pipeline and renders
+        // its own field. It uses the conformer slot because that is the only
+        // seam where a preset gets a command buffer and a draw of its own.
+        "Alfvén"
     ]
 }
 

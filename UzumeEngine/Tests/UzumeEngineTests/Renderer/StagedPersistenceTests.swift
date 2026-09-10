@@ -33,6 +33,36 @@ private enum PersistenceTestError: Error {
 /// `out = previous + 1`. Reads the persistent/iteration slot the engine binds
 /// (`kStagedPersistentTextureSlot` = 20); if that binding were missing the
 /// fragment would read zero every pass and every count below would come out 1.
+/// Writes the bound pass index, so a readback proves each iteration of an iterated stage
+/// sees a DIFFERENT value. Before ALFVEN.1c every iteration was byte-identical and this
+/// would read back 0 on the final pass regardless of the iteration count.
+private let kPassIndexShader = """
+#include <metal_stdlib>
+using namespace metal;
+
+struct VOut {
+    float4 position [[position]];
+    float2 uv;
+};
+
+struct StagedPassInfo { int index; int count; };
+
+vertex VOut pass_vertex(uint vid [[vertex_id]]) {
+    float2 pts[3] = { float2(-1, -1), float2(3, -1), float2(-1, 3) };
+    VOut o;
+    o.position = float4(pts[vid], 0.0, 1.0);
+    o.uv = (pts[vid] + 1.0) * 0.5;
+    return o;
+}
+
+fragment float4 pass_fragment(
+    VOut in [[stage_in]],
+    constant StagedPassInfo& p [[buffer(9)]]
+) {
+    return float4(float(p.index), float(p.count), 0.0, 1.0);
+}
+"""
+
 private let kAccumulatorShader = """
 #include <metal_stdlib>
 using namespace metal;
@@ -226,6 +256,64 @@ struct StagedPersistenceTests {
                 "iteration 1 of frame 2 must warm-start from frame 1's state")
     }
 
+    // MARK: ALFVEN.1c — per-pass index
+
+    @Test("each iteration of an iterated stage sees its own pass index")
+    func iteratedStageSeesPassIndex() throws {
+        let ctx = try MetalContext()
+        let pipeline = try makePipeline(ctx)
+
+        let options = MTLCompileOptions()
+        options.languageVersion = .version3_0
+        guard let library = try? ctx.device.makeLibrary(source: kPassIndexShader, options: options),
+              let vfn = library.makeFunction(name: "pass_vertex"),
+              let ffn = library.makeFunction(name: "pass_fragment") else {
+            throw PersistenceTestError.shaderCompileFailed
+        }
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vfn
+        descriptor.fragmentFunction = ffn
+        descriptor.colorAttachments[0].pixelFormat = .rgba32Float
+        let stage = StagedStageSpec(
+            name: "passidx",
+            pipelineState: try ctx.device.makeRenderPipelineState(descriptor: descriptor),
+            samples: [], writesToDrawable: false,
+            persistent: false, iterations: 6, pixelFormat: .rgba32Float)
+        pipeline.setStagedRuntime([stage], drawableSize: Self.size)
+        try renderFrame(ctx, pipeline)
+
+        // The front texture holds the LAST pass, so index must be iterations - 1.
+        #expect(try readRed(pipeline, stage: "passidx") == 5.0, """
+            the final pass of a 6-iteration stage did not see index 5 — every iteration is \
+            still byte-identical, and no per-pass algorithm (FFT butterfly, multigrid \
+            level, jump flood step) is authorable
+            """)
+    }
+
+    @Test("a non-iterated stage sees pass (0, 1)")
+    func singleShotStageSeesZeroIndex() throws {
+        let ctx = try MetalContext()
+        let pipeline = try makePipeline(ctx)
+        let options = MTLCompileOptions()
+        options.languageVersion = .version3_0
+        guard let library = try? ctx.device.makeLibrary(source: kPassIndexShader, options: options),
+              let vfn = library.makeFunction(name: "pass_vertex"),
+              let ffn = library.makeFunction(name: "pass_fragment") else {
+            throw PersistenceTestError.shaderCompileFailed
+        }
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = vfn
+        descriptor.fragmentFunction = ffn
+        descriptor.colorAttachments[0].pixelFormat = .rgba32Float
+        let stage = StagedStageSpec(
+            name: "single",
+            pipelineState: try ctx.device.makeRenderPipelineState(descriptor: descriptor),
+            samples: [], writesToDrawable: false, pixelFormat: .rgba32Float)
+        pipeline.setStagedRuntime([stage], drawableSize: Self.size)
+        try renderFrame(ctx, pipeline)
+        #expect(try readRed(pipeline, stage: "single") == 0.0)
+    }
+
     // MARK: Task 8 — non-finite watchdog
 
     @Test("a NaN injected into persistent state is cleared and the next frame is finite")
@@ -262,41 +350,55 @@ struct StagedPersistenceTests {
         #expect(pipeline.stagedWatchdogTripCount == 1, "the trip was not recorded")
     }
 
-    @Test("the watchdog probe's per-frame cost is small enough to run every frame")
+    @Test("the watchdog probe's cost is set by the block, not by the texture")
     func watchdogProbeCostIsMeasured() throws {
         let ctx = try MetalContext()
-        let pipeline = try makePipeline(ctx)
-        let stage = try makeAccumulatorStage(ctx, persistent: true, iterations: 1)
-        // Measure at a realistic 1080p size, not the 16×16 used elsewhere.
-        pipeline.setStagedRuntime([stage], drawableSize: CGSize(width: 1920, height: 1080))
-        try renderFrame(ctx, pipeline)
 
-        let iterations = 2000
-        let start = DispatchTime.now().uptimeNanoseconds
-        for _ in 0..<iterations { pipeline.probeStagedPersistentState() }
-        let elapsed = DispatchTime.now().uptimeNanoseconds - start
-        let perFrameMicros = Double(elapsed) / Double(iterations) / 1000.0
+        // WHAT THIS ASSERTS, AND WHY IT IS A RATIO. The probe must stay O(block), never
+        // O(texture) — the defect it guards is the probe growing back into a full-texture
+        // readback. An earlier version asserted an absolute wall-clock ceiling (400 µs
+        // Debug / 5 µs Release). That measures the MACHINE as much as the code: it passed
+        // 3/3 in isolation and failed at 402 µs and then 508 µs inside the full suite,
+        // where swift-testing runs suites in parallel and the box is loaded. Widening the
+        // budget would only have moved the tripwire (deterministic tests over
+        // budget-widening). Scaling the drawable 4x in AREA and comparing the two costs
+        // measured in the SAME run divides the machine out: a block probe stays flat, a
+        // full-texture readback grows with the area.
+        func probeCost(width: Int, height: Int) throws -> Double {
+            let pipeline = try makePipeline(ctx)
+            let stage = try makeAccumulatorStage(ctx, persistent: true, iterations: 1)
+            pipeline.setStagedRuntime([stage],
+                                      drawableSize: CGSize(width: width, height: height))
+            try renderFrame(ctx, pipeline)
+            for _ in 0..<200 { pipeline.probeStagedPersistentState() }   // warm
+
+            let iterations = 2000
+            let start = DispatchTime.now().uptimeNanoseconds
+            for _ in 0..<iterations { pipeline.probeStagedPersistentState() }
+            let elapsed = DispatchTime.now().uptimeNanoseconds - start
+            #expect(pipeline.stagedWatchdogTripCount == 0,
+                    "clean state must not trip the watchdog")
+            return Double(elapsed) / Double(iterations) / 1000.0
+        }
+
+        let hd = try probeCost(width: 1920, height: 1080)
+        let uhd = try probeCost(width: 3840, height: 2160)   // 4x the texels
+        let growth = uhd / max(hd, 1e-9)
 
         let edge = RenderPipeline.stagedProbeBlockEdge
-        print(String(format: "[alfven.1] watchdog probe: %.2f µs/frame at 1920×1080 rgba32Float "
-                             + "(one %d×%d block, %d bytes) — BUILD: %@",
-                     perFrameMicros, edge, edge, edge * edge * 16,
+        print(String(format: "[alfven.1] watchdog probe: %.2f µs at 1920×1080, %.2f µs at "
+                             + "3840×2160 (4x area) — growth %.2fx, one %d×%d block, %d bytes "
+                             + "— BUILD: %@",
+                     hd, uhd, growth, edge, edge, edge * edge * 16,
                      Self.isDebugBuild ? "Debug/-Onone" : "Release"))
-        #expect(pipeline.stagedWatchdogTripCount == 0, "clean state must not trip the watchdog")
 
-        // Build-dependent budget (CLAUDE.md §Build & Test; PREP.1 / D-242 §Amendment).
-        // `swift test` defaults to Debug/-Onone, where the 1024-element finiteness
-        // scan is ~500× slower than optimised — measured 2026-09-08 on M-series:
-        //   getBytes alone   0.17 µs (-O) / 0.34 µs (-Onone)
-        //   getBytes + scan  0.21 µs (-O) / 110 µs   (-Onone)
-        // The SHIPPING figure is the Release one: ~0.2 µs/frame, ~0.001 % of a
-        // 60 fps frame. The Debug ceiling is set only so the gate still fails if
-        // the probe grows back into a full-texture readback.
-        let budgetMicros = Self.isDebugBuild ? 400.0 : 5.0
-        #expect(perFrameMicros < budgetMicros,
+        // A full-texture readback would grow ~4x with the area. A block probe is flat.
+        // 2.0 sits clear of both, so this fails on the regression and not on load.
+        #expect(growth < 2.0,
                 """
-                watchdog probe costs \(perFrameMicros) µs/frame, over the \
-                \(budgetMicros) µs budget for this build configuration
+                watchdog probe cost grew \(growth)x when the drawable area grew 4x \
+                (\(hd) µs -> \(uhd) µs): the probe is scaling with the TEXTURE, not with \
+                its fixed \(edge)×\(edge) block
                 """)
     }
 }
