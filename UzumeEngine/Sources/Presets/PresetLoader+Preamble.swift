@@ -207,8 +207,15 @@ extension PresetLoader {
             // events), spectral_flux fires as often between events as on them, and surge
             // itself ranks a 0.76 s follower so it moves DOWN when the ear notices. Add it
             // as a small accent over a slow base; silence produces no rise, so no gate.
-            // Floats 54–56 — PADDING, for the 16-byte GPU-constant alignment.
-            float spectral_level_rise, _pad54, _pad55, _pad56;
+            // PR.20 float 54 — PER-TRACK HUE ANCHOR, 0…1. Constant for a whole track,
+            // different for the next. Nothing track-scoped could reach a `direct` preset
+            // before this: the existing per-track seed reaches Lumen Mosaic and Skein
+            // through per-preset STATE BUFFERS, which `direct` presets do not have. Rotate
+            // a palette by it for variety across a playlist while any single moment stays
+            // coherent. Zero means "no identity known" — a legitimate anchor, not a
+            // sentinel, so no gate is needed.
+            // Floats 55–56 — PADDING, for the 16-byte GPU-constant alignment.
+            float spectral_level_rise, track_hue_anchor01, _pad55, _pad56;
         };
 
         struct VertexOut {

@@ -1395,6 +1395,62 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### PR.20 — the per-track hue anchor 🔨 code complete, M7 owed (2026-09-10, Matt: *"do the per-track rotation"*)
+
+**The ask.** Matt, on Nebula's palette: *"go with the wider sweep, plus per-track rotation."* The
+sweep shipped in PR.19; the rotation did not, because nothing track-scoped could reach the preset.
+
+**Why it needed a new field, and the two derivations that were measured FALSE first.** Per-track
+variation already existed — `lumenTrackSeedHash` (an FNV-1a of `title|artist`) seeds Lumen Mosaic
+and Skein — but it reaches them through **per-preset state buffers**, which a `direct` preset does
+not have. So Nebula, Plasma, Waveform and Spectral Cartograph had no track-scoped input of any kind.
+
+Before adding to the GPU contract, two stateless derivations were tried against a real session:
+
+- `accumulated_audio_time − track_elapsed_s` *looks* like "the accumulated time at track start",
+  which would be constant within a track. **It is not** — the two clocks advance at different
+  rates (8.10 s against 60.10 s over one capture, ~1:11), so the difference is a ramp.
+- No other FeatureVector field is constant within a track and varies between them; mood and the
+  tonal family all drift mid-track.
+
+**What landed.** `FeatureVector` float 54 (`_pad54`, reclaimed — the same move DYN.1b/DYN.2 made on
+51–52 and D-158 made on `_pad7`, so ORDER IS THE CONTRACT holds and the struct size is unchanged):
+
+| Layer | Change |
+|---|---|
+| `FeatureVector` + MSL preamble | `trackHueAnchor01` / `track_hue_anchor01`, 0…1, 0 = no identity known |
+| `MIRPipeline` | `setTrackHueAnchor(_:)` — same lifecycle as `setBeatGrid` / `setLoudnessProfile`; clamps, and sends the whole non-finite class to 0 |
+| App | Published from `resetStemPipeline(for:caller:)`, the single funnel all four track-change call sites route through, **reusing** `lumenTrackSeedHash` rather than hashing again — two seeds from the same source are two seeds that can silently disagree |
+| `SessionRecorder` CSV | New `track_hue_anchor01` column, inserted BEFORE `stem_series_pos_s` because that one is optional and carries the row's terminating newline |
+| `SessionReplayHarness` + `AudioRoutePrimitives` | Carried and mapped, so QG.1 can see it |
+| `Nebula.metal` | The whole hue band rotates by the anchor |
+
+**Cleared on the complementary path.** `setTrackHueAnchor(0)` fires when identity is nil — this is
+CLAUDE.md §What NOT To Do in its plain stored-property form, and an uncleared anchor would leak the
+previous track's palette across a boundary. `clearingTakesEffect` gates it.
+
+**The test that is actually worth having.** An anchor that is stable but *identical for every
+track* passes every single-track test and produces exactly the bug this feature exists to prevent.
+`anchorsSpreadAcrossTracks` runs twelve real identities (Low's eleven plus one) through the app's
+own hash and asserts they land on distinct anchors occupying ≥5 of 10 deciles.
+
+**QG.1 records a FIXTURE GAP rather than a pass.** The route-coverage fixtures predate the column,
+so `columnsPostdatingFixtures` now lists it and the gate prints *"postdates love_rehab; route
+UNVERIFIED here"* every run. Re-capturing a fixture would not help: the anchor is constant within
+any one track by construction, so the property that matters is cross-track and is covered by the
+unit test instead. **A route that cannot be verified by the gate says so out loud.**
+
+**Trade-off worth naming.** With a full 0…1 rotation, Nebula's palette is no longer guaranteed cool
+on every track — some anchors land warm. That is the point of the feature, but it makes the
+sidecar's `color_temperature_range` (a *planner* hint: `PresetScorer.moodSubScore` matches its
+midpoint against a track's valence) a less accurate description of what the preset will actually
+look like. Bounding the rotation to the cool half would preserve it at the cost of variety —
+Matt's call if he wants it.
+
+**Available to every preset, not just Nebula.** Aurora Veil (*"purple is fleeting"*), Glaze
+(*"more mixture and blending of colors"*) and Dragon Bloom all carry colour-variation asks and can
+now read the same field.
+
 ### PR.19 — Nebula deep dive 🔨 code complete, M7 owed (2026-09-10, Matt: *"proceed with nebula"*)
 
 #### Step 1 — definition

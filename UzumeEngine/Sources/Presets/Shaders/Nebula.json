@@ -78,6 +78,11 @@
       "route": "sparkle_gain",
       "primitive": "trebDev",
       "kind": "continuous"
+    },
+    {
+      "route": "palette_rotation",
+      "primitive": "trackHueAnchor01",
+      "kind": "structural"
     }
   ]
 }

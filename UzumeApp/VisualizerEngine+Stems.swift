@@ -735,6 +735,23 @@ extension VisualizerEngine {
         if let identity, let lumenEngine = lumenPatternEngine {
             refreshLumenPaletteForTrack(identity: identity, lumenEngine: lumenEngine)
         }
+
+        // PR.20: publish the per-track hue anchor into the FeatureVector, so presets with no
+        // state buffer of their own can vary across a playlist. Deliberately reuses
+        // `lumenTrackSeedHash` rather than hashing the identity again — two seeds derived
+        // from the same thing are two seeds that can silently disagree.
+        //
+        // Cleared to 0 when there is NO identity, which is the CLAUDE.md §What NOT To Do
+        // trap in its plain form: a value written on the track-change path and never cleared
+        // on the complementary one leaks the previous track's anchor across the boundary.
+        if let identity {
+            let hash = Self.lumenTrackSeedHash(for: identity)
+            // Top 24 bits — the low bits of an FNV-1a hash of a short string move least.
+            let anchor = Float((hash >> 40) & 0xFFFFFF) / Float(0x1000000)
+            mirPipeline.setTrackHueAnchor(anchor)
+        } else {
+            mirPipeline.setTrackHueAnchor(0)
+        }
     }
 
     /// BEAT_GRID_INSTALL + LOUDNESS_PROFILE breadcrumbs for a prepared-cache install.

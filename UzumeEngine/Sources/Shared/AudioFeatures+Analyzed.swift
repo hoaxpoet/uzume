@@ -200,11 +200,28 @@ public struct FeatureVector: Sendable {
     /// answers "how loud is this passage"; this answers "did something just LAND". Rationale
     /// and the measured event specificity of every alternative: `SpectralAnalyzer.Result`.
     public var spectralLevelRise: Float
-    // Floats 54–56 — PADDING. 53 floats is 212 bytes and a GPU constant buffer must be
+    /// PR.20 float 54 — PER-TRACK HUE ANCHOR, 0…1. A stable pseudo-random value derived from
+    /// the track's identity: constant for the whole of a track, different for the next one.
+    ///
+    /// Why it has to live here. Per-track variation already existed for Lumen Mosaic and Skein
+    /// via `lumenTrackSeedHash`, but it reaches them through per-preset STATE BUFFERS, which a
+    /// `direct` preset does not have — so nothing track-scoped could reach Nebula, Plasma,
+    /// Waveform or Spectral Cartograph at all. Two stateless derivations were tried first and
+    /// MEASURED FALSE on a real session: `accumulatedAudioTime - trackElapsedS` looks like the
+    /// time at track start and is not, because the two clocks advance at different rates
+    /// (~1:11 over one capture). There is no existing field that is constant within a track
+    /// and varies between them.
+    ///
+    /// Zero when no identity is known (silence, cold start, an unprofiled local file), which
+    /// is a legitimate anchor rather than a sentinel — consumers rotate by it and 0 is simply
+    /// "no rotation".
+    public var trackHueAnchor01: Float
+    // Floats 55–56 — PADDING. 53 floats is 212 bytes and a GPU constant buffer must be
     // 16-byte aligned; the same reason floats 51–52 were padding before DYN.1b/DYN.2 claimed
-    // them. ORDER IS THE CONTRACT — `Common.metal` must match field-for-field.
+    // them, and float 54 before PR.20. ORDER IS THE CONTRACT — `Common.metal` must match
+    // field-for-field.
     // swiftlint:disable:next identifier_name
-    public var _pad54, _pad55, _pad56: Float
+    public var _pad55, _pad56: Float
 
     public init(
         bass: Float = 0, mid: Float = 0, treble: Float = 0,
@@ -249,7 +266,8 @@ public struct FeatureVector: Sendable {
         self.spectralDensity = 0; self.spectralDensitySlow = 0; self.spectralSurge = 0
         self.spectralSectionRatio = 0
         self.spectralLevelRise = 0          // FTR.24, set per frame by SpectralAnalyzer
-        self._pad54 = 0; self._pad55 = 0; self._pad56 = 0
+        self.trackHueAnchor01 = 0   // PR.20 — set per track by MIRPipeline.setTrackHueAnchor
+        self._pad55 = 0; self._pad56 = 0
     }
 
     /// All-zero feature vector.

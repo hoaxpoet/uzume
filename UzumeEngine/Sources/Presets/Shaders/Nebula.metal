@@ -188,7 +188,12 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     // magentas". The full visible spectrum (red at the bass) was the third candidate and
     // was NOT chosen: it starts to read as a rainbow analyser, and "rainbow layer cake"
     // is an explicit anti-reference in Stave's set.
-    float hue = fract(0.45 + angle01 * 0.55 + sin(t * 0.035) * 0.02);
+    // PR.20 — the whole band rotates by the TRACK. Any single moment stays coherent (one
+    // song is teals and blues, the next ambers and golds), so the playlist gets variety
+    // without any one frame being a rainbow. This is why the full-spectrum candidate was
+    // not needed: the variety comes from the track axis, not from widening the instant.
+    float hue = fract(0.45 + features.track_hue_anchor01
+                      + angle01 * 0.55 + sin(t * 0.035) * 0.02);
     float sat = 0.62 + band * 0.28;
     float val = bandMask * (0.35 + band * 0.65) * (0.6 + activity * 0.4);
     color += hsv2rgb(float3(hue, sat, val));
