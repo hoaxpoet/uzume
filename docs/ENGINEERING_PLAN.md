@@ -9697,6 +9697,53 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.4g — the motion verdict, and what the capture's own artifacts look like ✅ (2026-09-10)
+
+**Done-when:** `Scripts/motion_gate.sh` has run on a contiguous Alfvén sequence and the reader has
+given a verdict. Open since ALFVEN.4b.
+
+**It was blocked on one environment variable.** Every session capture said so in its own third
+line — `video recording: OFF — BUG-050; set UZUME_RECORD_VIDEO=1` — and the gate accepts an `.mp4`
+directly. Four closeouts carried "CANNOT VERIFY" without anyone reading that line.
+
+Source: `uzume_sessions/2026-09-10T16-14-52Z`, Matt driving, local file, chain verdict clean,
+Alfvén held ~3m18s. Trimmed to the Alfvén-only span (24s in) so preset switches could not register
+as false spikes: **181 s, 4501 frames**.
+
+**VERDICT: PASS — smooth, on-concept, no strobe, no freeze, no re-seed pop.** Composition matches
+REF 01 (broad opposed-colour lobes, thin bright seams, irregular and asymmetric). No `07` grid
+hash, no `06` quilt lattice. The 4e palette drift is visibly working across the sampled frames —
+five at the magenta↔teal anchor, three at the acid-green↔violet far end, dwell weighted to the
+anchor as designed.
+
+**⚠ Both raw anomaly counts are dominated by the CAPTURE, not the preset**, and this is the part
+worth keeping. The recorder appended **5546 of 11392** rendered frames (48.7 %), and the file is
+variable-rate: 24.9 fps of content in a container declaring 60. That produces exactly the
+dropped-frame → doubled-motion pattern the gate's two metrics are sensitive to:
+
+- **Spikes are co-located with frozen frames.** 39 % of spikes fall within 2 frames of a frozen
+  one, against a random expectation of **7 % ± 3** — about ten sigma. A frame that repeats is
+  followed by a frame carrying double the motion.
+- **"Frozen" frames are not a freeze.** They occur in 88 separate runs of at most 4 frames
+  (≤0.07 s), scattered — not one sustained stall.
+- **The remaining spikes are not the re-seed.** A 2 sim-second cycle lands every ~104 video frames
+  here; the unexplained spikes have a median gap of **3** frames, i.e. tight bursts, not a period.
+  So the 2 s cadence is not producing visible structure-pops.
+
+**The reference's "0 frozen frames" is not comparable** and should not be read as a regression:
+`target_animated.gif` is an offline, uniform 20 fps render, while this is a variable-rate screen
+capture of a 60 fps app. Comparing their frozen counts compares recorders.
+
+**Two numbers, and which to trust.** The gate reported 225 frozen / 69 spikes; measuring the same
+file directly gives 119 / 76. The gate extracts PNGs from a variable-rate source before diffing,
+which can duplicate frames; the direct read does not (its lowest diff is 0.0089, no exact zeros).
+The structural conclusions are identical either way, but the direct numbers are the faithful ones.
+
+**Follow-up worth having, not done here:** the gate has no notion of variable-rate input, so any
+screen-captured sequence will inflate both of its metrics. Either it should resample to a fixed
+rate before diffing, or its output should state the source's real frame rate so a reader is not
+comparing a capture against an offline render.
+
 ### Increment ALFVEN.4f — the seam bloom ✅ (2026-09-10)
 
 **Done-when:** film.py's seam bloom renders on the production path, validated against film.py's
@@ -9806,7 +9853,7 @@ CPU and a fragment cannot.
 
 **Still open:** the seam bloom is still absent (film.py's two Gaussian blurs over the brightest
 decile), so the live frame reads flatter than the stills; the re-seed cadence (2.0 sim s) remains
-Matt's call; motion verdict still CANNOT VERIFY.
+Matt's call; motion verdict now **PASS** — see ALFVEN.4g below.
 
 ### Increment ALFVEN.4d — make it testable, and calibrate the live look ✅ (2026-09-09)
 
