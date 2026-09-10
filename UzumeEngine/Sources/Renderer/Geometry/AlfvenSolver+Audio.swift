@@ -55,7 +55,14 @@ extension AlfvenSolver {
     /// own `sizzle = trebRel - 0.6`, restored now that there is audio to feed it. At
     /// silence this is the 0.30 floor ALFVEN.4f shipped; at full treble it reaches 1.66.
     var audioBloomAmount: Float {
-        let sizzle = min(max(trebleEnvelope - 0.6, 0), 1.6)
+        // film.py's `amt = 0.30 + 0.85 * clip(sizzle, 0, 1.6)` — but its `sizzle =
+        // trebRel - 0.6` assumes a primitive on a 0.6…2.2 scale. Ours is a relative
+        // deviation centred on zero (p50 0.000, p99 0.017), so the verbatim port clipped
+        // to zero on EVERY frame and the bloom never left its floor. The window is
+        // calibrated to our own measured range instead; the 0.30/0.85/1.6 shape is
+        // film.py's and unchanged.
+        let span = max(configuration.trebKnee - configuration.trebFloor, 1e-6)
+        let sizzle = 1.6 * min(max((trebleEnvelope - configuration.trebFloor) / span, 0), 1)
         return 0.30 + 0.85 * sizzle
     }
 

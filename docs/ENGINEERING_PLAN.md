@@ -9819,6 +9819,48 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.3b — the seam-bloom route was dead on arrival ✅ (2026-09-10)
+
+**Found by reviewing Matt's first audio-driven capture** (`2026-09-10T19-34-42Z`, local file,
+chain verdict **clean**, ~60 fps sustained, Alfvén ~95 s).
+
+**The bloom route never modulated.** ALFVEN.3 ported film.py's `sizzle = trebRel - 0.6`
+verbatim. Our `trebRel` is a relative deviation centred on zero — measured p05 −0.009 / p50 0.000 /
+p95 0.009 / p99 0.017 across 8 sessions — so `trebRel - 0.6` clipped to zero on **every frame** and
+`amt` sat at its 0.30 floor for **100 %** of the capture. Recalibrated to the measured window
+(`trebFloor` 0.002, `trebKnee` 0.017), keeping film.py's `0.30 / 0.85 / 1.6` shape: on the same
+capture the bloom now modulates on **38 %** of frames, p95 0.87, reaching film.py's 1.66 ceiling,
+with the median correctly resting at the floor through quiet passages.
+
+**⚠ The gate did not catch this, and that is the lesson.** `RouteCoverageTests` was green
+throughout: it asserts the **primitive fires**, not that the **consumer responds**. A declared
+route can be green and visually inert. The check that found it was reading the delivered value —
+`amt` — not the input. This is the `feedback_the_metric_is_a_model` failure in its exact shape:
+measuring a primitive correctly says nothing if the consumer's arithmetic discards it.
+
+**It is also an inconsistency in my own diligence, worth naming.** At ALFVEN.3 I explicitly checked
+that `spectralCentroid` was not on film.py's assumed scale and renormalised it — then ported the
+treble constant verbatim without applying the same check. One primitive was verified, the sibling
+was not.
+
+**What the capture confirms** (per-route firing evidence, D-179):
+
+| route | primitive | delivered |
+|---|---|---|
+| stirring_vigour | `bassDev` | drive p50 **5.02**, p95 15.85, max 16.0 — full span exercised |
+| seam_bloom | `trebRel` | was 0.30 flat; now p95 0.87, max 1.66, 38 % above floor |
+| palette_hue_centre | `spectralCentroid` | p50 0.125 → mid-traverse; anchored on 0.72 |
+
+**Motion verdict: PASS**, on the audio-driven run — and better than the unrouted one: mean
+inter-frame diff 4.14 (was 2.89, i.e. more motion, as bass-driven stirring should give) with spikes
+DOWN to **0.44 %** from 1.5 %. Sampled frames show the bass route working: dense braided seams at
+high drive, broad soft-seamed lobes when the bass eases, palette holding magenta↔teal throughout.
+
+**Known, not fixed:** the drive map saturates — p95 lands at 15.85 of a 16.0 ceiling, so ~5 % of
+frames are pinned and stop responding to further bass. Raising `bassKnee` would trade that against
+a lower median drive (knee 0.20 would put p50 at 2.6 instead of 5.0). Left as-is pending a live
+judgement of whether the loud passages feel flat.
+
 ### Increment ALFVEN.3 — audio routing (3 of 5 routes) ⏳ (2026-09-10)
 
 **Done-when (design §7):** five routes declared and green on `RouteCoverageTests`; M7. **Three

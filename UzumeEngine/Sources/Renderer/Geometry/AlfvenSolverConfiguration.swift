@@ -137,6 +137,21 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// ⚠ NOT 0…1. Measured across the same 8 sessions: p05 0.047, p50 0.120, p95 0.186.
     /// film.py's `hue = 0.46 + 0.26*centroid01` assumes a normalised 0…1 and would move
     /// the centre by 0.028 — no visible drift, and nowhere near the palette Matt approved.
+    /// Seam-bloom sizzle window, in `trebRel` units — the floor below which treble adds
+    /// no bloom, and the value that reaches film.py's full sizzle of 1.6.
+    ///
+    /// ⚠ film.py's `sizzle = trebRel - 0.6` was ported VERBATIM at ALFVEN.3 and was
+    /// therefore DEAD: our `trebRel` is a relative deviation centred on zero, measured
+    /// p05 -0.009 / p50 0.000 / p95 0.009 / p99 0.017 across 8 sessions, so `trebRel - 0.6`
+    /// clipped to zero on every frame of a live capture and the bloom never left its 0.30
+    /// floor (measured: 0.00% of frames above it). Same class of mistake as the centroid
+    /// range — film.py's primitive scales are not ours — and the one I checked for centroid
+    /// but not for treble.
+    ///
+    /// Note `RouteCoverageTests` passed throughout: it asserts the PRIMITIVE fires, not
+    /// that the consumer responds to it. A route can be green and visually inert.
+    public var trebFloor: Float
+    public var trebKnee: Float
     public var centroidLo: Float
     public var centroidHi: Float
     /// How much of the palette excursion the centroid owns versus the time drift.
@@ -188,6 +203,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         bassTau: Float = 0.10,
         trebleTau: Float = 0.03,
         centroidTau: Float = 2.5,
+        trebFloor: Float = 0.002,
+        trebKnee: Float = 0.017,
         centroidLo: Float = 0.047,
         centroidHi: Float = 0.186,
         centroidWeight: Float = 0.6,
@@ -220,6 +237,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.bassTau = bassTau
         self.trebleTau = trebleTau
         self.centroidTau = centroidTau
+        self.trebFloor = trebFloor
+        self.trebKnee = trebKnee
         self.centroidLo = centroidLo
         self.centroidHi = centroidHi
         self.centroidWeight = centroidWeight
