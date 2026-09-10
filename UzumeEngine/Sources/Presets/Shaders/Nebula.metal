@@ -132,6 +132,13 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     //    LANDED", and it measures event-shaped on his session: above 0.5 on 12 % of frames,
     //    near zero on 31 %.
     //
+    //    ★ PR.22 — NOW ITS SHORT-WINDOW SIBLING, `transient_rise`, for a measured reason.
+    //      Cross-correlated against offline onset strength, `spectral_level_rise` peaks
+    //      **+150 ms** after the transient and `transient_rise` **+30 ms** — the difference is
+    //      not pipeline delay but the fixed-lag difference each is built from. Matt's note on
+    //      the PR.21 build was *"sync is still a little loose"*; ~120 ms of that was this
+    //      preset choosing the most event-SHAPED primitive without checking when it peaks.
+    //
     //    ⚠ NOT `beat_composite`, which is the reflex answer and is WRONG here: on that same
     //      session it sits above 0.9 on **42.6 %** of frames and above 0.5 on 70.7 %. It is a
     //      pulse CLOCK, not an accent — turning it up yields a brighter constant, not a
@@ -141,7 +148,7 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     //    Declared HERE, with the other drivers, because the ring reads it too. The first cut
     //    declared it down in the core block and used it in `bandRadius` above — which is a
     //    compile error, and one that surfaces only as `presetNotFound` at load.
-    float event = saturate(features.spectral_level_rise);
+    float event = saturate(features.transient_rise);
 
     // ── Radial spectrum band ──────────────────────────────────────────────────
     float band = nebulaBandAt(nebulaBands, angle01);

@@ -94,7 +94,7 @@ struct ReplayHarnessRouteCoverageTests {
         // and FeatureVector camelCase, which is why an earlier audit of this gap wrongly
         // reported them as unrecorded — match on the VALUE, not the spelling.
         "bassAtt", "trebleAtt", "midDev", "trebDev", "highMid", "high",
-        "spectralLevelRise", "spectralSectionRatio", "waveformOccupancy", "trackHueAnchor01",
+        "spectralLevelRise", "spectralSectionRatio", "waveformOccupancy", "trackHueAnchor01", "transientRise",
         "drumsCentroid", "bassCentroid", "vocalsCentroid", "otherCentroid",
         "vocalsBand1", "otherBand1",
         "stringsActivityDev", "brassActivityDev", "woodwindsActivityDev",

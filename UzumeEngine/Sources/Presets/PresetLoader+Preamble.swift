@@ -215,7 +215,10 @@ extension PresetLoader {
             // coherent. Zero means "no identity known" — a legitimate anchor, not a
             // sentinel, so no gate is needed.
             // Floats 55–56 — PADDING, for the 16-byte GPU-constant alignment.
-            float spectral_level_rise, track_hue_anchor01, _pad55, _pad56;
+            // PR.22 float 55 — TRANSIENT RISE, 0…1: `spectral_level_rise`'s short-window
+            // sibling, peaking ~120 ms earlier. Use it for an accent that must land ON the
+            // hit; use `spectral_level_rise` for a held "this passage arrived" signal.
+            float spectral_level_rise, track_hue_anchor01, transient_rise, _pad56;
         };
 
         struct VertexOut {

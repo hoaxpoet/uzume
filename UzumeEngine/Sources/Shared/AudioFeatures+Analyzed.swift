@@ -202,9 +202,10 @@ public struct FeatureVector: Sendable {
     public var spectralLevelRise: Float
     /// PR.20 float 54 — per-track hue anchor, 0…1 (0 = no identity). See EP PR.20.
     public var trackHueAnchor01: Float
-    // Floats 55–56 — PADDING. ORDER IS THE CONTRACT; BOTH MSL sites must match field-for-field.
+    /// PR.22 float 55 — transient rise 0…1, `spectralLevelRise`'s fast sibling (EP PR.22).
+    public var transientRise: Float
     // swiftlint:disable:next identifier_name
-    public var _pad55, _pad56: Float
+    public var _pad56: Float
 
     public init(
         bass: Float = 0, mid: Float = 0, treble: Float = 0,
@@ -249,8 +250,7 @@ public struct FeatureVector: Sendable {
         self.spectralDensity = 0; self.spectralDensitySlow = 0; self.spectralSurge = 0
         self.spectralSectionRatio = 0
         self.spectralLevelRise = 0          // FTR.24, set per frame by SpectralAnalyzer
-        self.trackHueAnchor01 = 0   // PR.20 — set per track by MIRPipeline.setTrackHueAnchor
-        self._pad55 = 0; self._pad56 = 0
+        self.trackHueAnchor01 = 0; self.transientRise = 0; self._pad56 = 0   // PR.20 / PR.22
     }
 
     /// All-zero feature vector.
