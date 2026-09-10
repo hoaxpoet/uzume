@@ -100,7 +100,7 @@ struct StemAffinityScoringTests {
 
     // MARK: — Test 4: empty affinities → neutral 0.5
 
-    @Test("Empty stem_affinity dictionary always returns neutral 0.5 (QR.2)")
+    @Test("Empty stem_affinity scores the track's MEAN stem deviation (PR.8; was a flat 0.5)")
     func emptyAffinityIsAlwaysNeutral() {
         let preset = makePreset(affinities: [:])
 
@@ -109,7 +109,7 @@ struct StemAffinityScoringTests {
 
         let bd = scorer.breakdown(preset: preset, track: makeProfile(stems: activeSnap),
                                   context: makeContext())
-        #expect(bd.stemAffinity == 0.5,
+        #expect(bd.stemAffinity == 0.15,
                 "No declared affinities → always neutral regardless of stem activity")
     }
 

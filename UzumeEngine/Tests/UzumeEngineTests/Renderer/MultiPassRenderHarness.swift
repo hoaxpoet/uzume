@@ -650,8 +650,26 @@ struct MultiPassRenderHarness {
                 activePipeline: preset.pipelineState,
                 warpState: warpState,
                 sceneAlreadyRendered: false)
+            // BUG-118/Dragon Bloom — read back the ACCUMULATOR instead of the drawable.
+            //
+            // Comparing final images has been useless here: the comp stage (video echo,
+            // gamma, `bInvert`) sits between the feedback field and anything visible, and
+            // eleven hypotheses died guessing which side of it was wrong. The field itself
+            // is what the butterchurn oracle can be compared against directly.
+            //
+            // The warp textures are `.private`, so they are blitted over the readable output
+            // texture rather than read directly — `getBytes` on private storage is invalid.
+            if Self.dumpAccumulator, let blit = cmd.makeBlitCommandEncoder() {
+                blit.copy(from: warpState.warpTexture, to: outTex)
+                blit.endEncoding()
+            }
             try commit(cmd, outTex, into: &pixels)
         }
+    }
+
+    /// Read the mv_warp accumulator rather than the composed drawable.
+    static var dumpAccumulator: Bool {
+        ProcessInfo.processInfo.environment["HARNESS_DUMP_ACCUMULATOR"] == "1"
     }
 
     // MARK: - Render: bespoke mv_warp (Fata Morgana / Nacre / Floret / Glaze)

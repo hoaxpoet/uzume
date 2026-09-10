@@ -75,7 +75,6 @@ final class PlaybackShortcutRegistry {
         onHandleEsc: @escaping @MainActor () -> Void,
         onShowHelp: @escaping @MainActor () -> Void,
         onToggleDiagnosticHold: (@MainActor () -> Void)? = nil,
-        onToggleForceSpider: (@MainActor () -> Void)? = nil,
         onToggleAudioStallCard: (@MainActor () -> Void)? = nil,
         onDebugNextPreset: (@MainActor () -> Void)? = nil,
         onDebugPreviousPreset: (@MainActor () -> Void)? = nil,
@@ -155,16 +154,6 @@ final class PlaybackShortcutRegistry {
             ))
         }
         #if DEBUG
-        if let fn = onToggleForceSpider {
-            all.append(PlaybackShortcut(
-                id: "debugForceSpider",
-                key: "s",
-                modifiers: [.command, .shift, .option],
-                label: "Force spider easter egg (debug)",
-                category: .developer,
-                action: fn
-            ))
-        }
         // Force the audio-stall overlay card on/off — validates the surface
         // (look, copy, fade) without needing a real tap stall, which on the
         // streaming path triggers .silent → reinstall → BUG-057 (dead tap).

@@ -87,6 +87,18 @@ function fixWarpShader(w) {
     viz.setRendererSize(W, H);
 
     src.start(0);
+    // Diagnostics: expose the graph and a seek so the oracle can be measured at a
+    // chosen point in the track (render() does not advance the audio; it plays in
+    // real time, so sampling must be paced against ctx.currentTime).
+    window.__src = src; window.__audioBuf = audioBuf;
+    window.__seekAt = { sec: 0, when: ctx.currentTime };
+    window.__seek = (sec) => {
+      try { window.__src.stop(); } catch (e) {}
+      const s2 = ctx.createBufferSource(); s2.buffer = audioBuf; s2.loop = true;
+      s2.connect(boost); s2.start(0, sec);
+      window.__src = s2; window.__seekAt = { sec, when: ctx.currentTime };
+    };
+    window.__pos = () => window.__seekAt.sec + (ctx.currentTime - window.__seekAt.when);
     window.__status.ready = true;
     const t0 = performance.now();
     const td = new Uint8Array(mon.fftSize);

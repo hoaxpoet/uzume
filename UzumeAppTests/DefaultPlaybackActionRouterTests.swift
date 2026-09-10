@@ -289,6 +289,61 @@ struct DefaultPlaybackActionRouterU6bTests {
         #expect(tracker.overrideCalled?.1 == true, "immediate=true must be forwarded")
     }
 
+    // MARK: PR.8.3 — the immediate walk is alphabetical and reaches every loaded preset
+
+    /// Matt, 2026-09-09: *"I just want the presets to be listed in alphabetical order, so that I can
+    /// easily navigate to the preset I want."* PR.8 made this walk scorer-ranked (per-track, so
+    /// unpredictable) and recomputed it per press, which oscillated between two presets and left him
+    /// unable to reach Arachne and a dozen others. Both properties are pinned here: the ORDER is
+    /// alphabetical, and the walk reaches EVERYTHING — a manual override must, so no eligibility
+    /// filter (PR.8's `filter { $0.1 > 0 }` dropped diagnostics and over-budget presets).
+    private static func walkCatalog() throws -> [PresetDescriptor] {
+        func make(_ name: String, diagnostic: Bool, cost: Float, certified: Bool) throws -> PresetDescriptor {
+            let json = """
+            {"name":"\(name)","family":"geometric","complexity_cost":{"tier1":\(cost),"tier2":\(cost)},
+             "is_diagnostic":\(diagnostic),"certified":\(certified)}
+            """
+            return try JSONDecoder().decode(PresetDescriptor.self, from: Data(json.utf8))
+        }
+        return [try make("Zebra", diagnostic: false, cost: 1, certified: true),
+                try make("Arachne", diagnostic: false, cost: 1, certified: false),
+                try make("Cartograph", diagnostic: true, cost: 1, certified: false),
+                try make("Heavy", diagnostic: false, cost: 99, certified: true),
+                try make("Middle", diagnostic: false, cost: 1, certified: true)]
+    }
+
+    @Test("the immediate walk steps in alphabetical order")
+    func immediateWalk_isAlphabetical() throws {
+        let catalog = try Self.walkCatalog()
+        let expected = catalog.map(\.name).sorted()
+        var current = expected[0]
+        for step in 1...expected.count {
+            let tracker = CallTracker()
+            let router = Self.makeRouter(currentPresetID: current, catalog: catalog, tracker: tracker)
+            router.presetNudge(.next, immediate: true)
+            let got = tracker.overrideCalled?.0
+            #expect(got == expected[step % expected.count],
+                    "from \(current) expected \(expected[step % expected.count]), got \(got ?? "nil")")
+            current = got ?? current
+        }
+    }
+
+    @Test("the immediate walk reaches every preset — diagnostics and over-budget included")
+    func immediateWalk_reachesEverything() throws {
+        let catalog = try Self.walkCatalog()
+        var current = catalog.map(\.name).sorted()[0]
+        var seen: Set<String> = [current]
+        for _ in 0..<(catalog.count * 2) {
+            let tracker = CallTracker()
+            let router = Self.makeRouter(currentPresetID: current, catalog: catalog, tracker: tracker)
+            router.presetNudge(.next, immediate: true)
+            guard let got = tracker.overrideCalled?.0 else { break }
+            seen.insert(got); current = got
+        }
+        #expect(seen.count == catalog.count,
+                "walk reached \(seen.sorted()) of \(catalog.count) — a manual override must reach anything loaded")
+    }
+
     // MARK: Test 8 — presetNudge(.previous) with no lastPlayedPresetID is a no-op
 
     @Test("presetNudge(.previous) with nil lastPlayedPresetID is a no-op")

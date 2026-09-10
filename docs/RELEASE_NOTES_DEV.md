@@ -10,15 +10,44 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
-### [dev-2026-09-09-205204] ROOTCHOIR.2 / BUG-122 — remove the particle ring and make harmony reshape instead of spin
+### [dev-2026-09-09-205204] ROOTCHOIR.2 / BUG-125 — remove the particle ring and make harmony reshape instead of spin
 
 Matt's first live review rejected Root Choir: *“There is still white particles in a circular ring pattern,” “the center … looks like a muddle,” “not understanding the connection to the music,”* and *“the spin is odd and somewhat disorienting.”* The attached “Combat Baby” capture is clean and all five declared inputs fire, so this was the preset—not the audio or renderer.
 
 The causes were authored and measurable. A radial orbit trap (`abs(length(z) - radius)`) was promoted into near-white highlights, directly drawing the ring. Live `tonal_tension` topped out at 0.091 while the aperture expected 0…1, leaving the centre nearly closed. Fifths/thirds changed by about 0.86/0.89 rad per analysis update, yet fifths was mapped directly to the whole organism's angle, making rotation the dominant response.
 
-ROOTCHOIR.2 deletes the radial trap and white seam colour, uses dark leadwork with sparse amber light, maps the real tension/consonance ranges across their visual spans, grows a clean five-sided aperture, and bounds fifths orientation to ±0.34 rad. Thirds and tension now rotate/deepen a complex quadratic/cubic fold of the Newton starting domain, so harmony reorganizes basin topology rather than turning the frame. The preset remains uncertified and BUG-122 remains pending M7.
+ROOTCHOIR.2 deletes the radial trap and white seam colour, uses dark leadwork with sparse amber light, maps the real tension/consonance ranges across their visual spans, grows a clean five-sided aperture, and bounds fifths orientation to ±0.34 rad. Thirds and tension now rotate/deepen a complex quadratic/cubic fold of the Newton starting domain, so harmony reorganizes basin topology rather than turning the frame. The preset remains uncertified and BUG-125 remains pending M7.
 
 Evidence: clean session `2026-09-09T20-25-49Z`; route replay at `/private/tmp/root-choir-session-review/replay_report.md`; before sheet `/tmp/uzume_visual/20260909T203906/root_choir_compare.png`; after frames `/tmp/uzume_visual/20260909T204953/`; motion sequence `/tmp/uzume_visual/20260909T205058/` (430 frames). Focused tests, performance, lint, and app build are recorded in the closeout.
+## [dev-2026-09-09-160000] Arachne removed from the roster (D-246)
+
+Matt's call under PR.9's certify-or-remove gate. The orb-weaver preset rendered broken with zero audio
+coupling and no reference images after eight design iterations, so certifying it would have meant
+authoring it again rather than repairing it. ~6,100 lines deleted: shader, sidecar, the `Arachnid/`
+state machine, its orchestrator signalling conformance, five test suites, both design docs and the
+visual-reference directory. Roster 30 → 29 production presets.
+
+The segmented-session machinery Arachne motivated is generic and stays — `PresetMaxDuration`,
+`PlannedPresetSegment`, `PresetSignaling`. Arachne was the only conformer to the completion-signalling
+protocol, so every track now plans as a single segment, which is what non-signalling presets already
+did. Two sidecar keys are zero-adopter by design and declared as such.
+
+Consequence worth tracking: the `staged` paradigm now has **no production preset**, only the two
+diagnostic sandboxes. Its reference template was retargeted from Arachne to Staged Sandbox.
+
+### [dev-2026-09-08-192543] BUG-065 measured for the first time — the premise does not reproduce (kept OPEN)
+
+544 seconds, one continuous track (LCD Soundsystem, *Dance Yrself Clean*), whole-track grid, meter 4. The best evidence this defect has had, and it says the defect as written is not there.
+
+**The error that reaches the viewer** — `onset_residual_ms`, recorded for the first time this afternoon: p50 **14.9 ms**, p90 26.7, max 29.8, signed mean **−0.1 ms**, **100 % inside the ~60 ms perceptual window**, flat across all nine minutes.
+
+**The correction** — `drift_ms` — goes 0 → **−153 ms** at five and a half minutes → **+3 ms at the end**. It reverses. Only 26 of 54 buckets move away from zero, where a genuine clock mismatch moves essentially all of them. That is a bounded offset excursion the tracker absorbs, most likely following which percussive element dominates as the arrangement changes, not drift.
+
+**The original evidence was the compensation.** This entry has always cited `drift_ms` growing 0 → 119 ms as the defect. `drift_ms` is what the tracker APPLIES (`displayTime = pt + drift + shift`); the error is what survives it, and nothing recorded that until today.
+
+**Two false starts on the way, both mine, both corrected by measurement.** A 0.81 ms/s "clock mismatch" fitted to four buckets, two of which were the EMA still converging from zero — after convergence the slope is +0.37 ms/s, the opposite sign. And a resampler hypothesis derived from that bad fit: the probe was still worth running (it clears the grid's time base to −3 ppm over two minutes) but it was built to test a number that was an artifact.
+
+**Kept OPEN at Matt's call.** One sequenced-electronic track with machine-steady timing is not proof for live-played material with real rubato. The remaining ±15 ms residual floor is a separate question — plausibly the gap between the app's assumed 50 ms output latency and the Duet 3's measured 11.2 ms, which a tap-side residual is structurally blind to.
 
 ---
 

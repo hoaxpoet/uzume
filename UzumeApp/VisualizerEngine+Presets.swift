@@ -151,7 +151,6 @@ extension VisualizerEngine {
         pipeline.setMVWarpWetnessDecay(1.0)   // Skein.ENGINE.2: reset to "held" (only Skein decays A)
         pipeline.setStructuralPrediction(.none)   // Skein.ENGINE.3 (D-151): reset to inert default on preset switch
         pipeline.setMVWarpCanvasGround(nil)   // Skein.5.3b: drop the per-track ground override (only Skein sets it)
-        arachneState = nil
         gossamerState = nil
         nimbusState = nil
         skeinState = nil
@@ -464,7 +463,10 @@ extension VisualizerEngine {
                         name: stage.name,
                         pipelineState: stage.pipelineState,
                         samples: stage.samples,
-                        writesToDrawable: stage.writesToDrawable
+                        writesToDrawable: stage.writesToDrawable,
+                        persistent: stage.persistent,
+                        iterations: stage.iterations,
+                        pixelFormat: stage.pixelFormat
                     )
                 }
                 guard !stageSpecs.isEmpty else {
@@ -553,7 +555,6 @@ extension VisualizerEngine {
     /// sidecar-rename hazard against that set.
     private func bindStatefulPresetRuntime(for desc: PresetDescriptor) {
         switch desc.name {
-        case "Arachne":     bindArachneRuntime(desc)
         case "Gossamer":    bindGossamerRuntime(desc)
         case "Skein":       bindSkeinRuntime(desc)
         case "Nimbus":      bindNimbusRuntime(desc)
@@ -590,30 +591,6 @@ extension VisualizerEngine {
             // it is a shader, so there is no MSL layout contract to extend.
             let drift = self?.beatSyncLock.withLock { self?.latestBeatSyncSnapshot.driftMs ?? 0 } ?? 0
             stroke?.path.ingestBeatDrift(milliseconds: drift)
-        }
-    }
-
-    private func bindArachneRuntime(_ desc: PresetDescriptor) {
-        // V.7.7B: per-preset state for staged Arachne. Mirrors the mv_warp
-        // branch above — allocate the ArachneState pool, bind webBuffer at
-        // fragment slot 6 + spiderBuffer at slot 7 (per CLAUDE.md GPU
-        // Contract), and wire the per-frame tick so web stages advance and
-        // mood data lands in webs[0].row4. Without this the staged WORLD +
-        // COMPOSITE fragments read zeros from slots 6/7 and the WORLD
-        // palette collapses to the silence anchor.
-        if let state = ArachneState(device: context.device) {
-            arachneState = state
-            // V.7.7C.2 (D-095): reset the foreground BuildState +
-            // per-segment spider cooldown at segment-start. The
-            // canonical entry point per V.7.7C.2 §5.2 SUB-ITEM 2.
-            state.reset()
-            pipeline.setDirectPresetFragmentBuffer(state.webBuffer)    // buffer(6)
-            pipeline.setDirectPresetFragmentBuffer2(state.spiderBuffer) // buffer(7)
-            pipeline.setMeshPresetTick { [weak state] features, stems in
-                state?.tick(features: features, stems: stems)
-            }
-        } else {
-            logger.error("ArachneState: failed to allocate web pool for staged preset '\(desc.name)'")
         }
     }
 
@@ -800,12 +777,13 @@ extension VisualizerEngine {
     /// `PresetSignaling`, or nil. Currently only `ArachneState` is a candidate
     /// (Gossamer/Stalker/etc. are cyclical and never emit).
     ///
-    /// V.7.7C.2: `ArachneState` now conforms via `Sources/Orchestrator/
-    /// ArachneStateSignaling.swift` (placement forced by the Presets→Orchestrator
-    /// module-cycle constraint — see that file's note). The conditional cast
-    /// became unconditional once the conformance landed.
+    /// **No preset currently conforms.** `ArachneState` was the only conformer and Arachne was
+    /// removed (D-246); the segmented-session machinery it motivated — `PresetMaxDuration`,
+    /// `PlannedPresetSegment`, this signalling path — is generic (V.7.6.2) and stays for the next
+    /// preset with a natural completion point. Returning nil means every track plans as a single
+    /// segment, which is what non-signalling presets already did.
     private func activePresetSignaling() -> (any PresetSignaling)? {
-        return arachneState
+        return nil
     }
 
     /// Handle a `PresetSignaling.presetCompletionEvent` firing.

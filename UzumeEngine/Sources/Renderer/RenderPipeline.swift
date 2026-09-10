@@ -517,9 +517,24 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     // MARK: - Staged Composition (V.ENGINE.1)
 
     /// Active staged stages + per-stage offscreen textures. See RenderPipeline+Staged.
+    ///
+    /// `stagedTextures` is the FRONT half — each stage's most recent output, and
+    /// what later stages sample. `stagedBackTextures` holds the other half for
+    /// stages that own a ping-pong pair (`persistent` or `iterations > 1`,
+    /// ALFVEN.1); the two swap after each iteration.
     var stagedStages: [StagedStageSpec] = []
     var stagedTextures: [String: MTLTexture] = [:]
+    var stagedBackTextures: [String: MTLTexture] = [:]
     let stagedLock = NSLock()
+
+    /// Index of the texel block the non-finite watchdog probes next. Render-thread
+    /// only (advanced inside `probeStagedPersistentState`), so it needs no lock.
+    var stagedProbeCursor: Int = 0
+    /// Reused readback buffer for the watchdog probe — allocated on first use and
+    /// kept, so the per-frame probe does no allocation.
+    var stagedProbeScratch: [UInt8] = []
+    /// Watchdog trips since the last `setStagedRuntime`. Guarded by `stagedLock`.
+    var stagedWatchdogTrips: Int = 0
 
     // MARK: - Accessibility Flags (U.9, D-054)
 

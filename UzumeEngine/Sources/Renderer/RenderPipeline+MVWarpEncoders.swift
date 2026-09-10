@@ -69,6 +69,10 @@ extension RenderPipeline {
         var sceneUni = getSceneUniforms()
         encoder.setVertexBytes(&sceneUni, length: MemoryLayout<SceneUniforms>.stride, index: 2)
         encoder.setFragmentTexture(warpState.warpTexture, index: 0)
+        // D-137 warp_18..19 dither source (`sampler_noise_lq`). The shared
+        // `mvWarp_fragment` samples it only when chromaticMix > 0 (Dragon Bloom), so
+        // binding it is inert for every other mv_warp preset.
+        encoder.setFragmentTexture(textureManagerLock.withLock { textureManager }?.noiseLQ, index: 1)
         var chromatic = mvWarpLock.withLock { mvWarpChromatic }   // L3: 0 ⇒ identity for non-DB
         encoder.setFragmentBytes(&chromatic, length: MemoryLayout<Float>.stride, index: 0)
         // Skein.ENGINE.2: per-frame wetness-channel decay (ALPHA only) for canvas-hold presets.

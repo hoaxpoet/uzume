@@ -145,10 +145,23 @@ public struct DefaultPresetScorer: Sendable {
         let fatigueMult = fatigueMultiplier(preset: preset, context: context)
 
         // -- Aggregation ------------------------------------------------------
-        let raw = Self.weightMood * moodScore
-            + Self.weightTempoMotion * tempoScore
-            + Self.weightStemAffinity * affinityScore
-            + Self.weightSectionSuitability * sectionScore
+        // PR.8 (Matt): the section weight is GATED on real section data. Section detection was
+        // removed at D-170, every planned segment carries `section: nil`, and a nil section scored
+        // 1.0 — a quarter of every total was a constant pretending to be a signal. With no section
+        // the three live sub-scores are re-normalised to sum to 1.0; the four-weight form is kept
+        // verbatim for the day sections return.
+        let raw: Float
+        if context.currentSection == nil {
+            let live = Self.weightMood + Self.weightTempoMotion + Self.weightStemAffinity
+            raw = (Self.weightMood * moodScore
+                + Self.weightTempoMotion * tempoScore
+                + Self.weightStemAffinity * affinityScore) / live
+        } else {
+            raw = Self.weightMood * moodScore
+                + Self.weightTempoMotion * tempoScore
+                + Self.weightStemAffinity * affinityScore
+                + Self.weightSectionSuitability * sectionScore
+        }
 
         // -- U.6b additive family boost (independent of the four-weight structure) --
         // Diagnostic presets (family == nil) receive no family boost.
@@ -284,13 +297,18 @@ public struct DefaultPresetScorer: Sendable {
     /// Uses `stemEnergyDev` fields (D-026/QR.2, D-080) so AGC normalization cannot saturate
     /// the sub-score when multiple affinities are declared.
     private func stemAffinitySubScore(preset: PresetDescriptor, track: TrackProfile) -> Float {
-        let affinities = Set(preset.stemAffinity.keys)
-        guard !affinities.isEmpty else { return 0.5 }
         guard track.stemEnergyBalance != .zero else { return 0.5 }
-        let devSum = affinities.reduce(Float(0)) { acc, stem in
+        // PR.8 (Matt): a preset that declares no affinity scores the track's MEAN stem deviation,
+        // not a flat 0.5. The flat 0.5 made declaring `stem_affinity` a structural advantage —
+        // on energetic material the five declaring presets scored 0.88–1.00 here while every other
+        // preset scored 0.50, and those five owned the top of every ranking. Declared presets still
+        // score over their declared stems only.
+        let declared = Set(preset.stemAffinity.keys)
+        let stems: [String] = declared.isEmpty ? ["drums", "bass", "vocals", "other"] : Array(declared)
+        let devSum = stems.reduce(Float(0)) { acc, stem in
             acc + max(0, stemEnergyDeviation(stem, in: track.stemEnergyBalance))
         }
-        return min(1, max(0, devSum / Float(affinities.count)))
+        return min(1, max(0, devSum / Float(stems.count)))
     }
 
     /// Returns the above-average energy deviation for a named stem (D-026).

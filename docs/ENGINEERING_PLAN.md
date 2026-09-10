@@ -234,19 +234,103 @@ phase is the remediation programme. His scope calls, 2026-09-04:
 - **Observe before fixing.** Capture and watch the flagged presets against *Low* before proposing a
   cause (PR.1), rather than working from the review notes directly.
 
-**The central finding — "sync is weak" is three different problems.** The review reads as one
-complaint repeated across ten presets. The routing sidecars say it is not:
+**RETRACTED 2026-09-09 — the "central finding" was a synthesis, and two of its three rows were wrong.**
+What stood here was a three-row cause table grouping the roster's complaints into mechanisms, built
+from Matt's 25 observations. Those observations were **never recorded in the repo** — the plan said
+"wrote 25 per-preset observations" and then carried only this synthesis plus four quoted fragments.
+With no artifact to check against, nobody could verify the interpretation. Matt, 2026-09-09:
+*"I'm not convinced that PR.2 is necessary; I worry that it is a misinterpretation of my notes."*
 
-| Cause | Presets | Evidence in the tree |
+The notes are now at **[`docs/PRESET_ROSTER_REVIEW_2026-09-04.md`](PRESET_ROSTER_REVIEW_2026-09-04.md)**,
+27 presets, verbatim. Against that source:
+
+| the row said | what the source and the tree say |
+|---|---|
+| *"No audio coupling declared at all — Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph. **Nothing to tune — there is no coupling to tune.**"* | **False for Gossamer**, checked 2026-09-09: four stem routes, a 32-wave pool, YIN pitch tracking, and shader reads of `mid_att_rel` ×5 and `bass_att_rel` ×3. It had no `audio_routes` **key** — a documentation gap, not an absence. Ten real routes now declared. The other four were never re-checked; **assume this row is unverified for all of them.** |
+| *"Coupled, but nothing ties motion rate to tempo — Filigree, Mitosis, Cytokinesis, Nacre, Floret… the single highest-leverage item in the review"* | Built on **one hedged sentence**: Filigree's *"Speed of music could be better tied to speed of the motion? **Perhaps**."* A question mark and a "perhaps" became a five-preset phase. **Cytokinesis does not belong at all** — its observations are *"Remove overlap between dividing cells"* and *"Hangs for seconds before restart"*, nothing about speed or sync. Nacre's actual complaint is *"Too fast overall"*, a constant. Floret's is *"kinda boring"*, variation. Only Mitosis (*"Speed is seemingly uniform"*) supports the mechanism. |
+| *"Coupled and beat-aware — the beat itself is wrong"* | Stands. Witchlight, Meniscus, Lumen Mosaic, Ferrofluid Ocean consume beat/bar phase; their symptoms are BUG-065 and BUG-028, engine work parked under D-206. |
+
+**A cluster the synthesis dropped entirely: colour.** Aurora Veil *"wish there was more color variation,
+purple is fleeting"*; Dragon Bloom *"the same saturated color across the visible light spectrum"*;
+Glaze *"more mixture and blending of colors. Also quite bright"*. Three presets, one theme — invisible
+because the chosen framing was *sync*, so everything was read through sync.
+
+**The lesson, which the new structure exists to enforce:** grouping by inferred cause produced a
+cheaper-looking phase (one mechanism beats five design problems) and lost the source. Matt,
+2026-09-09: *"We need deeper dives into each of the presets — better definition and better
+implementation."*
+
+---
+
+## Phase PR, restructured (2026-09-09) — one preset at a time
+
+**The unit of work is a preset, not a mechanism.** Each deep dive runs in four steps and does not
+skip forward:
+
+1. **Definition.** Quote Matt's observation from the roster review. Write the one-sentence musical
+   role (*"how is this preset's primary visual subject another instrument in the band?"* — the
+   `preset-session` skill's bar). Confirm the reference set exists, or curate it. **No code yet.**
+2. **Diagnosis, measured.** Before proposing a cause: are its routes *declared* (`audio_routes`), do
+   they *fire* (QG.1), and do the primitives they read *carry signal* on real material? Today
+   produced two cases where the answer to a "this preset doesn't respond to music" complaint was a
+   broken input, not a missing design — Gossamer's coupling was undeclared, and vocal pitch was
+   being discarded by a half-implemented algorithm (BUG-124). **A preset is not diagnosed until its
+   inputs have been measured.**
+3. **Implementation.** The change, with the routes declared so QG.1 keeps them honest.
+4. **M7.** Matt watches it live on material that suits it. A still cannot settle a temporal
+   complaint (PR.6's Glaze) and offline numbers cannot settle a felt one.
+
+**Ordering is Matt's**, not a scoring exercise. His stated preference 2026-09-09: not Cymatic
+Resonance (*"in good shape and is fine for launch"*), but *"a preset that shows promise but is a weak
+implementation right now"* — Gossamer named as the first candidate.
+
+**Standing rules for every deep dive.**
+- **Quote, never paraphrase.** Cite the preset's heading in the roster review. If an increment cannot
+  point at a sentence Matt wrote, it is inventing the requirement.
+- **One preset per increment.** No mechanism is rolled across presets before it has been proven on
+  one and approved.
+- **Report the negative result.** Three today: PR.2's premise, `stem_dependence` (built, measured,
+  reverted — the signal it needed does not exist), and pitch-window size. Recording them is what
+  stops the next session re-deriving them.
+
+### The register — every preset, Matt's ask, and where it stands
+
+Sourced from [`PRESET_ROSTER_REVIEW_2026-09-04.md`](PRESET_ROSTER_REVIEW_2026-09-04.md). "Ask" is
+abbreviated; the review is the authority. **Open** rows are candidate deep dives.
+
+| Preset | Matt's ask (abbreviated) | Status |
 |---|---|---|
-| **No audio coupling declared at all** | Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph | `audio_routes: []` in all five sidecars. These are exactly the five Matt flagged, and all five are `certified: false`. Nothing to tune — there is no coupling to tune. |
-| **Coupled, but nothing ties motion *rate* to tempo** | Filigree, Mitosis, Cytokinesis, Nacre, Floret | 8–13 declared routes each, **zero beat or bar routes** between them (Floret has `barPhase01` for a pulse but nothing driving rate). Motion speed is constant regardless of what is playing. |
-| **Coupled *and* beat-aware — the beat itself is wrong** | Witchlight, Meniscus, Lumen Mosaic, Ferrofluid Ocean | All four consume `beatPhase01`/`barPhase01`. Their symptoms are BUG-065 (live phase drift) and BUG-028 (meter assumed simple), not preset defects. |
+| **Gossamer** | *"Tuning for sync with music, has potential."* | 🔨 **in progress.** Ten real routes declared (2026-09-09); BUG-124 restored the vocal-pitch signal it is keyed to; Matt saw it live — *"looks pretty good"*. **Remaining:** BUG-060 (force-quit hang on switching to it, uninvestigated), certification (no curated references), the particles idea he raised, and whether "hue on vocal pitch" survives knowing the vocals stem carries periodic bleed on instrumentals. |
+| **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
+| **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
+| **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
+| **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
+| **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
+| **Nacre** | *"Slow down the speed slightly or make it match the tempo of the music. Too fast overall."* | ⏳ **open.** Primary complaint is a constant that is too high; tempo-matching is his *alternative*, not the requirement. |
+| **Floret** | *"Pulses to the beat but more connection could be obvious."*; *"Mesmerizing but also kinda boring."* | ⏳ **open.** Variation/longevity, not rate. |
+| **Cymatic Resonance** | *"One of the best to watch… I want to see more variation of the patterns it creates."* | ⏸ **deferred by Matt** (2026-09-09): *"in good shape and is fine for launch."* |
+| **Witchlight** | *"Inconsistent with downbeat. Want more looping."* | ⏳ **partly blocked.** Downbeat half is BUG-065/D-206 engine work, parked. "More looping" is preset work and is not blocked. Sequence question answered by PR.8. |
+| **Aurora Veil** | *"Looks great… Wish there was more color variation, purple is fleeting."* | ⏳ **open — colour cluster.** |
+| **Glaze** | colour: *"more mixture and blending of colors. Also quite bright"* | ⏳ **open — colour cluster.** Framing half ✅ (PR.6). |
+| **Dragon Bloom** | *"the same saturated color across the visible light spectrum"* | ✅ PR.5.1–5.4; residual parked as **BUG-123** on Matt's call. Colour cluster's third member. |
+| **Fata Morgana** | *"Too dark, want more reflection of the pulsars in the water"*; sky/water ratio; *"not apparent"* sync | 🔨 **partly done.** Sky/water ✅ (PR.6, approved). **Open:** too dark, pulsar reflection, sync. |
+| **Cytokinesis** | *"Remove overlap between dividing cells."*; *"Hangs for seconds before restart"* | ⏳ **PR.4, blocked.** No repro of the hang in any recorded session (max frame gap 199 ms). Needs a capture from Matt. |
+| **Meniscus** | *"Sync is weak, puddle ripple looks good but timing could be improved"* | ⏳ **partly blocked** — timing is the parked beat work. |
+| **Lumen Mosaic** | *"Sync could probably be improved. Downbeat and beat."* | ⏳ **blocked** — parked beat work (D-206). |
+| **Ferrofluid Ocean** | *"Brilliant sync… but everything seems like 4/4 time."* | ⏳ **blocked** — BUG-028, meter assumed simple. |
+| **Volumetric Lithograph** | *"Not strong sync with music"* | ⏳ **open.** Also excluded from selection on tier 1 (24 ms > 16.6 ms budget) — it may simply not be appearing. |
+| **Ricercar** | *"Need to test with more tracks. Not clear or strong sync with Bowie's Subterraneans"* | ⏳ **open, cheapest first step:** test on other material. Subterraneans is near-beatless. |
+| **Stave** | *"A little hazy. Maybe make a little crisper? Not sure."* | ⏳ **open**, low confidence in the ask — confirm with Matt before work. |
+| **Fractal Tree** | *"dances along with the music pretty convincingly. Might consider adding additional trees"* | ⏳ **open**, an enhancement not a defect. |
+| **Murmuration** | *"Beautiful. Cloud could be bigger"* | ✅ **PR.6, approved live.** |
+| **Nimbus** | *"Doesn't do much and yet people seem to really like it"* | ⏸ no ask. |
+| **Skein** | *"Fine enough"* | ⏸ no ask. |
+| **Spectral Cartograph** | *"Opportunities to clean up eventually"* | ⏸ deferred; it is `is_diagnostic`, so it never auto-installs. |
+| **Staged Sandbox** | *"Get rid of it."* | 🔨 hidden from the cycle at PR.0 rather than removed — **and PR.9 then retargeted the staged harness template onto it**, so infrastructure now depends on something Matt asked to be gone. Needs a decision. |
+| **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
 
-The middle row is the single highest-leverage item in the review: one mechanism, five presets, and
-it answers four separately-worded complaints ("a movie on a loop", "speed is seemingly uniform",
-"too fast overall", "pulses to the beat but more connection could be obvious"). The third row is
-engine work that is currently **parked** (D-206) and must not be worked around inside the presets.
+**Nine of the open rows are blocked on parked engine work** (D-206 beat drift, BUG-028 meter). Those
+are not preset deep dives and must not be worked around inside presets.
 
 **Material note that shapes PR.1.** *Low* is two half-albums: tracks 1–7 are rhythmic (Speed Of
 Life, Breaking Glass, What In The World, Sound And Vision, Always Crashing In The Same Car, Be My
@@ -307,6 +391,10 @@ and the grader misreading quiet music is noted as a separate possible defect.
 **Done-when:** ✅ for the timing half. ⏳ the look half reopens when a video-on *Low* capture exists;
 ⏳ the per-preset production-path half reopens when the harness reaches the other paradigms (PR.10).
 
+**PR.2 — tempo-scaled motion rate — ❌ RETIRED 2026-09-09 (Matt).** *Superseded by the per-preset register above; the row below is kept for its measurements and its hazard note.*
+
+**Why retired.** It generalised **one hedged sentence** — Filigree's *"Speed of music could be better tied to speed of the motion? Perhaps."* — across five presets, one of which (Cytokinesis) Matt never made the complaint about. Matt: *"I'm not convinced that PR.2 is necessary; I worry that it is a misinterpretation of my notes."* **What survives:** rate-coupling is a legitimate hypothesis for **Mitosis** (*"Speed is seemingly uniform"*) and, hedged, for **Filigree** — to be tested inside those presets' own deep dives, one at a time. Nacre's *"Too fast overall"* is a constant, not a coupling. Its gate re-check (2026-09-09) and the BUG-097 hazard note below remain valid and should be read by whoever picks up either preset.
+
 **PR.2 — tempo-scaled motion rate** (the main lever; **gated on PR.3, not just PR.1** — PR.1 §3.3 measured the grid's TEMPO wrong on *Low*'s ambient side, and a motion rate read off a wrong BPM bakes in a compensation for a bad number). Give Filigree, Mitosis,
 Cytokinesis, Nacre and Floret a motion rate that tracks the cached grid's tempo, so a fast track
 visibly quickens and a slow one settles. Ship **Filigree first as the single proof** — it is the
@@ -317,6 +405,44 @@ render and fixture rates all differ and a steady-rate fixture cannot see the err
 Filigree's motion rate measurably differs between a fast and a slow track from the same capture
 harness, the coupling is declared in the sidecar's `audio_routes` (so QG.1 route coverage gates it),
 and Matt has confirmed the Filigree proof before any other preset is touched.
+
+**Gate re-checked 2026-09-09 (Matt: *"check if pr.2 is unblocked"*) — PARTIALLY CLEARED, and the
+remaining half need not block PR.2.** The gate was PR.1 §3.3: *"the grid's tempo is wrong on the
+ambient side"*, Weeping Wall reading 142.3 BPM.
+
+**The instrument could not ask the question.** `analyzeBeatGrid(samples:sampleRate:)` — the two-arg
+convenience — defaults to `wholeTrack: false`, and its own doc keeps it that way "so the many
+existing call sites (tests, diagnostics, **BeatBench**) are unchanged". So BeatBench measured the
+30 s clamp, not the local-file path PR.12 actually changed. A first re-measure reproduced 142.25 on
+Weeping Wall and would have reported "still broken" from the wrong arm — the span-artifact class
+again. BeatBench gained `--whole-track` to close that hole.
+
+**Measured on the whole-track grid (`--whole-track`), *Low*:**
+
+| track | BPM | beatsPerBar | barConfidence | grid span |
+|---|---:|---:|---:|---|
+| Speed Of Life | 116.05 | 4 | **1.00** | 3.3-164.5 s of 167 |
+| Sound And Vision | 106.28 | 4 | **1.00** | 1.6-179.9 s of 183 |
+| Breaking Glass | 94.87 | 2 | 0.73 | 1.1-108.6 s of 113 |
+| Art Decade | 78.52 | 4 | 0.86 | 0.4-220.8 s of 227 |
+| Warszawa | 75.08 | 4 | 0.43 | 0.5-368.4 s of 384 |
+| **Weeping Wall** | **171.73** | **1** | **0.37** | 0.0-203.5 s of 208 |
+
+- **Coverage is fixed.** Grids span whole tracks, not 30 s. PR.12 works.
+- **The rhythmic side is trustworthy** - barConfidence 1.00 on the 4/4 material.
+- **The ambient side is still not.** Weeping Wall answers `beatsPerBar 1` - BUG-117's "no bar
+  information" - at confidence 0.37, and its BPM moved 142.25 to 171.73 between the two arms. Two
+  answers 20 % apart on one file is itself the finding; neither is a foundation for a motion rate.
+  That is the wrong-metrical-level gap D-210 declined and FT.3.1 owns. It is not closing soon.
+
+**Why PR.2 is nonetheless unblocked.** The gate's fear was *baking a compensation for a bad number
+into a preset*. The grid now carries the signal needed to avoid that: `barConfidence`, and
+`BeatGrid.hasBarInformation` (BUG-117) which makes "this grid does not know" expressible rather than
+silently reading as 1 beat per bar. So the mechanism ships as **tempo-scaled when the grid is
+confident, default rate when it is not** - Weeping Wall gets the fallback, Speed Of Life gets the
+coupling, and no compensation is baked in anywhere. **Both tracks in the done-when's fast/slow pair
+should be confident ones** (e.g. Speed Of Life 116 vs Art Decade 78.5) so the proof measures the
+mechanism rather than the gap.
 
 **PR.3 — chasing the downbeat, not tolerating it** 🔨 (2026-09-04). **Scope changed by Matt
 mid-increment.** This began as "surface the corroboration and let Matt decide" and then as a
@@ -650,12 +776,136 @@ tone-map operator, on a full-track *Low* capture rather than a still, establishe
 the cause; if it is, the four presets share the operator and each gets its exposure set where Matt
 puts it; if it is not, that negative result is recorded before any brightness parameter is touched.
 
+**PR.5.1 — Dragon Bloom: the dither and the post-invert brighten ✅ (2026-09-08, `762e8862`).**
+**The tone-map candidate above was not the cause, and the A/B PR.5 asked for was run the other way
+round:** the butterchurn oracle was set to comp-identity (`invert 0, echo_alpha 0, gammaadj 1` — the
+preset carries no custom comp shader, so those baseVals genuinely disable it) and compared against
+our *accumulator*, read back through `HARNESS_DUMP_ACCUMULATOR`, on the same track and the same
+statistic. That is the comparison eleven earlier hypotheses lacked: every one of them reasoned about
+the field *through* a comp that is not invertible.
+
+The field was already at the oracle's luma (0.294 vs 0.26–0.57) and short on saturation (0.634 vs
+0.74–0.89) **before any comp ran** — so the wash-out started upstream of the tone-map question. Two
+defects, both fixed:
+
+1. **The source's `warp_18..19` dither was load-bearing, not polish.** D-137 deferred it as
+   "anti-banding polish, not the fill" — a first-principles claim with no rendering proof, the exact
+   FA #65 pattern. The R→G→B transfer above it is hard-gated at `(ret - 0.05)·99`, so pixels resting
+   just under 0.05 never transfer, never cycle hue, and integrate toward grey. Restoring it moved
+   field saturation 0.634 → **0.68–0.79** and luma 0.294 → **0.25–0.33**, both inside the oracle's band.
+   `noiseLQ` is r8Unorm — single-channel — so the source's RGB lookup is three decorrelated taps;
+   reading `.rgb` gives green and blue a constant 0, i.e. a −0.029/−0.078 per-frame drain, which
+   collapsed luma 4× on the first attempt.
+2. **Our comp carried a term butterchurn's does not:** `ret *= 1 + 0.12·bp`, applied *after* the
+   invert. The field is dark, so the invert lands near 0.74 and the darkest background inverts to
+   ≈1.0; ×1.12 pushes everything above 0.893 through the ceiling, and a clipped pixel is white with
+   the hue gone. Display clipped **0.831 → 0.353** (oracle 0.017). The beat still reads through the
+   zoom pump, which is geometry and cannot clip.
+
+**Decay stays butterchurn-faithful** (default warp only). Restoring it for the custom-warp path was
+measured and starves the field to saturation 0.254 / luma 0.116 — D-137's *observation* was right
+even though its conclusion, deleting the loop's only sink, was not.
+
+**Falsified on the way, recorded so they are not retried:** `modVol` is not starving the strands
+(saturated at 1.0 for 81–91 % of frames, mean 0.88–0.94 across all three stem arms), and
+"decay restored + stronger injection" is not the pair.
+
+**Not finished.** Display saturation barely moved (0.262 → **0.274** against the oracle's 0.67) and
+the lower field still blows out to white. The tone-map hypothesis in PR.5 is therefore still live for
+that residual, and is now testable against a field that is known-good. **PR.5's done-when is only
+half met:** clipping is confirmed as *a* cause and is halved, but the four-preset shared-operator
+question is untouched. **Gate: Matt has not seen this live.**
+
+**Follow-up (real, not cosmetic):** `DragonBloomMVWarpAccumulationTest` is env-gated and renders
+nothing — it passes in 0.001 s. There is no golden on Dragon Bloom's output, which is why the
+wash-out shipped unnoticed and why PR.5's A/B had to be built by hand.
+
+**PR.5.2 — the white-out was a TRANSIENT, and the mean was hiding it ✅ (2026-09-08, `4d5f75ff`).**
+PR.5.1 reported the residual as steady-state wash. It is not: measured per-frame rather than
+averaged over the track, display `nearWhite` runs **0.985 → 0.166 → 0.000** at frames 0 / 400 / 800.
+Dragon Bloom opened on a near-fully-white screen and faded in over ~10 s, every time it appeared —
+which is why steady-state numbers kept looking acceptable while Matt kept reporting wash-out. **A
+metric averaged over the track cannot see a transient; that is the same class of error as the span
+artifact and the `nearWhite` label in the replay harness still carries the old, wrong gloss
+("= EMPTY accumulator"), which should be corrected.**
+
+Two causes, both closed: the feedback field was cleared to **black** and the comp inverts it
+(butterchurn's `loadPreset` blends and keeps the previous buffers — it never clears, so our clear is
+a port defect); and **BUG-115** ran the per-frame zoom at 1.024 median / 1.070 p90 against the
+source's 0.99951, evacuating the frame faster than the strands refilled it, with the emptied corners
+driven to black by the R→G→B fade and stuck there — below the 0.05 transfer gate no push fires, so
+black is an absorbing state.
+
+Result on the 20:12 session: nearWhite **0.241 → 0.091**, saturation 0.354 → **0.441**, clipped
+0.191 → **0.150**, luma 0.748 → **0.700**.
+
+**Falsified first, recorded so they are not retried:** inverted black field regions (field
+`nearBlack` is 0.000–0.005), the strand `flare` term (0.182 vs 0.182), additive strand blending (the
+reference's waves are all `additive=0`, confirmed against the live oracle), and modVol starvation.
+
+**Gate: still not seen live.** Every number here is offline replay of Matt's own capture.
+
+**PR.5.4 — the blinding white was a DRAIN, and the reference's push is the cure ✅ (2026-09-08).**
+Matt on PR.5.2: *"better with respect to color, although there is still a sizable presence of blinding
+white. unfortunately, I'm sensing less connection between visuals and music."* Both true, both PR.5.2:
+its outward-only, un-kneed breathing was flat on 64 % of frames (zoom spread 0.0741 → 0.0053 — the lost
+connection), and with no outward push the field DRAINED wherever the strands were not and on every
+quiet passage; the comp inverts a drained region to white. **BUG-122 was filed on a false premise**
+("a vertical split the reference does not have"): the oracle's flat profile was one 120-frame sample.
+**Every earlier oracle time-series was a single-moment sample** — `render()` does not advance the audio
+and the hidden Browser pane throttles rAF and timers — so the oracle was rebuilt as an offline drive
+(`render({audioLevels, elapsedTime})` from the decoded track at 60 fps; `tools/dragon_bloom_reference/
+index.html` gained `__seek`/`__pos`). Measured that way on Seven Nation Army: the reference swings
+top/bottom **0.30–2.59** (harder than ours) with **nearWhite 0.000 through the drop**, and its
+`zoom *= min(1.05, max(1, max(bass,treb)))` sits at the 1.05 cap on **60 %** of frames, mean **+3.15 %**.
+**Fix:** always-on +3 % outward baseline, bass deviation to the 5 % cap. Session 21:12: nearWhite
+**0.448 → 0.000 on every sampled frame**, saturation 0.52. **PR.5.2's assertion that the old constant
+push "evacuated the frame" was inferred, not measured, and wrong** — BUG-115's real defects were the
+FA #31 routing and the uncapped 7 %. Nine more hypotheses falsified and recorded in BUG-122's entry;
+the y-mirrored strand set that fixed the symptom was tested and rejected as unfaithful and unnecessary.
+**Gate: Matt has not seen PR.5.4 live.** **Seen 2026-09-08 22:41: *"Color is better but still washed out."* Correct — and the
+metric could not see it. Same track, reference luma 0.37 / saturation 0.89; ours 0.57 / 0.65. `nearWhite`
+is blind to pale. **Matt: "stop and proceed with another PR increment."** Residual parked as BUG-123
+(one bounded increment if ever reopened). **PR.5 is CLOSED at this state:** colour restored, cold-start
+flash gone, quiet-passage white-outs gone, coupling restored; tone still paler than the reference.
+
 **PR.6 — framing.** Murmuration's flock takes more of the frame; Fata Morgana's horizon moves so
 sky occupies a larger share than water, letting the pulsars grow and reflect; Glaze stops jumping
 between the top and bottom of the screen and keeps its motion inside the canvas. Camera and
 composition parameters — the cheapest items in the whole review and each an unambiguous win.
 Likely folds into PR.5 as one look increment. **Done-when:** each is a before/after sheet Matt has
 approved.
+
+**PR.6 — implemented 2026-09-08, pending Matt's approval of the sheets.** Three parameter changes,
+each built to his exact words, no design invention:
+- **Murmuration** — *"flock takes more of the frame"*: `viewScale` 1.05 → **1.30**
+  (`Murmuration3DGeometry.swift`); the roam clamps scaled ×0.81 so the swelled flock stays framed
+  (`Murmuration3D.metal`). Flock bounding box ×1.24 in both axes on the audio sequence;
+  `test_framed` ("stays framed throughout") passes at the new zoom. Lever if he wants more: 1.5.
+- **Fata Morgana** — *"horizon moves so sky occupies a larger share than water"*: the source pins the
+  horizon at v = 0.5; the floor perspective, sky/water select, reflection sample and blue gradient all
+  hang off one `uv1.y`, so a single constant `kFataHorizonV = 0.62` moves the whole horizon
+  consistently. Measured: first water row 0.38–0.44 → 0.50–0.56 of the frame. **Fata Morgana has no
+  curated reference set** (`docs/VISUAL_REFERENCES/` has none) — a framing change built to Matt's
+  words does not need one, but certification work would.
+- **Glaze** — *"stops jumping between the top and bottom of the screen and keeps its motion inside
+  the canvas"*: the lift term could push the spring anchor to ≈1.7, so the tail slammed the top wall
+  and bounced (the jump), and the seed band (seedY ± 0.16) left the canvas at either wall. Anchor
+  bounded to [0.30, 0.70], the y-walls moved in to [0.22, 0.78] so the band stays on-screen with
+  margin; x is untouched. **And the cause, not just the symptom:** simulated to steady state the source's gravity (1.0) makes the WALLS the attractor — the tail rests at y 0.05 in silence and 0.97 under energy, so the jump is the tail flipping between two rests. The first cut bounded the anchor alone and the GLAZE.3 lift test caught it (both cases pinned at the upper wall — lift removed, not bounded). Gravity 0.3 lets the tail follow the anchor inside the band: silence ≈ 0.36, energy ≈ 0.55, nothing pinned; GLAZE.3 passes; motion gate on 600 frames: 0 spikes, 0 frozen.
+**✅ APPROVED 2026-09-09 (session `16-46-30Z`), Matt: *"All three look good."*** Seen live, not from the
+sheets — Murmuration, Fata Morgana and Glaze all appear in that session. **PR.6 is COMPLETE**; its
+done-when (each a before/after sheet Matt has approved) is met for all three.
+
+Glaze was the one that needed the live look: its complaint was *jumping*, a temporal defect a still
+cannot show, and the first fix attempt had flattened the vertical response rather than bounding it.
+Approved with gravity 0.3 — a deliberate departure from the source spring, because the request was
+itself a departure from the source behaviour.
+
+**The same session independently confirms PR.8.3 at roster scale:** 18 distinct presets reached in one
+pass, against the 2 the PR.8 ranked walk could reach. The PR.4 hang is still queued behind a fresh
+capture — no stall appears in any recorded session (max frame gap 199 ms), so there is nothing to
+root-cause yet.
 
 **PR.7 — variation and longevity** (deliberately last). Cymatic Resonance (more pattern variation —
 and it is the preset he rates highest, *"one of the best to watch"*), Witchlight (more looping),
@@ -671,6 +921,96 @@ the sequence vs. last?"* — that is `SessionPlanner` ordering. Witchlight's sid
 increment to establish whether opener choice reflects any stated intent or falls out of scoring.
 **Done-when:** the opener rule is written down or shown not to exist, and Matt has a recommendation.
 
+**PR.8 — answered 2026-09-09.** *"Why is Witchlight first in the sequence vs. last?"* Three findings,
+each from the production code or the session logs, not a model of them:
+
+1. **There is no opener rule.** `SessionPlanner` is a greedy forward walk; track 1 gets the highest
+   `DefaultPresetScorer` total under an empty history (no family penalty, no cooldown) **plus seeded
+   noise of ±0.02** (`selectPreset`, seed = `UInt64.random` per session). The top of the ranking sits
+   within 0.02–0.04 of itself, so the opener is a per-session coin toss inside that cluster. Run
+   through the production scorer on the cached profiles (`PlanRankingDumpTests`, env-gated
+   `PLAN_DUMP_META=<StemCache …/metadata.json>`): Seven Nation Army → Arachne 8/12 seeds, Filigree
+   4/12; Dance Yrself Clean → Arachne/Fata Morgana/Lumen Mosaic/Dragon Bloom within 0.05. **Witchlight
+   ranks 23rd of 30** on Seven Nation Army (total 0.731 vs 0.872). The planner never picks it.
+2. **`section_suitability` is dead weight.** `makeSections` emits `section: nil` for every segment
+   since section detection was removed (D-170), and `sectionSuitabilitySubScore` returns 1.0 for a nil
+   section — so a quarter of every preset's score is the constant 1.0, and Witchlight's
+   `[ambient, bridge, comedown, buildup]` declaration decides nothing. Related asymmetry: the five
+   presets that declare `stem_affinity` (Arachne, Fata Morgana, Lumen Mosaic, Dragon Bloom, Volumetric
+   Lithograph) score 0.88–1.00 on that quarter for energetic tracks while everyone else scores a flat
+   0.50 — which is why those five own the top of both dumps.
+3. **The sequence Matt sees is the immediate-nudge walk, and it is alphabetical.** The keyboard's
+   immediate nudge goes through `reactiveWalkNudge`, which sorts the catalog **by name** (the protocol
+   doc says "scorer-ranked order"; the implementation does not). The launch default is Waveform; the
+   only name after "Waveform" is "Witchlight", so the first press gives Witchlight, and the next press
+   wraps to Arachne → Aurora Veil → Cymatic Resonance → Cytokinesis → Dragon Bloom → Fata Morgana —
+   exactly the 21:12 and 22:41 session logs, one second apart. Witchlight is *last* alphabetically
+   and *first* after Waveform. Once a key is pressed, `manualPresetOverrideThisTrack` suppresses the
+   planned install for the rest of the track, so the planner's real opener is never seen.
+
+**Unresolved, flagged not chased:** in the 19:10 session (no early keypress) the planned preset did
+not install at wire (0.6 s) either — Dragon Bloom appeared **150 s** after `wire active`. The
+`applyPlannedSegment` guards look satisfied on first call; the cause needs an info-level capture
+(`Orchestrator: applied planned preset`), which the unified log does not persist by default.
+
+**Recommendation (product-level, default first):**
+- **Default: make the immediate nudge walk scorer-ranked order**, as its own contract says — then
+  "next" from launch gives the planner's best fit for the track, not the alphabetical neighbour of
+  the diagnostic default. One line in `reactiveWalkNudge`. Trade-off: the walk order changes per
+  track; the current alphabetical walk is at least predictable.
+- **Fix or retire the dead quarter of the score.** Either drop `weightSectionSuitability` and
+  re-normalise (mood 0.40 / tempo 0.27 / affinity 0.33), or gate it on real section data if that
+  ever returns. Today it is a constant pretending to be a signal.
+- **Decide whether declaring `stem_affinity` should be an advantage.** It currently is a large one;
+  if not intended, score undeclared presets at the track's mean deviation rather than 0.5.
+- **PR.8.1 (small): capture one session with info logging** to see why the planned install waits.
+
+**PR.8.2 — the ranked walk was a regression, found by Matt in 25 minutes ✅ (2026-09-09).** *"I was
+unable to access Arachne and a dozen other presets were missing as well."* PR.8's one-line change
+made the walk unusable, and it shipped and merged.
+
+**Mechanism.** `reactiveWalkNudge` ranked through `rank(...)` under the LIVE scoring context.
+`familyRepeatMultiplier` penalises the **current** preset too — its family is by definition the
+current family — so each press sank the current preset to the bottom of a freshly-computed ranking
+and `(currentIdx + 1) % count` wrapped to index 0. The walk oscillated between the top two entries
+of the moment. Matt's log: `Aurora Veil → Dragon Bloom → Aurora Veil → …`, later
+`Ricercar ↔ Fata Morgana` once the live adapter had moved him elsewhere. Seven distinct presets
+appeared in his session because the planner and mood-override switches changed *which pair* the walk
+then bounced between. Nothing was missing from the build — all 30 sidecars are bundled.
+Second defect in the same line: `filter { $0.1 > 0 }` dropped every planner-excluded preset from a
+**manual override** path — all three diagnostics categorically, plus Volumetric Lithograph
+(24 ms > the 16.6 ms budget). The alphabetical walk it replaced had reached those by accident.
+
+**Fix.** `DefaultPresetScorer.walkOrder(presets:track:context:)` (new file, `PresetScorer+Walk.swift`):
+ranks by track fit with `currentPreset`/`recentHistory` cleared, so the order is stable under the
+walk, and returns **every** preset with excluded ones sorted last and ties broken by name.
+`PresetWalkOrderTests` pins all three properties and was **verified to fail against the PR.8 code**
+— reaching 2 of 7 presets, the same ratio Matt hit.
+
+**What this cost and what it says.** PR.8's closeout claimed the walk change as an unambiguous win on
+the strength of a ranking dump; nothing exercised the walk itself. A one-line behavioural change to
+an interactive path shipped with no test of that path, and the person who found it was Matt.
+
+**PR.8.3 — the walk is alphabetical again, on Matt's call ✅ (2026-09-09).** *"I just want the presets
+to be listed in alphabetical order, so that I can easily navigate to the preset I want."* Ranked order
+is per-track and therefore unpredictable to navigate — the trade-off PR.8's own recommendation named,
+now settled by living with both. **The ordering reverts; the reachability fix stays:** the walk covers
+every loaded preset with no eligibility filter, which is what actually made Arachne unreachable.
+`DefaultPresetScorer.walkOrder` and its engine test are deleted — a `sorted { $0.name < $1.name }` in
+the router needs neither. Both properties are now pinned in `DefaultPlaybackActionRouterTests`
+(alphabetical stepping, and full reachability including diagnostics and over-budget presets), which
+is where a router behaviour belongs and where PR.8 should have put a test in the first place.
+
+**Matt: "do all three" — done 2026-09-09 (D-245).** Immediate nudge walks scorer-ranked order; the
+section quarter is gated on real section data (three-weight normalisation when nil); undeclared stem
+affinity scores the mean deviation. Result on the measured tracks: Seven Nation Army opener Filigree by
+0.035 (outside the noise), Dance Yrself Clean a Cytokinesis/Cymatic Resonance cluster. Goldens
+regenerated; the two "neutral 0.5" affinity tests restated to the new contract; the D-080 zero-profile
+guard unchanged. PR.8.1 remains open.
+
+
+**PR.9 — certify or remove — ⚠ REFRAMED 2026-09-09 (Matt).** The binary is malformed: *"we will not be able to disposition without making changes to each preset — they do not pass M7 review and most of these presets need better definition overall."* There is a **third state — needs definition** — and it is true of most of the set. Asking "certify or remove?" of Nebula and Plasma (55–77 line day-one shaders with no reference set) forces a decision the artifact cannot support. **The gate still stands for the public beta**; what changed is that a disposition is now the *output* of a deep dive, not a precondition. Arachne was dispositioned (removed, D-246) precisely because it had been looked at live. The row below keeps the inventory and the per-preset facts, which remain accurate.
+
 **PR.9 — certify or remove every uncertified preset** (pre-public-beta gate, Matt 2026-09-04).
 Seven presets are `certified: false`: Gossamer, Membrane, Nebula, Plasma, Spectral Cartograph,
 Arachne, Waveform. **None ships in that state** — each is either certified against the §12 fidelity
@@ -680,6 +1020,54 @@ coupling from scratch, not tuning it: this is preset-authoring work per preset, 
 honest default for any that does not earn the effort. **Done-when:** every `certified: false` preset
 has an explicit certify-or-remove decision from Matt with a date, and none remains undecided at the
 beta cut.
+
+**PR.9 inventory ✅ (2026-09-09) — facts gathered; every disposition is Matt's call, undecided until he says.**
+
+**The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
+which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
+diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
+to it. That leaves **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
+Plasma, Waveform.
+
+**Why Matt is seeing them at all.** `uzume.settings.visuals.showUncertifiedPresets = 1` in his defaults, so
+the uncertified six are in his roster today. The five zero-route presets PR.1 flagged as *"no audio coupling
+declared at all"* are **exactly** this set minus Waveform — the roster complaint and the certification gap
+are the same fact seen twice.
+
+| Preset | Size / history | What it is | State |
+|---|---|---|---|
+| **Waveform** | 101 lines, 2026-04-06, 2 commits | A spectrum-and-waveform bar display — a signal readout rather than a visualizer | **Load-bearing:** `VisualizerEngine.swift:936` installs it as the launch default before any plan wires, and `PresetLoaderTests` asserts it exists. Removing it needs a replacement default first. |
+| **Nebula** | 77 lines, 2026-04-06, 2 commits | Radial starburst on black | Day-one demo shader; zero routes |
+| **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
+| **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
+| **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
+| ~~**Arachne**~~ | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | **REMOVED 2026-09-09 (D-246), Matt's call.** Seen live (session `15-08-12Z`): *"Arachne is visible, but it's still a massively broken preset."* Zero routes, no reference images, broken render, eight prior design iterations — certifying meant authoring it again. ~6,100 lines deleted. |
+
+**None has curated reference images** — every `docs/VISUAL_REFERENCES/<preset>/` in this set holds a README
+and nothing else, so there is no fidelity target to certify *against* without curating one first.
+
+**What certifying one costs.** For the five zero-route presets it is not tuning — there is no coupling to
+tune. It is designing the musical role, curating references, authoring the routes, and running the §12
+rubric: preset-authoring work per preset, comparable to a preset uplift. Arachne additionally needs its
+render verified live before any of that is worth starting.
+
+**Arachne's case is now fully informed** (2026-09-09). It is the largest investment in the uncertified set —
+1652 lines, 48 commits, an 872-line design doc whose name (`ARACHNE_V8_DESIGN`) records eight prior
+iterations — and it renders broken, has zero audio coupling, and has no reference images to certify
+against. "Certify" here is not tuning or repair; it is authoring the preset again. That is the trade-off
+Matt is deciding, not a recommendation from this row.
+
+**Dispositions so far.** **Arachne — REMOVE, 2026-09-09 (D-246).** Five remain undecided: Gossamer
+(carries BUG-060), Membrane, Nebula, Plasma, and Waveform (load-bearing as the launch default — removing
+it needs a replacement chosen first).
+
+**A consequence of the first removal, for the record:** the `staged` paradigm now has **no production
+preset** — only the two diagnostic sandboxes. Its reference template was retargeted to Staged Sandbox.
+If `staged` is to stay a supported paradigm, it needs a production preset or an explicit note that it
+is infrastructure awaiting one.
+
+**Not decided here.** Per-preset disposition is Matt's; this row records the facts and stays open until he
+gives one. PR.9's done-when is unchanged: an explicit certify-or-remove decision, with a date, for each.
 
 **PR.10 — session-driven replay across every paradigm** ✅ (2026-09-04). **The premise in PR.1 was
 half wrong and the increment is much smaller than it scoped.** PR.1 reported that 23 of 26 flagged
@@ -1508,38 +1896,6 @@ name, and where the claim is "these N things are duplicates", measure it rather 
 the list.
 
 ### Increment RECON.22 — dead decoder surface + the small verified deads ✅ (2026-08-26)
-
-Closes the preset-audit backlog: Tier-1 items 11 and 12, the last two of the twelve. **−1,151 lines across
-49 files, no pixel change** (PresetRegression's 29-preset dHash gate green throughout, so nothing needs
-re-certification).
-
-**Item 11 — the sidecar/decoder surface.** Four decoder capabilities that every sidecar paid for and no
-shader read. `FerrofluidParams` / `thin_film` was decoded and range-validated while `FerrofluidOcean.metal`
-hardcoded the same constants (the registry's thin-film row now names the MSL constants as the single source
-of truth). The legacy `use_*` boolean synthesis served only hypothetical out-of-tree sidecars — all 29
-in-tree sidecars declare `passes`. `beat_source` was set by 27 sidecars and read by none (`beatValue` is
-hardcoded to `max(beatBass, beatComposite)`), so the key came out of every sidecar with the enum: a sidecar
-should not claim a control that isn't wired. The `feedback_pixel_format` name fallback met its own
-delete-when condition, and `mesh_additive_blend` went to 0/29 when Arachne's strands moved to a staged pass.
-
-**Item 12 — six unrelated pockets with no consumer.** FerrofluidParticles' Phase-2c layer (zero-caller
-`encodePerFrameUpdate` overloads over the rejected D-127(d) force model, reachable only from its own two
-tests — deleted per D-203; the live bake path is untouched); the engine's hand-synced copy of `MVWarp.metal`
-(the live pipeline compiles from `PresetLoader+WarpPreamble`, so the copy was a drift hazard, not a
-reference); seven `SessionFrame` columns parsed as *required* and never read, which made replay hard-fail on
-sessions missing columns nobody consumed; Skein's `colorFromFamily`, whose every branch was gated on a flag
-no production caller set after FL.10 gave Ricercar its own echo geometry; six shader helpers with no call
-site; and the certification/loader crumbs (unreachable second descriptor fallback, unused store singleton +
-injection hook, write-only `p95FrameTimeMs`, the superseded `.exempt` status, a Stalker filter for a deleted
-file, `placeholderDesc`, the 4-line `Presets.swift`).
-
-**A green build is not a green Metal library.** `swift build` compiles no shaders, and per-preset suites
-compile only preset libraries — so deleting `FerrofluidUpdateUniforms` from the *engine* shader library while
-`fo_canonical_position` still took it as a parameter passed both. The failure surfaced only in
-`closeout_evidence.sh`, as 56 unrelated GPU tests failing on `MTLLibraryErrorDomain`. Any `Renderer/Shaders/`
-edit now needs one engine-library GPU test (`--filter IBLManagerTests` is a 9-test, sub-second smoke) before
-it can be called verified.
-
 ### Increment PERF.17 — the frame-budget harness timed the roster at the AGC mean ✅ (2026-08-27)
 
 **Done-when:** a preset whose expensive layer is gated on runtime state is measured with that layer ON. BUG-110's follow-up asked for "a note or a mechanism for state-gated layers" in `PresetFrameBudgetTests`; the mechanism exists (`openTheGates`, for Fractal Tree) and the real finding was that the defect is not Skein-shaped. **The shared drive built every band at exactly `0.5` and left every `Rel`/`Dev` field at its zero-initialised default** — `bassRel = (bass − 0.5) × 2` is zero at 0.5 by construction, `StemFeatures` derives nothing in its initialiser — so the whole roster was timed at the one point where **D-026's deviation primitives, the default primary driver for every preset, are identically zero**. Skein's pour-commit machine consequently never committed a second pour: the breakpoint ring held **1** where playback holds 16, `skein_geometry_fragment` skipped most of Layer A, and Skein read **5.31 ms — cheapest third of the roster** — against 17.06 ms at one breakpoint and 55.65 ms at sixteen in `SkeinLineCostTests`. The drive now sweeps the bands (0.20–0.95, so `Dev` spans 0–0.9 — sized against real material's p99 ≈ 0.85 per FA #73, not against 1.0) and derives Rel/Dev with the analyzer's own formula rather than hand-setting them, since a `bassDev` that disagrees with its `bass` is its own trap; stem dominance rotates on a ~1 s cycle with a decisive leader, because an argmax route reads a fixed dominance as "nothing ever changed". `MultiPassRenderHarness.warmSkein` then ticks the state to a full ring before the timed frames — CPU-only, stopping on the ring rather than a frame count so it survives a `minPourTau` retune. **Skein 5.31 → 13.19 ms, 4th most expensive.** `skeinIsMeasuredMidPainting` gates it and carries a COLD control (a fresh state still holds 1 breakpoint after the 24 timed frames), so deleting the warm-up goes red rather than both halves passing vacuously. All 21 baselines re-recorded in one isolated run; **several moved DOWN** (Nebula/Plasma/Waveform 9.5 → 6.3), because a band sweeping 0.2–0.95 is not the same work as one pinned at 0.5 and the old figure was no more correct for being higher. Nothing tripped the ratio gate or the absolute ceiling. Engine suite green at 1873 tests.
@@ -1587,134 +1943,17 @@ Session `2026-08-27T16-17-34Z`: Skein at 3840×2160, `frame_gpu` p50 **flat at 1
 **Done-when:** a 23 ms series read through the local path's playback clock advances every frame. `MIRPipeline.elapsedSeconds` moves in 100 ms steps there (39 % of analysis frames do not advance it at all), which turned LFSTEM.1's series into a staircase — values held 2–6 frames then jumped 4+ grid frames onto deviation spikes (|Δ| up to 6.0), the twitchiness Matt reported on Skein. `PlaybackClockSmoother` dead-reckons between ticks and resyncs on each, capped at 0.25 s, reset on track change. `PlaybackClockSmootherTests` is the gate the alignment test could not be — it tests the clock, not the map — and fails without the smoother. **Filed, not fixed: BUG-110** (Skein 15.60 ms at 4K in the harness, ~170 ms after 50 s live; mechanism not established, and the next 4K Skein session is a free A/B on whether the staircase was inflating it).
 
 ### Increment LFSTEM.1 — local-file stems land on the beat ✅ COMPLETE, M7 PASSED 2026-08-27 (2026-08-26)
-
-**Done-when:** a local file plays with stems sampled by playback position rather than separated from audio that has already gone past. **1a** `StemFeatureSeries` + `SessionPreparer.analyzeStemSeries`: the sweep keeps spans of 2 s and places each at the END of its ~10 s separation window (leaving one analysis frame of headroom — flush placement dropped 10 of 1292 frames over 30 s, which `stemSeries_spanBoundariesDoNotDrift` caught on first run), with one analyzer instance carrying its AGC across spans as it does across live separations. **1b** persistence at schema v10: a raw `[StemFeatures]` dump in `stem_series.bin` guarded by `stemSeriesFeatureStride`, every read failure degrading to `.empty` rather than throwing away an otherwise-good cache entry. **1c** the local prep path builds it, playback samples it at `mir.elapsedSeconds`, and the live path stands down when a series is installed. Streaming is untouched and structurally cannot have this. Engine + app suites green; alignment, persistence and wiring each gated. **M7 PASSED 2026-08-27** (session `2026-08-27T18-17-50Z`, Matt: *"Looks good"*) — after four corrections found by session artifacts rather than tests: on time (1c), continuous (1d r1), non-rewinding (1d r2), full-rate (1e). **LFSTEM.2 is now unblocked.**
-
 ### Increment BUG106.1 — the ML dispatch gate measures jank, not resolution ✅ (2026-08-26)
-
-**Done-when:** the gate can open at 4K without becoming "never defer". Matt chose **(a) stems on time**. `MLDispatchScheduler.budgetMs(floorMs:recentMedianFrameMs:)` returns `max(floorMs, median × 1.5)` over the same rolling window `recentMaxFrameMs` comes from (new `FrameBudgetManager.recentMedianFrameMs`, median not mean so one hitch cannot raise the next dispatch's bar). 1080p is unchanged — median ≈ 8 ms, floor wins — and a steady 25 ms 4K session now dispatches where the old 16 ms constant deferred, while a 60 ms spike inside it still defers. ⚠ The recommendation's *display refresh interval* would not have worked: 16.7 ms at 60 Hz is still under a 4K session's 17–45 ms. **Owed:** one fullscreen 4K session — `ml_forced` flat, and Matt's eye on stem timing vs new stutter (the same session BUG-100 needs).
-
 ### Increment BUG100.1 — the two dimensions a degrading 4K session never recorded ✅ (2026-08-26)
-
-**Done-when:** a future 4K session decides BUG-100's open mechanisms from its own log. Sessions now emit `GPU_PRESSURE alloc_mb=… budget_mb=… used_pct=… ml_forced=… ml_last=…` on the `DRAWABLE_LIFECYCLE` heartbeat bucket — the GPU working set against `recommendedMaxWorkingSetSize` (never measured; 4K quadruples every render target, and eviction is slow globally, survives a preset switch and recovers at lower res — this entry's exact signature) and `MLDispatchScheduler.forceDispatchCount`. Found on the way and filed as **BUG-106**: the ML gate's budget is a hardcoded 14/16 ms with no resolution term, so at 4K the window is never clean, every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires against a 2.0 s period — the gate is inoperative and stems run ~a period late there. ⚠ **Not** BUG-100's mechanism: PERF.15's VL session was flat across 172 s at 4K while permanently over that same budget. **Next: one ~2-minute fullscreen 4K session on the instrumented build**, then BUG-106's product decision (stems on time vs jank-free at 4K).
-
 ### Increment BUG088.1 — Aurora Veil's undeclared routes were dead computation ✅ (2026-08-26)
-
-**Done-when:** the manifest matches what the shader reads, and a silence gate can no longer be declared as a driver. `AuroraVeilState` (kink charge + smoothed vocal pitch → `[[buffer(6)]]`) was deleted along with the shader's slot-6 parameter, the app wiring, three test harness binds, and `PresetSessionReplay/AuroraVeilRoutes.swift` — a second manifest for the same three routes AV.7 removed, so `--preset aurora_veil` no longer resolves there. Recurrence guard: `AudioRoute.Kind.gate` (floor: peak ≥ 0.9 on every fixture — the only failure a gate has is never opening), with Aurora Veil `star_beat_twinkle`, Fractal Tree `silence_gate` and Ferrofluid Ocean `spike_punch_gate` reclassified off `continuous`. Gate arm proven to bite (floor → 1.5 reds all three at peak 1.00). 201 routes / 21 presets / 0 red; Aurora Veil golden hashes unchanged; app build green. No M7 — no pixel moved.
-
 ### Increment KI-AUDIT.1 — KNOWN_ISSUES reconciled to the tree ✅ (2026-08-26)
-
-**Done-when:** §Open contains only unfinished work, and every claim in it survives a check against the source. Twelve resolved-in-place entries moved out (six to §Resolved, six rotated early to `KNOWN_ISSUES_HISTORY.md` to stay inside the §Resolved 50 KB DOC.6 budget). One factual correction landed in place: BUG-088's "three undeclared reads" are not shader reads — verified field-by-field against `AuroraVeil.metal` — which inverts its fix from *declare the route* to *delete the dead state*. One historical correction in HISTORY: BUG-089's "consumer was reverted" is stale; `FractalTree.json` declares `spectralLevelRise` on two routes again since FTR.30/33. Doc-only; no production delta. `DocIntegrityTests` 13/13 green.
 ### Increment RECON.21 — replay routes resolve from the `audio_routes` sidecars ✅ (2026-08-26)
-
-The audit's one structural item, and the only one that makes future presets *cheaper* rather than the tree smaller. **Replayable presets: 3 → 21.**
-
-**The problem.** Replay route specs were hand-written Swift, one file per preset. That stalled coverage at 3 of 26 because each new preset cost a ~90-line file plus a registry edit, and the files duplicated gate constants their own headers admitted had to be "kept in sync by code review" (`AuroraVeilRoutes` even promised "SR.2 will centralize these"). Meanwhile QG.1 (D-179) already requires every preset to declare its routes in the sidecar, `AudioRoutePrimitives` already maps each primitive to its recorded column, and `RouteCoverageTests` already asserts they fire. The manifest existed; replay just wasn't reading it.
-
-**`SidecarRouteSpecs` + `SidecarLocator`** resolve a preset name to its sidecar and build specs from `audio_routes`. A preset is now replayable by shipping the entry it must ship anyway for certification. `resolvePreset`'s "Unknown preset" wall is gone.
-
-**Two things the sidecar cannot express — stated, not guessed:**
-
-1. **Gate thresholds.** A sidecar route declares `kind`, not the shader's smoothstep edges. Sidecar-derived specs use the QG.1 per-kind coverage floors (`accent` → 0.02, matching `RouteCoverageTests.accentThreshold`; `continuous` → just above zero, since the assertion is that it varies). Those measure *whether the input is live*, not the visual amplitude — the spec text says so in the report.
-2. **Multi-primitive arithmetic.** 38 of 121 declared routes list several primitives, and the sidecar does not say how the shader combines them — Skein's painter speed takes `mean(max(0, ·))` of four stem deviations while its stem-mix gate takes their SUM. Rather than invent a rule, the resolver emits **one spec per (route, primitive)**, labelled with both.
-
-**Hand-written specs still win where they exist**, because they encode exactly what the sidecar cannot. Both survivors were re-verified against their sources rather than assumed: Skein's 0.13 gate is `SkeinState.onsetDevThreshold`, and Murmuration's `(drums+bass+other)/3 + 0.4·vocals` is `Murmuration3DGeometry`'s `stemEnergy`.
-
-**`AuroraVeilRoutes` deleted — it was reporting on a preset that no longer exists.** Its specs described the pre-AV.7 AV.2.h.1 shader (vocals→hue, bass→brightness, drums→kink) and cited `AuroraVeil.metal:515` in a file that is 225 lines; AV.7 removed all audio routing. Anyone running AV replay diagnostics was reading a report about a retired shader. The sidecar path reports its real routes (`star_beat_twinkle`, `veil_breathe`, `mood_colour`). This was surfaced during RECON.20 and flagged rather than silently patched; it is fixed here as the side effect predicted.
-
-**Reads through `SessionColumnSeries`, not `SessionFrame`** — the latter carries 16 fields while a declared primitive may be any recorded column, which is why the frame-based path could never have covered the corpus. `RouteSpec.inputValue` became optional to express "this spec reads a column, not a frame"; the event-montage extractor guards it and yields no events rather than a wrong one.
-
-`SidecarRouteSpecsTests` holds the coverage claim to the tree (every declaring preset resolves; ≥20 expected), plus name-normalisation, per-kind gate selection, and an Aurora Veil case asserting the retired route names cannot reappear.
-
-Engine suite 1,859 / 287 green, SwiftLint 0 in 511, doc gates 13/13.
-
 ### Increment RECON.20 — three preset residues deleted (sketch, Aurora Veil state, Arachne pool) ✅ (2026-08-26)
-
-The audit's three remaining ordinary deletions. **−1,314 lines.** Each was verified dead individually rather than inherited from the report.
-
-**A. The MitosisGen2 throwaway sketch** (`tools/mitosis_gen2_sketch/Gen2Cell.metal` 187 + `MitosisGen2SketchRenderTests` 141). It shipped: the production shader records "Ported from the Matt-approved throwaway sketch", the preset has a sidecar, and gen-2 (Cytokinesis) is certified. `MitosisGen2GeometryTests` **stays** — it exercises the production geometry and merely wrote its contact sheets into the sketch's frames directory; retargeted to `tools/mitosis_gen2_renders/`.
-
-**B. Aurora Veil's slot-6 state** (`AuroraVeilState.swift` 244 + shader struct/param + app wiring). The AV.7 shader header said it outright — the buffers "are unused… `AuroraVeilState.swift` still flushes buffer(6) — also unused now; left in place to avoid loader churn." Every frame this **certified** preset ran, a kink accumulator and a 5-frame pitch ring ticked into a buffer whose only reader was `(void)av;`. The shader param and CPU binding had to go together (an unbound `[[buffer(6)]]` read crashes); verified other direct presets declare only buffers 0–2, so slot 6 is optional. **PresetRegressionTests' 29-preset dHash gate green — pixel-identical, no re-certification.**
-
-**C. Arachne's retired V.7.5 pool.** The shader loop had shipped as `for (int wi = 1; wi < 1; wi++)` since V.7.7C.3 — 73 lines that could never execute, kept as a "structural marker" for a §5.12 follow-up never built. Deleted with the CPU machinery feeding it: `accumulateSpawn`, `trySpawn`, `advanceStage`, `freeSlot`, `evictAndRetry`, the `webCount`/`spawnAccumulator`/`lastSpawnBeatIndex`/`prevBeatComposite` state, `ArachneBackgroundWeb`, the whole background-web pool, `ArachneState+M7Diag` (gated on a flag no build config sets), and the three explicitly-deprecated stubs kept alive only so that diag build compiled.
-
-**The one live behaviour inside the dead machinery was preserved.** `finaliseMigration` did two things: snapshot the hero into the unrendered pool (dead), and **restart the foreground build cycle** (live — without it Arachne builds one web and stops). It now lives in `ArachneState+SegmentRollover.swift` with the 1 s delay unchanged, because that delay is the visible pause between a finished web and the next one starting.
-
-**Safety argument for C, since it touches the hero slot:** `advanceStage` ran on webs[0] too. The shader derives the hero's (stage, progress) from **Row 5** (`build_stage`/`frame_progress`/…), written by `advanceBuildState`; after the pool loop's removal `stage`/`progress`/`opacity`/`is_alive` survive only as struct field declarations with **no reader anywhere in the shader**. Six `ArachneStateTests` cases whose subject was the retired pool were deleted; the initial-pool, determinism, silence and spider tests stay, with the pool test's `webCount` assertion rewritten against the live buffer.
-
-Engine suite green (1,855 tests / 286 suites, 0 XCTest failures), app 417/417, SwiftLint 0 in 511 files. Module Map updated; the doc gate caught the new file, which is the gate working.
-
 ### Increment RECON.19 — Low Power Mode floors at `.noBloom` (D-167 amended) ✅ (2026-08-26)
-
-Answers the open question RECON.18 left on the table. Matt's call, 2026-08-26: **Low Power Mode floors the quality ladder at `.noBloom`.**
-
-**This is new behaviour, not a restoration.** D-167 floored Low Power Mode at `.noSSGI`, but that rung only ever suppressed SSGI — which no preset ever declared — so Low Power Mode has imposed **no actual reduction for its entire life**. RECON.18 deleted SSGI and the rung, and deliberately left the floor absent rather than promote it silently, because a new user-visible reduction is a product decision rather than a cleanup side effect. Asked, Matt chose `.noBloom`.
-
-**What a user sees:** with Low Power Mode on, bloom is off. ACES tone-mapping still runs (the post-process pass is not skipped), so highlights are flatter rather than the image being flat. Low Power Mode never weakens a stronger thermal floor — `.critical` still yields `.reducedRayMarch`. Thermal floors are otherwise unchanged.
-
-**No re-certification.** Certification grades a preset's own fidelity at full quality; the frame-budget governor is orthogonal to it, and every preset renders unchanged with Low Power Mode off.
-
-One line of logic (`floor = max(floor, .noBloom)`), the `qualityFloor` doc comment rewritten to explain why the floor is new rather than restored, and the D-167 test expectation updated from `.full` to `.noBloom` with a `.fair` case added. D-167 amended from partially-open to resolved; the capability-registry governor row records the new floor.
-
 ### Increment RECON.18 — ICB and SSGI deleted; the last two dormant capabilities ✅ (2026-08-26)
-
-Matt's park-or-delete call on the remaining two dormant capabilities from the 2026-08-25 preset audit (2026-08-26), closing the set opened at RECON.17. Same D-203 precedent. **−2,036 lines.**
-
-**A. Indirect command buffers.** `RenderPipeline+ICB.swift` (340), `Shaders/ICB.metal` (`icb_populate_kernel`), `RenderPipelineICBTests` (417), the `.icb` `RenderPass` case and draw arm, the `IndirectCommandBufferState` type, and `ShaderLibrary`'s `supportICB` pipeline-key axis. **No sidecar ever declared `"icb"`**; the app's branch logged *"ICB state must be set externally"* and nothing ever set it; `supportICB: true` appeared only in tests. The registry row's claim of a `MeshShaders.metal` populate kernel was stale — the kernel lived only in `ICB.metal`.
-
-**B. Screen-space global illumination.** `Shaders/SSGI.metal` (171), `SSGITests` (450), `runSSGIPass`/`runSSGIBlendPass`, the `ssgi`/`ssgiBlend` pipeline states, `ssgiTexture`, the `.ssgi` case, `PresetDescriptor.useSSGI`, and the `ssgi_pass_ms` CSV column (written since PERF.2-pass, read by nothing). No sidecar ever declared `"ssgi"`; both historical consumers retired (Glass Brutalist D-186, Kinetic Sculpture D-188).
-
-**SSGI's two entanglements, handled rather than stepped around** — this is why it was flagged as needing more care than the RECON.17 pair:
-
-1. **The D-057 OR-gate.** `RayMarchPipeline.reducedMotion` existed *solely* to arbitrate SSGI suppression between the a11y and governor paths, so it retired with SSGI (D-057 amended). **The accessibility feature is intact:** reduced motion has three arms and only the SSGI one is gone — the mv_warp single-frame path and `beatAmplitudeScale = 0.5` both remain. That arm had been inert anyway, since no preset declared the pass.
-2. **The D-167 Low Power Mode floor.** The `.noSSGI` quality rung was the ladder's *first* reduction, so deleting SSGI would have left the governor a wasted step; the rung is gone and the ladder is now `full → noBloom → reducedRayMarch → reducedParticles → reducedMesh`. Low Power Mode floored at `.noSSGI` — a rung that reduced nothing — and was **deliberately not promoted** to `.noBloom`, which would be a new user-visible reduction smuggled in as cleanup. Behaviour matches prior *effective* behaviour exactly (no floor), and **D-167 carries an open question for Matt**: should Low Power Mode floor at `.noBloom` instead?
-
-Full engine suite green (**1,863 tests in 287 suites**), app suite 417/417, SwiftLint 0 violations across 513 files. Test expectations that encoded the old rung count were updated to the new ladder rather than loosened — the governor still downshifts on exactly 3 consecutive overruns, it simply reaches `.reducedRayMarch` in two steps instead of three. No preset's rendering changes: nothing deleted was reachable from any shipping preset.
-
-**This closes Tier 1 of the preset audit's dormant-capability set.** Remaining audit items are ordinary deletions (Arachne retired pool ~540, Aurora Veil dead `buffer(6)` ~300, MitosisGen2 sketch ~330) plus the one structural item — driving replay from the `audio_routes` sidecars.
-
 ### Increment RECON.17 — the 2D Murmuration flock and hardware ray tracing deleted ✅ (2026-08-26)
-
-Matt's park-or-delete call on the first two of the four dormant capabilities from the 2026-08-25 preset audit (2026-08-26). Both were built to capability-complete, both work, and neither has a consumer — the **D-203** precedent: *good work is not a reason to keep code with no consumer.* **−2,562 lines.**
-
-**A. The 2D Murmuration flock** (`Geometry/ProceduralGeometry.swift` 333 + `Shaders/Particles.metal` 297 + `ProceduralGeometryTests` 237 + `MurmurationStemRoutingTests` 496). Murmuration has rendered through `Murmuration3DGeometry` since MM.3; the generic 2D path was constructed *only* by those two test files — and `MurmurationStemRoutingTests` was validating the stem routing of a kernel no preset runs. `Particles.metal` went whole: its `Particle` struct, `ParticleConfig`, `particle_update`, `particle_vertex`/`particle_fragment` were each verified to have no consumer outside `ProceduralGeometry` (the public Swift `Particle` type survived only in a doc comment). **`MURMURATION_DESIGN.md` §12 anticipated exactly this** — *"`ProceduralGeometry`/`Particles.metal` retired if no other consumer — grep confirms Murmuration is the only one"* — and the registry row carried its own retirement condition, *"retiring it is a later cleanup once nothing else consumes it."* Both are now marked done rather than left as standing intentions.
-
-**B. Hardware ray tracing** (`Renderer/RayTracing/` — `BVHBuilder` 269, `RayIntersector` 378, `+Internal` 101 — plus `Shaders/RayTracing.metal` 147 and `BVHBuilderTests`/`RayIntersectorTests` ~300). The capability row said it itself: *"Available; not yet wired into a shipping preset."* Both types are constructed only in their own tests; the `rt_nearest_hit_kernel` / `rt_shadow_kernel` entry points are looked up nowhere but `RayIntersector`. Its single design-doc mention is `ARACHNE_3D_DESIGN.md` §C **Option C.2 — the option that was not chosen** (C.1 screen-space was). Annotated in place so a future revival rebuilds rather than hunts. Note this was a hand-rolled BVH, not a platform dependency: Metal's `MTLAccelerationStructure` / `MPSRayIntersector` remain available to any future preset.
-
-**Verified before cutting, per the RECON.16 lesson.** Every symbol was grepped individually rather than trusting the audit's counts, and the shared-layer trap was checked first: `Particles.metal` looked shared (its header claims the `Particle` layout is "shared across all conformers"), so each of its five declarations was traced to a consumer before the file went — the claim turned out to be a convention other conformers follow, not a dependency they link against.
-
-Full engine suite green (**1,873 tests in 288 suites**), app builds, SwiftLint 0 violations across 514 files. No preset's rendering changes: nothing deleted was reachable from any shipping preset.
-
-**Remaining dormant capabilities:** ICB (~830 lines) and SSGI (~700), both still awaiting the same call.
-
 ### Increment RECON.16 — ShaderUtilities.metal reduced to its live surface ✅ (2026-08-26)
-
-Third item from the 2026-08-25 preset audit. The preamble concatenated **two parallel utility libraries** into every preset compile: the V.1–V.3 `Utilities/` tree (canonical, snake_case) and legacy `ShaderUtilities.metal` (camelCase). A transitive reachability census over every preset shader, every Renderer shader, every preamble string and every Swift call site found **38 of its 42 functions had no caller anywhere** — the entire SDF-primitive, ray-marching, PBR and UV-transform sections (the ray-march helpers additionally required a user-defined `map()` no preset ever defined), plus the unused noise and colour helpers. **639 → 128 lines.**
-
-**Four survive, with their live consumers named:** `hash21` ← `perlin3D` ← `fbm3D` ← VolumetricLithograph (3 sites); `toneMapACES` ← Nimbus (2 sites). All four are **byte-identical to their previous text** (verified by per-function checksum against HEAD), so `PresetRegressionTests`' 29-preset dHash gate holds — as it must, since unused `static inline` code cannot affect the codegen of used code.
-
-**Two audit claims corrected by the census.** The audit report asserted `fog` was consumed by Meniscus/Arachne/VL — it has **zero** shader call sites; only a test used it. It also read `calcNormal`/`opTwist` as live, but both hits are ASCII-diagram comments in `Utilities/`, and `hash21` in `tools/mitosis_gen2_sketch` is that sketch's own definition. Verified name-by-name rather than inherited.
-
-**Certification risk checked and cleared:** the E3 fog rubric item greps for `"fog("`, but `FidelityRubric.evaluate` receives `metalSource` read from the preset's own `.metal` file, never the preamble — so no rubric outcome can shift.
-
-**`ShaderUtilityTests` retargeted, not gutted.** Tests whose subject had a canonical successor moved to it (`cookTorranceBRDF` → `brdf_cook_torrance`, `perlin2D` → `perlin3D`, `fbm2D` → `fbm3D`); three whose subject had none (`rayMarch`, `uvKaleidoscope`, `fog`) were removed. One genuine finding fell out: the old `test_cookTorrance_energyConservation` asserted `output <= input energy`, which is **not** a property of the V.1 BRDF — at roughness 0.1 the mirror-direction specular lobe measures ~10.3, because a BRDF is a density and energy conservation is a property of the hemispherical integral, not one sample. The assertion was **not** weakened to pass; the test was rewritten around properties that do transfer (positive + finite, zero for sub-surface light, smooth peak > rough peak).
-
-**Consequence for QR.7:** its migration table named `perlin2D` / `fbm2D` / `sdRoundBox`, all of which turned out to have no consumers (Glass Brutalist D-186 and Kinetic Sculpture D-188 had been their only callers) and were simply deleted. QR.7 is annotated in place; what remains of it is migrating VL and Nimbus off the last four, after which the file disappears.
-
 ### Increment RECON.15 — FerrofluidMesh disabled G-buffer path deleted ✅ (2026-08-26)
-
-Second item from the 2026-08-25 preset audit (after RECON.14/D-213), same precedent: **D-203 — good work is not a reason to keep code with no consumer.** The mesh G-buffer path was unwired at Ferrofluid Ocean round 57 (2026-05-17) for "scoop" normal artifacts on foreground cones and never re-enabled; it sat in tree for 3 months behind a "preserved for a future increment" comment — verbatim the reusable-infrastructure defense CLAUDE.md names as a failure mode.
-
-**Verified dead before deleting, on both sides:** production's only call was `setMeshGBufferEncoder(nil)`, and the fixture hook `useMeshPath: Bool = false` had **no caller passing `true`** — so the test wiring was dead too, not coverage being lost.
-
-Deleted: `Presets/FerrofluidOcean/FerrofluidMesh.swift` (378) + `Renderer/Shaders/FerrofluidMesh.metal` (620); `RayMarchPipeline.meshGBufferEncoder` / `MeshGBufferEncode` / `meshGBufferLock` / `setMeshGBufferEncoder` and the render-loop branch; `runMeshGBufferPass` (`+Passes`); the public `RenderPipeline.setMeshGBufferEncoder` (`+PresetSwitching`); `gbufferDepth` + `gbufferDepthPixelFormat` + their allocation (mesh-only consumers — verified); app-side `makeFerrofluidMeshEncoder`, the `ferrofluidMesh` property, the round-57 tombstone comment block and its reset/teardown lines; the test's `useMeshPath` parameter and mesh block.
-
-**KEPT (verified live, do not confuse with the above):** `FerrofluidParticles` and its baked height texture — `presetHeightTexture` feeds slot 10 on the **SDF** path and is unrelated to the mesh dispatch. Ferrofluid Ocean stays certified and renders through `sceneSDF` exactly as before; the round-59 deep-ocean Gerstner constants ported *from* the mesh path are live in `FerrofluidOcean.metal` and untouched.
-
-**One judgment call surfaced:** the generic dispatch (not just the FFO implementation) went too, because its only remaining claimed consumer was `docs/presets/GOLDENGROVE_PLAN.md` §2 — and Goldengrove is **SHELVED** (2026-06-01, "do not revive without a fundamentally stronger, signal-grounded musical hook"), i.e. a retained research record rather than a live plan. Both Goldengrove docs are annotated in place so a revival rebuilds rather than hunts for a deleted API.
-
-Pixel-identical by construction (the branch required a non-nil encoder that production never set); `PresetRegressionTests` dHash green across all 29 presets, `FerrofluidOceanVisualTests` green. Net −1,214 / +33 lines. Two superfluous SwiftLint disables fell away as the shrunken functions dropped under their gates.
-
 ### Increment BUG103.0 — BUG-103 filed + diagnosed to the throw site (docs-only) ✅ (2026-08-25)
 ### Increment RECON.14 — D-213 executed: RMENV.2/.3 gallery environment + MFX.1 temporal upscaler deleted ✅ (2026-08-25)
 ### Increment RICERCAR-CERT.1 — Ricercar CERTIFIED ✅ (2026-08-20)
@@ -8987,7 +9226,7 @@ across the real tonal-tension range; harmonic geometry reads through bounded ori
 chirality, and topology rather than continuous spin; production still/motion artifacts are
 inspected; focused tests and the app build pass; and the preset remains uncertified for M7.
 
-**Implemented.** BUG-122 documents the clean “Combat Baby” session and first screenshot before
+**Implemented.** BUG-125 documents the clean “Combat Baby” session and first screenshot before
 the fix. The radial orbit trap and near-white seam colour are gone. `RootChoirState` now maps the
 measured tension range 0.004…0.085 and consonance range 0.05…0.20 across their visual spans,
 bounds fifths orientation to ±0.34 rad, and uses a slow ±0.10 rad pendular rest drift. The shader
@@ -9033,5 +9272,306 @@ the motion gate reports median/max difference 1.81/7.43, 21 event-cluster spikes
 frozen transitions. Reader verdict: smooth, coherent macro motion; live M7 remains deliberately
 open because the preset is uncertified.
 
-**Decision:** D-244. **Next:** one live M7 and a material-depth tuning pass if the central recursive
+**Decision:** D-247 (renumbered from D-244 on merging main — D-244…D-246 were already taken upstream). **Next:** one live M7 and a material-depth tuning pass if the central recursive
 seams still read decorative rather than transmitted-glass. Do not certify from offline evidence.
+
+## Phase ALFVEN — Alfvén program (MHD field preset; infrastructure first)
+
+Design: `docs/presets/ALFVEN_DESIGN.md`. Concept + port survey:
+`docs/presets/ALFVEN_CONCEPT_2026-09-08.md`, `docs/presets/ALFVEN_PORT_SURVEY_2026-09-08.md`.
+Plan (design §10): **ALFVEN.1** infrastructure → **ALFVEN.2** preset (no audio) →
+**ALFVEN.3** audio routing. Infrastructure lands before the preset and is never bundled with it.
+
+### Increment ALFVEN.1 — persistent + iterated staged stages, and the Poisson projection ✅ (2026-09-08)
+
+**Done-when (all met).** The `staged` paradigm can express a stateful, iterated GPU solver: a stage
+may own a ping-pong pair surviving across frames, may run N times per frame ping-ponging its own
+output, and may declare its own pixel format. A `Poisson Sandbox` diagnostic solves ∇²p = f by Jacobi
+iteration on that surface and is asserted to converge against an analytic solution. No Alfvén preset,
+no shader art, no audio routing — those are ALFVEN.2 / ALFVEN.3.
+
+**What shipped.**
+
+| Task | Outcome |
+|---|---|
+| 1 — three sidecar keys | `PresetStage.persistent` / `.iterations` (1…64) / `.pixelFormat` (`rgba16Float`/`rgba32Float`/`rg32Float`), all `decodeIfPresent`. Unknown format warns + falls back (PUB.4 precedent); out-of-range `iterations`, a persistent FINAL stage, and >7 `samples` are decode errors. `PresetStageDecodeTests` sweeps every shipping sidecar for unchanged defaults. |
+| 2 — persistent ping-pong pair | Zeroed pair allocated at preset-compile time in the declared format; previous half bound at `[[texture(20)]]` (`kStagedPersistentTextureSlot`, documented in ARCHITECTURE §GPU Contract Details). Zeroed on preset switch and by `resetStagedPersistentState()`. |
+| 3 — `iterations` | N passes per frame in the existing stage loop (`encodeOffscreenStages`), `samples` held constant, composing with `persistent`. No parallel code path. |
+| 4 — ported projection | `PoissonSandbox.metal` — divergence / Jacobi pressure / gradient-subtract adopted verbatim in structure from WebGL-Fluid-Simulation (MIT); attribution row in `docs/CREDITS.md`. |
+| 5 — diagnostic preset | `Poisson Sandbox` — velocity → divergence → pressure (persistent, 24 sweeps, rgba32Float) → project → compose. `is_diagnostic`, `certified: false`, `rubric_profile: lightweight`, out of planner selection (D-074) and out of manual cycling. |
+| 6 — convergence gate | `PoissonProjectionConvergenceTests`. Cold start at N=64: 4/8/16/24 sweeps → 0.98086 / 0.96209 / 0.92562 / 0.89052, strictly decreasing, thresholds frozen at the measured values. Cross-checked against the closed-form Jacobi prediction for this stencil — agreement to 5 decimal places. Warm-started: 0.000155 after 60 frames. |
+| 7 — harness template | `PersistentStagedPathHarnessTemplate` (`HARNESS_TEMPLATES=1`), 60 silence frames through the production dispatch, metric = the state field's RMS trajectory asserting neither saturation nor decay. |
+| 8 — non-finite watchdog | `probeStagedPersistentState()` — one rotating 16×16 texel block per persistent stage per frame off `.shared` (UMA) memory, re-zeroing the pair on NaN/Inf. ~0.2 µs/frame Release. |
+
+**The finding worth carrying forward.** 24 Jacobi sweeps is a **partial solve by construction** — the
+domain-scale mode is damped by only `cos(h)` per sweep, so a cold single frame at N=64 still carries
+89 % of the error. The iteration count buys per-frame responsiveness; **persistence buys the answer**
+(0.000155 after 60 warm-started frames). Sizing an iteration count without measuring convergence is
+how a solver silently ships unconverged. Recorded in [D-244] and in the test's frozen comment.
+
+**Out-of-scope change made deliberately.** `PresetLoader`'s `cycleExclusions` single-name literal
+became the sidecar flag `exclude_from_cycling`, exactly as that literal's own comment directed once a
+second harness fixture appeared. Without it, Poisson Sandbox would have landed in Matt's manual cycle
+— the defect he reported at the 2026-09-04 roster review.
+
+**Decisions:** [D-244].
+
+**Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
+format; non-finite watchdog) plus a new persistent-harness-template row.
+
+### Increment ALFVEN.4e — palette drift over time ✅ (2026-09-09)
+
+**Matt's live verdict on 4d: "it's wonderful."** First positive M7 for this preset. His one ask,
+verbatim: *"the only change i would want to see is a cycling of colors over time. i LOVE the color
+palette right now and would want to preserve this exact state, but introducing more complementary
+colors would add greater visual interest."*
+
+**This un-pins a drift that was designed in, rather than inventing one.** film.py already drifts
+the opponent centre (`hue = 0.46 + 0.26*centroid01`) and `04_palette_opponent_drift.png` annotates
+both ends — "left = early (acid green ↔ violet), right = late (magenta ↔ teal)". ALFVEN.2 pinned it
+at 0.72 because that is the column Matt picked. So the traverse stays inside the approved family
+instead of touring the wheel, and both endpoints are reference frames he has already seen.
+
+**Anchored so his state is preserved, not replaced.** `hueCentre(at:)` is a raised cosine away
+from `displayHueCentre` and back: exactly 0.72 at t = 0 and again every period, reaching
+0.72 − `displayHueSpan` (0.46) at the half period, no discontinuity and no wrap. The fragment still
+opposes ±0.30 about the centre, so what changes is WHICH complementary pair is on screen, not how
+complementary it is.
+
+`displayHueDwell` (2.0) biases where the traverse lingers. A plain raised cosine has zero
+derivative at BOTH ends, so it would dwell as long in acid-green↔violet as in the magenta↔teal he
+asked to keep; the exponent puts **50 % of each cycle within 0.065 of the anchor** while still
+reaching the far end. `displayHuePeriodSeconds` (80) is one there-and-back.
+
+**Clock: the listener's, not the field's.** Deliberately `features.time` ("seconds since
+visualization start", monotonic across tracks) rather than `simClock`. The field's rate moves with
+the CFL, i.e. with its own energy; a palette that sped up when the field energised would be wrong,
+and 80 s is far slower than the 2 s re-seed so colour and structure do not beat.
+
+Measured across the traverse, displayed-linear luma stays in 0.220…0.252 — the drift does not pump
+brightness.
+
+**⚠ Finding that changes ALFVEN.3, from Matt's own capture** (`uzume_sessions/2026-09-09T22-39-14Z`,
+local file, chain verdict clean): our `spectralCentroid` spans **p05 0.061 → p95 0.169**, median
+0.111 — NOT 0…1. Feed that into film.py's `0.46 + 0.26*centroid01` and the centre moves 0.028 and
+sits near 0.49, i.e. almost no drift and nowhere near the palette Matt signed off. film.py's
+`centroid01` is a differently normalised quantity than ours. **Binding centroid at ALFVEN.3 must
+renormalise against the real distribution** (the FA #31 shape: never assume a nominal range on a
+primitive whose scale is set elsewhere) and must keep 0.72 as the anchor.
+
+**Also established by that capture — the perf question 4b/4c left open is answered.** Alfvén ran
+live from 22:39:31 at 1080p on an M2 Pro. Frames between `DRAWABLE_LIFECYCLE` heartbeats: 599, 612,
+602, 586, 614, 600 per 10 s — **~60 fps sustained for 65+ s, `failures=0 unpresented=0`**, GPU
+193 MB (1.6 % of budget), thermal nominal. So 4 Heun substeps at 256² holds the target in Release.
+
+**Split:** `AlfvenSolver+Display.swift` (new) — the 400-line ceiling again, cut at a real seam:
+nothing in it touches physics, and everything in it stands in for a reduction film.py does on the
+CPU and a fragment cannot.
+
+**Still open:** the seam bloom is still absent (film.py's two Gaussian blurs over the brightest
+decile), so the live frame reads flatter than the stills; the re-seed cadence (2.0 sim s) remains
+Matt's call; motion verdict still CANNOT VERIFY.
+
+### Increment ALFVEN.4d — make it testable, and calibrate the live look ✅ (2026-09-09)
+
+**Done-when:** Alfvén can be put on screen in the app, and what it draws there matches the
+reference rather than the harness stills.
+
+**It was unreachable by any route.** Cycling skips `exclude_from_cycling`
+(`PresetLoader.isCycleExcluded`) and `certified: false` keeps it out of Orchestrator scoring
+(D-074). Both flags were right while the look was unproven — but together they mean no live
+look-check is possible. `exclude_from_cycling` → false; `certified: false` stays, so the planner
+still never selects it and it is reachable only by the manual next-preset control.
+
+**The shipping fragment was not drawing what the harness stills show**, in two ways, neither of
+them a recalibration:
+
+1. **`sJ` was tied to the exposure.** film.py normalises by two *different* statistics —
+   `aJ = autoexp(|J|)` ≈ `1/(p99.6-p2)` for value, and `sJ = tanh(J/(std*1.2))` ≈ `1/(std*1.2)`
+   for current-sheet polarity, which is what drives hue opponency. The shader collapsed both onto
+   `exposure`, so any exposure low enough not to blow out the value channel also drove `sJ` to
+   ~0.09 and killed the opponency — a flat lavender frame. Split out as `displayPolarityScale`
+   (0.52, from J's measured std 1.54…1.64).
+2. **The exposure had never been calibrated against anything.** 0.55 blew out at *both* field
+   scales: `|J|*0.55` reaches 2.99 at ALFVEN.4's J (rms 5.43) and still saturates at 4c's (1.55).
+   Measured on the production path it gave displayed-linear luma 0.353 against REF 05's 0.229.
+   Now **0.085**, which puts the production path at 0.229 — REF 05's own value.
+
+**⚠ The sRGB trap, recorded because it cost a round and will recur.** The render target is
+`.bgra8Unorm_srgb`, so its bytes are gamma-**encoded**; film.py and the reference PNGs write
+**linear** values straight to bytes (`(rgb*255).astype(uint8)`) and are then decoded as sRGB by
+any viewer — which is why the references look much darker than their byte values suggest, and
+that darker appearance is what was approved. Comparing raw byte means across the two conventions
+made the live path look 2× too *dark* and sent me to an exposure of 0.05, which is also what
+produced the hue-flat frame. Every brightness target in the harness is now stated in
+**displayed-linear** space: our film.py port 0.159, REF 01 0.114, REF 05 0.229. `meanLuma`
+sRGB-decodes before averaging.
+
+The live exposure is deliberately set to REF 05 (0.229) rather than to our own film.py port
+(0.159): the port still undershoots the reference Matt named, so matching the port would only
+reproduce that shortfall.
+
+**Harness:** `ALFVEN_LIVE` renders through `AlfvenSolver.render` — the actual production display
+fragment — and reports its displayed-linear luma, because every other measurement in that file
+describes the CPU port of film.py instead. Plus `ALFVEN_EXPOSURE` for sweeping, and a PNG dump of
+the live frame.
+
+**Known gap:** the shipping fragment still has no seam bloom (film.py's two Gaussian blurs over
+the brightest decile), so the live frame reads flatter and less contrasty than the stills. That
+needs the same reduction/blur surface as the percentile auto-exposure, and until it exists a
+fixed exposure cannot track a field whose scale moves — expect one adjustment round after a live
+look.
+
+**Also fixed:** a comment on `update(features:...)` claiming the re-seed cycle stays "on the
+listener's clock rather than the simulation's" — the exact opposite of what 4c established — and
+two test comments still asserting `exclude_from_cycling: true` for Alfvén.
+
+**Note, not fixed (out of scope):** `PostProcessChainTests.test_fullChain_under2ms_at1080p` flakes
+under parallel load (5.25 ms against a 5 ms Debug budget; clean 3/3 in isolation). Unrelated
+subsystem, and widening a budget is the wrong fix — flagged rather than touched.
+
+### Increment ALFVEN.4c — the silence state ✅ (2026-09-09)
+
+**Done-when:** the rendered field matches `05_atmosphere_relaxed_state`'s character — broad,
+fully-coloured lobes, soft and few seams, never black — sustained rather than as one lucky frame.
+
+**Matt's report:** the silence state is darker than the reference. Quantified first, against the
+reference PNGs (Rec.709 mean luma): REF 05 (the silence target) **0.422**, REF 01 (macro) 0.283,
+ours **0.130**. Saturation already matched (0.75 vs 0.77), so this was purely a VALUE problem.
+
+**What it was not.** Three hypotheses died, each to a measurement, and each is worth recording
+because they all looked right:
+
+- *My Swift port of film.py.* Ruled out by dumping our own J field to disk and running film.py
+  ITSELF on it: 0.132 against my port's 0.130. The port is faithful term-for-term.
+- *The forcing.* Our forcing is real-space `drive*0.25*(4 sinusoids)`, std `0.354*drive`, against
+  the spike's random-phase shell at std `drive` — genuinely 2.8x under-driven. But putting OUR
+  forcing into the spike changed its result by nothing (mean(aJ) 0.110 vs 0.109): at these times
+  the field is seed-dominated. **Fixing it would have been an unattributed change.** Left alone,
+  recorded here; it will matter at ALFVEN.3 when drive carries `bassDev`, since `ALFVEN_DRIVE=0`
+  currently moves J by 0.04%.
+- *A solver bug.* Our J spectrum sits at higher k than the spike's, and ψ's tail runs 2-3x its.
+  But ⟨ψ²⟩ — a Casimir of 2D reduced MHD — is CONSERVED by our nonlinear chain (0.8962 -> 0.9025
+  with dissipation off), which clears the gradient/bracket/dealias path; and running the spike
+  across 8 seeds put mean(aJ) at t=2.75 in 0.072...0.131 (sd 0.019) against our 0.061, with our
+  ω comfortably inside its 2.45...4.66. ψ's seed has only ~6 independent modes at k<=2, so the
+  ensemble is tiny and most of that "discrepancy" was realization spread. No bug.
+
+**Two things it actually was.**
+
+1. **The re-seed cycle ran on the wrong clock.** `cycleSeconds` was compared against the caller's
+   REAL time (`frame/60`) while everything it controls evolves in SIMULATION time, which advances
+   by `substeps*dt` with `dt` set by the CFL — i.e. by the field's own energy. They ran ~4.4x
+   apart (f300 = 5.0 real s but t = 2.75 sim s) and not by a constant. `blendRate` had the same
+   disease, dividing by the `maxDt` ceiling instead of the actual dt, so the crossfade ran ~2.5x
+   fast whenever the CFL bit. Same class as BUG-097. `AlfvenSolver.simClock` now accumulates sim
+   time and drives the cycle, the crossfade and the forcing phase.
+
+   This matters because **brightness is a function of position within a transient**, measured
+   through film.py's own mapping: meanLum 0.33 for the first ~1.5 sim seconds after a re-seed,
+   0.13 by t = 2.75, recovering only to 0.19 by t = 5.5. The reference look IS the early
+   transient — which the design doc says outright ("the look is a sequence of transients"), and
+   which explains why the curated references are brighter than any sustained state. So the cycle
+   length decides whether the preset lives in the reference look or in the trough. Measured over
+   900 frames (avg mean(aJ) / fraction of frames at-or-above REF 01): 2.0 s -> 0.233/70%,
+   3.0 -> 0.185/40%, 4.0 -> 0.164/27%, 6.0 -> 0.154/26%, 22.0 -> 0.143/18%. Default now **2.0 sim
+   seconds**; the spike agrees closely at the same cadence (0.237/min 0.107 vs our 0.233/0.114).
+
+2. **The display quantity amplified the float32 noise floor.** Shortening the cycle exposed fine
+   VERTICAL striping over the whole frame — the `07_anti_grid_speckle` anti-reference — which had
+   been masked by the dark, busy field. It is not physics: ψ's anomalous energy on the ky = 0 row
+   is ~1.5e-10 against a peak of 1.9e-3, i.e. 1e-7, which is float32 epsilon. It lands on ky = 0
+   because the transform is separable — the row pass leaves round-off of order eps·|ψ| at high kx
+   and the column pass averages it over y into the ky = 0 bin — and `J = -k²ψ` then multiplies it
+   by k⁴ in power (1.7e7 at k = 64), lifting round-off to J's own scale. The float64 spike is
+   immune, which is what told us it was ours. ψ carries 99.9% of its energy below k = 8, so the
+   new `jCutoff` (48, Hou-Li shaped) band-limits **J for display only** — numerical noise, not
+   physics; the state is untouched. Swept: 32 was worse (seams broaden and a real diagonal ripple
+   emerges), 64/128 leave the striping.
+
+**Result:** meanLum **0.309...0.332** across frames, against 0.130 before and REF 01's 0.283 — now
+between REF 01 and REF 05 rather than three times darker than the target.
+
+**Costs, stated plainly.** A 2 s cycle with `blendTau` 1.1 means the crossfade is almost always
+active, so the field stays young: ω settles near 1.0 (was 3.05) and J near 1.5, and the current
+sheets never fully sharpen — and REF 02 says the SEAM, not the lobe, is what the eye should land
+on. It also sits ψ ~30% below the seed amplitude, because a partial mix of two uncorrelated equal-
+rms fields has lower rms than either. Bounded and stable (0.43...0.80 about 0.65 over t = 22.5 sim
+s, no downward trend, 0% clamped), so `AlfvenSolverTests`' psi assertion moved from "conserved to
+within 10%" — whose premise died with the re-seed — to a collapse/blow-up band, since ψ -> 0 means
+J -> 0 means a black frame (D-037).
+
+**⚠ The cadence is a product decision, not an engineering one**, and it is the one thing here that
+should be Matt's: shorter buys brightness and continuous re-braiding and pays in seam sharpness;
+longer buys sharp seams and pays in darkness. 2.0 is set because it is what makes the SILENCE
+target reachable, which is what was asked for.
+
+**Also:** the film harness gained `mean(aJ)`/`meanLum`/`frac>0.25` per frame (the only numbers
+comparable to the reference PNGs), an `ALFVEN_SWEEP` long-run mode for judging cadence over several
+cycles, `ALFVEN_CAPTURE` for choosing frames, the `ALFVEN_DRIVE/ALPHA/NU4/CUTOFF/CYCLE/JCUT`
+overrides, and raw `ω/ψ/J` dumps so film.py and numpy can be run on our own fields.
+`AlfvenSolverTests` now prints accumulated SIM time, without which "at matched sim time" was
+unfalsifiable — and I had in fact been comparing t = 2.75 against t = 2.2 for most of the session.
+
+### Increment ALFVEN.4b — the integrator, and the end of the seam aliasing ✅ (2026-09-09)
+
+**Done-when:** the rendered J field carries no grid-scale hatching, and the solver's bulk
+statistics track the spike's at matched simulation time.
+
+Matt's report was "fix the seam aliasing" — fine diagonal hatching on the steepest bright ridges.
+Three things were wrong, found in this order, and only the third was the cause:
+
+1. **J was computed with a local 5-point stencil on the RAW state** while everything else in the
+   solver is spectral. Replaced with `alfven_j_spectrum` (`J_h = -k² psi_h`) reading the FILTERED
+   spectrum. Real defect — the display quantity was the one field carrying unfiltered content —
+   but not the cause. ⚠ My stated diagnosis for it ("a high-pass amplifying grid scale by 1/h²")
+   was **wrong in sign**: the stencil's effective wavenumber `(2/h²)(1-cos kh)` UNDER-reads
+   curvature at high k, which is why spectral J reads ~15 % higher (6.21 → 7.12 at f300) while
+   being the smoother field. Recorded because the number looks like a regression and is not.
+2. **The Hou-Li filter used a fixed `kmax = 100`** where the spike uses `kmax = N/2` (Nyquist).
+   Now derived from `edge`, for the same reason `nu4` is: both are violently
+   resolution-dependent. Correct, but it did not move the hatching either.
+3. **Forward Euler.** The cause. Euler's amplification on the imaginary axis is `|1 + iy| =
+   sqrt(1+y²)` — growth O(y²), strongest at the highest wavenumbers and localised where advection
+   is fastest, which is exactly where the hatching appeared. Replaced with the spike's own
+   integrating-factor Heun (alfven.py:93-105), whose `sqrt(1+y⁴/4)` the integrating factor then
+   damps. Split `alfven_spectral_filter` into `alfven_efactor` and `alfven_houli`, since Ew/Ep act
+   INSIDE the RK2 stages and FILT acts once at the end — and the fused version had also been
+   applying dissipation with the fixed `p.dt` ceiling rather than the adaptive dt the step
+   advances by.
+
+**⚠ Process failure worth keeping.** RK2 had been tried at ALFVEN.4 and reverted as "worse than
+Euler". That measurement was taken while the **Poisson sign bug was still live** (`phi =
++omega/k²`), so advection was feeding energy and no integrator could have been stable. The
+revert was reasoned from void evidence, and it cost this increment. **When a root cause is fixed,
+re-run the experiments that were rejected before it** — their verdicts do not survive it.
+
+**The reference is runnable, and running it ended the guessing.** Three rounds of theorising about
+filter cutoffs preceded simply executing `docs/presets/alfven_spike/alfven.py` (numpy + scipy in a
+throwaway venv, ~40 s) and looking at its J. It was clean, which converted "is this inherent to 2D
+MHD at N=256?" from speculation into a measured no. FA #73 covers porting; this is the same rule
+one step earlier — **the oracle answers behavioural questions too, not just API ones.** Matched
+sim time, spike vs ours: t≈2.2 ω 2.98 / 3.05, t≈4.8 J 5.95 / 5.98. Before the fix ours was ω 5.33.
+
+**Also:** the film harness now dumps raw `autoexp(|J|)` as greyscale next to each colour frame.
+That dump is what separated "the FIELD has grid-scale energy" from "the film mapping is amplifying
+it" in one look — film.py's hue is a periodic function of J, so it turns a ripple invisible in
+grey into a vivid band. The colour frame alone cannot tell you which half is at fault.
+
+**Files:** `AlfvenSolver.metal` (efactor/houli/accumulate/finalize/j_spectrum),
+`AlfvenSolver+Substep.swift` (rewritten as the scheme), `AlfvenSolver+Ops.swift` (new — dispatch
+vocabulary), `AlfvenSolverConfiguration.swift` (new — 400-line split), `AlfvenSolver.swift`,
+`AlfvenFilmPreviewTests.swift`, `docs/ARCHITECTURE.md` §Module Map (five rows; three of the
+Alfvén files had never been added and `DocIntegrityTests` was red on them).
+
+**Still open:** silence state darker than `05_atmosphere_relaxed_state`; motion verdict CANNOT
+VERIFY (needs a contiguous sequence + `Scripts/motion_gate.sh`); film.py's percentile auto-exposure
+still needs a reduction/mip surface (fixed 0.55 placeholder); no audio routing until ALFVEN.3.
+
+**Next:** ALFVEN.2 — `Alfven.metal` + sidecar, MHD advance, silence state, re-seed cycle. **No audio
+routing.** Its first task is the §11 look comparison against the reference set, before any tuning.
+Open it by deciding the **solver grid resolution** — [D-244] §Iteration count records why sweep
+count cannot be set independently of it (settling scales as N²; 24 sweeps stands until then).
+Its compose stage is a **port of `docs/presets/alfven_spike/film.py`**, not an authoring exercise:
+that spike's README is explicit that the Metal fragment "should reproduce THIS, not invent its own
+look" — same FA #73 discipline that governed the projection port at ALFVEN.1.

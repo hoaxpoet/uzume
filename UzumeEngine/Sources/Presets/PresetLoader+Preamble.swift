@@ -23,6 +23,106 @@ extension PresetLoader {
         #define FFT_BIN_COUNT 512
         #define WAVEFORM_CAPACITY 2048
 
+        // Stockham radix-2 FFT helpers (ALFVEN.1c). Shared so the FFT Sandbox diagnostic
+        // and any preset needing a spectral operator use ONE implementation — a wrong FFT
+        // fails silently, so it should exist once and be gated once (FFTSandboxTests).
+        // Complex values pack as (re, im). Requires power-of-two extent along the axis.
+        static inline float2 uz_cmul(float2 a, float2 b) {
+            return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+        }
+        // Gather form: from this fragment's output index `o` along the transform axis,
+        // recover the partner index `j`, which wing of the butterfly this is, and the
+        // twiddle angle. `wing` is deliberately not named `half` — that is an MSL keyword
+        // and shadowing it is Failed Approach #44.
+        static inline void uz_fft_indices(int o, int pass, thread int& j,
+                                          thread int& wing, thread float& angle) {
+            int ns   = 1 << pass;
+            int span = ns << 1;
+            int blk  = o / span;
+            int r    = o - blk * span;
+            int lo   = r & (ns - 1);
+            wing     = r / ns;
+            j        = blk * ns + lo;
+            angle    = -6.28318530718 * float(lo) / float(span);
+        }
+        // One butterfly, given the two gathered inputs.
+        static inline float2 uz_fft_combine(float2 a, float2 b, float angle, int wing,
+                                            bool forward) {
+            float ang = forward ? angle : -angle;
+            float2 w  = float2(cos(ang), sin(ang));
+            float2 wb = uz_cmul(w, b);
+            return (wing == 0) ? (a + wb) : (a - wb);
+        }
+        // Hou-Li spectral filter, exp(-36 (k/kmax)^36) — the spike's stabiliser. `gid` is
+        // the k-space texel; frequencies are in FFT order so the wavenumber wraps at N/2.
+        static inline float uz_houli_filter(uint2 gid, int w, int h) {
+            int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
+            int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
+            float kr = clamp(sqrt(float(kx * kx + ky * ky)) / float(w / 2), 0.0, 1.0);
+            return exp(-36.0 * pow(kr, 36.0));
+        }
+
+        // Spectral inverse Laplacian: solves lap(phi) = -src for phi, EXACTLY, in one
+        // multiply. `gid` is the k-space texel; frequencies are in FFT order. The k=0 mode
+        // is the undetermined additive constant of a periodic Poisson problem and is set
+        // to zero (the spike does the same: K2inv[0,0] = 0).
+        //
+        // This replaces a 24-sweep Jacobi that D-244 measured leaving an 89% residual on
+        // the domain-scale mode: Jacobi damps that mode by only cos(h) per sweep, so it
+        // needs ~1000 frames of warm start where this needs none.
+        static inline float uz_inv_laplacian_k(uint2 gid, int w, int h) {
+            int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
+            int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
+            // Wavenumbers in the spike's 2*pi box are the integer mode numbers themselves.
+            float k2 = float(kx * kx + ky * ky);
+            return (k2 < 0.5) ? 0.0 : (1.0 / k2);
+        }
+
+        // k-space wavenumbers for a texel, in FFT order (0..N/2 then negative).
+        static inline float2 uz_wavenumber(uint2 gid, int w, int h) {
+            int kx = int(gid.x); if (kx > w / 2) { kx -= w; }
+            int ky = int(gid.y); if (ky > h / 2) { ky -= h; }
+            return float2(float(kx), float(ky));
+        }
+
+        // Two REAL fields ride one complex transform as real and imaginary parts. Recover
+        // each one's spectrum by Hermitian unpacking against the mirrored texel:
+        //     a_h(k) = ( F(k) + conj(F(-k)) ) / 2          (the real-part field)
+        //     b_h(k) = -i( F(k) - conj(F(-k)) ) / 2        (the imaginary-part field)
+        static inline void uz_unpack_pair(float2 fk, float2 fmk,
+                                          thread float2& aH, thread float2& bH) {
+            aH = 0.5 * float2(fk.x + fmk.x, fk.y - fmk.y);
+            float2 d = 0.5 * float2(fk.x - fmk.x, fk.y + fmk.y);
+            bH = float2(d.y, -d.x);          // multiply by -i
+        }
+
+        // Spectrum of (a_x + i*a_y) for a real field a. One inverse transform of this
+        // yields BOTH partial derivatives — real part d/dx, imaginary part d/dy — because
+        // each is separately real. This is what makes a spectral Poisson bracket affordable:
+        // {a,b} = a_x b_y - a_y b_x needs four derivative fields, i.e. two transforms.
+        static inline float2 uz_grad_spectrum(float2 aH, float2 k) {
+            // (i*kx + i*i*ky) * a_h  =  (-ky + i*kx) * a_h
+            return uz_cmul(float2(-k.y, k.x), aH);
+        }
+
+        // Orszag 2/3 dealiasing mask. A product formed in real space aliases energy into
+        // wavenumbers the grid cannot represent; without this it folds back across the
+        // whole spectrum and accumulates. The spike applies it to EVERY Poisson bracket
+        // (alfven.py:79, `* self.DA`). Zeroes everything above 2/3 of Nyquist on either
+        // axis, which is exactly the band a quadratic nonlinearity can alias into.
+        static inline float uz_dealias_23(uint2 gid, int w, int h) {
+            float2 k = uz_wavenumber(gid, w, h);
+            float cut = (2.0 / 3.0) * float(w / 2);
+            return (abs(k.x) < cut && abs(k.y) < cut) ? 1.0 : 0.0;
+        }
+
+        // Matches Swift StagedPassInfo (Renderer). Bound at fragment buffer 9 on every
+        // staged pass; `(0, 1)` for a stage that is not iterated. ALFVEN.1c.
+        struct StagedPassInfo {
+            int index;
+            int count;
+        };
+
         // Matches Swift FeedbackParams layout (8 floats = 32 bytes).
         struct FeedbackParams {
             float decay, base_zoom, base_rot;

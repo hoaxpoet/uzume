@@ -52,6 +52,46 @@ struct StagedCompositionTests {
         #expect(sawCartograph)
     }
 
+    /// ALFVEN.1 task 5 — the Poisson Sandbox diagnostic loads, compiles all five
+    /// stages with the three new keys intact, and stays out of both planner
+    /// selection (D-074) and manual cycling (PR.0).
+    @Test("Poisson Sandbox loads with its persistent iterated stage and stays out of the roster")
+    func poissonSandboxLoadsAndIsExcluded() throws {
+        let ctx = try MetalContext()
+        let loader = PresetLoader(device: ctx.device, pixelFormat: ctx.pixelFormat)
+        guard let sandbox = loader.presets.first(where: {
+            $0.descriptor.name == "Poisson Sandbox"
+        }) else {
+            Issue.record("Poisson Sandbox preset not found in bundle")
+            return
+        }
+
+        #expect(sandbox.descriptor.isDiagnostic, "must be excluded from planner scoring (D-074)")
+        #expect(sandbox.descriptor.certified == false)
+        #expect(sandbox.descriptor.passes.contains(.staged))
+        #expect(sandbox.stages.map(\.name)
+                == ["velocity", "divergence", "pressure", "project", "compose"])
+
+        // The pressure stage is the one carrying all three new keys.
+        guard let pressure = sandbox.stages.first(where: { $0.name == "pressure" }) else {
+            Issue.record("Poisson Sandbox has no `pressure` stage")
+            return
+        }
+        #expect(pressure.persistent)
+        #expect(pressure.iterations == 24)
+        #expect(pressure.pixelFormat == .rgba32Float)
+        #expect(pressure.writesToDrawable == false)
+        #expect(sandbox.stages.last?.writesToDrawable == true)
+        #expect(sandbox.stages.last?.persistent == false,
+                "the drawable stage must never be persistent")
+
+        // Reachable by name, never by cycling.
+        #expect(loader.selectPreset(named: "Poisson Sandbox") != nil)
+        for _ in 0..<loader.presets.count {
+            #expect(loader.nextPreset()?.descriptor.name != "Poisson Sandbox")
+        }
+    }
+
     @Test("StagedSandbox loads with two compiled stages")
     func stagedSandboxLoadsWithTwoStages() throws {
         let ctx = try MetalContext()

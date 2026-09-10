@@ -161,6 +161,20 @@ constant float kTumbleRate    = 11.0;
 // deviation (D-026). Accent on top of the continuous volume ramp; kept modest so
 // continuous energy stays the primary driver (Audio Data Hierarchy).
 constant float kStrandFlare   = 0.60;
+// Bloom breathing (PR.5.4) — the source's operating point, measured rather than read.
+// source.milk per_pixel: `zoom *= min(1.05, max(1, max(bass, treb)))` — OUTWARD ONLY,
+// capped at +5 %. Driven offline with the real track (Seven Nation Army, the page's ×4
+// boost), the butterchurn oracle sits AT the 1.05 cap on 60 % of frames, at the floor on
+// 35 %, mean +3.15 %, and the median is still 1.05 through the pre-chorus drop. It is an
+// almost always-on outward push, and that push is what keeps the feedback field fed
+// everywhere: ink flows from wherever the ribbon is into the rest of the frame, so an
+// unfed half never dims and never inverts to white. Our primitives are DEVIATIONS (≈0 at
+// the running average), so a music-only term is silent exactly when the music sits at its
+// average — which is most of a quiet passage. Hence a baseline that is always on, plus the
+// music to the same cap.
+constant float kBreathBase    = 0.03;    // always-on outward push (oracle mean +3.15 %)
+constant float kBreathCap     = 0.05;    // source's cap
+constant float kBreathKnee    = 0.06;    // tanh knee on bass_att_rel; p90 of real music lands near the cap
 
 struct DragonStrandVertexOut {
     float4 position [[position]];
@@ -344,7 +358,27 @@ float2 mvWarpPerVertex(
     float md   = sin(ang * 5.0);
     md = md * md * md * md * md;                              // ^5
     float z    = (1.0 + fabs(0.01 * md)) * 0.99951;
-    z *= clamp(1.0 + 0.06 * (f.bass * 6.0 - 1.0), 0.97, 1.07);  // breathing (bass, 6×-boosted)
+    // Breathing — BUG-115 / PR.5.2 / PR.5.3 / PR.5.4, in that order, and the record matters.
+    //   BUG-115 (as shipped): `clamp(1 + 0.06*(f.bass*6 - 1), 0.97, 1.07)` — an absolute
+    //   threshold on AGC-normalised bass (FA #31), 1.024 median / 1.070 p90 on real music.
+    //   PR.5.2 moved it to the deviation primitive but as `tanh(max(0, rel))` with no knee:
+    //   flat at 1.0 on 64 % of frames — Matt: "less connection between visuals and music".
+    //   PR.5.3 restored the spread with a SIGNED form, 0.965–1.036 — and that inward half
+    //   is a drain: sampling from further out every frame collapses the field toward the
+    //   centre, and on a quiet passage it did so for seconds (frame 1050 of the 21:12
+    //   session: 45 % of the display near-white). PR.5.2's commit ALSO asserted that the
+    //   old constant outward push "evacuated the frame faster than the strands refilled
+    //   it". That was inferred, not measured, and it is wrong: the source pushes outward
+    //   +3–5 % on most frames (see kBreathBase), and doing the same here is what removes
+    //   the white entirely (nearWhite 0.000 on every sampled frame, saturation 0.52).
+    //   The old form's real defects were the routing and the uncapped 7 % — not the push.
+    // Falsified on the way, so they are not retried: strand-alpha floors (0.15/0.30: no
+    // change), 8-bit feedback emulation (no change), max(bass, treb) (treb_att_rel is
+    // +0.002 at the drop — a deviation, unlike the source's boosted absolute band), a
+    // post-invert soft ceiling (cannot brighten an empty field), and a vertically mirrored
+    // strand set (fixed the symptom by feeding both halves, but the reference does not do
+    // it and does not need it once the field is kept fed).
+    z *= 1.0 + kBreathBase + (kBreathCap - kBreathBase) * tanh(max(0.0, f.bass_att_rel) / kBreathKnee);
 
     float2 centre = float2(0.5, 0.5);
     float2 p      = uv - centre;

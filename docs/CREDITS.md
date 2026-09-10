@@ -250,6 +250,56 @@ the wordmark; the application itself ships neither as a bundled resource.
 
 ---
 
+## WebGL-Fluid-Simulation — GPU pressure-projection shaders
+
+**Used in:** `UzumeEngine/Sources/Presets/Shaders/PoissonSandbox.metal` — the
+`poisson_sandbox_divergence_fragment`, `poisson_sandbox_pressure_fragment` and
+`poisson_sandbox_project_fragment` stages (ALFVEN.1, D-244).
+
+**Source:** Pavel Dobryakov, *WebGL Fluid Simulation*.
+
+**Repository:** https://github.com/PavelDoGreat/WebGL-Fluid-Simulation
+
+**Specific artifact:** three GLSL fragment shaders from `script.js` —
+`divergenceShader`, `pressureShader` (the Jacobi pressure iteration) and
+`gradientSubtractShader` — retrieved 2026-09-08.
+
+**What was taken:** the stencils and pass structure, adopted verbatim rather than
+re-derived. Adapted only in context: translated to Metal Shading Language; the
+reference's `vL`/`vR`/`vT`/`vB` vertex varyings recomputed as per-fragment texel
+offsets against our shared `fullscreen_vertex`; and the reference's bounded-box
+free-slip boundary clauses replaced by an `address::repeat` sampler because our
+domain is doubly periodic. The numerics — including the reference's 0.5 factor on
+divergence against an unscaled gradient subtract — are unchanged. The shader file
+header records this in full.
+
+**License:** MIT — https://opensource.org/licenses/MIT
+
+```
+Copyright (c) 2017 Pavel Dobryakov
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+---
+
 ## Other dependencies
 
 System frameworks (Apple): Metal, MetalKit, MetalPerformanceShadersGraph,
@@ -261,8 +311,8 @@ required.
 
 If you ship a derivative of Uzume, you must:
 
-1. Preserve the MIT notice in `LICENSE` and the Beat This! MIT notice
-   in this file. (BeatNet is no longer bundled — its CC-BY section above
+1. Preserve the MIT notice in `LICENSE`, and the Beat This! and
+   WebGL-Fluid-Simulation MIT notices in this file. (BeatNet is no longer bundled — its CC-BY section above
    is a historical note, not a live obligation.)
 1a. Preserve the CC-BY-4.0 attribution for the PANNs MobileNetV1 weights
    (Kong et al., Zenodo 3987831) and the AudioSet ontology — both are

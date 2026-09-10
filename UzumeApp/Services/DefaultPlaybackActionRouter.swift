@@ -403,6 +403,16 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         immediate: Bool,
         catalog: [PresetDescriptor]
     ) -> Bool {
+        // ALPHABETICAL, over EVERY loaded preset (Matt, 2026-09-09: "I just want the presets to
+        // be listed in alphabetical order, so that I can easily navigate to the preset I want").
+        //
+        // PR.8 made this walk scorer-ranked because the protocol's doc said "scorer-ranked order".
+        // Ranked order is per-track and therefore unpredictable to navigate, and PR.8's version was
+        // also recomputed per press — the current preset sank to last by its own family-repeat
+        // multiplier, so "next" wrapped to the top and the walk oscillated between two presets
+        // (PR.8.2). Matt's call reverses the ORDER; the reachability half of the PR.8.2 fix stays:
+        // no eligibility filter here. This is a manual override, so it must reach anything loaded —
+        // diagnostics and over-budget presets included, which PR.8's `filter { $0.1 > 0 }` dropped.
         let eligible = catalog.sorted { $0.name < $1.name }
         guard !eligible.isEmpty else {
             logger.warning("U.6b: presetNudge — empty catalog")

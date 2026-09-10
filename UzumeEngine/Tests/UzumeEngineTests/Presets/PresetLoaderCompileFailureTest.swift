@@ -108,9 +108,34 @@ struct PresetLoaderCompileFailureTest {
     /// conversion, jaggedness fix, and camera-orbit removal each landed correctly, but
     /// Matt's verdict stayed negative through every round ("a loser across the board").
     /// See docs/DECISIONS.md D-224.)
-    /// 29 → 30 at ROOTCHOIR.1 (Root Choir — direct five-root Newton-fractal,
-    /// geometric family, circular tonal runtime at slot 6; uncertified).
-    static let expectedProductionPresetCount = 30
+    /// 29 → 30 at ALFVEN.1 (Poisson Sandbox added — the diagnostic proving the
+    /// persistent / iterations / pixel_format staged extensions by actually solving
+    /// ∇²p = f with a ported Jacobi projection. `is_diagnostic:true`,
+    /// `certified:false`, and `exclude_from_cycling:true` so it never lands in the
+    /// manual cycle; it is a harness fixture in the same class as Staged Sandbox,
+    /// not aesthetic content. See docs/DECISIONS.md D-244.)
+    /// 30 → 31 at ALFVEN.2 (Alfvén added — driven 2D incompressible MHD in vorticity /
+    /// flux-function form. Physics ported from the pseudo-spectral CPU spike; the solver
+    /// moved to a COMPUTE pipeline at ALFVEN.4 (`AlfvenSolver`) because the staged
+    /// fragment path can host neither a mid-frame reduction for adaptive dt nor real
+    /// substeps. PLACEHOLDER exposure until a reduction/mip surface exists for film.py's
+    /// percentile auto-exposure. `certified: false` — so the Orchestrator never plans it
+    /// (D-074) — but `exclude_from_cycling` was flipped to FALSE at ALFVEN.4d so the
+    /// manual next-preset control can reach it: with both flags set it was unreachable in
+    /// the app by ANY route, which made a live look-check impossible. No audio routing
+    /// until ALFVEN.3. See docs/presets/ALFVEN_DESIGN.md §10 and D-245.)
+    /// 31 → 32 at ALFVEN.1c (FFT Sandbox added — a GPU 2D Stockham FFT on the staged
+    /// surface, one butterfly pass per stage iteration, gated by a round-trip identity
+    /// test. Infrastructure for Alfvén's spectral stabiliser, proven standalone first.
+    /// `is_diagnostic`, `exclude_from_cycling`.)
+    /// 32 → 31 on merging main (D-246: Arachne removed there, taking main's own count
+    /// 30 → 29. This branch's +2 lands on top of that, so 29 + 2 = 31, NOT 32.)
+    /// 31 → 32 at ROOTCHOIR.1 (Root Choir — direct five-root Newton-fractal, geometric
+    /// family, circular tonal runtime at slot 6; uncertified. Its own branch wrote
+    /// "29 → 30" because it was cut before Alfvén and FFT Sandbox landed; neither side's
+    /// number survives the merge — main's 31 plus this one is 32. The gate below COUNTS
+    /// the loaded roster, so it is the arbiter, not this arithmetic.)
+    static let expectedProductionPresetCount = 32
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

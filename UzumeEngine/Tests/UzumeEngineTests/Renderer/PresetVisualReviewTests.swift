@@ -91,13 +91,6 @@ struct PresetVisualReviewTests {
     private static let renderHeight = 1280
     private static let outputRoot = "/tmp/uzume_visual"
 
-    private static let arachneReferenceRelPaths: [(label: String, path: String)] = [
-        ("Ref 01", "docs/VISUAL_REFERENCES/arachne/01_macro_dewy_web_on_dark.jpg"),
-        ("Ref 04", "docs/VISUAL_REFERENCES/arachne/04_specular_silk_fiber_highlight.jpg"),
-        ("Ref 05", "docs/VISUAL_REFERENCES/arachne/05_lighting_backlit_atmosphere.jpg"),
-        ("Ref 08", "docs/VISUAL_REFERENCES/arachne/08_palette_bioluminescent_organism.jpg"),
-    ]
-
     // Nimbus review cells: the three TRUST refs (form / meso / micro) the body
     // is authored against + the two AVOID anti-refs the body must not match.
     private static let nimbusReferenceRelPaths: [(label: String, path: String)] = [
@@ -115,7 +108,7 @@ struct PresetVisualReviewTests {
     /// the WORLD pass alone, the COMPOSITE pass, and any intermediate stages.
     /// Setting `RENDER_STAGE=<name>` limits output to a single stage.
     @Test("Render staged preset per-stage PNGs (RENDER_VISUAL=1)",
-          arguments: ["Staged Sandbox", "Arachne"])
+          arguments: ["Staged Sandbox"])
     func renderStagedPresetPerStage(_ presetName: String) throws {
         guard ProcessInfo.processInfo.environment["RENDER_VISUAL"] == "1" else {
             print("[PresetVisualReview] RENDER_VISUAL not set, skipping staged \(presetName)")
@@ -138,17 +131,6 @@ struct PresetVisualReviewTests {
         let outputDir = try makeOutputDirectory()
         print("[PresetVisualReview] staged output dir: \(outputDir.path)")
 
-        // Warm an ArachneState so the staged WORLD + COMPOSITE fragments can
-        // read mood / web / spider buffers at slots 6 / 7. Other staged
-        // presets (e.g. "Staged Sandbox") need no per-preset state.
-        let arachneState: ArachneState? = {
-            guard presetName == "Arachne" else { return nil }
-            guard let state = ArachneState(device: ctx.device, seed: 42) else { return nil }
-            let warmFV = FeatureVector(bass: 0.5, mid: 0.5, treble: 0.5,
-                                       time: 1.0, deltaTime: 1.0 / 60.0)
-            for _ in 0..<30 { state.tick(features: warmFV, stems: .zero) }
-            return state
-        }()
 
         let fixtures: [(name: String, fv: FeatureVector)] = [
             ("silence", silenceFixture),
@@ -160,8 +142,7 @@ struct PresetVisualReviewTests {
             var fv = fixture.fv
             let stagePixels = try renderStagedFrame(preset: preset,
                                                     context: ctx,
-                                                    features: &fv,
-                                                    arachneState: arachneState)
+                                                    features: &fv)
             for (stageName, pixels) in stagePixels {
                 if let stageFilter, stageFilter != stageName { continue }
                 let safeName = presetName.replacingOccurrences(of: " ", with: "_")
@@ -184,7 +165,8 @@ struct PresetVisualReviewTests {
     // pipeline state to a 1-attachment encoder — a Metal format mismatch
     // that produces raw G-buffer output instead of the deferred lit result.
     @Test("Render preset to PNGs + contact sheet (RENDER_VISUAL=1)",
-          arguments: ["Arachne", "Aurora Veil", "Gossamer", "Volumetric Lithograph", "Lumen Mosaic", "Nimbus",
+          // main's list (Arachne removed at D-246) plus ROOTCHOIR.1's addition.
+          arguments: ["Aurora Veil", "Gossamer", "Volumetric Lithograph", "Lumen Mosaic", "Nimbus",
                       "Root Choir",
                       // BUG-034: remaining ray-march presets, so before/after step-budget
                       // pairs cover the full affected set. Ferrofluid Ocean renders its
@@ -228,15 +210,6 @@ struct PresetVisualReviewTests {
         let outputDir = try makeOutputDirectory()
         print("[PresetVisualReview] output dir: \(outputDir.path)")
 
-        // Per-preset state.
-        let arachneState: ArachneState? = {
-            guard presetName == "Arachne" else { return nil }
-            guard let state = ArachneState(device: ctx.device, seed: 42) else { return nil }
-            let warmFV = FeatureVector(bass: 0.5, mid: 0.5, treble: 0.5,
-                                       time: 1.0, deltaTime: 1.0 / 60.0)
-            for _ in 0..<30 { state.tick(features: warmFV, stems: .zero) }
-            return state
-        }()
 
         // NB.4: Nimbus reads a 16-byte NimbusStateGPU at slot 6 (Energy bloom +
         // flow phase). Allocate the state; the per-fixture loop below primes it
@@ -371,7 +344,6 @@ struct PresetVisualReviewTests {
                 for _ in 0..<150 { nbState.tick(deltaTime: 0.1, features: fv, stems: .zero) }
             }
             let pixels = try renderFrame(preset: preset, context: ctx,
-                                         arachneState: arachneState,
                                          nimbusState: nimbusState,
                                          lumenEngine: lumenEngine,
                                          noiseTextureManager: noiseTextureManager,
@@ -387,11 +359,7 @@ struct PresetVisualReviewTests {
         }
 
         // Contact sheet — preset-specific layouts.
-        if presetName == "Arachne", let midURL = midPNGURL {
-            let sheetURL = outputDir.appendingPathComponent("Arachne_contact_sheet.png")
-            try buildArachneContactSheet(renderedMidPNG: midURL, to: sheetURL)
-            print("[PresetVisualReview] wrote \(sheetURL.lastPathComponent)")
-        } else if presetName == "Nimbus", let midURL = midPNGURL {
+        if presetName == "Nimbus", let midURL = midPNGURL {
             let sheetURL = outputDir.appendingPathComponent("Nimbus_contact_sheet.png")
             try buildContactSheet(renderedMidPNG: midURL,
                                   references: Self.nimbusReferenceRelPaths,
@@ -462,7 +430,9 @@ struct PresetVisualReviewTests {
             let pixels = try renderFrame(
                 preset: preset,
                 context: ctx,
-                arachneState: nil,
+                // `arachneState:` dropped when main removed Arachne (D-246). ROOTCHOIR.1
+                // was cut before that landed, so its call site still passed it — the text
+                // merge was clean and the result would not compile.
                 features: &features
             )
             let url = outputDir.appendingPathComponent(
@@ -550,7 +520,6 @@ struct PresetVisualReviewTests {
             fv.pulseAmp01 = pulseAmp
 
             let pixels = try renderFrame(preset: preset, context: ctx,
-                                         arachneState: nil,
                                          noiseTextureManager: noiseTextureManager,
                                          features: &fv)
             let url = outputDir.appendingPathComponent("Volumetric_Lithograph_\(label).png")
@@ -933,7 +902,6 @@ struct PresetVisualReviewTests {
     private func renderFrame(
         preset: PresetLoader.LoadedPreset,
         context: MetalContext,
-        arachneState: ArachneState?,
         nimbusState: NimbusState? = nil,
         lumenEngine: LumenPatternEngine? = nil,
         noiseTextureManager: TextureManager? = nil,
@@ -1010,11 +978,7 @@ struct PresetVisualReviewTests {
             encoder.setFragmentBuffer(sceneBuf, offset: 0, index: 4)
         }
         encoder.setFragmentBuffer(histBuf, offset: 0, index: 5)
-
-        if let arachneState = arachneState {
-            encoder.setFragmentBuffer(arachneState.webBuffer, offset: 0, index: 6)
-            encoder.setFragmentBuffer(arachneState.spiderBuffer, offset: 0, index: 7)
-        } else if let nimbusState = nimbusState {
+        if let nimbusState = nimbusState {
             // NB.4: bind the 16-byte NimbusStateGPU at buffer slot 6 (Energy
             // bloom + flow phase). Orthogonal to noiseVolume at *texture* 6 —
             // different binding namespaces. Primed per fixture by the caller.
@@ -1175,7 +1139,6 @@ struct PresetVisualReviewTests {
         preset: PresetLoader.LoadedPreset,
         context: MetalContext,
         features: inout FeatureVector,
-        arachneState: ArachneState? = nil
     ) throws -> [(stage: String, pixels: [UInt8])] {
         let width = Self.renderWidth
         let height = Self.renderHeight
@@ -1216,8 +1179,7 @@ struct PresetVisualReviewTests {
             try encodeStagePass(stage: stage, target: target, commandBuffer: cmd,
                                 features: &features,
                                 fft: fftBuf, wave: waveBuf, stems: stemBuf, hist: histBuf,
-                                samples: offscreen,
-                                arachneState: arachneState)
+                                samples: offscreen)
         }
         cmd.commit()
         cmd.waitUntilCompleted()
@@ -1242,8 +1204,7 @@ struct PresetVisualReviewTests {
                                 commandBuffer: cb,
                                 features: &features,
                                 fft: fftBuf, wave: waveBuf, stems: stemBuf, hist: histBuf,
-                                samples: offscreen,
-                                arachneState: arachneState)
+                                samples: offscreen)
             cb.commit()
             cb.waitUntilCompleted()
             result.append((stage.name, readBGRA(bgra, width: width, height: height)))
@@ -1261,8 +1222,7 @@ struct PresetVisualReviewTests {
                                 commandBuffer: cb,
                                 features: &features,
                                 fft: fftBuf, wave: waveBuf, stems: stemBuf, hist: histBuf,
-                                samples: offscreen,
-                                arachneState: arachneState)
+                                samples: offscreen)
             cb.commit()
             cb.waitUntilCompleted()
             result.append((finalStage.name, readBGRA(bgra, width: width, height: height)))
@@ -1278,7 +1238,6 @@ struct PresetVisualReviewTests {
         features: inout FeatureVector,
         fft: MTLBuffer, wave: MTLBuffer, stems: MTLBuffer, hist: MTLBuffer,
         samples: [String: MTLTexture],
-        arachneState: ArachneState? = nil
     ) throws {
         let rpd = MTLRenderPassDescriptor()
         rpd.colorAttachments[0].texture = target
@@ -1294,13 +1253,6 @@ struct PresetVisualReviewTests {
         enc.setFragmentBuffer(wave, offset: 0, index: 2)
         enc.setFragmentBuffer(stems, offset: 0, index: 3)
         enc.setFragmentBuffer(hist, offset: 0, index: 5)
-        // Per-preset fragment buffers — mirrors RenderPipeline+Staged.encodeStage
-        // (slot 6 = ArachneWebGPU pool, slot 7 = ArachneSpiderGPU). Required for
-        // V.7.7B's staged Arachne fragments to read mood / web / spider state.
-        if let arachneState = arachneState {
-            enc.setFragmentBuffer(arachneState.webBuffer, offset: 0, index: 6)
-            enc.setFragmentBuffer(arachneState.spiderBuffer, offset: 0, index: 7)
-        }
         for (offset, name) in stage.samples.enumerated() {
             guard let tex = samples[name] else { continue }
             enc.setFragmentTexture(tex, index: kStagedSampledTextureFirstSlot + offset)
@@ -1409,78 +1361,6 @@ struct PresetVisualReviewTests {
         guard CGImageDestinationFinalize(dest) else {
             throw VisualReviewError.pngWriteFailed
         }
-    }
-
-    // MARK: - Contact sheet (Arachne only)
-
-    private func buildArachneContactSheet(renderedMidPNG: URL, to outURL: URL) throws {
-        let sheetW = Self.renderWidth
-        let sheetH = Self.renderHeight
-        let topHalfH = sheetH / 2
-        let cellW = sheetW / 4
-        let cellH = sheetH / 2
-
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
-            throw VisualReviewError.cgImageFailed
-        }
-        let bitmapInfo = CGBitmapInfo(rawValue:
-            CGImageAlphaInfo.premultipliedFirst.rawValue
-            | CGBitmapInfo.byteOrder32Little.rawValue)
-        guard let ctx = CGContext(data: nil,
-                                  width: sheetW, height: sheetH,
-                                  bitsPerComponent: 8,
-                                  bytesPerRow: sheetW * 4,
-                                  space: colorSpace,
-                                  bitmapInfo: bitmapInfo.rawValue) else {
-            throw VisualReviewError.cgImageFailed
-        }
-
-        // Black background.
-        ctx.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
-        ctx.fill(CGRect(x: 0, y: 0, width: sheetW, height: sheetH))
-
-        // Top half: rendered output letterboxed to fit (1920×640).
-        if let renderedImage = loadCGImage(from: renderedMidPNG) {
-            let topRect = CGRect(x: 0, y: cellH, width: sheetW, height: topHalfH)
-            drawLetterboxed(image: renderedImage, in: topRect, ctx: ctx)
-        }
-
-        // Bottom half: 4 references each in a 480×640 cell.
-        let projectRoot = projectRootURL()
-        for (index, ref) in Self.arachneReferenceRelPaths.enumerated() {
-            let url = projectRoot.appendingPathComponent(ref.path)
-            let rect = CGRect(x: index * cellW, y: 0,
-                              width: cellW, height: cellH)
-            if let img = loadCGImage(from: url) {
-                drawLetterboxed(image: img, in: rect, ctx: ctx)
-            }
-        }
-
-        // Labels — render via NSGraphicsContext bridging to CGContext.
-        let nsContext = NSGraphicsContext(cgContext: ctx, flipped: false)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = nsContext
-
-        let labels: [(text: String, originX: Int, originY: Int)] = [
-            ("Render: steady-mid", 12, sheetH - 24),
-        ] + Self.arachneReferenceRelPaths.enumerated().map { index, ref in
-            (ref.label, index * cellW + 12, cellH - 24)
-        }
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 14),
-            .foregroundColor: NSColor.white,
-            .backgroundColor: NSColor(red: 0, green: 0, blue: 0, alpha: 0.7),
-        ]
-        for label in labels {
-            let attributed = NSAttributedString(string: " \(label.text) ", attributes: attrs)
-            attributed.draw(at: NSPoint(x: label.originX, y: label.originY))
-        }
-        NSGraphicsContext.restoreGraphicsState()
-
-        guard let cgImage = ctx.makeImage() else {
-            throw VisualReviewError.cgImageFailed
-        }
-        try writeCGImage(cgImage, to: outURL)
     }
 
     /// General N-cell contact sheet: rendered output letterboxed across the top

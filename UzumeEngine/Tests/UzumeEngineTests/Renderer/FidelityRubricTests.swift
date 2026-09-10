@@ -99,7 +99,6 @@ struct FidelityRubricReportTests {
 /// SpectralCartograph passes as lightweight. All other presets still fail M3.
 /// Update this dictionary when rubric logic or shader source is intentionally changed.
 private let expectedAutomatedGate: [String: Bool] = [
-    "Arachne":              false,   // full; V.7.5 §10.1.9 — M3 fails (chitin removed from spider)
     "Aurora Veil":          true,    // lightweight; AV.2 wired seven audio routes — L1/L2/L3 all pass
     "Cymatic Resonance":    false,   // CR.2 rebuild — lightweight; a `feedback+particles`
                                      // vibrating-sand sim whose coupling (energy→vibration /
@@ -194,12 +193,26 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Nimbus":               false,   // direct-fragment; heuristic sees no deviation primitives
     "Ricercar":             false,   // FL.13 flow-field coupling CPU-side; not yet certified
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
+    "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
+                                     // surface, not a certification candidate. Reads no audio at all
+                                     // (routing is ALFVEN.3), so the coupling items cannot pass.
     "Meniscus":             false,   // MEN.2a stub, measured 4/15. The heuristic reads the
                                      // preset's MSL, and Meniscus's subject is not in it —
                                      // the surface is `MeniscusSurface` geometry drawn from a
                                      // CPU wave field (the Skein / Lumen / Filigree precedent).
                                      // It also has NO audio coupling at all until MEN.2b/MEN.3,
                                      // so L2 cannot pass yet by design. certified: false.
+    // Both are ALFVEN-program entries that render nothing a still-frame rubric can
+    // score, so `false` is the correct locked value rather than a deficiency:
+    //   Alfvén      — the fragment is only the D-037 non-black ground; the field is
+    //                 drawn by `AlfvenSolver` through the ParticleGeometry seam, and
+    //                 the shipping look still awaits film.py's percentile auto-exposure
+    //                 and its seam bloom (both need a reduction/blur surface). Cyclable
+    //                 since ALFVEN.4d, but still `certified: false`, so the Orchestrator
+    //                 does not plan it (D-074).
+    //   FFT Sandbox — a diagnostic (ALFVEN.1c), never user-facing.
+    "Alfvén": false,
+    "FFT Sandbox": false
 ]
 
 @Suite("Fidelity Rubric — Automated Gate")

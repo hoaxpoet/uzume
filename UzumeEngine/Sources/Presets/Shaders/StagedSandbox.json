@@ -26,5 +26,6 @@
   "complexity_cost": { "tier1": 1.5, "tier2": 1.0 },
   "certified": false,
   "is_diagnostic": true,
+  "exclude_from_cycling": true,
   "rubric_profile": "lightweight"
 }
