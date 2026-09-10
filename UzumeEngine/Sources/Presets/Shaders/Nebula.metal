@@ -170,11 +170,25 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     //   complete trips around the hue circle over a 200 s track — it went unnoticed
     //   because v1's ring occupied a sliver and only ever showed one hue at a time.
     //   With the circle now filled, that drift walks the whole preset through green,
-    //   yellow and orange, outside both its stated description ("deep purples and blues
-    //   for low frequencies, hot pinks for highs") and the `color_temperature_range`
-    //   its own sidecar declares. The sweep is now bounded: blue at the bass end through
-    //   violet to magenta at the top, with a slow wobble instead of a rotation.
-    float hue = fract(0.58 + angle01 * 0.32 + sin(t * 0.035) * 0.02);
+    //   yellow and orange, outside its stated description ("deep purples and blues for
+    //   low frequencies, hot pinks for highs"). The sweep is now bounded: blue at the
+    //   bass end through violet to magenta at the top, with a slow wobble.
+    //
+    //   ⚠ AN EARLIER VERSION OF THIS NOTE ALSO CITED `color_temperature_range`, AND THAT
+    //     WAS WRONG. That sidecar field is a PLANNER hint — `PresetScorer.moodSubScore`
+    //     reads its midpoint to match a preset against a track's valence (warm for happy,
+    //     cool for sad). It constrains which SONGS reach this preset, not which hues the
+    //     shader may draw. Nothing structural bounds the palette; the bound below is a
+    //     choice, made from the description, and is Matt's to widen.
+    // Matt, 2026-09-10, after seeing three candidates rendered on his own session:
+    // the WIDER sweep. 0.45 -> 1.00 spans teal and green at the bass end, through blue
+    // and violet, to magenta and a warm accent at the top — roughly 200 degrees of hue
+    // against v2's first cut at 115. It keeps the cool anchor that puts this preset in
+    // the ambient/comedown slot while answering "are there colours beyond purples and
+    // magentas". The full visible spectrum (red at the bass) was the third candidate and
+    // was NOT chosen: it starts to read as a rainbow analyser, and "rainbow layer cake"
+    // is an explicit anti-reference in Stave's set.
+    float hue = fract(0.45 + angle01 * 0.55 + sin(t * 0.035) * 0.02);
     float sat = 0.62 + band * 0.28;
     float val = bandMask * (0.35 + band * 0.65) * (0.6 + activity * 0.4);
     color += hsv2rgb(float3(hue, sat, val));
