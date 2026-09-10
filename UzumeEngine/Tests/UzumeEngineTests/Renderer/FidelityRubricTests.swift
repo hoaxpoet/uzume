@@ -187,9 +187,14 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Lumen Mosaic":         false,   // slot-8 pattern engine is CPU-side (the original precedent)
     "Nacre":                true,    // lightweight; L1/L2/L3 pass in-shader (band routes visible
                                      // to the heuristic even though TIV palette is CPU-fed)
-    "Root Choir":           false,   // lightweight Liquid Script; intentionally uncertified
-                                     // through slot 6, so the source heuristic cannot see them.
-                                     // Uncertified pending visual M7.
+    "Root Choir":           true,    // Liquid Script: the routes ARE in the MSL the heuristic
+                                     // reads (bass_dev drives mv_warp advection, beat_composite
+                                     // the stroke accent), so it passes the automated gate. The
+                                     // preset is still `certified: false` pending Matt's live
+                                     // M7 — this dict locks what the heuristic MEASURES, not
+                                     // whether the preset is approved. The previous `false`
+                                     // carried a comment about routes arriving "through slot 6",
+                                     // which described the superseded five-root Newton design.
     "Nimbus":               false,   // direct-fragment; heuristic sees no deviation primitives
     "Ricercar":             false,   // FL.13 flow-field coupling CPU-side; not yet certified
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
