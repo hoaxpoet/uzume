@@ -1,6 +1,7 @@
 // VisualizerEngine+Presets — Preset switching and render-path configuration.
 // swiftlint:disable file_length
 
+import Audio
 import Combine
 import CoreGraphics
 import Foundation
@@ -152,6 +153,7 @@ extension VisualizerEngine {
         pipeline.setStructuralPrediction(.none)   // Skein.ENGINE.3 (D-151): reset to inert default on preset switch
         pipeline.setMVWarpCanvasGround(nil)   // Skein.5.3b: drop the per-track ground override (only Skein sets it)
         gossamerState = nil
+        nebulaState = nil
         nimbusState = nil
         skeinState = nil
         lumenPatternEngine = nil
@@ -556,6 +558,7 @@ extension VisualizerEngine {
     private func bindStatefulPresetRuntime(for desc: PresetDescriptor) {
         switch desc.name {
         case "Gossamer":    bindGossamerRuntime(desc)
+        case "Nebula":      bindNebulaRuntime(desc)
         case "Skein":       bindSkeinRuntime(desc)
         case "Nimbus":      bindNimbusRuntime(desc)
         case "Lumen Mosaic": bindLumenMosaicRuntime(desc)
@@ -606,6 +609,26 @@ extension VisualizerEngine {
             }
         } else {
             logger.error("GossamerState: failed to allocate wave pool for preset '\(desc.name)'")
+        }
+    }
+
+    private func bindNebulaRuntime(_ desc: PresetDescriptor) {
+        // PR.21 — Nebula's ring bands, peak-held. The tick closure captures the FFT
+        // processor because the tick signature carries only (FeatureVector, StemFeatures)
+        // and this preset needs the SPECTRUM; widening that signature for one consumer
+        // would change a hook five other presets already use.
+        guard let state = NebulaState(device: context.device) else {
+            logger.error("NebulaState: failed to allocate band buffer for preset '\(desc.name)'")
+            return
+        }
+        nebulaState = state
+        pipeline.setDirectPresetFragmentBuffer(state.bandBuffer)
+        let fft = fftProcessor
+        pipeline.setMeshPresetTick { [weak state] features, _ in
+            guard let state, let base = fft.magnitudeBuffer.pointer.baseAddress else { return }
+            state.tick(deltaTime: features.deltaTime,
+                       magnitudes: base,
+                       binCount: FFTProcessor.binCount)
         }
     }
 

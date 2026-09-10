@@ -200,26 +200,9 @@ public struct FeatureVector: Sendable {
     /// answers "how loud is this passage"; this answers "did something just LAND". Rationale
     /// and the measured event specificity of every alternative: `SpectralAnalyzer.Result`.
     public var spectralLevelRise: Float
-    /// PR.20 float 54 — PER-TRACK HUE ANCHOR, 0…1. A stable pseudo-random value derived from
-    /// the track's identity: constant for the whole of a track, different for the next one.
-    ///
-    /// Why it has to live here. Per-track variation already existed for Lumen Mosaic and Skein
-    /// via `lumenTrackSeedHash`, but it reaches them through per-preset STATE BUFFERS, which a
-    /// `direct` preset does not have — so nothing track-scoped could reach Nebula, Plasma,
-    /// Waveform or Spectral Cartograph at all. Two stateless derivations were tried first and
-    /// MEASURED FALSE on a real session: `accumulatedAudioTime - trackElapsedS` looks like the
-    /// time at track start and is not, because the two clocks advance at different rates
-    /// (~1:11 over one capture). There is no existing field that is constant within a track
-    /// and varies between them.
-    ///
-    /// Zero when no identity is known (silence, cold start, an unprofiled local file), which
-    /// is a legitimate anchor rather than a sentinel — consumers rotate by it and 0 is simply
-    /// "no rotation".
+    /// PR.20 float 54 — per-track hue anchor, 0…1 (0 = no identity). See EP PR.20.
     public var trackHueAnchor01: Float
-    // Floats 55–56 — PADDING. 53 floats is 212 bytes and a GPU constant buffer must be
-    // 16-byte aligned; the same reason floats 51–52 were padding before DYN.1b/DYN.2 claimed
-    // them, and float 54 before PR.20. ORDER IS THE CONTRACT — `Common.metal` must match
-    // field-for-field.
+    // Floats 55–56 — PADDING. ORDER IS THE CONTRACT; BOTH MSL sites must match field-for-field.
     // swiftlint:disable:next identifier_name
     public var _pad55, _pad56: Float
 

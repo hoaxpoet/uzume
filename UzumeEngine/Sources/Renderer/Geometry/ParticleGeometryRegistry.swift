@@ -65,6 +65,10 @@ public enum StatefulRuntimeRegistry {
         // `ParticleGeometry.update` signature cannot carry: the CPU-only
         // `StructuralPrediction`. It binds a tick (no slot-6 buffer) purely to feed
         // `WitchlightStroke.path.ingestStructure` — the Skein.ENGINE.3 / D-151 bridge.
-        "Witchlight"
+        "Witchlight",
+        // PR.21 — Nebula is the first `direct` preset with a state buffer. Its ring's
+        // peak-hold needs the previous frame's bands, which nothing on the direct path
+        // carries: `SpectralHistoryBuffer` holds MIR scalars, not spectra.
+        "Nebula"
     ]
 }
