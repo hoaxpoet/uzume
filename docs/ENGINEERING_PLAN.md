@@ -303,7 +303,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | ✅ **PR.18 — CERTIFIED 2026-09-09, the 22nd.** Matt: *"looks great. looks ready to certify."* Sync half addressed (14 routes, BUG-124); fidelity half built (silk material, strand irregularity, node glints, atmosphere, wave displacement, catenary scallop). Rubric 4/15 → 8/15; cost 6.6 → ~9.8 ms, inside budget. Reference set recurated (12 images). Open items listed under PR.18 step 4. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
-| **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ⏳ **open.** 77-line day-one shader; "more activated" is a look ask as much as a sync one. |
+| **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | 🔨 **PR.19, code complete — M7 owed.** Five measured mechanisms fixed: linear-bin→angle (2 % of the circle carried 27 % of the energy), a band pinned at its floor, 0.60× spatial noise, level-dependence, zero declared routes. Nine routes now declared. No cost increase. Reference set is still an unfilled template. |
 | **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
 | **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
 | **Nacre** | *"Slow down the speed slightly or make it match the tempo of the music. Too fast overall."* | ⏳ **open.** Primary complaint is a constant that is too high; tempo-matching is his *alternative*, not the requirement. |
@@ -1302,9 +1302,9 @@ beta cut.
 **The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
 which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
 diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
-to it. ⚠ **Superseded by the PR.18 recount (2026-09-09): five, not six** — Arachne was removed
-at D-246, Gossamer certified at PR.18, and Alfven arrived from ALFVEN.4d/4e. The live figure is
-Alfven, Membrane, Nebula, Plasma, Waveform;
+to it. ⚠ **Superseded — six again, and for different reasons** (re-derived at PR.19, 2026-09-10):
+Arachne was removed at D-246, Gossamer certified at PR.18, and Alfven then RootChoir arrived from
+parallel sessions. The live figure is Alfven, Membrane, Nebula, Plasma, RootChoir, Waveform;
 the sentence below is kept as written for the record of what the survey said at the time.
 That left **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
 Plasma, Waveform.
@@ -1394,6 +1394,104 @@ and think the ball has a personality."* That is the preset working; it is not to
 only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
+
+### PR.19 — Nebula deep dive 🔨 code complete, M7 owed (2026-09-10, Matt: *"proceed with nebula"*)
+
+#### Step 1 — definition
+
+**Matt's ask, verbatim** (roster review §Nebula): *"Needs better sync with music. Spikes are too
+sporadic. Should look more activated."*
+
+**Musical role.** The spectrum itself is the instrument: a ring whose radius at every angle is what
+the music is doing at that frequency, right now, with the core and the surrounding haze carrying
+the overall weight of the mix.
+
+**Reference set — a DIFFERENT failure from Gossamer's.** Gossamer's README was fully annotated and
+its images had been lost to `.gitignore`. Nebula's README is **an unfilled template**: every field
+is still a `<...>` placeholder, including the palette slot, the anti-references and the whole
+stylization contract. It was never curated at all. Nebula is `rubric_profile: lightweight`, so the
+contract is the substitute for the full rubric — and it is blank. **Not curated in this increment**
+(Matt's roster note is about behaviour, and its look is now a live question for him), but it is the
+gate that stands between this preset and certification.
+
+#### Step 2 — diagnosis, measured
+
+New: `NebulaSpectrumDiagnosticTests` runs real `raw_tap.wav` captures through the production
+`FFTProcessor` (FA #27) and reports **what the shader's own expressions evaluate to** — not what the
+primitive carries. That distinction is the point: a spectrum can be perfectly healthy and still
+arrive at arithmetic that crushes it.
+
+**Five mechanisms, all measured on two independent captures.**
+
+| # | Mechanism | Evidence |
+|---|---|---|
+| 1 | **The ring was a lopsided fan.** Angle mapped to bin index LINEARLY, but musical energy is log-distributed and bottom-heavy. | The first **eighth** of the circle carried **63.8 %** of ring energy; everything below 250 Hz — **27.2 %** of the energy — was crammed into **2.0 %** of the circle. Three quarters of the ring drew bins with nothing in them. |
+| 2 | **The band was pinned at its floor.** `saturate(mag * 8.0)`. | Under 0.02 on **58 %** of samples, above 0.5 on **2.8 %**. `bandRadius` p50 = **0.0848** against a floor of 0.08 — half the ring within 0.5 % of its minimum. |
+| 3 | **The ring was spatially noisy.** No aggregation; v1 read one bin per position and lerped to its neighbour, which smooths nothing. | Neighbour-to-neighbour \|Δmag\| = **0.60× the mean**, identical on both tracks — a property of raw FFT bins, not of the material. This is the "sporadic spikes" complaint *at one instant*, with no motion involved. |
+| 4 | **It was level-dependent.** Raw magnitudes carry no AGC. | The quieter of the two tracks sat at the floor **75 %** of the time against 58 %. |
+| 5 | **Nothing was declared.** No `audio_routes` key, so QG.1 gated none of it. | PR.2's row claimed "no audio coupling declared at all" for five presets and was **false for Gossamer**; for Nebula it is **true** — and the coupling that exists is all absolute. |
+
+**And a finding about the harness, not the preset: every automated still of a `direct` preset has
+been rendered against noise.** `renderDirectPreset` fills the FFT buffer from a fixed LCG — correct
+for the frame-budget gate, and wrong for anything that LOOKS at the frame. All four `direct` presets
+(Nebula, Plasma, Spectral Cartograph, Waveform) read the spectrum as their primary driver, three of
+them carry sync complaints in this very review, and every artifact anyone could have checked them
+against was broadband noise. `MultiPassRenderHarness.realSpectrum` now injects measured magnitudes;
+left unset, nothing changes and the budget gate is untouched.
+
+#### Step 3 — implementation
+
+Every constant below was **picked from a sweep, not chosen by taste**, and the sweeps are in the
+diagnostic so the next session can re-run them rather than re-derive them.
+
+- **Angle → log frequency, 40 Hz – 8 kHz, with a `sqrt(f)` tilt.** Energy share per eighth goes from
+  `63.8 10.6 7.1 5.8 4.3 3.3 2.8 2.3` (spread **27.7×**) to `6.5 24.7 31.1 12.4 10.4 6.9 4.2 3.8`
+  (spread **8.2×**). A steeper tilt flattens further but starves the bass, which is the part a
+  listener feels. Tilt 0.5 is the +3 dB/octave pink slope — measurement landing on the textbook
+  value rather than near it.
+- **Overlapped band aggregation (window = 5 angular positions).** Takes spatial volatility from
+  **0.60× → 0.09×** of the mean, a 6.7× reduction, because averaging N independent noisy bins cuts
+  variance by √N. No new state needed — which was checked *before* building any.
+- **Logarithmic response.** On the same aggregated input: linear ×8 saturated **31 %** of samples,
+  `sqrt` 43 %, `pow 0.4` 60 %; `log1p(x·90)/log1p(90)` sits at **3 % floored, 1 % saturated** with
+  p50 mid-range. A heavy-tailed signal needs a compressive curve; that is why spectrum displays are
+  drawn in dB.
+- **Reach from deviation primitives** (D-026), shape from the spectrum — so the preset behaves the
+  same on a quiet mix and a loud one.
+- **Ring floor raised clear of the core** (0.10 → 0.16). A quiet sector drew its band *on top of*
+  the core glow and was swallowed by it, so the quiet part of the circle vanished and what survived
+  read as a fan.
+- **Palette bounded.** v1's `t * 0.02` hue drift is **three full rotations** over a 200 s track — it
+  went unnoticed because v1's ring occupied a sliver and only ever showed one hue at a time. With
+  the circle filled it walked the preset through green, yellow and orange, outside both its own
+  description and the `color_temperature_range` its sidecar declares.
+- **FA #67** — core glow and haze both read `presence` in the first cut, which is the
+  one-primitive-per-layer trap. The haze now takes the slow signal (`arousal`).
+- **Nine `audio_routes` declared**, all firing under QG.1.
+
+**Ring continuity — a metric that had to be re-derived because the first one measured the wrong
+thing.** Aggregation smooths the *magnitude*, but the shader then applies a log response whose slope
+is steepest near zero, so a spectrum smooth in magnitude can still be jagged in *radius*. Measured
+properly — |Δradius| between neighbours against the band's own width — **18.9 %** of neighbouring
+positions stepped further than the band was thick (p99 step 3.7× the width), which is precisely why
+it drew spokes. The overlap plus a ×1.4 band width takes that to **4.0 %**.
+
+**Cost: no increase.** Nebula measured **8.27 / 8.37 ms**, against **Plasma 9.98 / 8.63** and
+**Waveform 9.14 / 9.56** — the two *unchanged* `direct` presets — in the same runs. It is the
+cheapest of the three. The overlap loop is a handful of extra bin reads.
+
+**Goldens regenerated**, 24–28 bits across all three fixtures. ⚠ Worth recording what the old golden
+was: `0x0000080C0C080000`, **identical on all three fixtures and almost entirely zero**. A dHash that
+cannot tell silence from a beat-heavy passage was locking in the defect Matt reported.
+
+#### Step 4 — M7, owed
+
+Matt watches it live. The measured defects are fixed; **whether the result looks right is his call
+and not one more offline iteration**. Two specific things a still cannot settle: whether the ring
+reads as a ring in motion rather than a starburst, and whether the log-frequency mapping makes the
+preset feel connected to what he is hearing. Open regardless of the answer: the reference set is
+still an unfilled template, and QG.1 has **no primitive for the spectrum itself**, so the ring's
+shape — the preset's whole subject — cannot be expressed as a declared route.
 
 ### Increment DS.6 — the playback chrome, retokenized in place ✅ (2026-09-03, D-241, M7 passed)
 
@@ -7723,7 +7821,7 @@ These milestones map to product-level outcomes, not implementation phases.
 
 **Milestone C — Device-Aware Show Quality.** ✅ **MET (2026-04-25).** The same playlist produces an excellent show on M1 and a richer one on M4 without jank. *Requires: ~~Phase 6 complete~~ ✅.*
 
-**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 27 production presets certified (recounted from the sidecars at PR.18, 2026-09-09, and RE-counted after merging `origin/main`).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **31 JSON sidecars, 22 with `certified: true`**, of which 4 (StagedSandbox, SpectralCartograph, PoissonSandbox, **FFTSandbox**) carry `is_diagnostic` and are not roster presets → **27 production presets, 22 certified**. Uncertified roster presets: **Alfven**, Membrane, Nebula, Plasma, Waveform. ⚠ **This line said "22 / 26" and "four uncertified" an hour earlier and was already wrong by the time it was pushed** — ALFVEN.4d/4e landed Alfven and FFTSandbox on `main` in parallel (PRs #214/#215), adding one roster preset and one diagnostic. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before.** *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
+**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 28 production presets certified (re-derived from the sidecars at PR.19, 2026-09-10, AFTER merging `origin/main`).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **32 JSON sidecars, 22 with `certified: true`**, of which 4 (StagedSandbox, SpectralCartograph, PoissonSandbox, FFTSandbox) carry `is_diagnostic` and are not roster presets → **28 production presets, 22 certified**. Uncertified roster presets: Alfven, Membrane, Nebula, Plasma, **RootChoir**, Waveform. ⚠ **This is the THIRD consecutive recount that was stale before it landed** — 22/26 became 22/27 when ALFVEN.4d/4e added Alfven and FFTSandbox, and 22/27 became 22/28 when RootChoir arrived during PR.19. The denominator moves whenever a parallel session lands a preset, which on this project is most days. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before — and treat any count in a PR description as provisional.** ⚠ **This line said "22 / 26" and "four uncertified" an hour earlier and was already wrong by the time it was pushed** — ALFVEN.4d/4e landed Alfven and FFTSandbox on `main` in parallel (PRs #214/#215), adding one roster preset and one diagnostic. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before.** *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
 
 **Roster survey (2026-07-19) — the production presets (`FidelityRubricTests.certifiedPresets` = ground truth; 27 → 26 at Glass Brutalist's retirement GBRETIRE.1 / D-186, then 26 → 25 at Kinetic Sculpture's retirement KSRETIRE.1 / D-188, 2026-07-20):**
 - **Certified (14):** Lumen Mosaic, Ferrofluid Ocean, Dragon Bloom, Fata Morgana, Murmuration, Nimbus, Skein, Nacre, Floret, Glaze, Filigree, Mitosis, Cytokinesis (Mitosis gen-2), Aurora Veil (AV.7).

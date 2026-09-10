@@ -230,7 +230,16 @@ private let goldenPresetHashes: [String: PresetHashes] = [
     // Production-parity coverage (ticked followers + bound noiseVolume) is
     // NimbusBloomFollowerTest + PresetVisualReviewTests.
     "Nimbus": (steady: 0x0F0F0F0F0F0F0F0F, beatHeavy: 0x0F0F0F0F0F0F0F0F, quiet: 0x0F0F0F0F0F0F0F0F),
-    "Nebula": (steady: 0x0000080C0C080000, beatHeavy: 0x0000080C0C080000, quiet: 0x0000080C0C080000),
+    // PR.19 (2026-09-10): regenerated for the v2 rewrite — log-frequency ring, overlapped
+    // band aggregation, logarithmic response, deviation-driven reach. Drift 24-28 bits
+    // across all three fixtures, which is what a rewrite should look like.
+    //
+    // ★ NOTE WHAT THE OLD GOLDEN WAS: 0x0000080C0C080000, IDENTICAL on all three
+    //   fixtures and almost entirely zero. A dHash that cannot tell silence from a
+    //   beat-heavy passage is a preset drawing essentially nothing — the gate was
+    //   locking in the defect Matt reported. A golden is only a regression guard if the
+    //   picture it encodes is worth keeping.
+    "Nebula": (steady: 0x7B330F0F0F8D1C16, beatHeavy: 0x39398B0F0F0B1D1C, quiet: 0x53772D1F0F0C0E5F),
     "Plasma": (steady: 0x030F170A072F1B0F, beatHeavy: 0x4193254F0E8E87C7, quiet: 0x0F1F0F0F0F07070F),
     // Skein.6 (D-159 cert): all three fixtures are IDENTICAL — the standalone
     // `skein_fragment` this harness renders is the static canvas GROUND (the
