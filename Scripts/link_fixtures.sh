@@ -73,6 +73,13 @@ manifest=(
   "UzumeEngine/Sources/ML/Weights|yes|."
   "docs/VISUAL_REFERENCES|no|\.(jpg|jpeg|png|gif)$"
   "docs/diagnostics|no|\.(jpg|jpeg|png|gif)$"
+  # A single FILE, not a tree, and the reason it is here is a live failure: a worktree
+  # Release build shipped with an EMPTY SpotifyClientID, so every Spotify connect threw
+  # `.spotifyAuthFailure` before reaching the network, and the app looked broken. The
+  # RUNBOOK already warned that this file "does not survive a fresh clone, or a new
+  # worktree" — a warning is not a mechanism, which is what this row makes it.
+  # `required=no`: not every checkout has a client ID, and local-file work is unaffected.
+  "UzumeApp/Uzume.local.xcconfig|no|."
 )
 
 # The required-FILES manifest (RECON.13). Absent file => the primary is not a
@@ -102,8 +109,16 @@ for entry in "${manifest[@]}"; do
   elif [ "$required" != "yes" ] && [ "$count" -eq 0 ]; then
     # Not fatal, but never silent: D-211's whole point is that a worktree
     # missing the reference images degrades preset work rather than failing.
-    echo "link_fixtures: WARNING — optional tree is empty in the primary: $path" >&2
-    echo "                 (preset work that depends on it will silently degrade)" >&2
+    echo "link_fixtures: WARNING — optional source is empty in the primary: $path" >&2
+    case "$path" in
+      *Uzume.local.xcconfig)
+        echo "                 (SPOTIFY_CLIENT_ID absent => every Spotify connect fails" >&2
+        echo "                  with .spotifyAuthFailure; see RUNBOOK §Spotify connector setup)" >&2
+        ;;
+      *)
+        echo "                 (preset work that depends on it will silently degrade)" >&2
+        ;;
+    esac
     [ "$mode" = "--verify" ] && printf 'link_fixtures: %-40s %5s file(s)\n' "$path" "$count"
   elif [ "$mode" = "--verify" ]; then
     printf 'link_fixtures: %-40s %5s file(s)%s\n' "$path" "$count" \

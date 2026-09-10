@@ -422,7 +422,28 @@ public final class PresetLoader: @unchecked Sendable {
         do {
             return try device.makeLibrary(source: source, options: options)
         } catch {
-            logger.error("\(label) compilation failed for \(url.lastPathComponent): \(error)")
+            // Write the source and the diagnostic out. `os.Logger` redacts interpolated
+            // values to `<private>` by default, so this line used to read "compilation
+            // failed for <private>: <private>" — which says a preset broke but not which,
+            // where, or why. The consequence is worse than the missing message: a preset
+            // that fails to compile is simply ABSENT from `PresetLoader.presets`, so every
+            // suite parameterised over the loaded presets passes VACUOUSLY. Two sessions
+            // have now lost time to exactly that (an MSL keyword shadow, then a helper
+            // signature), both surfacing only as a downstream `presetNotFound`.
+            //
+            // A failure here is always exceptional, so the artifact is always worth
+            // writing, and the breadcrumb is `.public` because redaction is the bug.
+            let dump = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("uzume_shader_failure_" + url.lastPathComponent)
+            let header = "// " + label + " FAILED for " + url.lastPathComponent
+                + "\n// " + String(describing: error) + "\n\n"
+            try? (header + source).write(to: dump, atomically: true, encoding: .utf8)
+            let detail = String(describing: error)
+            let name = url.lastPathComponent
+            logger.error("""
+                \(label, privacy: .public) compilation FAILED for \(name, privacy: .public): \
+                \(detail, privacy: .public) — source at \(dump.path, privacy: .public)
+                """)
             return nil
         }
     }

@@ -72,6 +72,10 @@ public enum AudioRoutePrimitives {
         // declaring it fails RouteCoverageTests with "column absent — not recorded" until the
         // fixtures are regenerated. Filed as its own increment.
         out["waveformOccupancy"] = RoutePrimitiveColumn(.features, "waveform_occupancy")
+        // PR.20 — the per-track palette anchor. Constant WITHIN a track by construction, so a
+        // route on it is `structural`, never `continuous`: the continuous floor demands the
+        // primitive VARY across a fixture, which this one must not.
+        out["trackHueAnchor01"] = RoutePrimitiveColumn(.features, "track_hue_anchor01")
         out["midDev"]    = RoutePrimitiveColumn(.features, "mid_dev")
         out["trebRel"]   = RoutePrimitiveColumn(.features, "treb_rel")
         out["trebDev"]   = RoutePrimitiveColumn(.features, "treb_dev")
