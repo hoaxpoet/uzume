@@ -173,6 +173,37 @@ public struct AlfvenSolverConfiguration: Sendable {
     ///
     /// Note `RouteCoverageTests` passed throughout: it asserts the PRIMITIVE fires, not
     /// that the consumer responds to it. A route can be green and visually inert.
+    /// Ceiling on the seam bloom, and the fastest it may change per second.
+    ///
+    /// ⚠ FLASH SAFETY (D-157), on Matt's M7: "a strobing effect ... jarring due to the
+    /// bright white light ... also sporadic." Measured on that clean capture, max
+    /// frame-to-frame delta-luma was **0.4153 against the D-157 gate of 0.05** — 8.3x over,
+    /// on 15 frames. For scale, DS.5's arrival push measures 0.0174 on the same gate.
+    ///
+    /// Cause: film.py's `amt` reaches 1.66 and multiplies a WHOLE-FRAME additive glow,
+    /// while §7's ~30 ms treble timescale is ~2 frames at 60 fps — the envelope moves 43 %
+    /// toward its target in ONE frame. film.py is offline still art; its bloom was never
+    /// validated as a temporal sequence, and a whole-frame additive term is exactly the
+    /// unbounded footprint D-157 forbids.
+    ///
+    /// The ceiling caps the contribution; the slew bounds how fast it may arrive, which is
+    /// what actually bounds delta-luma. Both are needed: a low ceiling still strobes if it
+    /// is reached in one frame.
+    ///
+    /// Calibrated on the production path against a percussive treble train at the fixtures'
+    /// p-max (0.126) — max frame-to-frame delta-luma, gate 0.05:
+    ///
+    ///     unbounded (1.66, no slew)  bloom 0.30...1.66   0.1041   3 frames OVER
+    ///     ceil 0.85, slew 1.2/s      bloom 0.30...0.46   0.0036   0   (too subtle)
+    ///     ceil 0.85, slew 3.0/s      bloom 0.30...0.69   0.0070   0
+    ///     ceil 0.85, slew 6.0/s      bloom 0.30...0.85   0.0124   0   <- shipped
+    ///     ceil 0.85, slew 12/s       bloom 0.30...0.85   0.0227   0   (no extra range)
+    ///
+    /// 6.0 reaches the full ceiling — so the bloom still visibly answers the treble — with
+    /// a 4x margin under the gate, and below DS.5's arrival push (0.0174) which passed M7.
+    /// Beyond it the range stops growing and only the flash does.
+    public var bloomMaxAmount: Float
+    public var bloomSlewPerSecond: Float
     public var trebFloor: Float
     public var trebKnee: Float
     public var centroidLo: Float
@@ -228,6 +259,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         bassTau: Float = 0.10,
         trebleTau: Float = 0.03,
         centroidTau: Float = 2.5,
+        bloomMaxAmount: Float = 0.85,
+        bloomSlewPerSecond: Float = 6.0,
         trebFloor: Float = 0.002,
         trebKnee: Float = 0.017,
         centroidLo: Float = 0.047,
@@ -264,6 +297,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.bassTau = bassTau
         self.trebleTau = trebleTau
         self.centroidTau = centroidTau
+        self.bloomMaxAmount = bloomMaxAmount
+        self.bloomSlewPerSecond = bloomSlewPerSecond
         self.trebFloor = trebFloor
         self.trebKnee = trebKnee
         self.centroidLo = centroidLo

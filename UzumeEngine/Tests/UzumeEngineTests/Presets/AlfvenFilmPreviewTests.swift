@@ -71,6 +71,8 @@ struct AlfvenFilmPreviewTests {
         if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
         if let cy = env["ALFVEN_CYCLE"].flatMap(Float.init) { cfg.cycleSeconds = cy }
         if let jc = env["ALFVEN_JCUT"].flatMap(Float.init) { cfg.jCutoff = jc }
+        if let bc = env["ALFVEN_BLOOMCEIL"].flatMap(Float.init) { cfg.bloomMaxAmount = bc }
+        if let bs = env["ALFVEN_BLOOMSLEW"].flatMap(Float.init) { cfg.bloomSlewPerSecond = bs }
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
                                       pixelFormat: ctx.pixelFormat, configuration: cfg)
 
@@ -185,6 +187,56 @@ struct AlfvenFilmPreviewTests {
                          solver.displayExposure, solver.displayHueCentre,
                          lums.reduce(0, +) / Double(lums.count),
                          lums.min() ?? 0, lums.max() ?? 0))
+            return
+        }
+
+        // ALFVEN_FLASH: the D-157 flash-safety metric on the PRODUCTION path — max
+        // frame-to-frame delta of mean luminance while the audio drivers move. Renders
+        // EVERY frame (not every 60th), because a strobe is by definition a single-frame
+        // event and a sampled harness cannot see one.
+        if env["ALFVEN_FLASH"] == "1" {
+            let frames = Int(env["ALFVEN_FRAMES"] ?? "600") ?? 600
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            var lums: [Double] = []
+            var blooms: [Float] = []
+            for frame in 1...frames {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                f.bassRel = env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? -0.014
+                f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.125
+                // A percussive treble train: bursts to the p99 the fixtures actually show,
+                // silent between. This is the shape that produced Matt's strobe.
+                let burst = (frame % 24) < 3
+                f.trebRel = burst ? (env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0.017) : 0.0
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = target
+                pass.colorAttachments[0].loadAction = .clear
+                pass.colorAttachments[0].storeAction = .store
+                pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.render(encoder: enc, features: f)
+                enc.endEncoding()
+                cmd.commit(); cmd.waitUntilCompleted()
+                lums.append(Self.meanLuma(target))
+                blooms.append(solver.audioBloomAmount)
+            }
+            var maxDelta = 0.0
+            var over = 0
+            for i in 1..<lums.count {
+                let d = abs(lums[i] - lums[i - 1])
+                maxDelta = max(maxDelta, d)
+                if d > 0.05 { over += 1 }
+            }
+            print(String(format: "[alfven-flash] bloom %.2f...%.2f  maxDelta %.4f  over-gate %d/%d "
+                                 + "(D-157 gate 0.05)",
+                         blooms.min() ?? 0, blooms.max() ?? 0, maxDelta, over, lums.count - 1))
             return
         }
 
