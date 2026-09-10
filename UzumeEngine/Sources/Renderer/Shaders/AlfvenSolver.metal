@@ -433,7 +433,7 @@ struct AlfvenDisplayParams {
     float exposure;
     float polarityScale;
     float hueCentre;
-    float _pad0;
+    float bloomAmount;
 };
 
 struct AlfvenVertexOut {
@@ -454,10 +454,61 @@ static inline float3 alf_hsv2rgb(float3 c) {
     return c.z * mix(float3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
 }
 
+// ── Seam bloom (ALFVEN.4f) ───────────────────────────────────────────────────
+// film.py takes the brightest decile of |J|, blurs it at two scales and adds it back
+// tinted by current-sheet polarity. It was deferred as needing "the same reduction
+// surface as the percentile auto-exposure" — which conflated two different things. The
+// AUTO-EXPOSURE needs a whole-frame reduction (percentiles). The BLOOM needs a BLUR,
+// which is local and separable, and the solver already owns a compute pipeline and
+// textures. Only the exposure stays a fixed stand-in.
+//
+//   core = clip((aJ - 0.72) / 0.28, 0, 1)^1.5      film.py's threshold, verbatim
+//   b0   = gaussian(core, 2.0)
+//   b1   = gaussian(core, 7.0)
+kernel void alfven_bloom_core(
+    texture2d<float, access::read>  state [[texture(0)]],
+    texture2d<float, access::write> dst   [[texture(1)]],
+    constant AlfvenParams& p              [[buffer(0)]],
+    constant float& exposure              [[buffer(1)]],
+    uint2 gid                             [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    float aJ = clamp(abs(state.read(gid).z) * exposure, 0.0, 1.0);
+    float core = pow(clamp((aJ - 0.72) / 0.28, 0.0, 1.0), 1.5);
+    dst.write(float4(core, 0.0, 0.0, 1.0), gid);
+}
+
+// One axis of a separable Gaussian. `dir` is (1,0) or (0,1); the field wraps, so the
+// taps wrap with it — the domain is periodic and a clamped edge would darken the border.
+kernel void alfven_blur(
+    texture2d<float, access::read>  src [[texture(0)]],
+    texture2d<float, access::write> dst [[texture(1)]],
+    constant AlfvenParams& p            [[buffer(0)]],
+    constant float2& dir                [[buffer(1)]],
+    constant float& sigma               [[buffer(2)]],
+    uint2 gid                           [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    int radius = int(ceil(3.0 * sigma));
+    float inv2s2 = 1.0 / (2.0 * sigma * sigma);
+    int n = int(p.gridEdge);
+    float sum = 0.0, wsum = 0.0;
+    for (int i = -radius; i <= radius; ++i) {
+        float w = exp(-float(i * i) * inv2s2);
+        int2 o = int2(gid) + int2(dir * float(i));
+        uint2 c = uint2(uint((o.x % n + n) % n), uint((o.y % n + n) % n));
+        sum += w * src.read(c).x;
+        wsum += w;
+    }
+    dst.write(float4(sum / max(wsum, 1e-9), 0.0, 0.0, 1.0), gid);
+}
+
 fragment float4 alfven_display_fragment(
     AlfvenVertexOut in [[stage_in]],
     constant AlfvenDisplayParams& p [[buffer(0)]],
-    texture2d<float, access::sample> stateTex [[texture(0)]]
+    texture2d<float, access::sample> stateTex [[texture(0)]],
+    texture2d<float, access::sample> bloomNear [[texture(1)]],
+    texture2d<float, access::sample> bloomFar  [[texture(2)]]
 ) {
     constexpr sampler smp(filter::linear, address::repeat);
     float J = stateTex.sample(smp, in.uv).z;
@@ -479,6 +530,17 @@ fragment float4 alfven_display_fragment(
     float val = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 
     float3 col = alf_hsv2rgb(float3(fract(hue), sat, val));
+
+    // Seam bloom, film.py's own weights and tints. `amt` is its silence value: the
+    // treble term (`0.85 * sizzle`) needs audio, so it arrives with ALFVEN.3.
+    float b0 = bloomNear.sample(smp, in.uv).x;
+    float b1 = bloomFar.sample(smp, in.uv).x;
+    float glow = 0.75 * b0 + 0.55 * b1;
+    float split = 0.5 + 0.5 * sJ;
+    float3 tintA = float3(1.00, 0.72, 0.42);
+    float3 tintB = float3(0.45, 0.72, 1.00);
+    col += p.bloomAmount * glow * (tintA * split + tintB * (1.0 - split));
+
     col += float3(0.035, 0.045, 0.075) * (1.0 - val);   // D-037: never black
     return float4(min(col, float3(1.0)), 1.0);
 }

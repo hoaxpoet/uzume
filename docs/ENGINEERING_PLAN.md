@@ -9599,6 +9599,64 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.4f — the seam bloom ✅ (2026-09-10)
+
+**Done-when:** film.py's seam bloom renders on the production path, validated against film.py's
+own output rather than by eye.
+
+**The blocker I had been repeating was wrong, and that is the finding.** Four closeouts said the
+bloom needed "the same reduction/mip surface as the percentile auto-exposure". Those are two
+different things: the AUTO-EXPOSURE needs a whole-frame reduction (percentiles); the BLOOM needs a
+BLUR, which is local, separable, and entirely expressible in the compute pipeline `AlfvenSolver`
+has owned since ALFVEN.4. Only the exposure still needs a reduction. Restating an obstacle across
+increments is how it stops being examined.
+
+`alfven_bloom_core` thresholds, `alfven_blur` is one separable axis, and the display fragment adds
+the tinted glow with film.py's own weights (`0.75*b0 + 0.55*b1`), tints and polarity split.
+**Two Gaussians compose exactly** — blurring by `a` then `b` is a blur by `sqrt(a²+b²)` — so the
+sigma-7 level is the sigma-2 level blurred again by `sqrt(45)`: four separable passes instead of
+six, with the wide one running on already-smooth data. Taps wrap, because the domain is periodic
+and a clamped edge would darken the border.
+
+**⚠ The same conflation trap as 4d, caught by measurement.** The first build contributed *nothing*:
+meanLum 0.229 → 0.229. film.py's `aJ` is PERCENTILE-normalised (p99.6 → 1.0), so its 0.72 threshold
+means "the brightest decile"; our `displayExposure` (0.085) is calibrated for BRIGHTNESS against
+REF 05, so `aJ` tops out near 0.38 and never crosses 0.72. Two constants, two different questions —
+exactly the mistake that made the frame flat lavender at 4d. `displayBloomExposure` is now separate,
+which lets `alfven_bloom_core` use film.py's `0.72 / 0.28 / ^1.5` **verbatim**.
+
+**Validated field-to-field, not by eye**, by dumping the GPU bloom chain and running film.py's own
+`gaussian_filter` on the same J:
+
+```
+              gpu mean    film mean   ratio   corr
+  core        0.00929     0.00901     1.071   0.958
+  b0 (σ2)     "           "           "       0.958
+  b1 (σ7)     "           "           "       0.952
+  coverage    3.28%       3.09%
+```
+
+The means being identical across core/b0/b1 within each implementation is itself the check that the
+blur is normalised — a normalised Gaussian preserves the mean.
+
+`displayBloomExposure` = **0.216**, and the choice is deliberate rather than fitted. J's p99.6 runs
+3.99…4.66, so the true scale is 0.216…0.253 and no fixed constant tracks it. 0.216 is the value at
+the brightest end: the threshold is nonlinear, so being 6 % HIGH made the core 1.56× too dense
+(coverage 4.34 %), while being low only makes the bloom slightly shy. Under-blooming is the safe
+direction.
+
+`displayBloomAmount` = 0.30 is film.py's `amt` at silence; its treble term (`0.85 * sizzle`,
+`sizzle = trebRel − 0.6`) needs audio and arrives with ALFVEN.3, at which point the bloom reaches
+1.66 — 5.5× stronger. So the effect being subtle in these stills is correct, not weak.
+
+**⚠ Perf needs re-confirming.** The ~60 fps evidence (ALFVEN.4e, from Matt's capture) predates this:
+the bloom adds 5 dispatches per frame, the widest being 43 taps × 2 passes at 256². Cheap in
+principle, unmeasured live in fact.
+
+**Also:** the harness now dumps the bloom chain as float64 (`bloom_core/b0/b1.f64`) so film.py can
+be run on the identical field — that dump is what caught the 1.56×, which no amount of looking at
+the frame would have.
+
 ### Increment ALFVEN.4e — palette drift over time ✅ (2026-09-09)
 
 **Matt's live verdict on 4d: "it's wonderful."** First positive M7 for this preset. His one ask,
