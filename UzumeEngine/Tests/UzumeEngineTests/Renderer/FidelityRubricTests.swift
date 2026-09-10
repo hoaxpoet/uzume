@@ -143,7 +143,14 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // heuristic can't see it (Filigree/Skein precedent). Certified via
                                      // Matt's M7 sign-off (MITOSIS.2c, "psychedelic cell division")
     "Murmuration":          false,   // full; M3 fails (file: Murmuration.metal)
-    "Nebula":               false,   // lightweight; L2 fails — no deviation primitives in source
+    // PR.19 (2026-09-10): flipped false -> true. L2 failed for the whole of this preset's
+    // life because the v1 shader contained no deviation primitive at all — everything was
+    // raw `fftMagnitudes` with fixed gains, which is the same defect Matt's roster note
+    // was describing from the other side. The v2 rewrite drives the ring's REACH from
+    // bass_att_rel / mid_att_rel / treb_dev (D-026) and now clears L1-L3. L4 stays manual
+    // and Nebula stays `certified: false` — the automated gate is not certification, and
+    // this preset's reference set is still an unfilled template.
+    "Nebula":               true,    // lightweight; L1-L3 pass since PR.19
     "Plasma":               false,   // lightweight; L2 fails — no deviation primitives in source
     "Skein":                false,   // lightweight; L2 fails BY CONSTRUCTION — Skein's deviation
                                      // primitives (stems.*EnergyDev, midAttRel — D-026) are consumed
@@ -187,8 +194,14 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Lumen Mosaic":         false,   // slot-8 pattern engine is CPU-side (the original precedent)
     "Nacre":                true,    // lightweight; L1/L2/L3 pass in-shader (band routes visible
                                      // to the heuristic even though TIV palette is CPU-fed)
-    "Root Choir":           true,    // lightweight Liquid Script; automated L1/L2/L3 pass in
-                                     // shader source. Still uncertified pending visual M7.
+    "Root Choir":           true,    // Liquid Script: the routes ARE in the MSL the heuristic
+                                     // reads (bass_dev drives mv_warp advection, beat_composite
+                                     // the stroke accent), so it passes the automated gate. The
+                                     // preset is still `certified: false` pending Matt's live
+                                     // M7 — this dict locks what the heuristic MEASURES, not
+                                     // whether the preset is approved. The previous `false`
+                                     // carried a comment about routes arriving "through slot 6",
+                                     // which described the superseded five-root Newton design.
     "Nimbus":               false,   // direct-fragment; heuristic sees no deviation primitives
     "Ricercar":             false,   // FL.13 flow-field coupling CPU-side; not yet certified
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
@@ -348,7 +361,11 @@ struct FidelityRubricGateTests {
     // ⚠ Verified the reviewed BINARY, not just the session: `ArrivalStep.o` compiled 12:24:46,
     // app built 12:24:50, last run 12:25:06, session log opens 12:25:04 CDT — so the M7 was on
     // the FTR.33 build and not a stale one (the BUG-051 discipline).
-    private static let certifiedPresets: Set<String> = ["Lumen Mosaic", "Ferrofluid Ocean", "Dragon Bloom", "Fata Morgana", "Murmuration", "Nimbus", "Skein", "Nacre", "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Aurora Veil", "Cymatic Resonance", "Volumetric Lithograph", "Meniscus", "Witchlight", "Stave", "Fractal Tree", "Ricercar"]
+    private static let certifiedPresets: Set<String> = ["Lumen Mosaic", "Ferrofluid Ocean", "Dragon Bloom", "Fata Morgana", "Murmuration", "Nimbus", "Skein", "Nacre", "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Aurora Veil", "Cymatic Resonance", "Volumetric Lithograph", "Meniscus", "Witchlight", "Stave", "Fractal Tree", "Ricercar",
+        // PR.18 (2026-09-09) — the 22nd. Matt's M7 on session `2026-09-09T22-36-18Z`:
+        // *"looks great. looks ready to certify"*. 81 s live on the V.8 uplift build, 5414
+        // frames, zero drawable failures and zero unpresented.
+        "Gossamer"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()

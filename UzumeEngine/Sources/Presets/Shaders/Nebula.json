@@ -4,7 +4,9 @@
   "duration": 30,
   "description": "Radial frequency visualization with particle sparkles and nebula haze",
   "author": "Matt",
-  "passes": ["direct"],
+  "passes": [
+    "direct"
+  ],
   "beat_zoom": 0.05,
   "beat_rot": 0.02,
   "base_zoom": 0.08,
@@ -13,11 +15,69 @@
   "beat_sensitivity": 1.0,
   "visual_density": 0.8,
   "motion_intensity": 0.3,
-  "color_temperature_range": [0.1, 0.5],
+  "color_temperature_range": [
+    0.1,
+    0.5
+  ],
   "fatigue_risk": "low",
-  "transition_affordances": ["crossfade"],
-  "section_suitability": ["ambient", "comedown"],
-  "complexity_cost": { "tier1": 0.6, "tier2": 0.3 },
+  "transition_affordances": [
+    "crossfade"
+  ],
+  "section_suitability": [
+    "ambient",
+    "comedown"
+  ],
+  "complexity_cost": {
+    "tier1": 0.6,
+    "tier2": 0.3
+  },
   "certified": false,
-  "rubric_profile": "lightweight"
+  "rubric_profile": "lightweight",
+  "audio_routes": [
+    {
+      "route": "ring_reach",
+      "primitive": "bassAttRel",
+      "kind": "continuous"
+    },
+    {
+      "route": "ring_reach",
+      "primitive": "midAttRel",
+      "kind": "continuous"
+    },
+    {
+      "route": "ring_reach",
+      "primitive": "trebDev",
+      "kind": "continuous"
+    },
+    {
+      "route": "core_glow",
+      "primitive": "bass",
+      "kind": "continuous"
+    },
+    {
+      "route": "core_glow",
+      "primitive": "mid",
+      "kind": "continuous"
+    },
+    {
+      "route": "core_glow",
+      "primitive": "treble",
+      "kind": "continuous"
+    },
+    {
+      "route": "core_pulse",
+      "primitive": "beatComposite",
+      "kind": "accent"
+    },
+    {
+      "route": "haze_density",
+      "primitive": "arousal",
+      "kind": "continuous"
+    },
+    {
+      "route": "sparkle_gain",
+      "primitive": "trebDev",
+      "kind": "continuous"
+    }
+  ]
 }

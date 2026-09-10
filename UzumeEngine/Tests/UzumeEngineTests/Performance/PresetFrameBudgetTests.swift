@@ -138,6 +138,16 @@ struct PresetFrameBudgetTests {
         "Waveform": 6.30,
         "Plasma": 6.30,
         "Meniscus": 5.76,
+        // PR.18 — Gossamer's first recorded cost was **6.61 ms, 0.9x median, 18th of 22**, which
+        // answered "can this preset afford a fidelity uplift" with yes. The V.8 uplift then spent
+        // some of that headroom: **9.2-10.5 ms across five runs, 1.2-1.4x median, 4th of 22.**
+        // Recorded at 9.8. Ranks are the trustworthy comparison across runs — the roster's
+        // absolute figures swing ~25 % with machine load — and this preset moved from the cheap
+        // half to the expensive quarter. Still ~6.5 ms inside the 16.6 ms budget, and every row
+        // above it is a ray-marcher. Three ablations (wave displacement, dust motes, the silk
+        // BRDF) each moved it under 0.6 ms, so the cost is diffuse rather than one hot layer;
+        // most likely register pressure from a much larger fragment.
+        "Gossamer": 9.8,
         "Fata Morgana": 5.65,
         "Floret": 5.53,
         "Glaze": 5.10,
@@ -162,8 +172,11 @@ struct PresetFrameBudgetTests {
     /// the G-buffer + lighting passes; and Aurora Veil and Nimbus declare NO passes at all — they
     /// are pass-agnostic and driven from preset state, so each needs its own bespoke path.
     /// **`feedback` is the cheapest remaining three** and it is a real increment, not a free win.
+    /// PR.18 took `mv_warp` ×1 (Gossamer) by the route this comment predicted — the generic
+    /// `renderMVWarp` plus `GossamerState` on slot 6, mirroring Skein. **Coverage is now 21 of 28**
+    /// (Arachne was removed at D-246).
     static let uncoveredPresets = [
-        "Arachne", "Aurora Veil", "Ferrofluid Ocean", "Gossamer", "Membrane",
+        "Aurora Veil", "Ferrofluid Ocean", "Membrane",
         "Murmuration", "Nimbus", "Staged Sandbox"
     ]
 
@@ -369,6 +382,45 @@ struct PresetFrameBudgetTests {
             a COLD state reached a full ring inside \(Self.timedFrames) frames, so this test can no
             longer tell a warmed painting from an empty canvas and would pass with `warmSkein`
             deleted. Re-establish the control before trusting Skein's row.
+            """)
+    }
+
+    /// ★★ GOSSAMER'S COST IS ITS WAVE POOL, and a cold pool holds two waves.
+    ///
+    /// `gossamer_fragment` loops `wave_count` and evaluates a Gaussian ring per wave per fragment,
+    /// so the pool size is the whole variable term. `GossamerState` seeds **two** ambient waves and
+    /// then emits at 0.5-2.5/s against a 6 s lifetime; 24 timed frames buy 0.4 s, which would time
+    /// the seeded pair forever. Same shape as Skein (PERF.17), same control: a COLD state must
+    /// still be near the seeded floor after the timed frames, so deleting `warmGossamer` goes red
+    /// rather than both halves passing vacuously.
+    ///
+    /// **Fix `warmGossamer`, never this floor.**
+    @MainActor
+    @Test("Gossamer's budget is measured with a live wave pool, not the two seeded waves")
+    func gossamerIsMeasuredWithWavesAlive() throws {
+        let ctx = try MetalContext()
+        guard let warm = GossamerState(device: ctx.device, seed: 42),
+              let cold = GossamerState(device: ctx.device, seed: 42) else {
+            Issue.record("GossamerState allocation failed")
+            return
+        }
+        MultiPassRenderHarness.warmGossamer(warm)
+        for i in 0..<Self.timedFrames {
+            cold.tick(deltaTime: 1.0 / 60.0, features: Self.driveFeature(frame: i),
+                      stems: Self.driveStems(frame: i))
+        }
+        print("[frame-budget] Gossamer wave pool: warmed \(warm.waveCount)/\(GossamerState.maxWaves), "
+              + "cold after \(Self.timedFrames) timed frames \(cold.waveCount)")
+
+        #expect(warm.waveCount > 4, """
+            the warmed pool carries \(warm.waveCount) waves, so the timed frame evaluates barely
+            more rings than the seeded pair and Gossamer's row is timing a near-silent web. The
+            drive stopped producing the vocal/other deviations `emitWave` gates on.
+            """)
+        #expect(cold.waveCount < warm.waveCount, """
+            a COLD pool reached \(cold.waveCount) waves inside \(Self.timedFrames) frames, matching
+            the warmed \(warm.waveCount) — this test can no longer tell a live pool from a seeded
+            one and would pass with `warmGossamer` deleted.
             """)
     }
 

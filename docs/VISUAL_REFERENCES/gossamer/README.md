@@ -1,264 +1,391 @@
-# Gossamer — Visual References
+# Visual References — Gossamer
+
+**Family:** instrument (sparkle family in the sidecar)
+**Render pipeline:** direct_fragment + mv_warp
+**Rubric:** full (gated by V.6 certification)
+**Last curated:** 2026-09-09 by Claude (PR.18), sources below for Matt's review
 
 Bioluminescent hero-web acting as a sonic resonator. A single irregular
 orb-weaver web (17 explicit spoke angles per D-042, off-center hub at
-UV (0.465, 0.32), Archimedean capture spiral) drawn against a near-black
-scene. Vocal-pitch-keyed color waves propagate outward from the hub,
-physically displacing silk strands as they pass; `mv_warp` accumulates
-decaying echoes (decay 0.955).
-
-**V.8 target (`SHADER_CRAFT.md §10.2`):**
-
-- **Macro** — 17 irregular spokes (D-042); off-center hub clipping upper rings
-  into arcs; high spiral turn count so the web reads as an instrument body,
-  not a geometry study.
-- **Meso** — physical wave displacement: each active wave offsets silk strand
-  positions *perpendicular to the local tangent*. No pure palette shifts.
-- **Micro** — silk Marschner-lite material
-  (`azimuthal_r = 0.08, azimuthal_tt = 0.5, absorption = 0.3`).
-- **Specular** — fine glints at thread intersections; chromatic aberration on
-  the highest-amplitude wave peaks (RGB sampled at offset positions).
-- **Atmosphere** — bioluminescent ambient haze in a ~0.5-radius halo around
-  the web; dust motes drawn inward at high vocal energy, outward at silence.
-- **Lighting** — nearly-black scene; web emission is the primary light source;
-  SSGI projects soft fill onto the background.
-- **Temporal** — `mv_warp` accumulates outward-propagating wave fronts as
-  decaying echoes (decay 0.955); the hub-centered ring signature is a
-  defining trait, not a side effect.
-- **Audio** — waves vocal-pitch-keyed (current);
-  propagation velocity = `2.0 + stems.vocals_energy_dev × 5.0`;
-  wave amplitude drives displacement magnitude;
-  dust drift velocity from `stems.vocals_energy_att`.
+UV (0.465, 0.32), Archimedean capture spiral, catenary scallop between spoke
+anchors) drawn against a near-black scene. Vocal-pitch-keyed color waves
+propagate outward from the hub, physically displacing silk strands as they
+pass; `mv_warp` accumulates decaying echoes (decay 0.955).
 
 ---
 
-## Mandatory traits
+## ⚠ Recuration note — this set was rebuilt from scratch
 
-### `01_macro_orb_geometry.jpg` — silver filament on near-black backdrop
+**The original set's images never existed in the repository.**
+raster images under `docs/VISUAL_REFERENCES/` have been gitignored since `33cebe25`, and the
+curation step that would have force-added them (`git add -f`) was only written
+into the process on 2026-08-25 — after this set was annotated. So for the whole
+of V.8's life the README described eleven images that no session could open.
+PR.18 sourced replacements; **every annotation below was rewritten against the
+image that is actually in the folder**, not carried over.
+
+Two consequences worth knowing:
+
+- **Slot 02 (thread fineness) is covered, on a rule change.** It was first
+  recorded as a gap: every usable candidate was dew-beaded, and the set excluded
+  beading because it was *Arachne's* trait. Matt retired that exclusion the same
+  day — Arachne was removed at D-246, so there is no longer a preset to stay
+  distinct from.
+- **Slot 07 was renamed.** It was named `07_temporal_mv_warp_echo` with a jpg extension, and `temporal`
+  is not one of the eight scales `_NAMING_CONVENTION.md` permits — the file could
+  never have passed `CheckVisualReferences`. It is now
+  `07_meso_ring_echo_accumulation.jpg`.
+
+## Reference images
+
+Files in this folder, in priority order; per-image annotations are in
+§Per-image annotations below. Sources and licences:
+
+Every image is from Wikimedia Commons. Attribution is required for the CC BY /
+CC BY-SA files if any of these are ever reproduced outside the repository.
+
+| File | Source | Author | Licence |
+|---|---|---|---|
+| `01_macro_orb_geometry.jpg` | [Spider cross web in dark](https://commons.wikimedia.org/wiki/File:Spider_cross_web_in_dark.jpg) | Grauvision | CC BY 4.0 |
+| `02_macro_thread_fineness.jpg` | [Spider web Luc Viatour](https://commons.wikimedia.org/wiki/File:Spider_web_Luc_Viatour.jpg) | Luc Viatour | CC BY-SA 3.0 |
+| `03_lighting_emission_filament_strands.jpg` | [Fibreoptic](https://commons.wikimedia.org/wiki/File:Fibreoptic.jpg) | BigRiz | CC BY-SA 3.0 |
+| `04_lighting_ssgi_environmental_fill.jpg` | [Mycena chlorophos](https://commons.wikimedia.org/wiki/File:Mycena_chlorophos.jpg) | Uploader (self) | CC BY-SA 3.0 |
+| `05_meso_wave_propagation.jpg` | [Lissajous-Figur 2020 7766](https://commons.wikimedia.org/wiki/File:Lissajous-Figur_--_2020_--_7766.jpg) | Dietmar Rabich | CC BY-SA 4.0 |
+| `06_specular_chromatic_aberration.jpg` | [Chromatic aberration with detail](https://commons.wikimedia.org/wiki/File:Chromatic_aberration_with_detail.jpg) | Jkk | CC BY-SA 3.0 |
+| `07_meso_ring_echo_accumulation.jpg` | [Two-point interference ripple tank](https://commons.wikimedia.org/wiki/File:Two-point-interference-ripple-tank.JPG) | RenamedUser2 (en.wikipedia) | BSD |
+| `08_micro_silk_material.jpg` | [Satin bedding](https://commons.wikimedia.org/wiki/File:Satin_bedding.jpg) | Jwrusa & Kjoonlee | Public domain |
+| `09_atmosphere_volumetric_halo_primary.jpg` | [Meeresleuchten auf Norderney 02](https://commons.wikimedia.org/wiki/File:Meeresleuchten_auf_Norderney_02.jpg) | Stephan Sprinz | CC BY 4.0 |
+| `10_atmosphere_volumetric_halo_secondary.jpg` | [Multicolored aurora borealis over Brastad 4](https://commons.wikimedia.org/wiki/File:Multicolored_aurora_borealis_over_Brastad_4.jpg) | W.carter | CC BY-SA 4.0 |
+| `11_meso_interference_bloom.jpg` | [A study of the propagation… of ripple waves (1914)](https://commons.wikimedia.org/wiki/File:A_study_of_the_propagation,_refraction,_reflection,_interference_and_diffraction_of_ripple_waves_(1914)_(14596074950).jpg) | Internet Archive Book Images | No known restrictions |
+| `99_anti_flat_palette_grid.jpg` | Uzume's own v3 render, `PresetVisualReviewTests` 2026-09-09 | — | project |
+
+---
+
+## V.8 target (`SHADER_CRAFT.md §10.2`) — status after PR.18
+
+- **Macro** — 17 irregular spokes (D-042); off-center hub clipping upper rings
+  into arcs; high spiral turn count so the web reads as an instrument body,
+  not a geometry study. ✅ v3, unchanged. PR.18 added the **catenary scallop**:
+  the capture spiral is pinned at each spoke and sags outward in between, with
+  amplitude scaling as `r × gap`. This is the single change that stopped the
+  web reading as a polar grid.
+- **Meso** — physical wave displacement: each active wave offsets silk strand
+  positions. No pure palette shifts. ✅ PR.18 — the wave field is resolved
+  before the geometry and pushes the sample point radially. (Displacement is
+  RADIAL, not yet perpendicular-to-local-tangent; the difference is small on a
+  radial wave and is the remaining half of this item.)
+- **Micro** — silk Marschner-lite material
+  (`azimuthal_r = 0.08, azimuthal_tt = 0.5, absorption = 0.3`). ✅ PR.18 via
+  `mat_silk_thread` + `fiber_trt_lobe`, with a cylindrical cross-section normal
+  so a thread reads round. ⚠ `mat_silk_thread` never reads `absorption`.
+- **Specular** — fine glints at thread intersections; chromatic aberration on
+  the highest-amplitude wave peaks. ✅ PR.18 (glints ride the strands' proximity
+  fields; v3's `spokeCov * spirCov` reached almost no pixels).
+- **Atmosphere** — bioluminescent ambient haze in a ~0.5-radius halo; dust motes
+  drawn inward at high vocal energy, outward at silence. ✅ PR.18.
+- **Lighting** — nearly-black scene; web emission is the primary light source;
+  SSGI projects soft fill onto the background. ◐ PR.18 — the haze carries the
+  waves' own colour into the air, which is the fill this 2D preset can express.
+  True screen-space GI is not available on the `mv_warp` path.
+- **Temporal** — `mv_warp` accumulates outward-propagating wave fronts as
+  decaying echoes (decay 0.955); the hub-centered ring signature is a defining
+  trait, not a side effect. ✅ v3, unchanged.
+- **Audio** — waves vocal-pitch-keyed; wave amplitude drives displacement
+  magnitude; dust drift from vocal energy. ✅ — 14 routes declared in the
+  sidecar and gated by QG.1. ⏳ Wave propagation VELOCITY is still the constant
+  `kWaveSpeed`; `2.0 + vocals_energy_dev × 5.0` is not implemented.
+
+---
+
+## Mandatory traits (per SHADER_CRAFT.md §12.1)
+
+- [x] **Detail cascade:** macro = haze density (`perlin3d`, scale 2.2); meso = per-strand
+      character driving width / sag / tilt (`fbm4`, scale 5.5); micro = surface grain along
+      the thread (`perlin3d`, scale 48.0); specular = R + TT + TRT fiber lobes and node glints.
+- [x] **Hero noise function(s):** `fbm4` (strand character) + `perlin3d` (grain, haze).
+      Four octaves is the §12 floor exactly; `fbm8`'s extra four are sub-pixel here and were
+      measured to cost without showing (PR.18).
+- [ ] **Material count and recipes:** `mat_silk_thread` + `fiber_trt_lobe`. **One cookbook
+      material — M3 wants three and this FAILS it.** Gossamer draws a single substance; two
+      more `mat_*` calls would be decoration for a gate. Recorded, not worked around.
+- [x] **Audio reactivity:** 14 routes declared in `Gossamer.json` and gated by QG.1 —
+      `vocalsPitchHz` (wave hue), `vocalsPitchConfidence` (emission gate), `vocalsEnergyDev`
+      (displacement), `vocalsEnergyRel` (haze, dust drift), `otherEnergyDev` (emission rate),
+      `bassEnergyRel` / `bassAttRel` (tautness), `drumsEnergy` (tremor), `trebDev` (glints),
+      `midAttRel` (breathe). All D-026 deviation primitives.
+- [x] **Silence fallback:** the drift floor holds ≥ 2 waves alive (D-037 invariant 4,
+      `GossamerStateTests` test 8); `presence` floors the strand tint at 0.22 so the web is
+      dim but lit, and the haze persists. Never black.
+- [ ] **Performance ceiling:** **~10.0 ms at 1080p** against v3's ~6.6 ms — `complexity_cost`
+      updated to `tier1 10.0 / tier2 5.8`. Inside the 16.6 ms budget but 4th of 22 rather than
+      18th; the increase is real and is reported rather than smoothed.
+- [x] **Hero reference image:** `01_macro_orb_geometry.jpg`.
+
+## Expected traits (per §12.2 — at least 2 of 4)
+
+- [ ] Triplanar texturing — **n/a**: there are no non-planar surfaces; the web is drawn in UV space.
+- [ ] Detail normals — **n/a** for the same reason. The cylindrical cross-section normal is
+      computed analytically from the signed offset across each thread, not sampled from a map.
+- [ ] Volumetric fog / aerial perspective — **applicable but unmet by the rubric's test.** The
+      haze halo is a genuine luminous medium, but `vol_density_height_fog` is a 3D
+      ray-march utility and does not fit a 2D radial halo, so no named call exists to detect.
+- [x] SSS / fiber BRDF / anisotropic specular — **yes**: `mat_silk_thread` (R + TT) plus
+      `fiber_trt_lobe` for the far-side rim.
+
+## Strongly preferred traits (per §12.3 — at least 1 of 4)
+
+- [x] Hero specular highlight in ≥60% of frames — **yes**: node glints at every spoke/spiral
+      crossing, plus the R-lobe axial highlight on strands the orbiting key light aligns with.
+- [ ] Parallax occlusion mapping — **n/a**, no surfaces.
+- [x] Volumetric light shafts or dust motes — **yes**: dust motes on a jittered lattice,
+      drifting inward at high vocal energy and outward at silence.
+- [ ] Chromatic aberration or thin-film — **implemented but undetected.** The three-tap
+      per-wave sampling is genuine CA; `chromatic_aberration_radial` is a texture
+      post-process and cannot express aberration on an analytic ring, so it is not called.
+
+## Per-image annotations
+
+### `01_macro_orb_geometry.jpg` — orb web, silver filament on black
 
 > *Reference for: macro web geometry reading against a dim scene
 > (`SHADER_CRAFT.md §10.2.1`).*
 
-- Asymmetric orb structure with visibly irregular angular spacing between
-  spokes — matches D-042 (never a uniform-grid-with-noise look).
-- Hub sits off-center toward the top of frame; upper spiral rings are
-  truncated into arcs by the frame boundary. Replicates the geometric
-  consequence of UV (0.465, 0.32) hub placement.
-- Silk reads as silvery-bright filament against the dark backdrop. Thread
-  width ≈ 1 px at 1080p — fine, not chunky.
-- **Caveat:** dewdrops on the spiral are an *Arachne* trait
-  (`SHADER_CRAFT.md §10.1.3`), explicitly not Gossamer's. Cite this image
-  for geometry and silver-on-black filament reading only; ignore the beading.
+- A complete orb web shot at night against a near-black field, spider at the
+  hub. **This is the hero geometry reference.**
+- Radials are individually resolvable across the whole frame and read as
+  *silver-white hairlines*, not as chunky strokes — the thread-width target.
+- Spoke spacing is visibly irregular and the capture spiral **scallops between
+  consecutive radials** rather than running as true circles. Cite this for the
+  catenary: it is what D-042's irregular anchor array is supposed to produce.
+- The hub is off-centre and the outer spiral is clipped by the frame.
+- **Caveat:** the spider is present and Gossamer draws none. Ignore it; the
+  Arachnid-trilogy spider is *Arachne's* trait (`SHADER_CRAFT.md §10.1`).
 
-### `02_macro_thread_fineness.jpg` — concentric thread spacing
+### `02_macro_thread_fineness.jpg` — dew-beaded orb web, thread spacing
 
-> *Reference for: spiral fineness and turn density
-> (`SHADER_CRAFT.md §10.2.1`).*
+> *Reference for: spiral fineness and turn density (`§10.2.1`).*
 
-- Each thread of the spiral is individually resolvable — no aliased blobs.
-- Spacing increment is small relative to thread width; the spiral reads as
-  a continuous instrument body, not a coarse skeleton.
-- Backlight reveals every thread as a hairline highlight.
-- **Caveat:** the photographed web is sheet/ladder geometry, not orb. Cite
-  this image for thread fineness and turn density only. Spoke geometry is
-  governed by D-042's explicit angle array, not by this image.
+- Every thread of the capture spiral is **individually resolvable** — no aliased
+  blobs, no merged bands. Spacing is small relative to thread width, so the
+  spiral reads as a continuous instrument body rather than a coarse skeleton.
+  This is the trait v3 got right and must not lose.
+- The scallop is visible again here, independently of `01`: each span between
+  radials bows outward. Two references agreeing on it is why PR.18 treats the
+  catenary as a defining trait rather than a flourish.
+- Beading picks out the threads and makes the spacing legible — read *through*
+  the drops to the thread geometry underneath.
+- **Caveat, and it changed on 2026-09-09:** the older version of this set
+  excluded beaded webs because dewdrops were *Arachne's* trait
+  (`SHADER_CRAFT.md §10.1.3`) and the two presets had to stay distinct.
+  **Arachne was retired at D-246**, so that exclusion no longer applies (Matt,
+  2026-09-09) and beaded macros are admissible. Beading is still not a trait
+  Gossamer must *implement* — cite this image for thread spacing and fineness.
 
-### `03_lighting_emission_filament_strands.jpg` — fanned fiber-optic strands with bright endpoints
+### `03_lighting_emission_filament_strands.jpg` — fibre-optic fan with bright tips
 
 > *Reference for: silk emission as the primary light source against
-> near-zero ambient (`SHADER_CRAFT.md §10.2.6`); also doubles as endpoint
-> specular glint reference (`§10.2.4`).*
+> near-zero ambient (`§10.2.6`); also the node/endpoint glint reference (`§10.2.4`).*
 
-- Fan of fine fiber-optic strands emitting teal light against a near-black
-  field. Each strand is individually resolvable; the radial spread evokes
-  spoke-field topology.
-- **Endpoint specular signature**: each strand body is teal (the silk
-  base color), and each tip is a small yellow-white pinpoint — the
-  endpoint specular highlight is a *different color and brighter* than
-  the underlying strand emission. This is the visual character V.8 needs
-  for fine specular glints at high-energy points along a strand
-  (`§10.2.4`).
-- Frame edges fall to near-zero; halo is tight, visible only in immediate
-  proximity to the strands.
-- **Caveat:** photographed strands are roughly parallel (fanned from a
-  single base), not radial-from-hub. Cite for the emission *regime* (zero
-  ambient, fiber-fine emissive lines, body-vs-tip color separation)
-  rather than spoke-field layout. D-042 governs spoke geometry.
+- A fan of fine optical fibres against pure black, each strand individually
+  resolvable, each tip a small intense pinpoint.
+- **Body-vs-tip separation is the trait**: the strand body is a dim continuous
+  line and the tip is *brighter and a different colour*. That separation, not
+  brightness alone, is what makes a glint read as a glint. PR.18's node glints
+  are keyed to this: warm-white points on a teal filament.
+- Frame falls to near-zero away from the strands; the halo is tight.
+- **Caveat:** fibres are fanned from a single base, roughly parallel, not
+  radial-from-hub, and the emission is white rather than teal. Cite for the
+  emission *regime* and the body/tip colour split. D-042 governs layout.
 
-### `04_lighting_ssgi_environmental_fill.jpg` — fungi lighting forest floor
+### `04_lighting_ssgi_environmental_fill.jpg` — bioluminescent Mycena
 
-> *Reference for: SSGI fill onto the background (`SHADER_CRAFT.md §10.2.6`).*
+> *Reference for: emission as the only light in the scene (`§10.2.6`).*
 
-- Glowing fungi project soft green-cyan fill onto surrounding grass with
-  falloff that reads bright at source, near-black at frame edges.
-- Foliage detail is *visible* but only because of the emission — there is
-  no environmental light. Background pixels gain perceptible color tint
-  only within the source's proximity radius. This is the exact behavior
-  Gossamer needs from SSGI sampling the silk emission.
-- **Caveat:** in-frame foliage is not present in Gossamer; cite for the
-  fill-falloff curve only, not for scene content.
+- Glowing green fungi against a black ground, lighting themselves and nothing
+  else. Everything visible is visible *because of* the emission.
+- The falloff is the trait: bright at source, gone within a short radius, no
+  ambient anywhere in frame. Gossamer's background must behave this way — dark
+  except where the web's own light reaches.
+- **Caveat, and it is a real one:** the original slot wanted fungi projecting
+  fill onto *surrounding foliage*, and this image has almost no surroundings to
+  catch it. It carries the zero-ambient emission regime and **not** the
+  fill-onto-a-surface half. That half is uncovered — see §Gaps.
 
-### `05_meso_wave_propagation.jpg` — long-exposure standing waves
+### `05_meso_wave_propagation.jpg` — light-painted Lissajous figure
 
-> *Reference for: wave propagation visible as transverse curve along a
-> strand axis (`SHADER_CRAFT.md §10.2.2`).*
+> *Reference for: overlapping sinusoidal traces (`§10.2.2`).*
 
-- Multiple overlapping sinusoidal traces against pure black. Demonstrates
-  what a strand following a propagating transverse wave looks like when
-  captured over time.
-- Smaller secondary peaks visible at the trace tips suggest higher-frequency
-  components — exactly the visual character we want when multiple
-  vocal-pitch-keyed waves stack along a single radial.
-- **Caveat:** photographed traces are unconstrained (free waves); silk in
-  Gossamer is constrained at both endpoints (hub and outer attachment).
-  The waveform character carries; the boundary conditions do not.
+- Many overlapping smooth sinusoidal traces against pure black, drawn as thin
+  bright filaments. This is what a strand following a propagating transverse
+  wave looks like integrated over time.
+- Trace density varies — where paths bunch, the light sums and brightens. That
+  summation is the behaviour wanted where multiple vocal-pitch-keyed waves stack
+  along one radial.
+- **Caveat:** the figure is a closed harmonic curve, not a travelling front, and
+  it is unconstrained where Gossamer's silk is pinned at hub and rim. The
+  *filament-trace character* carries; the topology does not.
 
-### `06_specular_chromatic_aberration.jpg` — striated field with CA fringes and amplitude peak
+### `06_specular_chromatic_aberration.jpg` — CA fringe with inset detail
 
-> *Reference for: chromatic aberration on wave peaks
-> (`SHADER_CRAFT.md §10.2.4`); secondary reference for amplitude-peak
-> rendering.*
+> *Reference for: chromatic aberration on wave peaks (`§10.2.4`).*
 
-- Vertical strand-like bands show CA fringes at their edges (cyan→purple
-  shifts visible along band boundaries). Treat each vertical band as one
-  Gossamer radial viewed at one moment; the band-edge fringes are the
-  desired RGB-channel offset target.
-- Central heat-map peak (red core → orange → yellow → green → blue
-  periphery) renders a high-amplitude wave region with energy-mapped color
-  falloff. Useful as a secondary reference for what a single wave's peak
-  should LOOK like as it traverses the strand field, including the smearing
-  character around the peak.
-- **Caveat:** photographed color mapping is amplitude→hue (heat-map);
-  Gossamer's wave color is YIN-pitch→hue with amplitude driving emission
-  intensity, not color. Cite for the *visual signature* of CA fringes and
-  for the energy-peak compositional character — not for the hue mapping.
+- A high-contrast edge with the inset showing the cyan/blue fringe that appears
+  where channels do not converge. That fringe is the target signature for
+  PR.18's three-tap wave sampling.
+- Fringing appears **only at the highest-contrast boundary** and is absent
+  elsewhere — which is why the shader scales the channel offset with wave
+  amplitude rather than applying it uniformly.
+- **Caveat:** this is a demonstrative photograph with a magnified inset, not an
+  aesthetic target. Cite the *fringe* only; nothing about the composition.
 
-### `07_temporal_mv_warp_echo.jpg` — concentric ring accumulation
+### `07_meso_ring_echo_accumulation.jpg` — ripple-tank concentric rings
 
-> *Reference for: `mv_warp` temporal feedback decay (decay=0.955) and
-> hub-centered wave-ring signature.*
+> *Reference for: `mv_warp` feedback decay (0.955) and the hub-centred ring
+> signature.*
 
-- Concentric rings of color emanating outward from a central bright point,
-  each progressively dimmer. Equivalent to a single long-exposure capture
-  of what Gossamer should produce when wave rings retire and their
-  luminance accumulates in the feedback texture.
-- Central bright point reads as the hub; rings read as wave fronts at
-  successive ages. This is essentially what one frame of accumulated
-  `mv_warp` output should look like in Gossamer under steady vocal input.
-- Ring spacing reads as roughly geometric (each successive ring slightly
-  larger and dimmer than its predecessor) — the visual signature of
-  exponential decay.
-- **Caveat:** photo shows full-ring closure; in Gossamer waves propagate
-  outward and are clipped by the screen edge. The decay character carries;
-  the closure does not.
+- Concentric wavefronts radiating from a point source, each successive ring
+  slightly wider and fainter — the visual signature of exponential decay, and
+  what one frame of accumulated `mv_warp` output should look like under steady
+  vocal input.
+- Ring spacing is even; the *brightness* falls off, not the geometry.
+- **Caveat:** a ripple tank is a shadowgram of surface waves, so the rings are
+  dark-on-light where Gossamer's are light-on-dark. The decay character and the
+  spacing carry; the polarity does not.
 
-### `08_micro_silk_material.jpg` — folded gold satin
+### `08_micro_silk_material.jpg` — folded satin
 
-> *Reference for: silk Marschner-lite material — anisotropic axial
-> highlight + transmission warmth (`SHADER_CRAFT.md §4.3, §10.2.3`).*
+> *Reference for: silk Marschner-lite material (`§4.3`, `§10.2.3`).*
 
-- Satin is woven silk; the broad band of axial sheen running across each
-  fold is the Marschner R-lobe signature — a sharp specular line oriented
-  along the fiber direction, perpendicular to surface curvature.
-- Soft warm falloff at the edges of each fold shows the TT (transmission)
-  lobe character: light entering the silk and re-emerging at a shifted
-  angle with subtle warmth gain. This is what `azimuthal_tt = 0.5,
-  absorption = 0.3` is reproducing.
-- Smooth gradient between the bright sheen band and the shadowed regions
-  — no sharp dielectric specular cut. Silk is glossy but not mirror-like.
-- **Caveat:** gold palette is incidental — V.8 silk is keyed to vocal
-  pitch hue, not gold. Cite for the *material reflectance signature*
-  (axial sheen, soft TT falloff, gradient transition) rather than color.
-  Also: Gossamer silk is filament-thin, not sheet-woven. The R-lobe
-  character is what carries forward, not the surface area.
+- Satin is woven silk, and the broad band of sheen running along each fold is
+  **the Marschner R-lobe signature** — a specular line oriented along the fibre
+  direction, perpendicular to the surface's curvature.
+- Soft falloff at the fold edges shows the TT (transmission) lobe: light
+  entering the silk and re-emerging at a shifted angle. This is what
+  `azimuthal_tt = 0.5` reproduces.
+- The gradient between sheen band and shadow is smooth — silk is glossy, never
+  mirror-like. A hard specular cut is wrong for this material.
+- **Caveat:** the palette is incidental (this print is violet; the original slot
+  was gold) — V.8 silk is keyed to vocal-pitch hue. And Gossamer's silk is
+  filament-thin, not sheet-woven: the *reflectance signature* carries, not the
+  surface area.
 
-### `09_atmosphere_volumetric_halo_primary.jpg` — bioluminescent shoreline
+### `09_atmosphere_volumetric_halo_primary.jpg` — bioluminescent surf, Norderney
 
-> *Reference for: bioluminescent ambient haze around the web
-> (`SHADER_CRAFT.md §10.2.5`); volumetric medium-luminance.*
+> *Reference for: bioluminescent ambient haze around the web (`§10.2.5`).*
 
-- The blue glow exists *in the medium itself* (water + organisms), not on
-  a surface. This is the trait V.8 needs: air around the web should be
-  perceptibly luminous within ~0.5 UV of the hub, not just unlit black
-  pixels with the web on top.
-- Glow falloff is sharp at the medium's edge (rocks, distant horizon) and
-  smooth within the medium — the exact gradient character a hub-centered
-  haze halo should have.
-- Sky above is near-black with stars; halo does not bleed into infinity.
-  This bounds the halo radius — Gossamer's haze should not extend to the
-  full frame.
-- **Caveat:** photographed glow is horizontal-distributed (along a
-  shoreline); Gossamer's halo is radial-from-hub. Cite for the volumetric
-  character of the medium and for the falloff curve, not for the spatial
-  distribution.
+- **The single most important atmosphere reference.** The blue glow exists *in
+  the medium itself*, not on a surface — the trait PR.18's haze layer exists to
+  produce. Air within ~0.5 UV of the hub should be perceptibly luminous rather
+  than unlit black with a web drawn on top.
+- Falloff is smooth inside the luminous water and sharp at its edge; the sky
+  above stays near-black. This **bounds the halo radius** — Gossamer's haze must
+  not bleed to the frame edge.
+- The glow is not uniform: it has internal structure and density variation. That
+  is why the shader modulates haze with a low-frequency noise octave; a perfectly
+  smooth radial falloff reads as a lens flare, not as luminous air.
+- **Caveat:** the glow is distributed along a shoreline (horizontal); Gossamer's
+  is radial-from-hub. Cite the medium's character and falloff, not the layout.
 
-### `10_atmosphere_volumetric_halo_secondary.jpg` — aurora borealis
+### `10_atmosphere_volumetric_halo_secondary.jpg` — aurora over Brastad
 
-> *Reference for: hue-graded volumetric falloff at the halo perimeter
-> (`SHADER_CRAFT.md §10.2.5`).*
+> *Reference for: hue-graded volumetric falloff at the halo perimeter (`§10.2.5`).*
 
-- Aurora's green-to-purple hue shift across the volume demonstrates how
-  emission color can shift across a luminous medium without breaking the
-  illusion of a single light source. Useful for the halo perimeter where
-  ambient haze color may shift slightly toward complementary hue.
-- Smooth fade-to-black at the perimeter — no hard cutoff between glow and
-  sky.
-- Clean separation between the luminous medium and the dark surrounding
-  void.
-- **Caveat:** aurora has a directional sweep (curtain-like flow) that
-  Gossamer's halo does not. Cite for the *gradient and fade character*
-  only, not the directional flow.
+- The green-to-violet shift across the volume shows emission colour changing
+  across a luminous medium without breaking the read of a single source. Useful
+  for the halo perimeter, where haze hue may drift toward the complement.
+- Smooth fade to black at the perimeter — no hard cutoff between glow and sky.
+- **Caveat:** the aurora has a directional curtain sweep Gossamer's halo does
+  not, and the foreground town lights are not a trait. Cite the gradient and the
+  fade only.
 
-### `11_meso_interference_bloom.jpg` — intersecting golden water ripples
+### `11_meso_interference_bloom.jpg` — two-source ripple interference
 
-> *Reference for: warm-white interference bloom where wave fronts overlap
+> *Reference for: brightening where wave fronts overlap
 > (`saturate(totalRingWeight - 1.0) × 0.45 × strandCov`).*
 
-- Two distinct ripple sets visible: a primary set of concentric rings
-  centered in frame, and a secondary set entering from upper right.
-- Where the wave fronts intersect, the specular highlights brighten and
-  warm — exactly the visual signature of two waves overlapping in
-  Gossamer when their `totalRingWeight` exceeds 1.0.
-- Specular glints at the crossing points are golden-warm against the
-  surrounding cooler ripple field. This warm-shift on overlap is the
-  effect to preserve.
-- **Caveat:** photographed ripples are surface waves on water, not
-  emission rings on strands. Cite for the *crossing-point brightening
-  signature* (warmer, brighter where two wave sets overlap) rather than
-  the water-surface specifics.
+- Two ripple sets from separate sources, with a clear interference field where
+  they meet. Along the constructive lines the fronts reinforce and read stronger
+  than either set alone; along the nulls they cancel.
+- **The crossing-point behaviour is the trait** — where two of Gossamer's waves
+  overlap on a strand, the result must be *more* than either, not an average.
+- **Caveat:** plate figures from a 1914 monograph, monochrome and dark-on-light.
+  Cite the interference structure only; nothing about tone or palette.
 
 ---
 
 ## Anti-references
 
-### `99_anti_reference.jpg` — capture during V.8 kickoff
+### `99_anti_flat_palette_grid.jpg` — Gossamer v3, captured at PR.18 kickoff
 
-Frame-grab from current Gossamer v3 with annotation:
+Frame-grab from the v3 build, the state Matt described as *"a child's drawing of
+a spider web, or a basic computer program from 30 years ago"* (2026-09-09).
 
-> NOT this — uniform palette-shift waves with no perpendicular strand
-> displacement; silk reads as static grid; web is lit by ambient pixel
-> color rather than projecting its own emission.
+> **NOT this** — uniform-width strokes with no material; every strand identical;
+> the capture spiral running as mathematically perfect concentric ellipses with
+> no scallop between anchors; waves applied as a flat palette tint over strands
+> that were already drawn, rather than displacing them; node glints present in
+> code but reaching no pixels; and a flat unlit background with no luminous
+> medium around the web.
+
+Compare any candidate render against this first. If it is closer to this than to
+`01`, the fidelity work has regressed.
 
 ---
 
 ## Gaps still uncovered
 
-**Inward/outward dust drift** (`SHADER_CRAFT.md §10.2.5`) — dust motes
-drawn inward at high vocal energy, outward at silence — is still not
-captured. Source as a short loop rather than a still: incense smoke under a
-slowly oscillating fan is the canonical capture. Lowest priority of the
-covered traits, since dust is a secondary atmospheric layer rather than a
-defining characteristic.
+*(Thread fineness was listed here on first pass and is now **covered** by slot 02.
+It was recorded as a gap because every usable candidate was dew-beaded and the
+set excluded beading as an *Arachne* trait — an exclusion **Matt retired on
+2026-09-09**, Arachne having been removed at D-246. The gap was a stale
+constraint, not a missing image.)*
 
-**Node-intersection glints** (`SHADER_CRAFT.md §10.2.4` second clause) —
-small specular highlights at points where strands cross. No real-world
-photograph reliably captures this trait at the resolution and clarity
-needed; slot 03's endpoint glints carry the related trait of
-"point-intensified specular brighter than strand body," and the V.8
-implementation will hit crossing-point glints from the §10.2.4 spec text
-alone.
+**Emission fill onto a surface (`§10.2.6`)** — `04` covers zero-ambient emission
+but has no surroundings for the light to fall on. Wanted: a small emissive source
+lighting a nearby textured surface, with visible falloff and no other light.
+
+**Inward/outward dust drift (`§10.2.5`)** — motes drawn inward at high vocal
+energy, outward at silence. Still uncaptured, and it wants a short loop rather
+than a still: incense smoke under a slowly oscillating fan is the canonical
+capture. Lowest priority — dust is a secondary atmospheric layer.
 
 ---
+
+## Audio routing notes
+
+All routes are D-026 deviation primitives behind the D-019 stem warmup (`stemMix`), and all
+14 are declared in `Gossamer.json` where QG.1's `RouteCoverageTests` holds them honest —
+a route that stops firing on the canonical fixtures goes red.
+
+- **Wave hue ← `stems.vocals_pitch_hz`**, gated by `vocals_pitch_confidence > 0.35`, mapped
+  `log2(pitch/80) / log2(10)` so 80–800 Hz spans the hue circle. ⚠ Note BUG-124's finding:
+  the pitch tracker recovers PERIODICITY, not vocals — an instrumental track's "vocals" stem
+  can read as confidently pitched. The hue will key to that.
+- **Wave emission rate ← `stems.other_energy_dev`** — guitar/keys strike the web.
+- **Wave displacement + amplitude ← `stems.vocals_energy_dev` / `_rel`.**
+- **Strand tautness ← `bass_energy_rel` + `bass_att_rel`**, into the tremor amplitude.
+- **Strand tremor ← `drums_energy`**, on the beat grid phase, never raw live onsets.
+- **Node glints ← `f.treb_dev`** (continuous, not accent — it does not reach the 0.9 peak an
+  accent route must, and declaring it as one failed QG.1 correctly).
+- **Haze + dust drift ← `vocals_energy_rel`.** Drift sign flips: inward when vocals are
+  above their running average, outward at silence.
+- **Web breathe ← `mid_att_rel`** via the `mv_warp` per-frame zoom.
+
+**Anti-pattern to keep out:** absolute AGC-normalised bands. v3 drove brightness from
+`f.bass` at six times the weight of its deviation term (FA #31) — how bright the web looked
+tracked mix density, so the same kick read differently across tracks. Fixed at PR.18.
+
+## Provenance
+
+**Curated by:** Claude (PR.18, 2026-09-09) — **pending Matt's review.** The process doc says
+image sources are Matt's choice; these were sourced on his instruction to "recurate the
+reference images" and every one should be treated as a proposal he can swap.
+
+**Image sources:** Wikimedia Commons, licences and authors in §Reference images above. Nine
+CC BY / CC BY-SA / BSD / public-domain photographs plus one 1914 plate figure with no known
+restrictions. `99_anti_flat_palette_grid.jpg` is Uzume's own v3 render.
+
+**The previous set had no images at all** — see the recuration note at the top.
 
 ## Cross-references
 
@@ -268,5 +395,5 @@ alone.
 - `DECISIONS.md D-042` — explicit spoke-angle array, off-center hub
 - `DECISIONS.md D-026` — deviation-primitive audio routing
 - `DECISIONS.md D-027` — `mv_warp` constraints
-- `ENGINEERING_PLAN.md Increment V.8` — implementation scope
-- `ENGINEERING_PLAN.md Increment MV-2` — `mv_warp` per-vertex feedback
+- `ENGINEERING_PLAN.md PR.18` — the fidelity uplift and this recuration
+- `ENGINEERING_PLAN.md Increment V.8` — original implementation scope

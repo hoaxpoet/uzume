@@ -17,7 +17,7 @@ struct AlfvenDisplayParams {
     var exposure: Float
     var polarityScale: Float
     var hueCentre: Float
-    var pad0: Float
+    var bloomAmount: Float
 }
 
 extension AlfvenSolver {
@@ -47,12 +47,47 @@ extension AlfvenSolver {
         var params = AlfvenDisplayParams(exposure: displayExposure,
                                          polarityScale: displayPolarityScale,
                                          hueCentre: hueCentre(at: features.time),
-                                         pad0: 0)
+                                         bloomAmount: displayBloomAmount)
         encoder.setRenderPipelineState(displayPipeline)
         encoder.setFragmentBytes(&params,
                                  length: MemoryLayout<AlfvenDisplayParams>.stride,
                                  index: 0)
         encoder.setFragmentTexture(stateTexture, index: 0)
+        encoder.setFragmentTexture(fields.bloomNear, index: 1)
+        encoder.setFragmentTexture(fields.bloomFar, index: 2)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+    }
+
+    /// The seam bloom, once per frame off the settled field.
+    ///
+    /// Two Gaussians compose exactly — blurring by `a` then `b` is a blur by
+    /// `sqrt(a^2 + b^2)` — so the sigma-7 level is the sigma-2 level blurred again by
+    /// sqrt(45), rather than a second wide pass over the core. Four separable passes
+    /// instead of six, and the wide one runs on already-smooth data.
+    func encodeBloom(_ params: inout AlfvenParams, into cmd: MTLCommandBuffer) {
+        let (gridSize, tgSize) = grid()
+        let dims = DispatchDims(grid: gridSize,
+                                threadgroup: tgSize,
+                                edge: configuration.edge)
+        let ops = Ops(solver: self, cmd: cmd, dims: dims)
+        ops.encode { enc in
+            enc.setComputePipelineState(self.bloomCorePSO)
+            enc.setTexture(self.state[self.stateIndex], index: 0)
+            enc.setTexture(self.fields.bloomCore, index: 1)
+            enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 0)
+            var exposure = self.displayBloomExposure
+            enc.setBytes(&exposure, length: MemoryLayout<Float>.size, index: 1)
+            enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
+        }
+        ops.blur(&params,
+                 from: fields.bloomCore,
+                 via: fields.bloomTmp,
+                 into: fields.bloomNear,
+                 sigma: 2.0)
+        ops.blur(&params,
+                 from: fields.bloomNear,
+                 via: fields.bloomTmp,
+                 into: fields.bloomFar,
+                 sigma: (49.0 - 4.0).squareRoot())
     }
 }

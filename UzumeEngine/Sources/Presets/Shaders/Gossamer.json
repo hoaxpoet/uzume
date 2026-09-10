@@ -66,6 +66,26 @@
       "route": "web_breathe",
       "primitive": "midAttRel",
       "kind": "continuous"
+    },
+    {
+      "route": "wave_displacement",
+      "primitive": "vocalsEnergyDev",
+      "kind": "continuous"
+    },
+    {
+      "route": "node_glint",
+      "primitive": "trebDev",
+      "kind": "continuous"
+    },
+    {
+      "route": "web_haze",
+      "primitive": "vocalsEnergyRel",
+      "kind": "continuous"
+    },
+    {
+      "route": "dust_drift",
+      "primitive": "vocalsEnergyRel",
+      "kind": "continuous"
     }
   ],
   "visual_density": 0.4,
@@ -85,8 +105,12 @@
     "comedown"
   ],
   "complexity_cost": {
-    "tier1": 6.0,
-    "tier2": 3.5
+    "tier1": 10.0,
+    "tier2": 5.8
   },
-  "certified": false
+  "certified": true,
+  "rubric_hints": {
+    "dust_motes": true,
+    "hero_specular": true
+  }
 }

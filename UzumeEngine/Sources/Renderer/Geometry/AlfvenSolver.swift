@@ -79,27 +79,6 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
 
     var state: [MTLTexture] = []      // ping-pong pair
     var stateIndex = 0
-    /// Working textures. Grouped so they are non-optional and allocated together —
-    /// implicitly-unwrapped optionals are a lint error and, here, would also hide an
-    /// allocation failure until first use.
-    struct Fields {
-        let scratchA: MTLTexture      // spectra / intermediate complex fields
-        let scratchB: MTLTexture
-        let scratchC: MTLTexture      // inverse staging, keeps fields.scratchB intact
-        let gradPhi: MTLTexture
-        let gradOmega: MTLTexture
-        let gradPsi: MTLTexture
-        let gradJ: MTLTexture
-        let nonlinear: MTLTexture
-        /// The spectrally filtered state — what each step advances FROM.
-        let filtered: MTLTexture
-        /// J = lap(psi), computed spectrally. What the fragment colours.
-        let jField: MTLTexture
-        /// RK2 stage slopes: k1 held across the second RHS evaluation, and the
-        /// half-step base E(w + 0.5*dt*k1) it is combined with.
-        let k1: MTLTexture
-        let rk: MTLTexture
-    }
     var fields: Fields
 
     let fftRows: MTLComputePipelineState
@@ -115,6 +94,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     let cflReducePSO: MTLComputePipelineState
     let cflFinishPSO: MTLComputePipelineState
     let jSpectrumPSO: MTLComputePipelineState
+    let bloomCorePSO: MTLComputePipelineState
+    let blurPSO: MTLComputePipelineState
 
     let dtBuffer: MTLBuffer
     let cflScratch: MTLBuffer
@@ -163,6 +144,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         cflReducePSO = try pso("alfven_cfl_reduce")
         cflFinishPSO = try pso("alfven_cfl_finish")
         jSpectrumPSO = try pso("alfven_j_spectrum")
+        bloomCorePSO = try pso("alfven_bloom_core")
+        blurPSO      = try pso("alfven_blur")
 
         guard let dtBuf = device.makeBuffer(length: MemoryLayout<Float>.size,
                                             options: .storageModeShared),
@@ -218,7 +201,11 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
             filtered: try make(),
             jField: try make(),
             k1: try make(),
-            rk: try make())
+            rk: try make(),
+            bloomCore: try make(),
+            bloomTmp: try make(),
+            bloomNear: try make(),
+            bloomFar: try make())
         return (pair, fields)
     }
 
@@ -265,6 +252,7 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         for _ in 0..<configuration.substeps {
             encodeSubstep(&params, into: commandBuffer)
         }
+        encodeBloom(&params, into: commandBuffer)
     }
 
     /// Force a fresh seed — first frame, or recovery after a non-finite blow-up.
@@ -348,11 +336,43 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// normalise by different statistics, and collapsing them onto one constant is what
     /// made the live frame flat lavender. J's std runs 1.54...1.64, so 1/(1.6*1.2) ~ 0.52.
     public var displayPolarityScale: Float = 0.52
+    /// Seam-bloom strength — film.py's `amt` at silence.
+    ///
+    /// film.py uses `0.30 + 0.85 * clip(sizzle, 0, 1.6)` where `sizzle` is `trebRel - 0.6`;
+    /// at silence that clips to 0 and the constant term is all that remains. The treble
+    /// term needs audio, so it arrives with ALFVEN.3 and this is the floor it builds on.
+    public var displayBloomAmount: Float = 0.30
+    /// The normalisation the BLOOM THRESHOLD is measured against — `1/(p99.6 - p2)`, the
+    /// autoexp scale. J's p99.6 runs 3.99…4.66 across frames, so the true scale is
+    /// 0.216…0.253 and no fixed constant tracks it; 0.216 is the value at the BRIGHTEST
+    /// end, chosen deliberately because the threshold is nonlinear — being 6% high on
+    /// this constant made the core 1.56x too dense, while being low only makes the bloom
+    /// slightly shy. Under-blooming is the safe direction. Validated field-to-field
+    /// against film.py's own `gaussian_filter` on the same J: core mean ratio 1.071,
+    /// coverage 3.28% vs 3.09%, correlation 0.958 (at 0.229 it was 1.560 / 4.34%).
+    ///
+    /// Deliberately NOT `displayExposure`, and the distinction is the same trap that made
+    /// the frame flat lavender at 4d: the two constants answer different questions.
+    /// `displayExposure` (0.085) is calibrated so the frame's BRIGHTNESS matches REF 05;
+    /// this one reproduces film.py's percentile scale so that its threshold still means
+    /// "the brightest decile". Feed the brightness constant in instead and `aJ` tops out
+    /// near 0.38, never crosses film.py's 0.72, and the bloom silently contributes
+    /// nothing — which is exactly what the first build of this did.
+    ///
+    /// Keeping it separate is what lets `alfven_bloom_core` use film.py's 0.72 / 0.28 /
+    /// ^1.5 verbatim rather than three constants re-derived into our own space.
+    public var displayBloomExposure: Float = 0.216
+
     /// ANCHOR of the palette drift: the late magenta<->teal end of film.py's drift, and
     /// the state Matt signed off on live (2026-09-09). The drift is arranged so this exact
     /// value is what you see at t = 0 and again every period — his ask was to keep this
     /// state and add colours around it, not to replace it.
     public var displayHueCentre: Float = 0.72
+
+    /// The seam-bloom chain, for field-to-field comparison against film.py. Diagnostics only.
+    public var bloomCoreTexture: MTLTexture { fields.bloomCore }
+    public var bloomNearTexture: MTLTexture { fields.bloomNear }
+    public var bloomFarTexture: MTLTexture { fields.bloomFar }
 
     /// The timestep the CFL reduction chose on the last substep. Diagnostics only.
     public var lastAdaptiveDt: Float {
