@@ -402,7 +402,7 @@ struct PresetVisualReviewTests {
 
     /// Temporal review for Root Choir using the committed So What feature capture in row order.
     /// The state is ticked at every recorded analysis row and every third row is rendered,
-    /// preserving the real harmonic trajectory at ~14 fps while keeping the review tractable.
+    /// preserving the real musical trajectory at ~14 fps while keeping the review tractable.
     @MainActor
     @Test("Render Root Choir real-music motion sequence (RENDER_ROOT_CHOIR_SEQUENCE=1)")
     func renderRootChoirMotionSequence() throws {
@@ -415,36 +415,31 @@ struct PresetVisualReviewTests {
         let rows = try SessionReplayHarness.loadRowsForReplay(
             fixtureRoot.appendingPathComponent("so_what/features.csv")
         )
-        let ctx = try MetalContext()
-        guard let preset = _acceptanceFixture.presets.first(where: {
-            $0.descriptor.name == "Root Choir"
-        }) else {
-            throw VisualReviewError.preconditionFailed("Root Choir preset missing")
-        }
+        let allStems = SessionReplayHarness.loadStemsForReplay(
+            fixtureRoot.appendingPathComponent("so_what/stems.csv")
+        )
         let outputDir = try makeOutputDirectory()
-        let aspect = Float(Self.renderWidth) / Float(Self.renderHeight)
+        let width = 640, height = 360
+        let aspect = Float(width) / Float(height)
+        let indices = rows.indices.filter { $0 % 3 == 0 }
+        let features = indices.map {
+            SessionReplayHarness.featureForReplay(from: rows[$0], aspect: aspect)
+        }
+        let stems = indices.map { $0 < allStems.count ? allStems[$0] : .zero }
         var written = 0
-        for (index, row) in rows.enumerated() {
-            var features = SessionReplayHarness.featureForReplay(from: row, aspect: aspect)
-            guard index % 3 == 0 else { continue }
-            let pixels = try renderFrame(
-                preset: preset,
-                context: ctx,
-                // `arachneState:` dropped when main removed Arachne (D-246). ROOTCHOIR.1
-                // was cut before that landed, so its call site still passed it — the text
-                // merge was clean and the result would not compile.
-                features: &features
-            )
+        let harness = MultiPassRenderHarness(width: width, height: height)
+        _ = try harness.render(preset: "Root Choir", features: features, stems: stems) { pixels in
             let url = outputDir.appendingPathComponent(
                 String(format: "root_choir_seq_%04d.png", written)
             )
-            try writePNG(
+            try? writePNG(
                 bgraPixels: pixels,
-                width: Self.renderWidth,
-                height: Self.renderHeight,
+                width: width,
+                height: height,
                 to: url
             )
             written += 1
+            return 0
         }
         print("[PresetVisualReview] wrote \(written) Root Choir real-music sequence frames to \(outputDir.path)")
     }
