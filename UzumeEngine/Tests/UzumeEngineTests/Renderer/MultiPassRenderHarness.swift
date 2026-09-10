@@ -62,10 +62,10 @@ struct MultiPassRenderHarness {
         // cost scales with branch count rather than pixel count, which is exactly why it needs
         // its own row rather than an assumption.
         "Fractal Tree",
-        // PERF.10 — the four `direct` presets: one fullscreen fragment each, no per-preset Swift
-        // state, so one generic path covers all of them. PERF.7's survey named these as the
-        // cheapest remaining paradigm and this is that work.
-        "Nebula", "Plasma", "Spectral Cartograph", "Waveform",
+        // PERF.10 — direct presets: one fullscreen fragment each. Root Choir additionally
+        // binds its compact circular-phase state at slot 6 through this same production-shaped
+        // path, so the budget measures the Newton work and CPU smoothing together.
+        "Nebula", "Plasma", "Spectral Cartograph", "Waveform", "Root Choir",
         // RICERCAR-CERT.1 — the fifth ParticleGeometry preset the harness reaches, and the
         // first with a geometry-owned resolution-dependent target (ensureAllocated). Absent
         // until this increment: PresetFrameBudgetTests carried "Ricercar" in its UNVERIFIED
@@ -103,7 +103,7 @@ struct MultiPassRenderHarness {
         case "Nacre":        return try renderBespokeMVWarp("Nacre", features, stems, reduce)
         case "Floret":       return try renderBespokeMVWarp("Floret", features, stems, reduce)
         case "Glaze":        return try renderBespokeMVWarp("Glaze", features, stems, reduce)
-        case "Dragon Bloom", "Skein", "Gossamer":
+        case "Dragon Bloom", "Skein", "Gossamer", "Root Choir":
             return try renderMVWarp(presetName, features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)
@@ -764,12 +764,14 @@ struct MultiPassRenderHarness {
         guard let warp = preset.mvWarpPipelines else {
             throw HarnessError.setupFailed("\(desc.name) mvWarpPipelines missing")
         }
+        // The sidecar owns feedback precision/transfer. Falling back by preset name
+        // made newly-authored linear/HDR presets compile against one format and then
+        // render into a different texture, which Metal correctly rejects.
         let feedbackFormat: MTLPixelFormat
-        switch desc.name {
-        case "Fata Morgana": feedbackFormat = .bgra8Unorm
-        case "Nacre":        feedbackFormat = .rgba16Float
-        case "Floret":       feedbackFormat = .rgba16Float
-        default:             feedbackFormat = ctx.pixelFormat
+        switch desc.feedbackPixelFormat {
+        case .bgra8Unorm?:  feedbackFormat = .bgra8Unorm
+        case .rgba16Float?: feedbackFormat = .rgba16Float
+        case nil:           feedbackFormat = ctx.pixelFormat
         }
         let canvasClear = desc.marks?.canvasClear.map {
             SIMD4<Double>(Double($0.x), Double($0.y), Double($0.z), 1)
@@ -967,13 +969,12 @@ struct MultiPassRenderHarness {
         return out
     }
 
-    // MARK: - Render: direct (one fullscreen fragment — Nebula / Plasma / Cartograph / Waveform)
+    // MARK: - Render: direct (one fullscreen fragment)
 
     /// Render a `direct`-pass preset exactly as `RenderPipeline.encodePresetVisualization` does.
     ///
-    /// One generic path covers all four because a direct preset is one fullscreen fragment with no
-    /// per-preset Swift state — the property that made this the cheapest paradigm to add after
-    /// PERF.7's mesh path. **Every binding that call site makes is made here**, because an
+    /// One generic path covers the direct presets because each is one fullscreen fragment.
+    /// **Every binding that call site makes is made here**, because an
     /// unbound buffer does not fail loudly: a preset reading slot 2 when nothing is bound there
     /// samples zeros and costs less than it does live, and the recorded budget would quietly be a
     /// number for a cheaper frame than production draws. That is the same hazard as timing Fractal
@@ -1034,7 +1035,6 @@ struct MultiPassRenderHarness {
         // The real generated textures, not placeholders — see the note above.
         let textures = try TextureManager(context: ctx, shaderLibrary: lib)
         let target = try makeOutputTexture(ctx)
-
         return try renderLoop(drive, ctx, target, reduce) { frame, pixels in
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                 throw HarnessError.renderFailed

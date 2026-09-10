@@ -74,7 +74,9 @@ struct SessionReplayHarness {
         // catches an unmapped route the moment a preset newly declares it (see that suite's
         // own history of silent-zero gaps).
         var tonalPhaseFifths: Float = 0
+        var tonalPhaseThirds: Float = 0
         var tonalConsonance: Float = 0
+        var tonalTension: Float = 0
         var harmonicFlux: Float = 0
         var midAttRel: Float = 0
         // PR.10 — the fields non-ray-march presets declare. Every one of these was
@@ -134,7 +136,9 @@ struct SessionReplayHarness {
             r.pulseBeatIndex = get(f, "pulse_beat_index")
             r.pulseRegionalBlend01 = get(f, "pulse_regional_blend01")
             r.tonalPhaseFifths = get(f, "tonal_phase_fifths")
+            r.tonalPhaseThirds = get(f, "tonal_phase_thirds")
             r.tonalConsonance = get(f, "tonal_consonance")
+            r.tonalTension = get(f, "tonal_tension")
             r.harmonicFlux = get(f, "harmonic_flux")
             r.midAttRel = get(f, "mid_att_rel")
             r.bassAtt = get(f, "bass_att")
@@ -167,7 +171,9 @@ struct SessionReplayHarness {
         f.pulseBeatIndex = r.pulseBeatIndex
         f.pulseRegionalBlend01 = r.pulseRegionalBlend01
         f.tonalPhaseFifths = r.tonalPhaseFifths
+        f.tonalPhaseThirds = r.tonalPhaseThirds
         f.tonalConsonance = r.tonalConsonance
+        f.tonalTension = r.tonalTension
         f.harmonicFlux = r.harmonicFlux
         f.midAttRel = r.midAttRel
         f.bassAtt = r.bassAtt; f.trebleAtt = r.trebleAtt

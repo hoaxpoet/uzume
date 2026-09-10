@@ -128,6 +128,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-244 | Accepted | **Staged stages gain persistence, iteration and a per-stage pixel format; the projection is a PORT of an MIT reference, not a derivation** (ALFVEN.1, 2026-09-08) |
 | D-245 | Accepted (item 3 reversed 2026-09-09) | Scorer: section weight gated on real section data; undeclared stem affinity scores the mean deviation; ~~ranked walk~~ → the manual walk is alphabetical over every preset |
 | D-246 | Accepted | Arachne removed from the roster (PR.9); the segmented-session machinery it motivated stays |
+| D-247 | Accepted for uncertified review | **Root Choir keeps harmonic geometry on a compact stateful direct path** — five ordered Newton roots, CPU circular phase smoothing, stable root-colour identity (ROOTCHOIR.1, 2026-09-09) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -5779,3 +5780,42 @@ is explicitly NOT a fidelity target (`docs/VISUAL_REFERENCES/alfven/README.md` �
 CAVEAT names chasing spectral sharpness on a projection solver as the FA #64 trap), while
 `06_anti_static_quilt.png` makes box-scale condensation the failure mode — and box scale is
 exactly what an under-converged Jacobi under-resolves.
+
+## D-247: Root Choir keeps harmonic geometry on a compact stateful direct path (ROOTCHOIR.1)
+
+**Status:** Accepted for uncertified review · 2026-09-09
+
+> ⚠ Renumbered from D-244 to D-247 when ROOTCHOIR.1 was merged with main (2026-09-09). D-244 was already taken upstream by ALFVEN.1, and D-245/D-246 were taken too; ROOTCHOIR.1 was cut before those landed and could not have known. Main's numbers were already published, so this one moved.
+
+Root Choir is a direct eight-iteration Newton fractal over five ordered roots. Fifths rotates the
+whole constellation; thirds skews alternating petals; tension changes root radii and the centre
+aperture; consonance changes saturation and seam clarity; bass adds only a bounded 0.94…1.06
+whole-field breath. Root index, not nearest screen sector or current angle, owns colour identity.
+That makes harmony change the polynomial geometry without allowing a morph to exchange colours.
+
+The two wrapped tonal phases do not travel through `FeatureVector` scalar filtering. A dedicated
+`RootChoirState` applies the existing `CircularPhaseSmoother` to unit vectors at τ 1.4 s, then
+writes a 32-byte block to direct fragment buffer(6) using the renderer's existing preset tick and
+buffer hooks. This is intentionally preset-local: the global `FeatureVector` ABI does not change,
+and no generic renderer mechanism is added. At low tonal confidence the shader circularly blends
+to a slowly rotating canonical five-root constellation, preserving a dim non-black silence state.
+
+The first render was structurally right but materially too pastel. The retained correction lowered
+linear-light palette values, preserved more chroma at low consonance, and let cream/gold dominate
+the selected recursive seams; the Newton geometry and audio mappings did not move. Offline review
+now supports the concept, but does not certify it: the real-music contact sheet and temporal gate
+are evidence for a live M7, after which the next call is tune, redesign, or retire.
+
+**ROOTCHOIR.2 amendment after the first M7 rejection (2026-09-09).** The decision to map fifths
+as an unconstrained whole-constellation angle did not survive contact with real tonal data: phase
+steps were large enough that the musical route read chiefly as disorienting spin. Fifths still
+orients the complete root system, but through `0.34*sin(phi5)`; thirds supplies chirality and a
+bounded-angle complex-domain fold; tension controls fold depth and the aperture after calibration
+to the supplied capture. The canonical rest state now drifts pendularly instead of completing
+turns. The radial orbit trap and cream/white seam path were also rejected because together they
+authored the reported circular particle ring. These are preset-local mapping changes; the compact
+slot-6 architecture and stable root identities remain the accepted part of D-244.
+
+**Evidence:** `RootChoirTests`; `PresetFrameBudgetTests` via the stateful direct harness;
+`docs/presets/ROOT_CHOIR_DESIGN.md`; `/tmp/uzume_visual/20260909T194737/root_choir_compare.png`;
+real-music sequence `/tmp/uzume_visual/20260909T195116/`.

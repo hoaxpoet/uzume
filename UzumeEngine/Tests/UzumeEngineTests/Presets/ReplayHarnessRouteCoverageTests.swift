@@ -75,7 +75,8 @@ struct ReplayHarnessRouteCoverageTests {
         // TONAL block (D-178) — mapped for Rosette (WHIT.2b), the first ray-march preset
         // routed off it; kept as generic harness capability after Rosette's retirement
         // (D-224) for whichever future ray-march preset routes off it next
-        "tonalPhaseFifths", "tonalConsonance", "harmonicFlux", "midAttRel",
+        "tonalPhaseFifths", "tonalPhaseThirds", "tonalConsonance", "tonalTension",
+        "harmonicFlux", "midAttRel",
         // StemFeatures — energies, beats, deviations, spectral shape
         "drumsEnergy", "bassEnergy", "vocalsEnergy", "otherEnergy",
         "drumsBeat", "bassBeat", "vocalsBeat", "otherBeat",

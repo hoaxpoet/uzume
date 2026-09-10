@@ -9597,6 +9597,62 @@ full engine suite green.
 
 ---
 
+### Increment ROOTCHOIR.2 — first-M7 structural redesign; pending live verdict (2026-09-09)
+
+**Done when:** the white circular particle mechanism is removed; the centre remains visibly open
+across the real tonal-tension range; harmonic geometry reads through bounded orientation,
+chirality, and topology rather than continuous spin; production still/motion artifacts are
+inspected; focused tests and the app build pass; and the preset remains uncertified for M7.
+
+**Implemented.** BUG-125 documents the clean “Combat Baby” session and first screenshot before
+the fix. The radial orbit trap and near-white seam colour are gone. `RootChoirState` now maps the
+measured tension range 0.004…0.085 and consonance range 0.05…0.20 across their visual spans,
+bounds fifths orientation to ±0.34 rad, and uses a slow ±0.10 rad pendular rest drift. The shader
+opens a 0.135…0.250 central aperture and applies a quadratic/cubic complex preimage whose bounded
+angle follows thirds and whose depth follows tension; this makes harmony alter basin topology
+without free field rotation. Recursive boundaries are dark leadwork with sparse amber filaments.
+
+**Evidence.** Before sheet:
+`/tmp/uzume_visual/20260909T203906/root_choir_compare.png`. Final after sheet:
+`/tmp/uzume_visual/20260909T205631/root_choir_compare.png`. The real-music sequence at
+`/tmp/uzume_visual/20260909T205529/` contains 430 frames; sampled frames keep a stable centre and
+show bounded morphing rather than full turns. The motion signal reports median/max 0.69/5.38,
+47 >3×-median event transitions and 182 near-zero transitions; this is not an automated pass and
+is explicitly owed live judgment because Newton boundary changes are nonlinear.
+
+**Verdict:** continue to one M7, do not certify. The named ring, muddle, and free-spin mechanisms
+are removed. If the stronger fold still reads as decorated petals rather than a psychedelic
+organism—or if its event transitions feel like popping—retire the concept instead of starting a
+third cosmetic tuning round.
+
+---
+
+### Increment ROOTCHOIR.1 — reviewable uncertified harmonic Newton preset ✅ (2026-09-09)
+
+**Done when:** a production `geometric` / `direct` preset named Root Choir loads uncertified;
+five ordered Newton roots are driven by the existing fifths, thirds, tension, consonance, and
+bass primitives; circular phases are CPU-smoothed across ±π; silence remains alive; focused
+geometry/render/performance gates pass; and both real-music still and motion artifacts exist.
+
+**Delivered.** `RootChoir.metal` runs eight guarded damped Newton steps (λ 0.78) over five
+ordered roots and derives jewel identity, convergence depth, orbit detail, derivative-stabilized
+recursive seams, a tension aperture, and one asymmetrical five-lobed silhouette. `RootChoirState`
+uses the shared unit-vector circular smoother at τ 1.4 s and writes a 32-byte slot-6 block;
+low-confidence input blends toward a dim canonical rotating constellation. The app allocates and
+ticks that state through the existing direct-preset hooks. No `FeatureVector` field was added.
+
+**Verification.** Nine focused tests cover load/compile, non-black silence, fifths rotation,
+thirds chirality with stable indices, tension aperture/separation, bounded bass scale, phase-wrap
+continuity, a 50,000-step finite/collision-free math sweep, and a 121-frame non-collapse GPU sweep.
+Final isolated 1080p direct timing is 2.72 ms/frame best-of-three (no readback; Tier-2 preset-work ceiling 7 ms). The So What
+fixture produced five named 1920×1280 review frames plus a 430-frame real-music temporal sequence;
+the motion gate reports median/max difference 1.81/7.43, 21 event-cluster spikes, and 2/429 near-
+frozen transitions. Reader verdict: smooth, coherent macro motion; live M7 remains deliberately
+open because the preset is uncertified.
+
+**Decision:** D-247 (renumbered from D-244 on merging main — D-244…D-246 were already taken upstream). **Next:** one live M7 and a material-depth tuning pass if the central recursive
+seams still read decorative rather than transmitted-glass. Do not certify from offline evidence.
+
 ## Phase ALFVEN — Alfvén program (MHD field preset; infrastructure first)
 
 Design: `docs/presets/ALFVEN_DESIGN.md`. Concept + port survey:
@@ -9640,6 +9696,64 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
+
+### Increment ALFVEN.4f — the seam bloom ✅ (2026-09-10)
+
+**Done-when:** film.py's seam bloom renders on the production path, validated against film.py's
+own output rather than by eye.
+
+**The blocker I had been repeating was wrong, and that is the finding.** Four closeouts said the
+bloom needed "the same reduction/mip surface as the percentile auto-exposure". Those are two
+different things: the AUTO-EXPOSURE needs a whole-frame reduction (percentiles); the BLOOM needs a
+BLUR, which is local, separable, and entirely expressible in the compute pipeline `AlfvenSolver`
+has owned since ALFVEN.4. Only the exposure still needs a reduction. Restating an obstacle across
+increments is how it stops being examined.
+
+`alfven_bloom_core` thresholds, `alfven_blur` is one separable axis, and the display fragment adds
+the tinted glow with film.py's own weights (`0.75*b0 + 0.55*b1`), tints and polarity split.
+**Two Gaussians compose exactly** — blurring by `a` then `b` is a blur by `sqrt(a²+b²)` — so the
+sigma-7 level is the sigma-2 level blurred again by `sqrt(45)`: four separable passes instead of
+six, with the wide one running on already-smooth data. Taps wrap, because the domain is periodic
+and a clamped edge would darken the border.
+
+**⚠ The same conflation trap as 4d, caught by measurement.** The first build contributed *nothing*:
+meanLum 0.229 → 0.229. film.py's `aJ` is PERCENTILE-normalised (p99.6 → 1.0), so its 0.72 threshold
+means "the brightest decile"; our `displayExposure` (0.085) is calibrated for BRIGHTNESS against
+REF 05, so `aJ` tops out near 0.38 and never crosses 0.72. Two constants, two different questions —
+exactly the mistake that made the frame flat lavender at 4d. `displayBloomExposure` is now separate,
+which lets `alfven_bloom_core` use film.py's `0.72 / 0.28 / ^1.5` **verbatim**.
+
+**Validated field-to-field, not by eye**, by dumping the GPU bloom chain and running film.py's own
+`gaussian_filter` on the same J:
+
+```
+              gpu mean    film mean   ratio   corr
+  core        0.00929     0.00901     1.071   0.958
+  b0 (σ2)     "           "           "       0.958
+  b1 (σ7)     "           "           "       0.952
+  coverage    3.28%       3.09%
+```
+
+The means being identical across core/b0/b1 within each implementation is itself the check that the
+blur is normalised — a normalised Gaussian preserves the mean.
+
+`displayBloomExposure` = **0.216**, and the choice is deliberate rather than fitted. J's p99.6 runs
+3.99…4.66, so the true scale is 0.216…0.253 and no fixed constant tracks it. 0.216 is the value at
+the brightest end: the threshold is nonlinear, so being 6 % HIGH made the core 1.56× too dense
+(coverage 4.34 %), while being low only makes the bloom slightly shy. Under-blooming is the safe
+direction.
+
+`displayBloomAmount` = 0.30 is film.py's `amt` at silence; its treble term (`0.85 * sizzle`,
+`sizzle = trebRel − 0.6`) needs audio and arrives with ALFVEN.3, at which point the bloom reaches
+1.66 — 5.5× stronger. So the effect being subtle in these stills is correct, not weak.
+
+**⚠ Perf needs re-confirming.** The ~60 fps evidence (ALFVEN.4e, from Matt's capture) predates this:
+the bloom adds 5 dispatches per frame, the widest being 43 taps × 2 passes at 256². Cheap in
+principle, unmeasured live in fact.
+
+**Also:** the harness now dumps the bloom chain as float64 (`bloom_core/b0/b1.f64`) so film.py can
+be run on the identical field — that dump is what caught the 1.56×, which no amount of looking at
+the frame would have.
 
 ### Increment ALFVEN.4e — palette drift over time ✅ (2026-09-09)
 

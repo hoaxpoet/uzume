@@ -130,7 +130,12 @@ struct PresetLoaderCompileFailureTest {
     /// `is_diagnostic`, `exclude_from_cycling`.)
     /// 32 → 31 on merging main (D-246: Arachne removed there, taking main's own count
     /// 30 → 29. This branch's +2 lands on top of that, so 29 + 2 = 31, NOT 32.)
-    static let expectedProductionPresetCount = 31
+    /// 31 → 32 at ROOTCHOIR.1 (Root Choir — direct five-root Newton-fractal, geometric
+    /// family, circular tonal runtime at slot 6; uncertified. Its own branch wrote
+    /// "29 → 30" because it was cut before Alfvén and FFT Sandbox landed; neither side's
+    /// number survives the merge — main's 31 plus this one is 32. The gate below COUNTS
+    /// the loaded roster, so it is the arbiter, not this arithmetic.)
+    static let expectedProductionPresetCount = 32
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {
