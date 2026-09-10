@@ -110,6 +110,10 @@ public final class SpectralAnalyzer: @unchecked Sendable {
     /// two real analysis rates — see `SpectralAnalyzer+Density`).
     var levelRise: Float = 0
     var preSmoothedLevelDB: Float = -120
+    /// PR.22 — the short-window sibling of `levelRise`; see `SpectralAnalyzer+Density`.
+    var transientRise: Float = 0
+    var preSmoothedFastDB: Float = -120
+    var recentFastDB: [Float] = []
     var recentLevelDB: [Float] = []
     var smoothedDensity: Float = 0
     /// False until the first non-silent frame seeds both density legs.
@@ -193,7 +197,8 @@ public final class SpectralAnalyzer: @unchecked Sendable {
                 smoothedDensity: 0,
                 sectionRatio: 1,
                 surge: 0,
-                levelRise: 0
+                levelRise: 0,
+                transientRise: 0
             )
         }
 
@@ -249,7 +254,8 @@ public final class SpectralAnalyzer: @unchecked Sendable {
             // no full decode exists; there it still needs ~90 s to mean anything.
             sectionRatio: smoothedSectionRatio,
             surge: surge,
-            levelRise: levelRise
+            levelRise: levelRise,
+            transientRise: transientRise
         )
     }
 
@@ -276,6 +282,9 @@ public final class SpectralAnalyzer: @unchecked Sendable {
         surge = 0
         levelRise = 0
         preSmoothedLevelDB = -120
+        transientRise = 0
+        preSmoothedFastDB = -120
+        recentFastDB.removeAll(keepingCapacity: true)
         recentLevelDB.removeAll(keepingCapacity: true)
         // `loudnessProfile` intentionally NOT cleared — see `setLoudnessProfile(_:)`.
     }

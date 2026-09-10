@@ -81,12 +81,12 @@
     },
     {
       "route": "core_pulse",
-      "primitive": "spectralLevelRise",
+      "primitive": "transientRise",
       "kind": "accent"
     },
     {
       "route": "ring_event_push",
-      "primitive": "spectralLevelRise",
+      "primitive": "transientRise",
       "kind": "accent"
     }
   ]

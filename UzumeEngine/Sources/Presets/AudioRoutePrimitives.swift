@@ -76,6 +76,7 @@ public enum AudioRoutePrimitives {
         // route on it is `structural`, never `continuous`: the continuous floor demands the
         // primitive VARY across a fixture, which this one must not.
         out["trackHueAnchor01"] = RoutePrimitiveColumn(.features, "track_hue_anchor01")
+        out["transientRise"] = RoutePrimitiveColumn(.features, "transient_rise")
         out["midDev"]    = RoutePrimitiveColumn(.features, "mid_dev")
         out["trebRel"]   = RoutePrimitiveColumn(.features, "treb_rel")
         out["trebDev"]   = RoutePrimitiveColumn(.features, "treb_dev")
