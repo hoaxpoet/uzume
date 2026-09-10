@@ -57,7 +57,7 @@ struct VisualAudioOffsetTests {
         //    envelope directly. If both lag equally the delay is in the pipeline; if only the
         //    level-rise column lags, most of it is the feature definition and there is far
         //    less to fix than the first number suggested.
-        let columns = ["bass", "treble", "beatComposite", "spectral_level_rise"]
+        let columns = ["bass", "treble", "beatComposite", "spectral_level_rise", "transient_rise"]
         var report: [String] = []
         var overlapS = 0.0
         for column in columns {
@@ -107,9 +107,15 @@ struct VisualAudioOffsetTests {
             }
         }
 
-        report.append(String(format: "  %-20@ lag %+5.0f ms   r %.3f   (r@0 %.3f)   %@",
+        // ★ FLAG A PEAK THAT IS NOT WORTH READING. A cross-correlation always returns an
+        //   argmax; on material with few transients that argmax is noise, and quoting it as a
+        //   latency is how a measurement turns into a wrong fact. Seen live: one session gave
+        //   `bass` r = -0.058 at -390 ms — no signal at all, but a confident-looking number.
+        let quality = bestR < 0.10 ? "  ⚠ TOO WEAK TO READ"
+                    : (bestR < 0.15 ? "  ⚠ marginal" : "")
+        report.append(String(format: "  %-20@ lag %+5.0f ms   r %.3f   (r@0 %.3f)%@   %@",
                              column as NSString, ms, bestR,
-                             Self.correlate(a, b, lag: 0),
+                             Self.correlate(a, b, lag: 0), quality as NSString,
                              neighbourhood.joined(separator: " ") as NSString))
         }
 
