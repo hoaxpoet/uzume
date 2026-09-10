@@ -120,6 +120,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     var bassEnvelope: Float = 0
     var trebleEnvelope: Float = 0
     var centroidEnvelope: Float = 0
+    /// Slew-limited bloom strength (D-157). Starts at film.py's silence floor.
+    var bloomAmount: Float = 0.30
     private var lastFeatureTime: Float = 0
 
     public init(device: MTLDevice, library: MTLLibrary,
