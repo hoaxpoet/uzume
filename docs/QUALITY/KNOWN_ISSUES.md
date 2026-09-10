@@ -1301,6 +1301,58 @@ FLAC**, and "sync is weak / loose / tenuous" appears against Membrane, Meniscus,
 Nebula in it. A driver bus running ~5.8× slower than the renderer is a plausible common factor
 behind part of that cluster, and no per-preset tuning touches it.
 
+#### The residual is OFFSET, not rate — measured at ~145 ms transport (2026-09-10)
+
+Matt on a streaming build: *"audio sync is still a little loose, not perfectly synced."* On that
+path the rate ceiling is **gone** — bass 60.0 Hz, beatComposite 58.9, spectral_level_rise 59.3
+against a 59.9 fps render (`2026-09-10T19-45-58Z`). So whatever remains is not quantisation.
+
+`VisualAudioOffsetTests` turns it into a number. **The alignment is exact, not estimated:**
+`session.log` records `raw tap capture started ... wallclock=<t0>` and every `features.csv` row
+carries the same `wallclock_s`, so a sample index in `raw_tap.wav` and a feature row sit on ONE
+timeline — no CS.1-style onset pairing needed. Offline broadband onset strength (log-energy first
+difference, 5 ms grid) is cross-correlated against the recorded columns over the 21.3 s overlap:
+
+| column | best lag | r | r at zero lag |
+|---|---|---|---|
+| `bass` | **+145 ms** | 0.219 | −0.031 |
+| `treble` | **+175 ms** | 0.142 | 0.095 |
+| `spectral_level_rise` | **+275 ms** | 0.195 | 0.026 |
+| `beatComposite` | −280 ms | **0.060** | 0.016 |
+
+**★ SEVERAL COLUMNS ON PURPOSE — one column cannot tell transport delay from feature shape.**
+`bass` is a band energy that tracks the envelope directly and lags **+145 ms**: that is transport.
+`spectral_level_rise` lags **+275 ms**, and the extra ~130 ms is its OWN design — it compares level
+against a 0.15 s trailing floor, so it peaks after a transient by construction. Reading the 275 ms
+as pipeline latency would have over-stated the engine's share by nearly half.
+
+**Actionable consequence for presets, not just the engine:** an event layer keyed to
+`spectral_level_rise` (Nebula's, PR.21) is keyed to the *laggiest* available primitive. Roughly
+130 ms is recoverable preset-side by driving the accent from a faster one or compensating, without
+touching the audio path.
+
+**And `beatComposite` is independently confirmed as not event-aligned** — r = 0.060 at a *negative*
+lag, i.e. essentially uncorrelated with audible onsets. That matches the 42.6 %-above-0.9 duty
+cycle measured from the preset side, and the FeatureVector's own comment that the `beat_*` fields
+score below chance against real events.
+
+⚠ **Bounds.** Correlations are weak in absolute terms (0.14–0.22) because broadband onset strength
+and AGC-normalised band energy are different quantities; the corroboration is that `bass` and
+`treble` agree (+145/+175 ms) and that every peak is sharp rather than flat. And this measures tap
+capture → feature in a rendered row: it **excludes** output-device buffering between the tap point
+and the speaker, and display presentation. The true eye-vs-ear gap is ≥ these figures.
+
+#### The feature-shape half is FIXED (PR.22); the ~145 ms transport half is what remains
+
+The +275 ms measured on `spectral_level_rise` decomposed into ~145 ms transport and ~130 ms of the
+field's own fixed-lag design. **PR.22 recovers the second half** with `transientRise` — the same
+statistic at 15 ms pre-smooth / 40 ms lag, band re-calibrated to 4–10 dB so its fire rate still
+matches the parent's. Measured against offline onset strength: **+30 ms against the parent's
++150 ms**, on both a streaming and a local session.
+
+**So BUG-087's remaining scope is the ~145 ms transport term only.** A preset keyed to
+`transientRise` should now sit ~145 ms behind the audio rather than ~275 ms.
+
 **The remaining route is smaller buffers from AVAudioEngine** — manual rendering mode, an
 `AUAudioUnit` render block with a smaller `maximumFramesPerSlice`, or tapping a different
 node. BUG087.1 measured that a plain `installTap(bufferSize:)` request is ignored. **Filed as

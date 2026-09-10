@@ -94,6 +94,7 @@ struct SessionReplayHarness {
         var high: Float = 0
         var spectralLevelRise: Float = 0
         var trackHueAnchor01: Float = 0
+        var transientRise: Float = 0
         var spectralSectionRatio: Float = 0
         var waveformOccupancy: Float = 0
     }
@@ -154,6 +155,7 @@ struct SessionReplayHarness {
             r.high = get(f, "high")
             r.spectralLevelRise = get(f, "spectral_level_rise")
             r.trackHueAnchor01 = get(f, "track_hue_anchor01")
+            r.transientRise = get(f, "transient_rise")
             r.spectralSectionRatio = get(f, "spectral_section_ratio")
             r.waveformOccupancy = get(f, "waveform_occupancy")
             out.append(r)
@@ -188,6 +190,7 @@ struct SessionReplayHarness {
         f.highMid = r.highMid; f.high = r.high
         f.spectralLevelRise = r.spectralLevelRise
         f.trackHueAnchor01 = r.trackHueAnchor01
+        f.transientRise = r.transientRise
         f.spectralSectionRatio = r.spectralSectionRatio
         f.waveformOccupancy = r.waveformOccupancy
         f.aspectRatio = aspect
