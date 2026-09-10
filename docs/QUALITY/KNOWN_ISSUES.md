@@ -1353,6 +1353,36 @@ matches the parent's. Measured against offline onset strength: **+30 ms against 
 **So BUG-087's remaining scope is the ~145 ms transport term only.** A preset keyed to
 `transientRise` should now sit ~145 ms behind the audio rather than ~275 ms.
 
+#### The remaining term decomposes AGAIN, and the fix route is chosen (2026-09-10)
+
+Measured per primitive on a streaming session (offline onset strength, shared wallclock):
+
+| primitive | lag | r |
+|---|---|---|
+| `transientRise` (PR.22) | **+30…+45 ms** | 0.18–0.33 |
+| `bassDev` | +135 ms | 0.202 |
+| `bass` / `mid_dev` | +145 ms | 0.219 / **0.250** |
+| `bassAttRel` | +145 ms | 0.159 |
+| `mid_att_rel` | +170 ms | 0.142 |
+| `bass_att` | **+365 ms** | 0.143 |
+
+**Every continuous primitive sits at ~135–170 ms, and most of that is deliberate band smoothing** —
+`BandEnergyProcessor.instantSmoothers` run `rate30: 0.65/0.75/0.75`, i.e. **τ ≈ 77 ms (bass) and
+116 ms (mid, treble)**. Real transport is therefore only ~40–60 ms of it.
+
+⚠ **A correction worth keeping:** the raw attenuated band `bass_att` (τ ≈ 650 ms) lags +365 ms, and
+extrapolating from that to its `_rel` sibling is wrong — `bassAttRel` measures **+145 ms**, the same
+as the instant family. **The deviation transform removes almost all of the attenuation lag**, which
+makes D-026's "drive from deviation" a latency rule as well as an AGC-independence rule.
+
+**Matt's call on which lever** (2026-09-10): not the smoothing constants — *"i don't like that the
+smoothing constants will change the feel of every preset - too risky"* — but true transport. Scoped
+as **BUG087.4** in ENGINEERING_PLAN: drive the analysis clock from the decoded file at the smoothed
+playhead instead of from tap arrival, on the local-file path only. Honest ceiling: ~40–50 ms of the
+~145 ms, plus removal of the 100 ms staircase. ⚠ And the defect there is **cadence, not staleness** —
+`FFTProcessor` already analyses the NEWEST samples of each buffer, so a design premised on stale
+audio would aim at the wrong thing.
+
 **The remaining route is smaller buffers from AVAudioEngine** — manual rendering mode, an
 `AUAudioUnit` render block with a smaller `maximumFramesPerSlice`, or tapping a different
 node. BUG087.1 measured that a plain `installTap(bufferSize:)` request is ignored. **Filed as

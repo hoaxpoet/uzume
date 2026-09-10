@@ -57,7 +57,7 @@ struct VisualAudioOffsetTests {
         //    envelope directly. If both lag equally the delay is in the pipeline; if only the
         //    level-rise column lags, most of it is the feature definition and there is far
         //    less to fix than the first number suggested.
-        let columns = ["bass", "treble", "beatComposite", "spectral_level_rise", "transient_rise"]
+        let columns = ["bass", "bassDev", "bassRel", "mid_dev", "bass_att", "bassAttRel", "mid_att_rel", "transient_rise"]
         var report: [String] = []
         var overlapS = 0.0
         for column in columns {
