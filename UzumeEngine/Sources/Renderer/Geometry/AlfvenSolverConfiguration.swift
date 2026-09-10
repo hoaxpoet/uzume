@@ -125,6 +125,29 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// A linear map from 0 would therefore park the field at its silence look through most
     /// of a track. `tanh(env / knee)` with the knee near p75 (0.094) spreads the COMMON
     /// range across the drive range instead. Tuned against p99, never against 1.0 (D-026).
+    /// Stirring-vigour window, in `bassRel` units: the shift that centres steady music
+    /// mid-range, and the scale that spans quiet to loud.
+    ///
+    /// ⚠ Replaces a `bassDev` map, on Matt's M7: "only a loose connection is perceived
+    /// between the visuals and audio signal." Measured on that session's Alfvén window,
+    /// the cause was not latency — it was that `bassDev` is a ONE-SIDED deviation from a
+    /// running average, so steady music with no bass surprises reads as ZERO (62 % of
+    /// frames exactly zero). Drive therefore sat below 1 — the silence look — for **40 %
+    /// of the music**. The field was rendering its relaxed state while a track played,
+    /// which is precisely "not connected to the audio".
+    ///
+    /// `bassRel` is the two-sided sibling and still a D-026 deviation primitive, so FA #67
+    /// holds: one primitive on this layer. Same window, same session: 0 % below 1, p50
+    /// 9.44, p95 14.55 — the field stirs throughout the music and still tracks the bass.
+    /// Across the 7 canonical fixtures the map puts quiet at drive 0.8, median 9.8, loud
+    /// 15.8.
+    ///
+    /// This deviates from design §7, which names `bassDev`. §7's own amplitude for this
+    /// route was already falsified at ALFVEN.3 (measured inert); its choice of the
+    /// one-sided primitive is the second thing about that row that does not survive
+    /// contact with real music.
+    public var bassRelShift: Float
+    public var bassRelScale: Float
     public var bassKnee: Float
     /// Envelope time constants, seconds. §7's timescales: bass ~100 ms, treble ~30 ms,
     /// centroid seconds. Different timescales per layer is the point — two layers sharing
@@ -199,6 +222,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         displayHueDwell: Float = 2.0,
         driveFloor: Float = 0.02,
         driveCeil: Float = 16.0,
+        bassRelShift: Float = 0.05,
+        bassRelScale: Float = 0.16,
         bassKnee: Float = 0.094,
         bassTau: Float = 0.10,
         trebleTau: Float = 0.03,
@@ -233,6 +258,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.displayHueDwell = displayHueDwell
         self.driveFloor = driveFloor
         self.driveCeil = driveCeil
+        self.bassRelShift = bassRelShift
+        self.bassRelScale = bassRelScale
         self.bassKnee = bassKnee
         self.bassTau = bassTau
         self.trebleTau = trebleTau
