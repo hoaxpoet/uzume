@@ -1302,8 +1302,9 @@ beta cut.
 **The list of seven was stale in one place.** `Spectral Cartograph` is `is_diagnostic: true` in its sidecar,
 which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roster preset — D-074 excludes
 diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
-to it. ⚠ **Superseded by the PR.18 recount (2026-09-09): four, not six** — Arachne was removed
-at D-246 and Gossamer certified at PR.18. The live figure is Membrane, Nebula, Plasma, Waveform;
+to it. ⚠ **Superseded by the PR.18 recount (2026-09-09): five, not six** — Arachne was removed
+at D-246, Gossamer certified at PR.18, and Alfven arrived from ALFVEN.4d/4e. The live figure is
+Alfven, Membrane, Nebula, Plasma, Waveform;
 the sentence below is kept as written for the record of what the survey said at the time.
 That left **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
 Plasma, Waveform.
@@ -2175,38 +2176,6 @@ name, and where the claim is "these N things are duplicates", measure it rather 
 the list.
 
 ### Increment RECON.22 — dead decoder surface + the small verified deads ✅ (2026-08-26)
-
-Closes the preset-audit backlog: Tier-1 items 11 and 12, the last two of the twelve. **−1,151 lines across
-49 files, no pixel change** (PresetRegression's 29-preset dHash gate green throughout, so nothing needs
-re-certification).
-
-**Item 11 — the sidecar/decoder surface.** Four decoder capabilities that every sidecar paid for and no
-shader read. `FerrofluidParams` / `thin_film` was decoded and range-validated while `FerrofluidOcean.metal`
-hardcoded the same constants (the registry's thin-film row now names the MSL constants as the single source
-of truth). The legacy `use_*` boolean synthesis served only hypothetical out-of-tree sidecars — all 29
-in-tree sidecars declare `passes`. `beat_source` was set by 27 sidecars and read by none (`beatValue` is
-hardcoded to `max(beatBass, beatComposite)`), so the key came out of every sidecar with the enum: a sidecar
-should not claim a control that isn't wired. The `feedback_pixel_format` name fallback met its own
-delete-when condition, and `mesh_additive_blend` went to 0/29 when Arachne's strands moved to a staged pass.
-
-**Item 12 — six unrelated pockets with no consumer.** FerrofluidParticles' Phase-2c layer (zero-caller
-`encodePerFrameUpdate` overloads over the rejected D-127(d) force model, reachable only from its own two
-tests — deleted per D-203; the live bake path is untouched); the engine's hand-synced copy of `MVWarp.metal`
-(the live pipeline compiles from `PresetLoader+WarpPreamble`, so the copy was a drift hazard, not a
-reference); seven `SessionFrame` columns parsed as *required* and never read, which made replay hard-fail on
-sessions missing columns nobody consumed; Skein's `colorFromFamily`, whose every branch was gated on a flag
-no production caller set after FL.10 gave Ricercar its own echo geometry; six shader helpers with no call
-site; and the certification/loader crumbs (unreachable second descriptor fallback, unused store singleton +
-injection hook, write-only `p95FrameTimeMs`, the superseded `.exempt` status, a Stalker filter for a deleted
-file, `placeholderDesc`, the 4-line `Presets.swift`).
-
-**A green build is not a green Metal library.** `swift build` compiles no shaders, and per-preset suites
-compile only preset libraries — so deleting `FerrofluidUpdateUniforms` from the *engine* shader library while
-`fo_canonical_position` still took it as a parameter passed both. The failure surfaced only in
-`closeout_evidence.sh`, as 56 unrelated GPU tests failing on `MTLLibraryErrorDomain`. Any `Renderer/Shaders/`
-edit now needs one engine-library GPU test (`--filter IBLManagerTests` is a 9-test, sub-second smoke) before
-it can be called verified.
-
 ### Increment PERF.17 — the frame-budget harness timed the roster at the AGC mean ✅ (2026-08-27)
 
 **Done-when:** a preset whose expensive layer is gated on runtime state is measured with that layer ON. BUG-110's follow-up asked for "a note or a mechanism for state-gated layers" in `PresetFrameBudgetTests`; the mechanism exists (`openTheGates`, for Fractal Tree) and the real finding was that the defect is not Skein-shaped. **The shared drive built every band at exactly `0.5` and left every `Rel`/`Dev` field at its zero-initialised default** — `bassRel = (bass − 0.5) × 2` is zero at 0.5 by construction, `StemFeatures` derives nothing in its initialiser — so the whole roster was timed at the one point where **D-026's deviation primitives, the default primary driver for every preset, are identically zero**. Skein's pour-commit machine consequently never committed a second pour: the breakpoint ring held **1** where playback holds 16, `skein_geometry_fragment` skipped most of Layer A, and Skein read **5.31 ms — cheapest third of the roster** — against 17.06 ms at one breakpoint and 55.65 ms at sixteen in `SkeinLineCostTests`. The drive now sweeps the bands (0.20–0.95, so `Dev` spans 0–0.9 — sized against real material's p99 ≈ 0.85 per FA #73, not against 1.0) and derives Rel/Dev with the analyzer's own formula rather than hand-setting them, since a `bassDev` that disagrees with its `bass` is its own trap; stem dominance rotates on a ~1 s cycle with a decisive leader, because an argmax route reads a fixed dominance as "nothing ever changed". `MultiPassRenderHarness.warmSkein` then ticks the state to a full ring before the timed frames — CPU-only, stopping on the ring rather than a frame count so it survives a `minPourTau` retune. **Skein 5.31 → 13.19 ms, 4th most expensive.** `skeinIsMeasuredMidPainting` gates it and carries a COLD control (a fresh state still holds 1 breakpoint after the 24 timed frames), so deleting the warm-up goes red rather than both halves passing vacuously. All 21 baselines re-recorded in one isolated run; **several moved DOWN** (Nebula/Plasma/Waveform 9.5 → 6.3), because a band sweeping 0.2–0.95 is not the same work as one pinned at 0.5 and the old figure was no more correct for being higher. Nothing tripped the ratio gate or the absolute ceiling. Engine suite green at 1873 tests.
@@ -2254,134 +2223,17 @@ Session `2026-08-27T16-17-34Z`: Skein at 3840×2160, `frame_gpu` p50 **flat at 1
 **Done-when:** a 23 ms series read through the local path's playback clock advances every frame. `MIRPipeline.elapsedSeconds` moves in 100 ms steps there (39 % of analysis frames do not advance it at all), which turned LFSTEM.1's series into a staircase — values held 2–6 frames then jumped 4+ grid frames onto deviation spikes (|Δ| up to 6.0), the twitchiness Matt reported on Skein. `PlaybackClockSmoother` dead-reckons between ticks and resyncs on each, capped at 0.25 s, reset on track change. `PlaybackClockSmootherTests` is the gate the alignment test could not be — it tests the clock, not the map — and fails without the smoother. **Filed, not fixed: BUG-110** (Skein 15.60 ms at 4K in the harness, ~170 ms after 50 s live; mechanism not established, and the next 4K Skein session is a free A/B on whether the staircase was inflating it).
 
 ### Increment LFSTEM.1 — local-file stems land on the beat ✅ COMPLETE, M7 PASSED 2026-08-27 (2026-08-26)
-
-**Done-when:** a local file plays with stems sampled by playback position rather than separated from audio that has already gone past. **1a** `StemFeatureSeries` + `SessionPreparer.analyzeStemSeries`: the sweep keeps spans of 2 s and places each at the END of its ~10 s separation window (leaving one analysis frame of headroom — flush placement dropped 10 of 1292 frames over 30 s, which `stemSeries_spanBoundariesDoNotDrift` caught on first run), with one analyzer instance carrying its AGC across spans as it does across live separations. **1b** persistence at schema v10: a raw `[StemFeatures]` dump in `stem_series.bin` guarded by `stemSeriesFeatureStride`, every read failure degrading to `.empty` rather than throwing away an otherwise-good cache entry. **1c** the local prep path builds it, playback samples it at `mir.elapsedSeconds`, and the live path stands down when a series is installed. Streaming is untouched and structurally cannot have this. Engine + app suites green; alignment, persistence and wiring each gated. **M7 PASSED 2026-08-27** (session `2026-08-27T18-17-50Z`, Matt: *"Looks good"*) — after four corrections found by session artifacts rather than tests: on time (1c), continuous (1d r1), non-rewinding (1d r2), full-rate (1e). **LFSTEM.2 is now unblocked.**
-
 ### Increment BUG106.1 — the ML dispatch gate measures jank, not resolution ✅ (2026-08-26)
-
-**Done-when:** the gate can open at 4K without becoming "never defer". Matt chose **(a) stems on time**. `MLDispatchScheduler.budgetMs(floorMs:recentMedianFrameMs:)` returns `max(floorMs, median × 1.5)` over the same rolling window `recentMaxFrameMs` comes from (new `FrameBudgetManager.recentMedianFrameMs`, median not mean so one hitch cannot raise the next dispatch's bar). 1080p is unchanged — median ≈ 8 ms, floor wins — and a steady 25 ms 4K session now dispatches where the old 16 ms constant deferred, while a 60 ms spike inside it still defers. ⚠ The recommendation's *display refresh interval* would not have worked: 16.7 ms at 60 Hz is still under a 4K session's 17–45 ms. **Owed:** one fullscreen 4K session — `ml_forced` flat, and Matt's eye on stem timing vs new stutter (the same session BUG-100 needs).
-
 ### Increment BUG100.1 — the two dimensions a degrading 4K session never recorded ✅ (2026-08-26)
-
-**Done-when:** a future 4K session decides BUG-100's open mechanisms from its own log. Sessions now emit `GPU_PRESSURE alloc_mb=… budget_mb=… used_pct=… ml_forced=… ml_last=…` on the `DRAWABLE_LIFECYCLE` heartbeat bucket — the GPU working set against `recommendedMaxWorkingSetSize` (never measured; 4K quadruples every render target, and eviction is slow globally, survives a preset switch and recovers at lower res — this entry's exact signature) and `MLDispatchScheduler.forceDispatchCount`. Found on the way and filed as **BUG-106**: the ML gate's budget is a hardcoded 14/16 ms with no resolution term, so at 4K the window is never clean, every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires against a 2.0 s period — the gate is inoperative and stems run ~a period late there. ⚠ **Not** BUG-100's mechanism: PERF.15's VL session was flat across 172 s at 4K while permanently over that same budget. **Next: one ~2-minute fullscreen 4K session on the instrumented build**, then BUG-106's product decision (stems on time vs jank-free at 4K).
-
 ### Increment BUG088.1 — Aurora Veil's undeclared routes were dead computation ✅ (2026-08-26)
-
-**Done-when:** the manifest matches what the shader reads, and a silence gate can no longer be declared as a driver. `AuroraVeilState` (kink charge + smoothed vocal pitch → `[[buffer(6)]]`) was deleted along with the shader's slot-6 parameter, the app wiring, three test harness binds, and `PresetSessionReplay/AuroraVeilRoutes.swift` — a second manifest for the same three routes AV.7 removed, so `--preset aurora_veil` no longer resolves there. Recurrence guard: `AudioRoute.Kind.gate` (floor: peak ≥ 0.9 on every fixture — the only failure a gate has is never opening), with Aurora Veil `star_beat_twinkle`, Fractal Tree `silence_gate` and Ferrofluid Ocean `spike_punch_gate` reclassified off `continuous`. Gate arm proven to bite (floor → 1.5 reds all three at peak 1.00). 201 routes / 21 presets / 0 red; Aurora Veil golden hashes unchanged; app build green. No M7 — no pixel moved.
-
 ### Increment KI-AUDIT.1 — KNOWN_ISSUES reconciled to the tree ✅ (2026-08-26)
-
-**Done-when:** §Open contains only unfinished work, and every claim in it survives a check against the source. Twelve resolved-in-place entries moved out (six to §Resolved, six rotated early to `KNOWN_ISSUES_HISTORY.md` to stay inside the §Resolved 50 KB DOC.6 budget). One factual correction landed in place: BUG-088's "three undeclared reads" are not shader reads — verified field-by-field against `AuroraVeil.metal` — which inverts its fix from *declare the route* to *delete the dead state*. One historical correction in HISTORY: BUG-089's "consumer was reverted" is stale; `FractalTree.json` declares `spectralLevelRise` on two routes again since FTR.30/33. Doc-only; no production delta. `DocIntegrityTests` 13/13 green.
 ### Increment RECON.21 — replay routes resolve from the `audio_routes` sidecars ✅ (2026-08-26)
-
-The audit's one structural item, and the only one that makes future presets *cheaper* rather than the tree smaller. **Replayable presets: 3 → 21.**
-
-**The problem.** Replay route specs were hand-written Swift, one file per preset. That stalled coverage at 3 of 26 because each new preset cost a ~90-line file plus a registry edit, and the files duplicated gate constants their own headers admitted had to be "kept in sync by code review" (`AuroraVeilRoutes` even promised "SR.2 will centralize these"). Meanwhile QG.1 (D-179) already requires every preset to declare its routes in the sidecar, `AudioRoutePrimitives` already maps each primitive to its recorded column, and `RouteCoverageTests` already asserts they fire. The manifest existed; replay just wasn't reading it.
-
-**`SidecarRouteSpecs` + `SidecarLocator`** resolve a preset name to its sidecar and build specs from `audio_routes`. A preset is now replayable by shipping the entry it must ship anyway for certification. `resolvePreset`'s "Unknown preset" wall is gone.
-
-**Two things the sidecar cannot express — stated, not guessed:**
-
-1. **Gate thresholds.** A sidecar route declares `kind`, not the shader's smoothstep edges. Sidecar-derived specs use the QG.1 per-kind coverage floors (`accent` → 0.02, matching `RouteCoverageTests.accentThreshold`; `continuous` → just above zero, since the assertion is that it varies). Those measure *whether the input is live*, not the visual amplitude — the spec text says so in the report.
-2. **Multi-primitive arithmetic.** 38 of 121 declared routes list several primitives, and the sidecar does not say how the shader combines them — Skein's painter speed takes `mean(max(0, ·))` of four stem deviations while its stem-mix gate takes their SUM. Rather than invent a rule, the resolver emits **one spec per (route, primitive)**, labelled with both.
-
-**Hand-written specs still win where they exist**, because they encode exactly what the sidecar cannot. Both survivors were re-verified against their sources rather than assumed: Skein's 0.13 gate is `SkeinState.onsetDevThreshold`, and Murmuration's `(drums+bass+other)/3 + 0.4·vocals` is `Murmuration3DGeometry`'s `stemEnergy`.
-
-**`AuroraVeilRoutes` deleted — it was reporting on a preset that no longer exists.** Its specs described the pre-AV.7 AV.2.h.1 shader (vocals→hue, bass→brightness, drums→kink) and cited `AuroraVeil.metal:515` in a file that is 225 lines; AV.7 removed all audio routing. Anyone running AV replay diagnostics was reading a report about a retired shader. The sidecar path reports its real routes (`star_beat_twinkle`, `veil_breathe`, `mood_colour`). This was surfaced during RECON.20 and flagged rather than silently patched; it is fixed here as the side effect predicted.
-
-**Reads through `SessionColumnSeries`, not `SessionFrame`** — the latter carries 16 fields while a declared primitive may be any recorded column, which is why the frame-based path could never have covered the corpus. `RouteSpec.inputValue` became optional to express "this spec reads a column, not a frame"; the event-montage extractor guards it and yields no events rather than a wrong one.
-
-`SidecarRouteSpecsTests` holds the coverage claim to the tree (every declaring preset resolves; ≥20 expected), plus name-normalisation, per-kind gate selection, and an Aurora Veil case asserting the retired route names cannot reappear.
-
-Engine suite 1,859 / 287 green, SwiftLint 0 in 511, doc gates 13/13.
-
 ### Increment RECON.20 — three preset residues deleted (sketch, Aurora Veil state, Arachne pool) ✅ (2026-08-26)
-
-The audit's three remaining ordinary deletions. **−1,314 lines.** Each was verified dead individually rather than inherited from the report.
-
-**A. The MitosisGen2 throwaway sketch** (`tools/mitosis_gen2_sketch/Gen2Cell.metal` 187 + `MitosisGen2SketchRenderTests` 141). It shipped: the production shader records "Ported from the Matt-approved throwaway sketch", the preset has a sidecar, and gen-2 (Cytokinesis) is certified. `MitosisGen2GeometryTests` **stays** — it exercises the production geometry and merely wrote its contact sheets into the sketch's frames directory; retargeted to `tools/mitosis_gen2_renders/`.
-
-**B. Aurora Veil's slot-6 state** (`AuroraVeilState.swift` 244 + shader struct/param + app wiring). The AV.7 shader header said it outright — the buffers "are unused… `AuroraVeilState.swift` still flushes buffer(6) — also unused now; left in place to avoid loader churn." Every frame this **certified** preset ran, a kink accumulator and a 5-frame pitch ring ticked into a buffer whose only reader was `(void)av;`. The shader param and CPU binding had to go together (an unbound `[[buffer(6)]]` read crashes); verified other direct presets declare only buffers 0–2, so slot 6 is optional. **PresetRegressionTests' 29-preset dHash gate green — pixel-identical, no re-certification.**
-
-**C. Arachne's retired V.7.5 pool.** The shader loop had shipped as `for (int wi = 1; wi < 1; wi++)` since V.7.7C.3 — 73 lines that could never execute, kept as a "structural marker" for a §5.12 follow-up never built. Deleted with the CPU machinery feeding it: `accumulateSpawn`, `trySpawn`, `advanceStage`, `freeSlot`, `evictAndRetry`, the `webCount`/`spawnAccumulator`/`lastSpawnBeatIndex`/`prevBeatComposite` state, `ArachneBackgroundWeb`, the whole background-web pool, `ArachneState+M7Diag` (gated on a flag no build config sets), and the three explicitly-deprecated stubs kept alive only so that diag build compiled.
-
-**The one live behaviour inside the dead machinery was preserved.** `finaliseMigration` did two things: snapshot the hero into the unrendered pool (dead), and **restart the foreground build cycle** (live — without it Arachne builds one web and stops). It now lives in `ArachneState+SegmentRollover.swift` with the 1 s delay unchanged, because that delay is the visible pause between a finished web and the next one starting.
-
-**Safety argument for C, since it touches the hero slot:** `advanceStage` ran on webs[0] too. The shader derives the hero's (stage, progress) from **Row 5** (`build_stage`/`frame_progress`/…), written by `advanceBuildState`; after the pool loop's removal `stage`/`progress`/`opacity`/`is_alive` survive only as struct field declarations with **no reader anywhere in the shader**. Six `ArachneStateTests` cases whose subject was the retired pool were deleted; the initial-pool, determinism, silence and spider tests stay, with the pool test's `webCount` assertion rewritten against the live buffer.
-
-Engine suite green (1,855 tests / 286 suites, 0 XCTest failures), app 417/417, SwiftLint 0 in 511 files. Module Map updated; the doc gate caught the new file, which is the gate working.
-
 ### Increment RECON.19 — Low Power Mode floors at `.noBloom` (D-167 amended) ✅ (2026-08-26)
-
-Answers the open question RECON.18 left on the table. Matt's call, 2026-08-26: **Low Power Mode floors the quality ladder at `.noBloom`.**
-
-**This is new behaviour, not a restoration.** D-167 floored Low Power Mode at `.noSSGI`, but that rung only ever suppressed SSGI — which no preset ever declared — so Low Power Mode has imposed **no actual reduction for its entire life**. RECON.18 deleted SSGI and the rung, and deliberately left the floor absent rather than promote it silently, because a new user-visible reduction is a product decision rather than a cleanup side effect. Asked, Matt chose `.noBloom`.
-
-**What a user sees:** with Low Power Mode on, bloom is off. ACES tone-mapping still runs (the post-process pass is not skipped), so highlights are flatter rather than the image being flat. Low Power Mode never weakens a stronger thermal floor — `.critical` still yields `.reducedRayMarch`. Thermal floors are otherwise unchanged.
-
-**No re-certification.** Certification grades a preset's own fidelity at full quality; the frame-budget governor is orthogonal to it, and every preset renders unchanged with Low Power Mode off.
-
-One line of logic (`floor = max(floor, .noBloom)`), the `qualityFloor` doc comment rewritten to explain why the floor is new rather than restored, and the D-167 test expectation updated from `.full` to `.noBloom` with a `.fair` case added. D-167 amended from partially-open to resolved; the capability-registry governor row records the new floor.
-
 ### Increment RECON.18 — ICB and SSGI deleted; the last two dormant capabilities ✅ (2026-08-26)
-
-Matt's park-or-delete call on the remaining two dormant capabilities from the 2026-08-25 preset audit (2026-08-26), closing the set opened at RECON.17. Same D-203 precedent. **−2,036 lines.**
-
-**A. Indirect command buffers.** `RenderPipeline+ICB.swift` (340), `Shaders/ICB.metal` (`icb_populate_kernel`), `RenderPipelineICBTests` (417), the `.icb` `RenderPass` case and draw arm, the `IndirectCommandBufferState` type, and `ShaderLibrary`'s `supportICB` pipeline-key axis. **No sidecar ever declared `"icb"`**; the app's branch logged *"ICB state must be set externally"* and nothing ever set it; `supportICB: true` appeared only in tests. The registry row's claim of a `MeshShaders.metal` populate kernel was stale — the kernel lived only in `ICB.metal`.
-
-**B. Screen-space global illumination.** `Shaders/SSGI.metal` (171), `SSGITests` (450), `runSSGIPass`/`runSSGIBlendPass`, the `ssgi`/`ssgiBlend` pipeline states, `ssgiTexture`, the `.ssgi` case, `PresetDescriptor.useSSGI`, and the `ssgi_pass_ms` CSV column (written since PERF.2-pass, read by nothing). No sidecar ever declared `"ssgi"`; both historical consumers retired (Glass Brutalist D-186, Kinetic Sculpture D-188).
-
-**SSGI's two entanglements, handled rather than stepped around** — this is why it was flagged as needing more care than the RECON.17 pair:
-
-1. **The D-057 OR-gate.** `RayMarchPipeline.reducedMotion` existed *solely* to arbitrate SSGI suppression between the a11y and governor paths, so it retired with SSGI (D-057 amended). **The accessibility feature is intact:** reduced motion has three arms and only the SSGI one is gone — the mv_warp single-frame path and `beatAmplitudeScale = 0.5` both remain. That arm had been inert anyway, since no preset declared the pass.
-2. **The D-167 Low Power Mode floor.** The `.noSSGI` quality rung was the ladder's *first* reduction, so deleting SSGI would have left the governor a wasted step; the rung is gone and the ladder is now `full → noBloom → reducedRayMarch → reducedParticles → reducedMesh`. Low Power Mode floored at `.noSSGI` — a rung that reduced nothing — and was **deliberately not promoted** to `.noBloom`, which would be a new user-visible reduction smuggled in as cleanup. Behaviour matches prior *effective* behaviour exactly (no floor), and **D-167 carries an open question for Matt**: should Low Power Mode floor at `.noBloom` instead?
-
-Full engine suite green (**1,863 tests in 287 suites**), app suite 417/417, SwiftLint 0 violations across 513 files. Test expectations that encoded the old rung count were updated to the new ladder rather than loosened — the governor still downshifts on exactly 3 consecutive overruns, it simply reaches `.reducedRayMarch` in two steps instead of three. No preset's rendering changes: nothing deleted was reachable from any shipping preset.
-
-**This closes Tier 1 of the preset audit's dormant-capability set.** Remaining audit items are ordinary deletions (Arachne retired pool ~540, Aurora Veil dead `buffer(6)` ~300, MitosisGen2 sketch ~330) plus the one structural item — driving replay from the `audio_routes` sidecars.
-
 ### Increment RECON.17 — the 2D Murmuration flock and hardware ray tracing deleted ✅ (2026-08-26)
-
-Matt's park-or-delete call on the first two of the four dormant capabilities from the 2026-08-25 preset audit (2026-08-26). Both were built to capability-complete, both work, and neither has a consumer — the **D-203** precedent: *good work is not a reason to keep code with no consumer.* **−2,562 lines.**
-
-**A. The 2D Murmuration flock** (`Geometry/ProceduralGeometry.swift` 333 + `Shaders/Particles.metal` 297 + `ProceduralGeometryTests` 237 + `MurmurationStemRoutingTests` 496). Murmuration has rendered through `Murmuration3DGeometry` since MM.3; the generic 2D path was constructed *only* by those two test files — and `MurmurationStemRoutingTests` was validating the stem routing of a kernel no preset runs. `Particles.metal` went whole: its `Particle` struct, `ParticleConfig`, `particle_update`, `particle_vertex`/`particle_fragment` were each verified to have no consumer outside `ProceduralGeometry` (the public Swift `Particle` type survived only in a doc comment). **`MURMURATION_DESIGN.md` §12 anticipated exactly this** — *"`ProceduralGeometry`/`Particles.metal` retired if no other consumer — grep confirms Murmuration is the only one"* — and the registry row carried its own retirement condition, *"retiring it is a later cleanup once nothing else consumes it."* Both are now marked done rather than left as standing intentions.
-
-**B. Hardware ray tracing** (`Renderer/RayTracing/` — `BVHBuilder` 269, `RayIntersector` 378, `+Internal` 101 — plus `Shaders/RayTracing.metal` 147 and `BVHBuilderTests`/`RayIntersectorTests` ~300). The capability row said it itself: *"Available; not yet wired into a shipping preset."* Both types are constructed only in their own tests; the `rt_nearest_hit_kernel` / `rt_shadow_kernel` entry points are looked up nowhere but `RayIntersector`. Its single design-doc mention is `ARACHNE_3D_DESIGN.md` §C **Option C.2 — the option that was not chosen** (C.1 screen-space was). Annotated in place so a future revival rebuilds rather than hunts. Note this was a hand-rolled BVH, not a platform dependency: Metal's `MTLAccelerationStructure` / `MPSRayIntersector` remain available to any future preset.
-
-**Verified before cutting, per the RECON.16 lesson.** Every symbol was grepped individually rather than trusting the audit's counts, and the shared-layer trap was checked first: `Particles.metal` looked shared (its header claims the `Particle` layout is "shared across all conformers"), so each of its five declarations was traced to a consumer before the file went — the claim turned out to be a convention other conformers follow, not a dependency they link against.
-
-Full engine suite green (**1,873 tests in 288 suites**), app builds, SwiftLint 0 violations across 514 files. No preset's rendering changes: nothing deleted was reachable from any shipping preset.
-
-**Remaining dormant capabilities:** ICB (~830 lines) and SSGI (~700), both still awaiting the same call.
-
 ### Increment RECON.16 — ShaderUtilities.metal reduced to its live surface ✅ (2026-08-26)
-
-Third item from the 2026-08-25 preset audit. The preamble concatenated **two parallel utility libraries** into every preset compile: the V.1–V.3 `Utilities/` tree (canonical, snake_case) and legacy `ShaderUtilities.metal` (camelCase). A transitive reachability census over every preset shader, every Renderer shader, every preamble string and every Swift call site found **38 of its 42 functions had no caller anywhere** — the entire SDF-primitive, ray-marching, PBR and UV-transform sections (the ray-march helpers additionally required a user-defined `map()` no preset ever defined), plus the unused noise and colour helpers. **639 → 128 lines.**
-
-**Four survive, with their live consumers named:** `hash21` ← `perlin3D` ← `fbm3D` ← VolumetricLithograph (3 sites); `toneMapACES` ← Nimbus (2 sites). All four are **byte-identical to their previous text** (verified by per-function checksum against HEAD), so `PresetRegressionTests`' 29-preset dHash gate holds — as it must, since unused `static inline` code cannot affect the codegen of used code.
-
-**Two audit claims corrected by the census.** The audit report asserted `fog` was consumed by Meniscus/Arachne/VL — it has **zero** shader call sites; only a test used it. It also read `calcNormal`/`opTwist` as live, but both hits are ASCII-diagram comments in `Utilities/`, and `hash21` in `tools/mitosis_gen2_sketch` is that sketch's own definition. Verified name-by-name rather than inherited.
-
-**Certification risk checked and cleared:** the E3 fog rubric item greps for `"fog("`, but `FidelityRubric.evaluate` receives `metalSource` read from the preset's own `.metal` file, never the preamble — so no rubric outcome can shift.
-
-**`ShaderUtilityTests` retargeted, not gutted.** Tests whose subject had a canonical successor moved to it (`cookTorranceBRDF` → `brdf_cook_torrance`, `perlin2D` → `perlin3D`, `fbm2D` → `fbm3D`); three whose subject had none (`rayMarch`, `uvKaleidoscope`, `fog`) were removed. One genuine finding fell out: the old `test_cookTorrance_energyConservation` asserted `output <= input energy`, which is **not** a property of the V.1 BRDF — at roughness 0.1 the mirror-direction specular lobe measures ~10.3, because a BRDF is a density and energy conservation is a property of the hemispherical integral, not one sample. The assertion was **not** weakened to pass; the test was rewritten around properties that do transfer (positive + finite, zero for sub-surface light, smooth peak > rough peak).
-
-**Consequence for QR.7:** its migration table named `perlin2D` / `fbm2D` / `sdRoundBox`, all of which turned out to have no consumers (Glass Brutalist D-186 and Kinetic Sculpture D-188 had been their only callers) and were simply deleted. QR.7 is annotated in place; what remains of it is migrating VL and Nimbus off the last four, after which the file disappears.
-
 ### Increment RECON.15 — FerrofluidMesh disabled G-buffer path deleted ✅ (2026-08-26)
-
-Second item from the 2026-08-25 preset audit (after RECON.14/D-213), same precedent: **D-203 — good work is not a reason to keep code with no consumer.** The mesh G-buffer path was unwired at Ferrofluid Ocean round 57 (2026-05-17) for "scoop" normal artifacts on foreground cones and never re-enabled; it sat in tree for 3 months behind a "preserved for a future increment" comment — verbatim the reusable-infrastructure defense CLAUDE.md names as a failure mode.
-
-**Verified dead before deleting, on both sides:** production's only call was `setMeshGBufferEncoder(nil)`, and the fixture hook `useMeshPath: Bool = false` had **no caller passing `true`** — so the test wiring was dead too, not coverage being lost.
-
-Deleted: `Presets/FerrofluidOcean/FerrofluidMesh.swift` (378) + `Renderer/Shaders/FerrofluidMesh.metal` (620); `RayMarchPipeline.meshGBufferEncoder` / `MeshGBufferEncode` / `meshGBufferLock` / `setMeshGBufferEncoder` and the render-loop branch; `runMeshGBufferPass` (`+Passes`); the public `RenderPipeline.setMeshGBufferEncoder` (`+PresetSwitching`); `gbufferDepth` + `gbufferDepthPixelFormat` + their allocation (mesh-only consumers — verified); app-side `makeFerrofluidMeshEncoder`, the `ferrofluidMesh` property, the round-57 tombstone comment block and its reset/teardown lines; the test's `useMeshPath` parameter and mesh block.
-
-**KEPT (verified live, do not confuse with the above):** `FerrofluidParticles` and its baked height texture — `presetHeightTexture` feeds slot 10 on the **SDF** path and is unrelated to the mesh dispatch. Ferrofluid Ocean stays certified and renders through `sceneSDF` exactly as before; the round-59 deep-ocean Gerstner constants ported *from* the mesh path are live in `FerrofluidOcean.metal` and untouched.
-
-**One judgment call surfaced:** the generic dispatch (not just the FFO implementation) went too, because its only remaining claimed consumer was `docs/presets/GOLDENGROVE_PLAN.md` §2 — and Goldengrove is **SHELVED** (2026-06-01, "do not revive without a fundamentally stronger, signal-grounded musical hook"), i.e. a retained research record rather than a live plan. Both Goldengrove docs are annotated in place so a revival rebuilds rather than hunts for a deleted API.
-
-Pixel-identical by construction (the branch required a non-nil encoder that production never set); `PresetRegressionTests` dHash green across all 29 presets, `FerrofluidOceanVisualTests` green. Net −1,214 / +33 lines. Two superfluous SwiftLint disables fell away as the shrunken functions dropped under their gates.
-
 ### Increment BUG103.0 — BUG-103 filed + diagnosed to the throw site (docs-only) ✅ (2026-08-25)
 ### Increment RECON.14 — D-213 executed: RMENV.2/.3 gallery environment + MFX.1 temporal upscaler deleted ✅ (2026-08-25)
 ### Increment RICERCAR-CERT.1 — Ricercar CERTIFIED ✅ (2026-08-20)
@@ -7871,7 +7723,7 @@ These milestones map to product-level outcomes, not implementation phases.
 
 **Milestone C — Device-Aware Show Quality.** ✅ **MET (2026-04-25).** The same playlist produces an excellent show on M1 and a richer one on M4 without jank. *Requires: ~~Phase 6 complete~~ ✅.*
 
-**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 26 production presets certified (recounted from the sidecars at PR.18, 2026-09-09).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **29 JSON sidecars, 22 with `certified: true`**, of which 3 (StagedSandbox, SpectralCartograph, **PoissonSandbox**) carry `is_diagnostic` and are not roster presets → **26 production presets, 22 certified**. Uncertified roster presets are down to **four**: Membrane, Nebula, Plasma, Waveform. *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
+**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 27 production presets certified (recounted from the sidecars at PR.18, 2026-09-09, and RE-counted after merging `origin/main`).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **31 JSON sidecars, 22 with `certified: true`**, of which 4 (StagedSandbox, SpectralCartograph, PoissonSandbox, **FFTSandbox**) carry `is_diagnostic` and are not roster presets → **27 production presets, 22 certified**. Uncertified roster presets: **Alfven**, Membrane, Nebula, Plasma, Waveform. ⚠ **This line said "22 / 26" and "four uncertified" an hour earlier and was already wrong by the time it was pushed** — ALFVEN.4d/4e landed Alfven and FFTSandbox on `main` in parallel (PRs #214/#215), adding one roster preset and one diagnostic. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before.** *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
 
 **Roster survey (2026-07-19) — the production presets (`FidelityRubricTests.certifiedPresets` = ground truth; 27 → 26 at Glass Brutalist's retirement GBRETIRE.1 / D-186, then 26 → 25 at Kinetic Sculpture's retirement KSRETIRE.1 / D-188, 2026-07-20):**
 - **Certified (14):** Lumen Mosaic, Ferrofluid Ocean, Dragon Bloom, Fata Morgana, Murmuration, Nimbus, Skein, Nacre, Floret, Glaze, Filigree, Mitosis, Cytokinesis (Mitosis gen-2), Aurora Veil (AV.7).

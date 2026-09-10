@@ -4,6 +4,202 @@ Resolved entries rotated out of [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §Resolved 
 
 ---
 
+### BUG-088 — RESOLVED (BUG088.1): Aurora Veil's "undeclared reads" were dead computation, and a silence gate is not a driver (2026-08-12, resolved 2026-08-26)
+
+**Status: ✅ RESOLVED 2026-08-26.** The diagnosis below is kept in full because the correction
+matters more than the fix: a capture said three primitives were live in the session, and that was
+read as "the preset reads them." It does not. `AuroraVeil.metal` reads exactly the five fields its
+sidecar declares; `AuroraVeilState` computed the other three into a buffer AV.7 stopped reading.
+
+**Fix.** Deleted, not re-wired: `AuroraVeilState.swift`, the `AuroraVeilStateGPU` struct and
+`[[buffer(6)]]` parameter in `AuroraVeil.metal`, the app-side property + `bindAuroraVeilRuntime`
+wiring, the slot-6 bind in three test harnesses, and
+`PresetSessionReplay/AuroraVeilRoutes.swift` (a second manifest for the same three deleted
+routes — `--preset aurora_veil` no longer resolves). Recurrence guard: a new
+`AudioRoute.Kind.gate` with its own floor (peak ≥ 0.9 on every fixture — the only failure a gate
+has is never opening), and the three misdeclared `pulseAmp01` routes reclassified (Aurora Veil
+`star_beat_twinkle`, Fractal Tree `silence_gate`, Ferrofluid Ocean `spike_punch_gate`).
+
+**Verification.**
+- [x] The manifest matches what the code reads — verified field-by-field against the shader source, not a capture.
+- [x] `kind` distinguishes a gate from a driver — `Kind.gate`, documented in SHADER_CRAFT §17 and D-180's manifest line.
+- [x] Gate arm proven to bite: floor raised to 1.5 → all three gate routes red at peak 1.00; restored → **201 routes / 21 presets / 0 red**.
+- [x] No pixel moved: Aurora Veil's `PresetRegressionTests` golden hashes unchanged (steady / beat-heavy / quiet).
+- [x] Engine suite + `xcodebuild -scheme UzumeApp build` green.
+- **No M7 required** — nothing rendered changes; the deleted state never reached a pixel.
+
+**The withdrawn criterion, kept as the lesson.** "RouteCoverageTests sees `drumsEnergyDev` for
+Aurora Veil after the fix" would have declared a route with no consumer and gated a value nothing
+reads. A liveness capture tells you a primitive is alive in the SESSION; only the source tells
+you the preset reads it. `Scripts/check_route_liveness.py` answers the first question — the
+second one needs a grep.
+
+---
+
+
+**Diagnosis only, no fix.** Found because BUG-086's `dsp.stem` manual gate was aimed at
+Aurora Veil and returned nothing — for a reason that had nothing to do with BUG-086.
+
+#### How the wrong preset got picked (the process failure, recorded first)
+
+The gate was aimed here on a stale note calling `other_energy_dev` Aurora Veil's
+"song-defining anchor, never drop it." **Git contradicts it**: added at `e7cd6e3a`
+(AV.2.2f), dropped at `e305839a` (AV.2.h, "drop 5 routes"), and **AV.7 / D-185 reauthored
+the preset as a nimitz *Auroras* port onto mood envelopes rather than deviation
+primitives** — deliberately, for a GENTLE preset. Aurora Veil declares **no stem route at
+all**, so no stem-latency change could ever have shown up in it. A human review was spent
+on a question a CSV could have answered first. `Scripts/check_route_liveness.py` exists so
+that does not recur: **run it before aiming any manual review at a preset.**
+
+#### Expected behavior
+
+A preset's `audio_routes` manifest enumerates the primitives it reads, with a `kind` that
+describes how each is used. QG.1 / D-180 route coverage depends on it being accurate.
+
+#### Actual behavior — measured on capture `2026-08-12T19-57-29Z`
+
+| route | declared | verdict | detail |
+|---|---|---|---|
+| `star_beat_twinkle` / `barPhase01` | ✅ accent | **ALIVE** | range 901 / 1000 |
+| `star_beat_twinkle` / `pulseAmp01` | ✅ **continuous** | **DEAD** | pinned 1.000, p5–p95 range **0.000** |
+| `veil_breathe` / `arousal` | ✅ | ALIVE | range 0.178 |
+| `veil_breathe` / `bassAttRel` | ✅ | ALIVE | range 0.287, near-entirely negative |
+| `mood_colour` / `valence` | ✅ | ALIVE | range 0.453 |
+| `drumsEnergyDev` | ❌ **undeclared** | ALIVE | 61 % nonzero, p95 0.997 |
+| `vocalsPitchHz` | ❌ **undeclared** | SPARSE | **0.1 % nonzero** |
+| `vocalsPitchConfidence` | ❌ **undeclared** | SPARSE | **0.1 % nonzero** |
+
+**`pulseAmp01` is not misbehaving.** The shader uses it as a silence gate, and a gate
+pinned at 1.000 through music is exactly right. The defect is the **declaration**:
+`kind: continuous` reads as a driver, and WL.1 already measured this primitive as a silence
+gate with no dynamic range and ruled it out as a hero driver. That lesson did not propagate
+into this manifest.
+
+**The real gaps** are the three undeclared reads. `drumsEnergyDev` is Aurora Veil's only
+live stem input and QG.1 cannot see it; the vocals-pitch pair is garnish at 0.1 % — WL.1
+measured the same primitive at 4.5 % and called it garnish there too.
+
+#### Suspected failure class
+
+`documentation-drift` primarily (manifest vs code), `calibration` secondarily (a primitive
+declared as a driver that cannot drive).
+
+#### Matt's M7, and what it does and does not mean
+
+> *"I don't really see how the preset responds to music beyond the flickering of the stars
+> once per bar. The veil is just aurora-ing."* (2026-08-12)
+
+The measurement explains it precisely: **only `barPhase01` has large dynamic range.**
+Everything else is a slow narrow mood envelope (0.18–0.45) or effectively dead. The bar
+flicker he sees *is* `star_beat_twinkle` working.
+
+**Whether that is a defect or the design is Matt's call, not a measurement.** AV.7 / D-185
+chose mood envelopes over deviation primitives for a GENTLE preset and Matt certified it on
+2026-07-19. "Reads as uncoupled" may be the intended register. What is objectively wrong is
+the manifest. Flagged, not resolved.
+
+#### ⚠ CORRECTION 2026-08-26 (audit pass) — the "three undeclared reads" are not reads
+
+Read against the source rather than the capture: **`AuroraVeil.metal` reads exactly five audio
+fields** — `arousal`, `bar_phase`, `bass_att_rel`, `pulse_amp`, `valence` — which is precisely
+what the sidecar declares. There is no undeclared shader read. `drumsEnergyDev`,
+`vocalsPitchHz` and `vocalsPitchConfidence` are consumed by **`AuroraVeilState.swift`**, which
+still computes a kink charge and a smoothed pitch and flushes them to buffer(6) — and AV.7
+stopped reading that buffer (`AuroraVeil.metal` header: *"still flushes buffer(6) — also unused
+now; left in place to avoid loader churn"*). They are **dead computation on the per-frame path**,
+not coupling QG.1 is blind to.
+
+**This inverts the fix.** Declaring `drumsEnergyDev` in the manifest — the third verification
+criterion below — would declare a route that reaches nothing, and `RouteCoverageTests` would
+then gate a value with no consumer. The correct fix is deletion: drop the dead stem/pitch reads
+from `AuroraVeilState` (or the state object, if nothing survives), and fix `pulseAmp01`'s `kind`
+so a silence gate stops reading as a driver. That is a small increment, not a preset increment —
+no M7, no re-certification, because no rendered pixel changes.
+
+#### Verification criteria (before any fix)
+
+- The manifest matches what the code reads — ideally mechanized, since a hand-maintained
+  list drifted here on a certified preset.
+- `kind` distinguishes a **gate** from a **driver**, so a silence gate cannot be declared as
+  continuous coupling again.
+- ~~`RouteCoverageTests` sees `drumsEnergyDev` for Aurora Veil after the fix.~~ **Withdrawn by the 2026-08-26 correction above** — the shader never reads it; the route would be fictional. Replace with: no live-path code computes a primitive no consumer reads.
+- If Matt decides the coupling itself is too weak, that is a **separate** preset increment
+  with its own M7 — not a manifest fix.
+
+#### Related
+
+**⇄ BUG-086** — this is why that entry's `dsp.stem` gate is still owed. Re-aimed at
+**Skein**, verified first: 20 of 28 routes ALIVE, **all eight stem-deviation routes alive**
+(`painter_speed` and `flick_trigger` on all four stems, ranges 0.60–1.39), zero DEAD.
+### BUG-105 — RESOLVED (WHIT.1d-3): Rosette's wing cartouche rendered fully off-screen on a real window (2026-08-26)
+
+**Severity:** P2
+**Domain tag:** preset.fidelity / renderer
+**Status:** Resolved
+**Introduced:** WHIT.0 (wing arcs added, 2026-08-25)
+**Resolved:** WHIT.1d-3 (2026-08-26)
+**Note (2026-08-26):** originally filed as BUG-103; renumbered to BUG-105 when a concurrent
+session's unrelated BUG-103 (AVAudioPlayerNode NSException) merged to main first, creating a
+duplicate. Content unchanged. Rosette itself is retired (D-224) — this entry is historical.
+
+**Expected behavior.** Rosette's mirrored coloured wing arcs + small ellipses (D-217, "full
+cartouche") render near the frame edges on every real window size, as they do in every recorded
+test (960×540 / 1920×1080).
+
+**Actual behavior.** On Matt's first live look at Rosette (`2026-08-26T12-58-21Z`, Cherub Rock),
+the wings did not render at all — Matt: *"Looks completely broken. A star shape with a broken line
+pattern, no additional ornamentation."*
+
+**Reproduction steps.** Run Rosette in the live app at a near-square window (any window with
+aspect ratio ≲ 1.2 reproduces it; Matt's session measured exactly 1080×1018, aspect 1.061). Observe
+that only the bare epicycle stroke renders — no wing arcs, no ellipses, at any point in the morph.
+
+**Minimum reproducer:** `test_rosette_wingsVisibleAtNearSquareAspect`
+(`RosetteMVWarpAccumulationTest.swift`) at 1080×1018.
+
+**Session artifacts.** Session directory: `~/Documents/uzume_sessions/2026-08-26T12-58-21Z/`.
+`session.log`: `RENDER_TARGET width=1080 height=1018 megapixels=1.10 render_scale=1.00`, set before
+Rosette became active and unchanged for the rest of the session. `features.csv`: checked first to
+rule out a routing failure — `tonal_consonance` (mean 0.076, actively varying), `tonal_phase_fifths`
+(full ±π sweep), `harmonic_flux` (peaks just over the 0.09 step-threshold), `bassDev` (mean 0.082,
+max 1.665) — all alive and in-range for the whole session. The routing was never the problem.
+
+**Suspected failure class:** sdf-geometry.
+
+**Evidence for this class:** `rosetteWingArc`/`rosetteWingEllipseDist` (`Rosette.metal`) placed the
+wings at a hardcoded absolute `x≈0.62–0.67` in the fragment's aspect-scaled coordinate space, where
+visible `q.x` spans `±0.5·aspect`. At aspect 1.061 (Matt's window) that visible range is `±0.53` —
+strictly inside the wings' hardcoded position, so they render fully off-screen on every frame,
+unconditionally. Every test, visual-dump, and flash-safety measurement this program has ever run
+used a 16:9-family aspect (1.78, `±0.89` visible), where the wings sit comfortably inside frame —
+nobody had ever rendered Rosette at a square or narrow window, so this was invisible to the whole
+suite by construction.
+
+**Verification criteria:**
+- [x] New regression guard `test_rosette_wingsVisibleAtNearSquareAspect` passes at 1080×1018.
+- [x] Confirmed the guard actually bites: temporarily reverted the fix in-place, confirmed the
+      test fails (max luma 12/255, background-only) against the pre-fix code, then restored the
+      fix and confirmed it passes.
+- [x] Full existing Rosette suite (`test_rosette_multiFrameNonDegenerate`,
+      `test_rosette_harmonyCoupling`, `test_rosette_rotationAndSymmetryCoupling`,
+      `rosetteIsFlashSafe`, `RouteCoverageTests`) re-run clean at the 16:9 reference aspect — the
+      scale factor is exactly 1.0 there, so the approved D-217 look is bit-for-bit reproduced.
+- [x] `swiftlint --strict` clean; full engine suite (1898 tests) clean.
+
+**Manual validation required:** Yes — Matt's next live look confirms the cartouche is visible on
+his actual window. Not yet performed as of this fix landing.
+
+**Fix scope.** Contained: `rosetteWingArc`/`rosetteWingDist`/`rosetteWingEllipseDist` gained an
+`aspect` parameter; x-placement scales by `aspect / kRosetteReferenceAspect` (16:9). No change to
+`y` placement (already aspect-independent), the figure geometry, or any audio routing. Trivial
+single-increment collapse (root cause obvious from the session log + math, <20 lines, no
+architectural risk) — approved by Matt in the same session ("yes, fix the aspect-ratio bug").
+
+**Related:** Decision D-217 (the cartouche this bug silently defeated); Increment WHIT.1d-3.
+
+---
+
+
 ### BUG-094 — Meniscus clamps `arousal` to 0…1 when its contract is −1…+1, and a beat-locked region goes dead on calm material (2026-08-17)
 
 **Status: ✅ CLOSED 2026-08-24.** The fix WAS applied — in the very commit that wrote the
