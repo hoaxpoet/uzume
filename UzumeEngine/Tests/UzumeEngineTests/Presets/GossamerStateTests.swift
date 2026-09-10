@@ -14,6 +14,7 @@
 //   8. Silence stability: at zero audio for 10s, waveCount ≥ 2 (drift floor holds)
 
 import Testing
+import Foundation
 import Metal
 @testable import Presets
 import Shared
@@ -265,5 +266,67 @@ struct GossamerStateTests {
         }
         // Drift floor should keep ≥ 2 waves alive (D-037 invariant 4).
         #expect(state.waveCount >= 2)
+    }
+
+    // MARK: Test 9 — the spoke direction table agrees with the spoke angles (PR.18)
+
+    /// ★ TWO SOURCES OF TRUTH, HELD IN AGREEMENT BY A TEST.
+    ///
+    /// `Gossamer.metal` carries D-042's 17 spoke angles in radians — the readable,
+    /// authoritative form — and, since PR.18, a parallel table of their unit direction
+    /// vectors. The table exists because indexing a `constant` array in a loop defeats
+    /// constant folding, so the shader was evaluating 17 `cos` and 17 `sin` for every
+    /// pixel of a fullscreen pass to rebuild something that never changes.
+    ///
+    /// The hazard that buys is obvious: edit one array, forget the other, and the web's
+    /// geometry silently stops matching the angles the design decision specifies — with
+    /// nothing failing, because both arrays are individually well-formed. So this reads
+    /// the shader source and checks them against each other. There is no way to do this
+    /// from Swift by importing the constants; they are Metal `constant` scope.
+    @Test("Gossamer's spoke direction table matches its spoke angles")
+    func testSpokeDirectionTableMatchesAngles() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()          // Presets
+            .deletingLastPathComponent()          // UzumeEngineTests
+            .deletingLastPathComponent()          // Tests
+            .deletingLastPathComponent()          // UzumeEngine (package root)
+            .appendingPathComponent("Sources/Presets/Shaders/Gossamer.metal")
+        let source = try String(contentsOf: url, encoding: .utf8)
+
+        func floats(after marker: String) -> [Double] {
+            guard let start = source.range(of: marker),
+                  let end = source.range(of: "};", range: start.upperBound..<source.endIndex)
+            else { return [] }
+            let body = source[start.upperBound..<end.lowerBound]
+            // Strip // comments so the annotations beside each row are not scanned.
+            let cleaned = body.split(separator: "\n").map { line -> Substring in
+                guard let slash = line.range(of: "//") else { return line }
+                return line[line.startIndex..<slash.lowerBound]
+            }.joined(separator: "\n")
+            // `float2(` would otherwise contribute a literal 2 per row — the parse read
+            // 51 numbers instead of 34 the first time this ran.
+            let scanned = cleaned.replacingOccurrences(of: "float2", with: "")
+            let pattern = "[-+]?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?"
+            let re = try? NSRegularExpression(pattern: pattern)
+            let ns = scanned as NSString
+            let matches = re?.matches(in: scanned, range: NSRange(location: 0, length: ns.length)) ?? []
+            return matches.compactMap { Double(ns.substring(with: $0.range)) }
+        }
+
+        let angles = floats(after: "constant float kSpokeAngles[17] = {")
+        let dirs   = floats(after: "constant float2 kSpokeDirs[17] = {")
+
+        #expect(angles.count == 17, "expected 17 spoke angles, parsed \(angles.count)")
+        #expect(dirs.count == 34, "expected 17 direction pairs (34 floats), parsed \(dirs.count)")
+        guard angles.count == 17, dirs.count == 34 else { return }
+
+        for i in 0..<17 {
+            let expectedX = cos(angles[i]), expectedY = sin(angles[i])
+            let actualX = dirs[i * 2], actualY = dirs[i * 2 + 1]
+            #expect(abs(actualX - expectedX) < 1e-6,
+                    "spoke \(i): kSpokeDirs.x \(actualX) != cos(\(angles[i])) = \(expectedX)")
+            #expect(abs(actualY - expectedY) < 1e-6,
+                    "spoke \(i): kSpokeDirs.y \(actualY) != sin(\(angles[i])) = \(expectedY)")
+        }
     }
 }
