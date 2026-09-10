@@ -90,7 +90,14 @@ struct RouteCoverageTests {
     /// BUG-090 resolved 2026-08-17: the fixtures were regenerated, so every column added since
     /// QG.1.3 is now present and route-coverable. Empty is the healthy state — a name here means
     /// a route is UNVERIFIED, so add one only alongside a filed reason to regenerate.
-    static let columnsPostdatingFixtures: Set<String> = []
+    /// PR.20 — `track_hue_anchor01` was added after the route-coverage fixtures were
+    /// captured, so it is absent from all three. Listing it here makes the gate print a
+    /// FIXTURE GAP every run instead of failing on a route that is genuinely wired; it does
+    /// NOT verify the route. The anchor is also constant within any one track by
+    /// construction, so re-capturing a single fixture would still not exercise it — the
+    /// property that matters (different tracks land on different anchors) is covered by
+    /// `TrackHueAnchorTests.anchorsSpreadAcrossTracks` instead.
+    static let columnsPostdatingFixtures: Set<String> = ["track_hue_anchor01"]
 
     // MARK: - Fixtures
 

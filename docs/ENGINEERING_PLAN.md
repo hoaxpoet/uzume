@@ -1395,6 +1395,128 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### PR.21 — Nebula: make the coupling legible 🔨 code complete, M7 owed (2026-09-10)
+
+**Matt, on the PR.20 build:** *"looks good, but I'm not getting a clear understanding of how the
+visuals are tied to the audio."* Fidelity and activation were fixed at PR.19/PR.20; **legibility**
+was not — which is the roster note's *"needs better sync with music"* restated from the other side.
+
+#### Diagnosis, measured on session `2026-09-10T17-13-10Z`
+
+| # | Mechanism | Evidence |
+|---|---|---|
+| 1 | **The core glow — the biggest, brightest thing on screen — barely moved.** Driven by `presence = (bass+mid+treble)×0.5` on AGC-normalised bands. | `presence` measured **mean 0.157, max 0.375** — never near the top of its own range. So core brightness spanned 0.30→0.51 and radius 0.045→0.058 across a whole track. Effectively static. |
+| 2 | **The beat was invisible.** | It moved the core radius by 0.012 UV and affected **no brightness anywhere**. |
+| 3 | **Nothing marked a moment.** Ring on the spectrum (fast, everywhere), core on a slow level, haze on arousal over ~10 s. | Motion in every layer at all times reads as *busy*, not *responsive*. |
+| 4 | **The ring's own motion was shimmer, not response.** | Frame-to-frame volatility 0.40× the mean even after PR.19's log aggregation, so a loud moment appeared and vanished inside a frame or two. |
+
+**★ And the reflex fix would have been wrong.** Turning up the beat is the obvious move, and
+`beatComposite` measured **above 0.9 on 42.6 % of frames and above 0.5 on 70.7 %** — it is a pulse
+CLOCK, not an accent. Amplifying it yields a brighter constant, not a visible event. The
+FeatureVector's own comment says the `beat_*` fields score *below chance* against real audible
+events. **`spectral_level_rise` is the field documented for this**, and it measures event-shaped on
+the same session: mean 0.201, above 0.5 on **12 %** of frames, near zero on **31 %**.
+
+#### What landed
+
+- **An event layer.** `spectral_level_rise` drives a core flash (radius **and** brightness) and a
+  small outward push on the whole ring, so a landing is one gesture across the frame. The push is
+  deliberately small — the ring's shape is the thing being read, and this is an accent on it, not a
+  replacement (D-004). The dead `core_pulse ← beatComposite` route was **removed** rather than left
+  declared, because a sidecar that claims a route the shader no longer reads is a lie the gate
+  cannot catch.
+- **The core got a real range**, stretched against the range `presence` actually occupies.
+- **Peak-hold on the ring**, via a new `NebulaState` — fast attack (τ 25 ms), slow release
+  (τ 400 ms), so a spike shoots out and *decays* instead of flickering. Coefficients are
+  `1 − exp(−dt/τ)`, frame-rate independent: a fixed per-frame coefficient would make the release
+  twice as fast at 120 Hz as at 60, which is the BUG-096 class.
+
+**Nebula is the first `direct` preset with a state buffer.** Peak-hold needs the previous frame and
+the direct path carries no spectrum history (`SpectralHistoryBuffer` holds MIR scalars). The slot-6
+mechanism already existed — `RenderPipeline+DirectDraw` binds it — so this is `GossamerState`'s
+shape applied to a new paradigm, plus a row in `StatefulRuntimeRegistry`.
+
+**★ And it made the preset CHEAPER: 6.30 ms, exactly its recorded baseline, now cheaper than the
+two UNCHANGED direct presets** (Plasma 6.57, Waveform 7.43) in the same run. The log-band
+aggregation used to run **per pixel** — ~2 M fragments each re-deriving the same 256 bands. Doing it
+once per frame on the CPU paid for the peak-hold and then some.
+
+#### A diagnostic that paid for itself on first use
+
+`PresetLoader.compileLibrary` logged `"compilation failed for <private>: <private>"` — `os.Logger`
+redacts interpolated values by default. **The consequence is worse than the missing message: a
+preset that fails to compile is simply ABSENT from `PresetLoader.presets`, so every suite
+parameterised over the loaded presets passes VACUOUSLY.** Three sessions have now lost time to it
+(Gossamer's `half` keyword shadow, PR.19's, and this one), each surfacing only as a downstream
+`presetNotFound`. It now writes the full source plus the diagnostic to a temp file and logs the path
+`.public`. The very next run read *"program_source:5873:24: error: use of undeclared identifier
+'event'"* — a declaration placed below its first use.
+
+#### Owed / known limits
+
+- **M7.** Whether the event layer reads as *"that happened because of that"* is Matt's call.
+- **The regression goldens render Nebula with ZERO bands.** `PresetAcceptanceTests.renderFrame`
+  binds a zeroed placeholder at slot 6, so the golden encodes a band-less picture. Its three
+  fixture hashes are still distinct, so the gate can tell them apart, but it does not exercise the
+  ring. Shared with every other slot-6 preset; recorded, not worked around.
+- QG.1 still has **no primitive for the spectrum**, so the ring's shape remains ungated.
+
+### PR.20 — the per-track hue anchor 🔨 code complete, M7 owed (2026-09-10, Matt: *"do the per-track rotation"*)
+
+**The ask.** Matt, on Nebula's palette: *"go with the wider sweep, plus per-track rotation."* The
+sweep shipped in PR.19; the rotation did not, because nothing track-scoped could reach the preset.
+
+**Why it needed a new field, and the two derivations that were measured FALSE first.** Per-track
+variation already existed — `lumenTrackSeedHash` (an FNV-1a of `title|artist`) seeds Lumen Mosaic
+and Skein — but it reaches them through **per-preset state buffers**, which a `direct` preset does
+not have. So Nebula, Plasma, Waveform and Spectral Cartograph had no track-scoped input of any kind.
+
+Before adding to the GPU contract, two stateless derivations were tried against a real session:
+
+- `accumulated_audio_time − track_elapsed_s` *looks* like "the accumulated time at track start",
+  which would be constant within a track. **It is not** — the two clocks advance at different
+  rates (8.10 s against 60.10 s over one capture, ~1:11), so the difference is a ramp.
+- No other FeatureVector field is constant within a track and varies between them; mood and the
+  tonal family all drift mid-track.
+
+**What landed.** `FeatureVector` float 54 (`_pad54`, reclaimed — the same move DYN.1b/DYN.2 made on
+51–52 and D-158 made on `_pad7`, so ORDER IS THE CONTRACT holds and the struct size is unchanged):
+
+| Layer | Change |
+|---|---|
+| `FeatureVector` + MSL preamble | `trackHueAnchor01` / `track_hue_anchor01`, 0…1, 0 = no identity known |
+| `MIRPipeline` | `setTrackHueAnchor(_:)` — same lifecycle as `setBeatGrid` / `setLoudnessProfile`; clamps, and sends the whole non-finite class to 0 |
+| App | Published from `resetStemPipeline(for:caller:)`, the single funnel all four track-change call sites route through, **reusing** `lumenTrackSeedHash` rather than hashing again — two seeds from the same source are two seeds that can silently disagree |
+| `SessionRecorder` CSV | New `track_hue_anchor01` column, inserted BEFORE `stem_series_pos_s` because that one is optional and carries the row's terminating newline |
+| `SessionReplayHarness` + `AudioRoutePrimitives` | Carried and mapped, so QG.1 can see it |
+| `Nebula.metal` | The whole hue band rotates by the anchor |
+
+**Cleared on the complementary path.** `setTrackHueAnchor(0)` fires when identity is nil — this is
+CLAUDE.md §What NOT To Do in its plain stored-property form, and an uncleared anchor would leak the
+previous track's palette across a boundary. `clearingTakesEffect` gates it.
+
+**The test that is actually worth having.** An anchor that is stable but *identical for every
+track* passes every single-track test and produces exactly the bug this feature exists to prevent.
+`anchorsSpreadAcrossTracks` runs twelve real identities (Low's eleven plus one) through the app's
+own hash and asserts they land on distinct anchors occupying ≥5 of 10 deciles.
+
+**QG.1 records a FIXTURE GAP rather than a pass.** The route-coverage fixtures predate the column,
+so `columnsPostdatingFixtures` now lists it and the gate prints *"postdates love_rehab; route
+UNVERIFIED here"* every run. Re-capturing a fixture would not help: the anchor is constant within
+any one track by construction, so the property that matters is cross-track and is covered by the
+unit test instead. **A route that cannot be verified by the gate says so out loud.**
+
+**Trade-off worth naming.** With a full 0…1 rotation, Nebula's palette is no longer guaranteed cool
+on every track — some anchors land warm. That is the point of the feature, but it makes the
+sidecar's `color_temperature_range` (a *planner* hint: `PresetScorer.moodSubScore` matches its
+midpoint against a track's valence) a less accurate description of what the preset will actually
+look like. Bounding the rotation to the cool half would preserve it at the cost of variety —
+Matt's call if he wants it.
+
+**Available to every preset, not just Nebula.** Aurora Veil (*"purple is fleeting"*), Glaze
+(*"more mixture and blending of colors"*) and Dragon Bloom all carry colour-variation asks and can
+now read the same field.
+
 ### PR.19 — Nebula deep dive 🔨 code complete, M7 owed (2026-09-10, Matt: *"proceed with nebula"*)
 
 #### Step 1 — definition

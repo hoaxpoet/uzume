@@ -230,6 +230,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// via `setMeshPresetTick` / `setDirectPresetFragmentBuffer` in `applyPreset`.
     var gossamerState: GossamerState?
 
+    /// PR.21 — Nebula's peak-held ring bands. Allocated when Nebula is the active preset,
+    /// released on preset change (same lifecycle as `gossamerState`).
+    var nebulaState: NebulaState?
+
     /// Nimbus Energy bloom follower + gas flow-phase state — allocated when the
     /// Nimbus preset is active, nil otherwise. Tick closure and stateBuffer are
     /// wired via `setMeshPresetTick` / `setDirectPresetFragmentBuffer` in
@@ -275,7 +279,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     private let audioBuffer: AudioBuffer
 
     /// Real-time FFT processor writing magnitudes to a GPU buffer.
-    private let fftProcessor: FFTProcessor
+    /// PR.21 — `internal`, not `private`: `bindNebulaRuntime` in
+    /// `VisualizerEngine+Presets.swift` captures it so Nebula's per-frame tick can read the
+    /// spectrum. Same widening, and the same reason, as `refreshLumenPaletteForTrack`.
+    let fftProcessor: FFTProcessor
 
     /// Preset loader managing shader compilation and hot-reload.
     let presetLoader: PresetLoader

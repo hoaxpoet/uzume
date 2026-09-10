@@ -427,6 +427,12 @@ struct NebulaSpectrumDiagnosticTests {
             var fv = realFeatures[min(realFeatures.count - 1,
                                       Int(frac * Double(realFeatures.count - 1)))]
             fv.aspectRatio = 16.0 / 9.0
+            // PR.20 — preview a specific track's palette rotation. Recorded sessions predate
+            // the field, so replaying one always reads 0; this is how a different track's
+            // anchor gets rendered without needing a session recorded under that track.
+            if let a = ProcessInfo.processInfo.environment["NEBULA_HUE_ANCHOR"], let v = Float(a) {
+                fv.trackHueAnchor01 = v
+            }
             return fv
         }
         let stems = [StemFeatures](repeating: .zero, count: picked.count)

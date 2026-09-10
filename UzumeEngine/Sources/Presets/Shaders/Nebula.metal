@@ -46,6 +46,10 @@
 // A steeper tilt flattens further but starves the bass (tilt 0.75 puts the first
 // eighth at 4.2 %), and bass is the part a listener feels.
 
+// Angular positions in the CPU band table. MUST equal `NebulaState.bandCount`;
+// `NebulaBandTableTests` holds the two in agreement.
+constant int   kBandCount = 256;
+
 constant float kFreqLo   = 40.0;     // Hz at angle 0
 constant float kFreqHi   = 8000.0;   // Hz at angle 2*pi
 constant float kTilt     = 0.5;      // amplitude ∝ sqrt(f) — the +3 dB/octave pink slope
@@ -69,53 +73,21 @@ constant float kOverlap = 5.0;
 constant float kRadiusFloor = 0.16;
 constant float kRadiusSpan  = 0.26;
 
-/// Mean magnitude across the FFT bins one angular position covers, tilt-compensated.
+/// Sample the CPU-computed band table with linear interpolation between neighbours.
 ///
-/// The aggregation is the load-bearing part — see mechanism 3. At the top of the range
-/// one angular position spans many bins and averaging them removes the bin-to-bin
-/// noise; at the bottom one bin spans many positions and the ring reads smooth because
-/// it genuinely is. v1 read a single bin per position and lerped to its neighbour,
-/// which smooths nothing: two adjacent noisy samples are still noise.
-static float nebulaBand(constant float* fft, float angle01) {
-    // ★ THE WINDOW OVERLAPS ITS NEIGHBOURS, and that is what makes this read as a RING
-    //   rather than a starburst. With disjoint windows nothing couples adjacent angular
-    //   positions, so the radius is free to jump between them: measured, **18.9 % of
-    //   neighbouring positions stepped further than the band was thick**, with a p99
-    //   step 3.7x the mean width — a band that cannot connect to its neighbour draws a
-    //   spoke. Widening each window to span `kOverlap` positions makes neighbours share
-    //   most of their bins, which smooths the RADIUS directly instead of hiding the
-    //   problem by blurring the drawn band. Measured: 18.9 % -> 4.0 % broken.
-    //
-    //   Note this is a different quantity from mechanism 3's magnitude smoothing, and
-    //   measuring that one was not enough: the log response' slope is steepest near
-    //   zero, so a spectrum that is smooth in MAGNITUDE can still be jagged in RADIUS.
-    // NOT named `half` — that is an MSL type and shadowing it is Failed Approach #44,
-    // which the preamble warns about by name and which this shader hit anyway. The
-    // symptom is `presetNotFound` at load, not a compile message in the test output.
-    float halfSpan = kOverlap * 0.5 / 256.0;
-    float a0 = max(0.0, angle01 - halfSpan);
-    float a1 = min(1.0, angle01 + halfSpan);
-    float h0 = kFreqLo * pow(kFreqHi / kFreqLo, a0);
-    float h1 = kFreqLo * pow(kFreqHi / kFreqLo, a1);
-
-    int b0 = clamp(int(h0 / kBinHz), 0, kFFTBins - 1);
-    int b1 = clamp(int(h1 / kBinHz) + 1, b0 + 1, kFFTBins);
-
-    float acc = 0.0;
-    for (int b = b0; b < b1; b++) { acc += fft[b]; }
-    float mean = acc / float(b1 - b0);
-
-    // Pink-slope compensation: natural spectra fall ~1/f, so without this the top of
-    // the circle is permanently dark however the gain is set.
-    return mean * pow(h0 / kFreqLo, kTilt);
-}
-
-/// Logarithmic response. Measured against the alternatives on the same aggregated
-/// input: linear x8 saturated 31 % of samples, sqrt 43 %, pow-0.4 60 %; this one sits
-/// at 3 % floored and 1 % saturated with p50 mid-range. A visualiser wants the whole
-/// range used, which is exactly what a dB-like curve does to a heavy-tailed signal.
-static float nebulaResponse(float x) {
-    return saturate(log(1.0 + max(x, 0.0) * kLogGain) / log(1.0 + kLogGain));
+/// ★ THE AGGREGATION MOVED TO THE CPU (PR.21), and this is both a legibility fix and a
+///   performance one. It used to run per PIXEL — every one of ~2 M fragments at 1080p
+///   re-derived the same 256 bands by looping over FFT bins. `NebulaState` now does it once
+///   per frame, which is strictly less work AND is the only place peak-hold can live: the
+///   smoothing needs the previous frame, and a `direct` preset has no memory of its own.
+///
+/// The interpolation matters. At the ring's outer radius one position spans roughly 10 px,
+/// so reading the table nearest-neighbour would show visible faceting around the circle.
+static float nebulaBandAt(constant float* bands, float angle01) {
+    float x = fract(angle01) * float(kBandCount);
+    int i0 = int(x) % kBandCount;
+    int i1 = (i0 + 1) % kBandCount;
+    return mix(bands[i0], bands[i1], fract(x));
 }
 
 // ── Scene fragment ─────────────────────────────────────────────────────────────
@@ -123,7 +95,8 @@ static float nebulaResponse(float x) {
 fragment float4 preset_fragment(VertexOut in [[stage_in]],
                                 constant FeatureVector& features [[buffer(0)]],
                                 constant float* fftMagnitudes [[buffer(1)]],
-                                constant float* waveformData [[buffer(2)]]) {
+                                constant float* waveformData [[buffer(2)]],
+                                constant float* nebulaBands [[buffer(6)]]) {
     float2 uv = in.uv;
     float t = features.time;
     float3 color = float3(0.0);
@@ -149,12 +122,36 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
                             + max(0.0, features.mid_att_rel) * 0.30
                             + max(0.0, features.treb_dev) * 0.20);
     float presence = saturate((features.bass + features.mid + features.treble) * 0.5);
-    float beatPulse = max(features.beat_bass, features.beat_composite);
+
+    // ★★ NOTHING IN THIS PRESET MARKED A MOMENT. Every layer was continuous — ring on the
+    //    spectrum, core on a slow level, haze on arousal over ~10 s — so there was motion
+    //    everywhere and an event nowhere, which is what Matt was describing as "not getting a
+    //    clear understanding of how the visuals are tied to the audio".
+    //
+    //    `spectral_level_rise` is the one primitive documented as marking "something just
+    //    LANDED", and it measures event-shaped on his session: above 0.5 on 12 % of frames,
+    //    near zero on 31 %.
+    //
+    //    ⚠ NOT `beat_composite`, which is the reflex answer and is WRONG here: on that same
+    //      session it sits above 0.9 on **42.6 %** of frames and above 0.5 on 70.7 %. It is a
+    //      pulse CLOCK, not an accent — turning it up yields a brighter constant, not a
+    //      visible event. The FeatureVector's own comment says the `beat_*` fields score below
+    //      chance against real audible events.
+    //
+    //    Declared HERE, with the other drivers, because the ring reads it too. The first cut
+    //    declared it down in the core block and used it in `bandRadius` above — which is a
+    //    compile error, and one that surfaces only as `presetNotFound` at load.
+    float event = saturate(features.spectral_level_rise);
 
     // ── Radial spectrum band ──────────────────────────────────────────────────
-    float band = nebulaResponse(nebulaBand(fftMagnitudes, angle01));
+    float band = nebulaBandAt(nebulaBands, angle01);
 
-    float bandRadius = kRadiusFloor + band * kRadiusSpan * (0.55 + activity * 0.45);
+    // The event pushes the whole ring outward too, so a landing is one gesture across the
+    // frame rather than a detail in the middle. Small, because the ring's own shape is the
+    // thing being read — this is an accent on it, not a replacement for it (D-004).
+    float bandRadius = kRadiusFloor
+                     + band * kRadiusSpan * (0.55 + activity * 0.45)
+                     + event * 0.030;
     // x1.4 on the measured width: with the overlap above it takes broken steps from
     // 6.8 % to 4.0 %, and a slightly thicker filament is what closes a ring visually.
     float bandWidth  = (0.012 + band * 0.024) * 1.4;
@@ -188,7 +185,12 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     // magentas". The full visible spectrum (red at the bass) was the third candidate and
     // was NOT chosen: it starts to read as a rainbow analyser, and "rainbow layer cake"
     // is an explicit anti-reference in Stave's set.
-    float hue = fract(0.45 + angle01 * 0.55 + sin(t * 0.035) * 0.02);
+    // PR.20 — the whole band rotates by the TRACK. Any single moment stays coherent (one
+    // song is teals and blues, the next ambers and golds), so the playlist gets variety
+    // without any one frame being a rainbow. This is why the full-spectrum candidate was
+    // not needed: the variety comes from the track axis, not from widening the instant.
+    float hue = fract(0.45 + features.track_hue_anchor01
+                      + angle01 * 0.55 + sin(t * 0.035) * 0.02);
     float sat = 0.62 + band * 0.28;
     float val = bandMask * (0.35 + band * 0.65) * (0.6 + activity * 0.4);
     color += hsv2rgb(float3(hue, sat, val));
@@ -197,9 +199,19 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     // Driven by presence + the beat accent rather than a raw 64-bin sum (v1's
     // `totalEnergy` measured p50 0.148 / p99 0.439 — it never reached the top third
     // of its own range, so the core was permanently dim).
-    float coreRadius = 0.045 + presence * 0.035 + beatPulse * 0.012;
+    // ★★ THE CORE HAD NO DYNAMIC RANGE, and it is the biggest brightest thing on screen.
+    //    `presence` is `(bass+mid+treble)*0.5` on AGC-normalised bands, and AGC holds those
+    //    near 0.3 — measured over Matt's session it ran **mean 0.157, max 0.375**, never
+    //    approaching the top of its own range. So the core's brightness spanned 0.30→0.51 and
+    //    its radius 0.045→0.058 across a whole track: effectively static. A near-constant
+    //    centre is most of why the preset read as "not obviously tied to the audio".
+    //    `presence` is now stretched against the range it ACTUALLY occupies.
+    float presenceLift = saturate(presence * 2.6);
+
+    float coreRadius = 0.040 + presenceLift * 0.055 + event * 0.030;
     float coreDist = radius / coreRadius;
-    float coreGlow = exp(-coreDist * coreDist * 2.0) * (0.30 + presence * 0.55);
+    float coreGlow = exp(-coreDist * coreDist * 2.0)
+                   * (0.16 + presenceLift * 0.70 + event * 0.55);
     color += float3(0.55, 0.40, 1.0) * coreGlow;
 
     // ── Outer nebula haze ─────────────────────────────────────────────────────
