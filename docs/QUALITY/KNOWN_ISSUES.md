@@ -1258,6 +1258,49 @@ last slice reflects the newest 1024 samples rather than a position inside a 4410
 a latency gain even where the rate did not move. Cost: ~5× the per-callback allocation on the
 audio thread, landing at ~47/s — the rate the system-tap path has always run at.
 
+#### Instrumentation — one remaining route ELIMINATED, and a fresh live measurement (2026-09-10)
+
+`TapDeliveryRateTests` measures what each node actually delivers and, crucially, **how far apart
+the deliveries land** — two buffers arriving in the same instant are worth one update to a preset
+however small they are. Real music (a session `raw_tap.wav`), `BUG087_AUDIO=<wav>`:
+
+| tap node | requested | delivered | rate | arrival gap |
+|---|---|---|---|---|
+| player | 1024 | 4410 | 10.0 Hz | mean 99.8 ms |
+| player | 4096 | 4410 | 10.0 Hz | mean 99.8 ms |
+| mixer  | 1024 | **4800** | **10.0 Hz** | mean 99.8 ms |
+| mixer  | 4096 | **4800** | **10.0 Hz** | mean 99.8 ms |
+| output | any | **nothing** | — | — |
+
+**"Tap a different node" is DEAD as a route.** The mixer delivers on the identical 0.1 s cadence —
+4800 frames at 48 kHz against the player's 4410 at 44.1 kHz, i.e. the same fixed *duration*, the
+same discriminator BUG087.1 used. `outputNode` delivers no buffers at all. The 0.1 s tap cadence is
+AVAudioEngine's, not the node's, and it ignores the requested size at both 1024 and 4096.
+
+**`AVAudioSinkNode` is INCONCLUSIVE, not eliminated.** It is a render-callback node rather than a
+tap, so it is not subject to the tap cadence — the right shape for this problem. But wiring it
+alongside live playback did not work here: a plain second `connect` from `mainMixerNode` (which
+already feeds `outputNode`) **aborts with signal 6 rather than throwing**, and the supported
+`AVAudioConnectionPoint` fan-out produced **zero callbacks**. Two configurations tried, both
+recorded; neither shows it working and neither proves it cannot. Stopped there per the two-strikes
+rule rather than permuting wiring.
+
+**Live rate confirmed independently, from Matt's own sessions** — the analysis rate measured as
+"how often does a `FeatureVector` field actually CHANGE across render rows":
+
+| session | type | bass | beatComposite | arousal | render |
+|---|---|---|---|---|---|
+| `2026-09-10T18-01-30Z` | local file | 10.2 Hz | 9.0 Hz | 9.6 Hz | 59.8 fps |
+| `2026-09-10T17-13-10Z` | local file | 10.3 Hz | — | — | ~60 fps |
+| `beat-match-test-session` | **streaming** | **58.8 Hz** | — | — | ~60 fps |
+
+So the row's "10 Hz local vs 51 Hz streaming" holds, and streaming now measures **58.8 Hz** —
+essentially render rate. **The 16.4 Hz from BUG087.2/.3 is not what a local session shows today;
+10 Hz is.** ⚠ **Product consequence worth stating plainly: the roster review was conducted on local
+FLAC**, and "sync is weak / loose / tenuous" appears against Membrane, Meniscus, Mitosis, Plasma and
+Nebula in it. A driver bus running ~5.8× slower than the renderer is a plausible common factor
+behind part of that cluster, and no per-preset tuning touches it.
+
 **The remaining route is smaller buffers from AVAudioEngine** — manual rendering mode, an
 `AUAudioUnit` render block with a smaller `maximumFramesPerSlice`, or tapping a different
 node. BUG087.1 measured that a plain `installTap(bufferSize:)` request is ignored. **Filed as
