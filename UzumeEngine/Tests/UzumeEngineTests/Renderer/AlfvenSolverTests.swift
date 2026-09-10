@@ -66,12 +66,17 @@ struct AlfvenSolverTests {
         // Env overrides so the equilibrium can be bisected without editing the test.
         let env = ProcessInfo.processInfo.environment
         if let e = env["ALFVEN_EDGE"].flatMap(Int.init) { cfg.edge = e }
-        if let d = env["ALFVEN_DRIVE"].flatMap(Float.init) { cfg.drive = d }
+        // Forcing is `audioDrive`, not a config constant — pin the floor and the
+        // ceiling together to hold it at one value. (`ALFVEN_DRIVE` used to set
+        // `cfg.drive`, which ALFVEN.3 stopped reading; the knob was inert.)
+        if let df = env["ALFVEN_DRIVEFLOOR"].flatMap(Float.init) { cfg.driveFloor = df }
+        if let dc = env["ALFVEN_DRIVECEIL"].flatMap(Float.init) { cfg.driveCeil = dc }
         if let a = env["ALFVEN_ALPHA"].flatMap(Float.init) { cfg.alpha = a }
         if let s = env["ALFVEN_SUBSTEPS"].flatMap(Int.init) { cfg.substeps = s }
         if let n4 = env["ALFVEN_NU4"].flatMap(Float.init) { cfg.nu4 = n4 }
         // A huge cutoff makes the Hou-Li filter identity, which together with
-        // ALFVEN_DRIVE=0 ALFVEN_ALPHA=0 ALFVEN_NU4=0 leaves ONLY the nonlinear terms.
+        // ALFVEN_DRIVEFLOOR=0 ALFVEN_DRIVECEIL=0 ALFVEN_ALPHA=0 ALFVEN_NU4=0 leaves
+        // ONLY the nonlinear terms.
         // <psi^2> is a Casimir of 2D reduced MHD and must then be conserved, so that
         // configuration is a direct gate on the gradient/bracket/dealias chain.
         if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
@@ -152,5 +157,61 @@ struct AlfvenSolverTests {
         // And the adaptive timestep must actually be adapting, not pinned at its ceiling.
         let dts = trace.map(\.2)
         #expect(dts.allSatisfy { $0 > 0 && $0.isFinite }, "adaptive dt is not being written")
+    }
+
+    /// ALFVEN.3e — the stirring-vigour map must keep loud moments distinguishable.
+    ///
+    /// The defect this gates: at the 3c window the drive map put the MEDIAN frame at 65 %
+    /// of the ceiling and compressed the loudest 5 % of a track into its last 0.3, so
+    /// every drop and chorus rendered the same frame-to-frame motion (measured p95 4.30 vs
+    /// p99 4.36 mean pixel delta). A preset can be perfectly coupled to the signal and
+    /// still read as arbitrary if its loud moments are indistinguishable from each other.
+    ///
+    /// Percentiles are the `bassRel` tau-100ms envelope measured over Matt's two clean
+    /// captures (12 925 frames, `chain_health` verdict `clean`). CPU-side: this gates the
+    /// MAP, not the render — the rendered consequence is `ALFVEN_VIGOUR` in the film
+    /// harness, which is too slow for the regression suite.
+    @Test("loud moments stay separated in the drive map")
+    func driveMapSeparatesLoudMoments() throws {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        var cfg = AlfvenSolverConfiguration()
+        cfg.edge = 64   // the map is CPU-side; the grid only has to exist
+        let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
+                                      configuration: cfg)
+
+        /// Settle the envelope on a held `bassRel` and read the drive it resolves to.
+        func drive(at bassRel: Float) throws -> Float {
+            for frame in 1...90 {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                f.bassRel = bassRel
+                f.bassDev = max(bassRel, 0)
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                cmd.commit(); cmd.waitUntilCompleted()
+            }
+            return solver.audioDrive
+        }
+
+        let median = try drive(at: -0.007)   // p50
+        let loud = try drive(at: 0.318)      // p95
+        let peak = try drive(at: 0.533)      // p99
+
+        #expect(median < cfg.driveCeil * 0.7, """
+            the median frame sits at \(median / cfg.driveCeil * 100)% of the drive ceiling \
+            — the map has no headroom left for the music that is actually loud
+            """)
+        #expect(peak - loud > 1.0, """
+            p95 -> p99 spans only \(peak - loud) of drive: the loudest moments of a track \
+            all render the same, which is the ALFVEN.3e defect
+            """)
+        #expect(peak < cfg.driveCeil * 0.98, """
+            p99 is pinned at the ceiling (\(peak) of \(cfg.driveCeil)) — everything above \
+            it is clipped to one value
+            """)
     }
 }
