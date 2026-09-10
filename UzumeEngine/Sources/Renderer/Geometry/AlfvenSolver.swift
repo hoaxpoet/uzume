@@ -118,10 +118,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// ALFVEN.3 audio envelopes (see AlfvenSolver+Audio). Real-time smoothed, per §7's
     /// timescales; zero at silence, which is the state the preset relaxes to (D-037).
     var bassEnvelope: Float = 0
-    var trebleEnvelope: Float = 0
     var centroidEnvelope: Float = 0
     /// Slew-limited bloom strength (D-157). Starts at film.py's silence floor.
-    var bloomAmount: Float = 0.30
     private var lastFeatureTime: Float = 0
 
     public init(device: MTLDevice, library: MTLLibrary,
@@ -355,6 +353,13 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// film.py uses `0.30 + 0.85 * clip(sizzle, 0, 1.6)` where `sizzle` is `trebRel - 0.6`;
     /// at silence that clips to 0 and the constant term is all that remains. The treble
     /// term needs audio, so it arrives with ALFVEN.3 and this is the floor it builds on.
+    /// Seam-glow strength. A CONSTANT, deliberately — the value ALFVEN.4f shipped and Matt
+    /// signed off ("Looks great", `2026-09-10T16-07-07Z`).
+    ///
+    /// ⚠ Do not route audio to this. ALFVEN.3b drove it from `trebRel`; it strobed 8.3x
+    /// over the D-157 gate (BUG-126), and bounding it fixed the RATE, not the look — on
+    /// the bounded build it still pumped to nearly 3x this value for 36 % of a track.
+    /// Matt: *"I don't like the brightening effect... I would remove it."* (ALFVEN.3f).
     public var displayBloomAmount: Float = 0.30
     /// The normalisation the BLOOM THRESHOLD is measured against — `1/(p99.6 - p2)`, the
     /// autoexp scale. J's p99.6 runs 3.99…4.66 across frames, so the true scale is
