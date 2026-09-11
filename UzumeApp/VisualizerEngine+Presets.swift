@@ -376,7 +376,7 @@ extension VisualizerEngine {
                 // attachment-format mismatch and the GPU stalls.
                 // Linear `.bgra8Unorm` and HDR `.rgba16Float` declarations MUST match
                 // PresetLoader's compile-time format or Metal rejects the attachment
-                // (BUG-125: Root Choir was black when live setup ignored this field).
+                // (BUG-125: a linear-feedback preset was black when live setup ignored this field).
                 let fbFormat = mvWarpFeedbackFormat(
                     desc.feedbackPixelFormat,
                     drawableFormat: context.pixelFormat)

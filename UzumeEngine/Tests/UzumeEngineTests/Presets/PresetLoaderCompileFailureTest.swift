@@ -135,7 +135,9 @@ struct PresetLoaderCompileFailureTest {
     /// "29 → 30" because it was cut before Alfvén and FFT Sandbox landed; neither side's
     /// number survives the merge — main's 31 plus this one is 32. The gate below COUNTS
     /// the loaded roster, so it is the arbiter, not this arithmetic.)
-    static let expectedProductionPresetCount = 32
+    /// 32 → 31 at ROOTCHOIR-RETIRE.1 (Root Choir retired after the merged live build
+    /// failed its selected Liquid Script motion oracle; BUG-128 / D-249.)
+    static let expectedProductionPresetCount = 31
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {
@@ -150,5 +152,15 @@ struct PresetLoaderCompileFailureTest {
             update expectedProductionPresetCount AND log a decision in docs/DECISIONS.md. \
             If you did not, a shader is silently failing to compile — see Failed Approach #44.
             """)
+    }
+
+    @Test("Root Choir is retired from the production catalog (BUG-128)")
+    func rootChoirIsRetired() {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            print("PresetLoaderCompileFailureTest: no Metal device — skipping")
+            return
+        }
+        let loader = PresetLoader(device: device, pixelFormat: .bgra8Unorm_srgb)
+        #expect(!loader.presets.contains { $0.descriptor.name == "Root Choir" })
     }
 }

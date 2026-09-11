@@ -62,9 +62,8 @@ struct MultiPassRenderHarness {
         // cost scales with branch count rather than pixel count, which is exactly why it needs
         // its own row rather than an assumption.
         "Fractal Tree",
-        // PERF.10 — direct presets: one fullscreen fragment each. Root Choir remains in the
-        // roster here but dispatches below to its production `direct+mv_warp` feedback path.
-        "Nebula", "Plasma", "Spectral Cartograph", "Waveform", "Root Choir",
+        // PERF.10 — direct presets: one fullscreen fragment each.
+        "Nebula", "Plasma", "Spectral Cartograph", "Waveform",
         // RICERCAR-CERT.1 — the fifth ParticleGeometry preset the harness reaches, and the
         // first with a geometry-owned resolution-dependent target (ensureAllocated). Absent
         // until this increment: PresetFrameBudgetTests carried "Ricercar" in its UNVERIFIED
@@ -102,7 +101,7 @@ struct MultiPassRenderHarness {
         case "Nacre":        return try renderBespokeMVWarp("Nacre", features, stems, reduce)
         case "Floret":       return try renderBespokeMVWarp("Floret", features, stems, reduce)
         case "Glaze":        return try renderBespokeMVWarp("Glaze", features, stems, reduce)
-        case "Dragon Bloom", "Skein", "Gossamer", "Root Choir":
+        case "Dragon Bloom", "Skein", "Gossamer":
             return try renderMVWarp(presetName, features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)

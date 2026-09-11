@@ -102,11 +102,6 @@ struct PresetAcceptanceTests {
         // (drawWithGlaze); the standalone `glaze_fragment` is intentionally black. Production
         // coverage: GlazeMVWarpAccumulationTest.
         guard preset.descriptor.name != "Glaze" else { return }
-        // Root Choir (ROOTCHOIR.3): the direct fragment is a transient ink INJECTION into
-        // linear 8-bit feedback, not the displayed image. Its jewel seed deliberately reaches
-        // full channel value before the low-weight compose; the production feedback result is
-        // bounded by RootChoirTests.accumulation and the real-session replay gate.
-        guard preset.descriptor.name != "Root Choir" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)
@@ -146,11 +141,6 @@ struct PresetAcceptanceTests {
         // (drawWithGlaze); the standalone `glaze_fragment` is intentionally black. Production
         // coverage: GlazeMVWarpAccumulationTest.
         guard preset.descriptor.name != "Glaze" else { return }
-        // Root Choir (ROOTCHOIR.3): the direct fragment is a transient ink INJECTION into
-        // linear 8-bit feedback, not the displayed image. Its jewel seed deliberately reaches
-        // full channel value before the low-weight compose; the production feedback result is
-        // bounded by RootChoirTests.accumulation and the real-session replay gate.
-        guard preset.descriptor.name != "Root Choir" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)
@@ -309,10 +299,6 @@ struct PresetAcceptanceTests {
         // the clamp doing the work, checked against the runnable spike at matched sim time)
         // and AlfvenFilmPreviewTests (RENDER_VISUAL contact sheet + raw-J dump).
         guard preset.descriptor.name != "Alfvén" else { return }
-        // Root Choir's standalone direct fragment is one current calligraphic seed. Readable
-        // multi-stroke form exists only after the production mv_warp history accumulates it;
-        // RootChoirTests.accumulation gates that path over 96 frames.
-        guard preset.descriptor.name != "Root Choir" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)

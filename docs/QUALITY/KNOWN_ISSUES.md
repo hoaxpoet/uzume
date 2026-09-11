@@ -46,7 +46,6 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
-| BUG-125 | P1 · live-format fix implemented 2026-09-10; pending live M7 | preset.fidelity / renderer | **Root Choir's corrected Liquid Script render was completely black in the live app despite visible production replay output.** Session `2026-09-10T16-39-01Z` isolated an app-only feedback-format mismatch; live setup now honors the sidecar exactly as the loader and replay do. Shader fidelity remains pending live review. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -93,7 +92,63 @@ reads" are not reads — see the entry.)*
 
 ---
 
-## Open
+## Resolved (recent — Root Choir retirement)
+
+---
+
+### BUG-128 — Root Choir substituted generic warped feedback for the selected Liquid Script subject (2026-09-11)
+
+**Severity:** P2
+**Domain tag:** preset.fidelity
+**Status:** Resolved by preset retirement
+**Introduced:** ROOTCHOIR.3 / PR #222
+**Resolved:** ROOTCHOIR-RETIRE.1 / D-249
+
+**Expected behavior.** The live preset should be recognizably related to the selected
+`Martin - liquid arrows` motion oracle without explanation: discrete pointed luminous heads
+actively draw long, fine S-curves that braid and dissolve through persistent negative space.
+The moving gesture, rather than the feedback canvas, must remain the primary visual subject.
+
+**Actual behavior.** On the merged PR #222 live build, Matt reported that Root Choir is
+reminiscent of Ricercar with warp added and looks nothing like the animated Martin reference.
+This is consistent and concept-level, after the earlier Newton version and two Liquid Script
+corrections also failed live review. The generic accumulator and warp dominate the frame; the
+reference's readable arrow heads and authored drawing action do not survive as the subject.
+
+**Reproduction steps.** Build merged commit `dc4892d3`, enable uncertified presets, play music,
+and select Root Choir. Compare the live motion directly with the then-selected
+`Martin - liquid arrows` animated motion oracle. The preset-local reference copy was removed with
+the retired preset. Minimum reproducer: the dedicated merged review build at
+`/private/tmp/uzume-root-choir-review-dd/Build/Products/Debug/Uzume.app`.
+
+**Session artifacts.** The earlier clean sessions and production replays are recorded under
+BUG-125 and ROOTCHOIR.3. They establish that the pipeline renders, stays visible, and moves, but
+do not establish fidelity. The decisive artifact is Matt's M7 comparison of the merged live
+build against the named animated oracle: the two do not share a recognizable moving subject.
+
+**Suspected failure class:** `algorithm`.
+
+**Evidence for this class.** ROOTCHOIR.3 reduced the oracle to compact seed shapes plus generic
+`mv_warp` persistence. That combination produces a broad warped feedback field in Uzume's existing
+visual vocabulary; it does not implement the oracle's defining head-led drawing behavior. The
+design and closeout then described metric compliance as if it demonstrated visual fidelity,
+creating a secondary documentation-drift defect.
+
+**Verification criteria (written before retirement).**
+
+- [x] Automated: the production preset count drops by one and the loader returns no descriptor
+  named `Root Choir`.
+- [x] Automated: no app/runtime catalog, acceptance, rubric, or visual-review test names Root Choir.
+- [x] Repository: the Root Choir shader, sidecar, dedicated tests, visual references, and design
+  document are removed; generic `feedback_pixel_format` implementation and regression coverage stay.
+- [x] Manual-equivalent loader proof: a fresh app test host initializes with 31 presets and no
+  Root Choir descriptor; final clean-build picker inspection remains the release smoke check.
+
+**Manual validation required:** Yes — inspect the preset picker after a clean build.
+
+**Fix scope.** Complete preset retirement (`ROOTCHOIR-RETIRE.1`), not another tuning pass. Preserve
+the generic sidecar-owned `mv_warp` feedback-format capability because it has other current and
+future consumers and is independently regression-tested.
 
 ---
 
@@ -101,9 +156,9 @@ reads" are not reads — see the entry.)*
 
 **Severity:** P1
 **Domain tag:** preset.fidelity / renderer
-**Status:** Live feedback-format fix implemented; pending live M7
+**Status:** Resolved by ROOTCHOIR-RETIRE.1; generic format fix retained
 **Introduced:** ROOTCHOIR.1  
-**Resolved:** —
+**Resolved:** ROOTCHOIR-RETIRE.1 / D-249
 
 **Expected behavior.** Root Choir reads immediately as the selected Liquid Script motion oracle: luminous arrow/leaf heads pull long fine S-curves and curled tendrils through a visible charcoal field, with enamel-hot cores, coloured rims, and persistent negative space. Bass activity changes the advection continuously and beat onsets strengthen only newly written local gestures. There is no global spin, radial particle field, white bloom, or fixed central knot.
 
@@ -127,12 +182,15 @@ reads" are not reads — see the entry.)*
 - [x] Motion artifact: `Scripts/motion_gate.sh` over 430 contiguous attached-session frames reports 0 spike transitions; 70/429 low-motion transitions are concentrated in the deliberately sparse opening.
 - [x] Automated visibility: the attached-session production replay holds mean frame luma in **0.18…0.38**, with clipped share below 1% and near-white share below 2%.
 - [x] Reference fidelity artifact: the comparison sheet visibly carries pointed luminous heads, fine S-curves, paired tendrils, hot cores, coloured rims, and persistent negative space. Matt's fidelity verdict remains the manual gate.
-- [ ] Manual live-path check: the newly built app visibly renders the charcoal ground immediately on Root Choir selection and gestures appear during “Combat Baby.”
-- [ ] Manual M7: Matt recognizes Liquid Script without explanation, can identify bass-driven flow and onset-driven new writing, and sees no white rings, centre muddle, global spin, or stalled symmetry.
+- [x] Superseded by retirement: Root Choir has no live path or M7 certification candidate.
 
 **Manual validation required:** Yes — musical causality, psychedelic character, and comfort in motion are perceptual criteria.
 
 **Fix scope.** One live app format resolver plus an app regression test; no shader, audio route, `FeatureVector`, or renderer pass change. The sidecar already owns this value and the loader/replay already honor it. Exact black-session replay frames: `/tmp/root-choir-163901-frames/`.
+
+---
+
+## Open
 
 ---
 

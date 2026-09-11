@@ -1304,7 +1304,8 @@ which puts it with Poisson Sandbox and Staged Sandbox as a **tool**, not a roste
 diagnostics from auto-install, so it never reaches a listener and the certify-or-remove gate does not apply
 to it. ⚠ **Superseded — six again, and for different reasons** (re-derived at PR.19, 2026-09-10):
 Arachne was removed at D-246, Gossamer certified at PR.18, and Alfven then RootChoir arrived from
-parallel sessions. The live figure is Alfven, Membrane, Nebula, Plasma, RootChoir, Waveform;
+parallel sessions. Root Choir was subsequently retired at D-249 after its merged live build failed
+the selected motion oracle. The live figure is now Alfven, Membrane, Nebula, Plasma, Waveform;
 the sentence below is kept as written for the record of what the survey said at the time.
 That left **six** production presets at `certified: false`: Arachne, Gossamer, Membrane, Nebula,
 Plasma, Waveform.
@@ -7961,7 +7962,7 @@ These milestones map to product-level outcomes, not implementation phases.
 
 **Milestone C — Device-Aware Show Quality.** ✅ **MET (2026-04-25).** The same playlist produces an excellent show on M1 and a richer one on M4 without jank. *Requires: ~~Phase 6 complete~~ ✅.*
 
-**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 28 production presets certified (re-derived from the sidecars at PR.19, 2026-09-10, AFTER merging `origin/main`).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **32 JSON sidecars, 22 with `certified: true`**, of which 4 (StagedSandbox, SpectralCartograph, PoissonSandbox, FFTSandbox) carry `is_diagnostic` and are not roster presets → **28 production presets, 22 certified**. Uncertified roster presets: Alfven, Membrane, Nebula, Plasma, **RootChoir**, Waveform. ⚠ **This is the THIRD consecutive recount that was stale before it landed** — 22/26 became 22/27 when ALFVEN.4d/4e added Alfven and FFTSandbox, and 22/27 became 22/28 when RootChoir arrived during PR.19. The denominator moves whenever a parallel session lands a preset, which on this project is most days. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before — and treat any count in a PR description as provisional.** ⚠ **This line said "22 / 26" and "four uncertified" an hour earlier and was already wrong by the time it was pushed** — ALFVEN.4d/4e landed Alfven and FFTSandbox on `main` in parallel (PRs #214/#215), adding one roster preset and one diagnostic. A certification count is a property of the tree at merge time, not of the branch when the recount was run; **re-derive it after the merge, never before.** *(Two changes since the RICERCAR-CERT.1 recount: **Gossamer certified at PR.18** — the 22nd, Matt's M7 on session `2026-09-09T22-36-18Z`, *"looks great. looks ready to certify"* — and **Arachne removed** at D-246, which takes a preset off the denominator rather than adding to the numerator. The stated requirement below is "22+ certified presets total", so this milestone's certification threshold is now met; its other prerequisites are tracked separately.)* *(This line read "16 / 26 (RECON.2, 2026-08-03)" and had missed five certifications since — Witchlight (WL.14), Stave (CHR.3k), Fractal Tree (FTR.5), Meniscus (MEN.5), and Ricercar (RICERCAR-CERT.1) — plus a sidecar count change 28→29. Recount from the sidecars, not from a dated survey.)* The preset catalog is large enough, varied enough, and well-tagged enough for Uzume to feel like a product rather than a tech demo. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
+**Milestone D — Library Depth.** ✅ **THRESHOLD MET — 22 / 27 production presets certified (re-derived from the sidecars at ROOTCHOIR-RETIRE.1, 2026-09-11).** Ground truth is `FidelityRubricTests.certifiedPresets` cross-checked against the sidecars: **31 JSON sidecars, 22 with `certified: true`**, of which 4 (StagedSandbox, SpectralCartograph, PoissonSandbox, FFTSandbox) carry `is_diagnostic` and are not roster presets → **27 production presets, 22 certified**. Uncertified roster presets: Alfven, Membrane, Nebula, Plasma, Waveform. Root Choir was removed at D-249 after its merged live build failed the selected Liquid Script motion oracle. The denominator moves whenever a parallel session lands or retires a preset; re-derive it from the tree at merge time. The preset catalog remains above the stated 22-certified threshold. *Requires: Phase 5 complete, Phase V complete (12 fidelity-uplifted presets), Phase AV + Phase CC complete (Aurora Veil + Crystalline Cavern shipped certified), Phase G-uplift complete (Gossamer + remaining catalog members M7-certified or explicitly retired), Phase MD through MD.5 minimum (10 Milkdrop presets), 22+ certified presets total.* **First certified preset: Lumen Mosaic** (Phase LM closed 2026-05-12; BUG-004 resolved).
 
 **Roster survey (2026-07-19) — the production presets (`FidelityRubricTests.certifiedPresets` = ground truth; 27 → 26 at Glass Brutalist's retirement GBRETIRE.1 / D-186, then 26 → 25 at Kinetic Sculpture's retirement KSRETIRE.1 / D-188, 2026-07-20):**
 - **Certified (14):** Lumen Mosaic, Ferrofluid Ocean, Dragon Bloom, Fata Morgana, Murmuration, Nimbus, Skein, Nacre, Floret, Glaze, Filigree, Mitosis, Cytokinesis (Mitosis gen-2), Aurora Veil (AV.7).
@@ -9737,7 +9738,23 @@ full engine suite green.
 
 ---
 
-### Increment ROOTCHOIR.3 — Liquid Script replacement; pending live verdict (2026-09-10)
+### Increment ROOTCHOIR-RETIRE.1 — retire the failed Liquid Script preset ✅ (2026-09-11)
+
+**Done when:** Root Choir is absent from the production loader and manual preset walk even when
+uncertified presets are enabled; its shader, sidecar, dedicated tests, reference folder, and design
+document are removed; generic feedback-format support remains; catalog/rubric/harness counts agree;
+and BUG-128, release notes, capability registry, and D-249 record the retirement.
+
+**Implemented.** Matt's merged-build M7 rejected the replacement at the concept level: it read as
+Ricercar with warp added and looked nothing like the selected `Martin - liquid arrows` animation.
+The implementation had substituted a familiar persistent warped field for the oracle's defining
+moving subject—pointed heads actively drawing long fine S-curves. Root Choir is removed completely,
+not hidden behind certification and not queued for another tuning pass. The reusable sidecar-owned
+feedback pixel-format resolver and its generic regression tests stay.
+
+---
+
+### Increment ROOTCHOIR.3 — Liquid Script replacement; rejected and retired (2026-09-10)
 
 **ROOTCHOIR.3.2 live-path correction (2026-09-10).** Matt's ROOTCHOIR.3.1 review was completely
 black despite the corrected shader's visible headless output. Session `2026-09-10T16-39-01Z`

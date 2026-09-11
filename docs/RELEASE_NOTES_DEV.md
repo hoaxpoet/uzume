@@ -18,6 +18,18 @@ entries verbatim into their history files, retaining plan status headers and sea
 history. Release notes and artifact/skill hygiene required no further moves. This is documentation
 maintenance only; no product or rendering behavior changed.
 
+### [dev-2026-09-11-root-choir-retired] ROOTCHOIR-RETIRE.1 / BUG-128 — retire Root Choir
+
+Matt rejected the merged Root Choir live build because it read as Ricercar with warp added and
+looked nothing like the selected `Martin - liquid arrows` animated oracle. The technical gates
+proved a visible, moving feedback pipeline but did not preserve the defining moving subject:
+pointed heads drawing long fine S-curves. Root Choir is removed from the production catalog,
+including its shader, sidecar, dedicated tests, visual references, and design document.
+
+The generic sidecar-owned `mv_warp` feedback-format resolver and its regression coverage remain;
+that renderer capability is independent of the retired preset. Production preset count drops
+from 32 to 31, and Root Choir cannot be selected even when uncertified presets are enabled.
+
 ### [dev-2026-09-10-165626] ROOTCHOIR.3.2 / BUG-125 — restore live feedback-format parity
 
 Matt's next review found ROOTCHOIR.3.1 completely black in the live app. The attached clean
