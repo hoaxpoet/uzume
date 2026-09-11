@@ -171,6 +171,23 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Nebula", luma: try flashLuma("Nebula"))
     }
 
+    @Test("Alfvén is flash-safe (worst-case beat train, real headless solver render)")
+    func alfvenIsFlashSafe() throws {
+        // ALFVEN.CERT — Alfvén reaches this harness because the single-pass gate correctly
+        // REFUSED it: its fragment is `alfven_ground_fragment`, the D-037 backdrop only, so the
+        // FeatureVector harness renders it static (Δ0.000) and cannot flash-gate it. That is not
+        // "safe", it is unmeasured — the CLEAN.0 vacuous-pass rule working. The field itself is
+        // drawn by `AlfvenSolver` through the particles seam, which `MultiPassRenderHarness`
+        // drives here, so this is the preset's actual response.
+        //
+        // Load-bearing rather than ceremonial: Alfvén's own flash history is why this matters.
+        // BUG-126 measured max frame-to-frame Δluma of 0.4153 against D-157's 0.05 gate — 8.3×
+        // over — when `trebRel` drove a whole-frame additive bloom (ALFVEN.3b). ALFVEN.3d bounded
+        // it and ALFVEN.3f removed the route entirely on Matt's M7, so the seam glow is a
+        // constant again. A worst-case beat train is the input that would resurrect that class.
+        assertFlashSafe(name: "Alfvén", luma: try flashLuma("Alfvén"))
+    }
+
     @Test("Meniscus is flash-safe (continuous band drive + a drop on every beat, real headless render)")
     func meniscusIsFlashSafe() throws {
         // Meniscus reaches this harness because the single-pass gate correctly REFUSED it:

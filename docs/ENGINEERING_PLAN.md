@@ -10048,6 +10048,44 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.CERT — Alfvén certified, the 24th ✅ (2026-09-11)
+
+**Matt's M7** (`2026-09-11T21-00-42Z`): *"Please certify."*
+
+| evidence | |
+|---|---|
+| chain_health | **clean**, peak 0 dBFS, no reasons |
+| live | 101 s, 6088 frames |
+| frame rate | **59.9 fps** median |
+| GPU | p50 9.99 ms / p95 14.83 ms vs a 16.6 ms budget |
+| drawable | **0 failures, 0 unpresented** |
+| routes | `stirring_vigour ← bassRel`, `palette_hue_centre ← spectralCentroid`, both green on `RouteCoverageTests` |
+
+Ships with **two** audio routes, not §7's five, on Matt's call: *"A 2-route Alfvén is musically
+complete. We can tweak it later if needed — this is release 1."*
+
+**Two deviations accepted at certification, neither a gate:**
+
+1. **The silence state is UNVALIDATED, not proven.** No M7 session ever contained real silence —
+   the engine logged no silent frame in any of the four — so `05_atmosphere_relaxed_state` has never
+   been observed live. It is correct in the harness from a fresh seed (3h) and from an energised
+   field (3i). Matt saw no difference between states in three sessions; in the last one the tap ran
+   at −3…0 dBFS throughout, so there was only ever one state to see.
+2. **Peak-energy density.** At the top of the range the frame approaches the "undifferentiated
+   filament" the reference README names as the signal that the drive ceiling is too high.
+
+**⚠ The process lesson, worth more than either deviation.** The silence work consumed ALFVEN.3f→.3i
+and was never on the certification path: the mechanized gates were green throughout and D-037 was
+already satisfied (Alfvén never rendered black — it rendered an energetic field). A reference-trait
+FAIL was escalated into three increments without putting the choice to Matt, against an explicit
+"release 1, tweak later". **Chasing a real defect is not the same as chasing the right one.**
+
+**What the arc leaves behind** beyond the preset: `FeatureVector.nearSilent01` (any preset can now
+ask whether the room is quiet, and get an answer that survives AGC — Witchlight had the same bug),
+`near_silent01` in the session CSV, the `ALFVEN_VIGOUR` / `ALFVEN_REVIEW` / `ALFVEN_TRANSITION`
+harness modes, and five recorded instrument failures whose shared shape is that a metric or fixture
+silently stopped matching production while its numbers stayed plausible.
+
 ### Increment ALFVEN.3h — certification prep, and the silence state ALFVEN.3 broke ✅ (2026-09-11)
 
 Matt's call: *"A 2-route Alfvén is musically complete. We can tweak it later if needed — this is

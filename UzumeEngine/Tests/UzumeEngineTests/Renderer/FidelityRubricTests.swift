@@ -390,7 +390,27 @@ struct FidelityRubricGateTests {
         // makes the response asymmetric, not early. The core's body remains on the smoothed instant
         // bands at +85 ms while its accent runs at +55 ms. Recorded so a later session reads this as
         // an accepted trade rather than an undiscovered defect.
-        "Nebula"]
+        "Nebula",
+        // ALFVEN.CERT (2026-09-11) — the 24th. Matt's M7 on session `2026-09-11T21-00-42Z`:
+        // *"Please certify."* 101 s live on the ALFVEN.3i build, 6088 frames, chain_health
+        // `clean` at peak 0 dBFS, 59.9 fps median (GPU p50 9.99 ms / p95 14.83 ms against a
+        // 16.6 ms budget), zero drawable failures, zero unpresented.
+        //
+        // Ships with TWO audio routes, not §7's five, on Matt's call: *"A 2-route Alfvén is
+        // musically complete. We can tweak it later if needed — this is release 1."* Three of
+        // §7's rows failed contact with real music (an inert amplitude, a one-sided primitive,
+        // and a treble route Matt asked to remove); a fourth needs section detection, which
+        // D-170 removed. Scores 2/4 on the lightweight ladder and both misses are by
+        // construction — see the `Alfvén` note in the heuristic-gate map.
+        //
+        // ⚠ Known deviation, accepted at certification: the silence state is UNVALIDATED, not
+        // proven. No M7 session ever contained real silence — the engine logged no silent
+        // frame in any of them — so the relaxed state (`05_atmosphere_relaxed_state`) has
+        // never been observed live. It is correct in the harness from both a fresh seed and
+        // an energised field (ALFVEN.3h/.3i). Also open: at peak energy the frame approaches
+        // the "undifferentiated filament" the reference README names as a too-high drive
+        // ceiling.
+        "Alfvén"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()

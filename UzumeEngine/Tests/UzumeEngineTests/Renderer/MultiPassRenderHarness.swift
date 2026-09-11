@@ -93,6 +93,7 @@ struct MultiPassRenderHarness {
         case "Meniscus":     return try renderMeniscus(features, stems, settle: settle, reduce)
         case "Ricercar":     return try renderRicercar(features, stems, settle: settle, reduce)
         case "Stave":        return try renderStave(features, stems, settle: settle, reduce)
+        case "Alfvén":       return try renderAlfven(features, stems, reduce)
         case "Mitosis":      return try renderMitosis(features, stems, reduce)
         case "Cytokinesis":  return try renderCytokinesis(features, stems, reduce)
         case "Lumen Mosaic": return try renderLumenMosaic(features, stems, reduce)
@@ -424,6 +425,21 @@ struct MultiPassRenderHarness {
     }
 
     // MARK: - Render: particle (Mitosis / Cytokinesis — geometry-driven RD / cell colony)
+
+    /// Alfvén (ALFVEN.CERT): the MHD field is drawn by `AlfvenSolver` through the particles
+    /// seam, so the single-pass FeatureVector harness renders only `alfven_ground_fragment`
+    /// (the D-037 backdrop) and measures a static frame. Driving the real solver here is what
+    /// makes its photosensitivity gate mean anything.
+    private func renderAlfven<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+                                 _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
+                                      pixelFormat: ctx.pixelFormat,
+                                      configuration: AlfvenSolverConfiguration())
+        return try particleLoop(ctx, drive, stems, reduce) { i, enc in solver.render(encoder: enc, features: drive[i]) }
+            update: { i, cmd in solver.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
+    }
 
     private func renderMitosis<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
                                   _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
