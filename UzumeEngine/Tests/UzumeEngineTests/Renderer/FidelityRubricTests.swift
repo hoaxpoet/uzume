@@ -393,7 +393,7 @@ struct FidelityRubricGateTests {
         "Nebula",
         // ALFVEN.CERT (2026-09-11) — the 24th. Matt's M7 on session `2026-09-11T21-00-42Z`:
         // *"Please certify."* 101 s live on the ALFVEN.3i build, 6088 frames, chain_health
-        // `clean` at peak 0 dBFS, 59.9 fps median (GPU p50 9.99 ms / p95 14.83 ms against a
+        // `clean`, 59.9 fps median (GPU p50 9.99 ms / p95 14.83 ms against a
         // 16.6 ms budget), zero drawable failures, zero unpresented.
         //
         // Ships with TWO audio routes, not §7's five, on Matt's call: *"A 2-route Alfvén is

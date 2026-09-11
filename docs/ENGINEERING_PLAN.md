@@ -10136,7 +10136,9 @@ format; non-finite watchdog) plus a new persistent-harness-template row.
 
 | evidence | |
 |---|---|
-| chain_health | **clean**, peak 0 dBFS, no reasons |
+| chain_health | **clean**, no reasons. ⚠ Its `peakDBFS` reads exactly 0, which BUG-129 shows is
+  unreliable (unmeasured-or-clipping); the session's health rests on the per-5 s `SIGNAL_HEALTH`
+  lines instead — −2.4 / −1.8 / −0.6 dBFS, real varying values |
 | live | 101 s, 6088 frames |
 | frame rate | **59.9 fps** median |
 | GPU | p50 9.99 ms / p95 14.83 ms vs a 16.6 ms budget |
