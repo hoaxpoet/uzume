@@ -10,6 +10,31 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-200000] BUG-116 and BUG-119 closed on one Ferrofluid session
+
+Both were fixed-pending-live-confirm and both surface in Ferrofluid Ocean, so one sitting closed the
+pair. Session `2026-09-11T19-12-34Z`: **48 kHz** (the rate BUG-116 depends on — a 44.1 kHz file would
+have tested nothing, because the defective branch does not fire there), chain health **clean**, peak
+−6.03 dBFS, 180 s at 59.9 fps.
+
+**BUG-116** — *"On any local file that is not 44.1 kHz, the pre-analysed stem series is DEAD for ~0.4 s
+out of every 2 s."* Measured on this capture: **0 of 10,789 frames** with all four stems at zero,
+against the pre-fix signature of **279 of 1,875 (14.9 %)**. Matt: *"No periodic darkening. Visuals are
+steady."*
+
+**BUG-119** — the beat pulse held one whole-track average BPM, so a wrong average put every
+pulse-driven preset off the music. Measured: **|drift_ms| median 13.9 / p90 42.7**, **|onset_residual_ms|
+median 17.6 / p90 25.3** — sub-20 ms is the pulse landing on the beat. (For contrast, the Nebula session
+on a track whose grid was genuinely bad read |drift_ms| median 634.) Matt: *"No visible grain observed.
+Spike punches land with the music."*
+
+⚠ **A metric was built, measured, and DISCARDED here rather than reported.** An attempt to show the
+pulse now follows the grid's LOCAL period — by differencing `pulse_beat_index` over 5 s windows —
+returned a 1231 % spread, then 62–187 % after excluding gated frames. Neither figure means anything:
+`pulse_beat_index` steps in integers, so over a 5 s window the estimator quantises into buckets
+(5s/13, 5s/8, 5s/5) and is measuring the window arithmetic rather than the pulse. `drift_ms` and
+`onset_residual_ms` answer the question directly and are what the closure rests on.
+
 ### [dev-2026-09-11-172000] Nebula certified — the 23rd, and the first reviewed on a fixed clock
 
 Matt's M7 on `2026-09-11T16-47-03Z`: *"It's close enough ... we should leave Nebula alone and move to
