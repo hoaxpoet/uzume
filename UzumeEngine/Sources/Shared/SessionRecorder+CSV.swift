@@ -121,7 +121,7 @@ extension SessionRecorder {
         beatPhase01,bassRel,bassDev,bassAttRel,\
         barPhase01_permille,beatsPerBar,beat_in_bar,is_downbeat,\
         beat_sync_mode,lock_state,grid_bpm,playback_time_s,drift_ms,onset_residual_ms,\
-        frame_cpu_ms,frame_gpu_ms,track_elapsed_s,cached_bass_proportion,\
+        near_silent01,frame_cpu_ms,frame_gpu_ms,track_elapsed_s,cached_bass_proportion,\
         mir_pipeline_ms,stem_analyzer_ms,beat_detector_ms,pitch_tracker_ms,mood_classifier_ms,\
         encode_cpu_ms,renderframe_cpu_ms,\
         gbuffer_pass_ms,lighting_pass_ms,post_process_pass_ms,\
@@ -201,7 +201,10 @@ extension SessionRecorder {
         // that don't have stems context).
         let elapsed = String(format: "%.4f", fv.trackElapsedS)
         let bassProp = String(format: "%.5f", stems.cachedBassProportion)
-        let timing = ",\(cpu),\(gpu),\(elapsed),\(bassProp)"
+        // ALFVEN.3i — near_silent01 leads the timing block so a capture shows WHY a
+        // silence-gated preset did or did not relax. Without it the only silence
+        // evidence in a session is AGC-normalised bands, which never reach zero.
+        let timing = ",\(String(format: "%.0f", fv.nearSilent01)),\(cpu),\(gpu),\(elapsed),\(bassProp)"
         // PERF.1 — per-subsystem analysis-frame timing breakdown. Empty cells
         // until the first analysis-frame fires (cold-start frames before the
         // analysis queue produces its first row). Order matches the header in

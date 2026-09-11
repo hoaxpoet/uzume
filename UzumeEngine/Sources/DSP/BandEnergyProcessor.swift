@@ -27,6 +27,13 @@ public final class BandEnergyProcessor: @unchecked Sendable {
 
     /// Band energy output for a single frame.
     public struct Result: Sendable {
+        /// 1 when the input has been near-silent long enough to be a real gap, else 0.
+        /// This is D-148/BUG-029's existing detector, now PUBLISHED rather than kept private:
+        /// `totalRawEnergy < 0.02 * agcRunningAvg` sustained for `sustainedSilenceFrames`.
+        /// RELATIVE to AGC's own running average, so unlike an absolute test on `bass+mid+
+        /// treble` it cannot be fooled by AGC holding the bands near 0.02–0.1 during a pause.
+        public var nearSilent01: Float = 0
+
         // 3-band instant (fast smoothing)
         public var bass: Float
         public var mid: Float
@@ -340,6 +347,10 @@ public final class BandEnergyProcessor: @unchecked Sendable {
         frameCount += 1
 
         return Result(
+            // D-148's detector, published. `silentRun` counts consecutive near-silent frames;
+            // the sustain threshold is what separates an inter-track gap from a between-beat
+            // gap in sparse music.
+            nearSilent01: silentRun >= Self.sustainedSilenceFrames ? 1 : 0,
             bass: smoothedInstant[0],
             mid: smoothedInstant[1],
             treble: smoothedInstant[2],

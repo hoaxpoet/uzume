@@ -39,13 +39,16 @@ extension AlfvenSolver {
         // in the reference README as *"Silence / low-drive state (D-037) … this is what
         // silence must look like"*, and it has been unreachable in production ever since.
         //
-        // Detecting literal silence needs an ABSOLUTE level; FA #31 forbids absolute
-        // thresholds for REACTIVITY, not for deciding whether there is any sound at all.
-        // Test and constant are Witchlight's (WL.5, `mixEnergy <= 1e-6`), including its
-        // hard-won detail: the live MIX bands collapse immediately at silence while the
-        // stems HOLD their last values, so stems get no vote.
-        let mixEnergy = features.bass + features.mid + features.treble
-        let silent = mixEnergy <= 1e-6
+        // ⚠ NOT `bass + mid + treble <= 1e-6`. ALFVEN.3h used that (Witchlight's WL.5 test)
+        // and it fired on 0 of 5224 frames of a clean session: those bands are AGC-NORMALISED
+        // and never reach zero while the tap is alive — measured minimum 0.022. It succeeds
+        // only when the tap is DEAD, which is exactly how 3h's gate came to be "validated"
+        // against a capture whose own `chain_health` verdict was `broken`.
+        //
+        // `nearSilent01` is D-148/BUG-029's detector instead: RELATIVE to AGC's own running
+        // average (`total < 0.02 * runningAvg`, ~34 dB down) and sustained for 30 frames, so
+        // it cannot be fooled by AGC and does not trip on a between-beat gap.
+        let silent = features.nearSilent01 > 0.5
         // Ramped, not switched: a step in drive is a step in the whole field's motion.
         // Falls to the relaxed state in ~`silenceTau`, recovers at the same rate.
         let gateTarget: Float = silent ? 0 : 1
