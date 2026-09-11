@@ -148,8 +148,8 @@ private let expectedAutomatedGate: [String: Bool] = [
     // raw `fftMagnitudes` with fixed gains, which is the same defect Matt's roster note
     // was describing from the other side. The v2 rewrite drives the ring's REACH from
     // bass_att_rel / mid_att_rel / treb_dev (D-026) and now clears L1-L3. L4 stays manual
-    // and Nebula stays `certified: false` — the automated gate is not certification, and
-    // this preset's reference set is still an unfilled template.
+    // L4 stayed manual and Nebula stayed `certified: false` until Matt's M7 of 2026-09-11
+    // (PR.24). ⚠ Its reference set is STILL an unfilled template — see the certifiedPresets note.
     "Nebula":               true,    // lightweight; L1-L3 pass since PR.19
     "Plasma":               false,   // lightweight; L2 fails — no deviation primitives in source
     "Skein":                false,   // lightweight; L2 fails BY CONSTRUCTION — Skein's deviation
@@ -365,7 +365,20 @@ struct FidelityRubricGateTests {
         // PR.18 (2026-09-09) — the 22nd. Matt's M7 on session `2026-09-09T22-36-18Z`:
         // *"looks great. looks ready to certify"*. 81 s live on the V.8 uplift build, 5414
         // frames, zero drawable failures and zero unpresented.
-        "Gossamer"]
+        "Gossamer",
+        // PR.24 (2026-09-11) — the 24th. Matt's M7 on session `2026-09-11T16-47-03Z`, chain health
+        // `clean` (peak −0.13 dBFS), 202 s, and the FIRST Nebula review with BUG-087's rate ceiling
+        // gone (bass 59.41 Hz against a 60.00 fps render, where every prior Nebula review ran at
+        // ~10 Hz). His words: *"It's close enough ... We should leave Nebula alone and move to
+        // certification."*
+        //
+        // ⚠ Certified with a KNOWN residual he chose not to spend an increment on. He reported
+        // *"the core activates with a delay"*; PR.23 scoped it and he declined it as *"risky, not
+        // necessarily a fix"* — correctly, since a follower downstream of τ 77 ms band smoothing
+        // makes the response asymmetric, not early. The core's body remains on the smoothed instant
+        // bands at +85 ms while its accent runs at +55 ms. Recorded so a later session reads this as
+        // an accepted trade rather than an undiscovered defect.
+        "Nebula"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()
