@@ -103,6 +103,7 @@
 		P10011 /* StreamingArtworkPublishingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P20011; };
 		P10012 /* TrackChangePresetResetRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P20012; };
 		P10013 /* StemSeriesWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = P20013; };
+		RC125100 /* MVWarpFeedbackFormatRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RC125200; };
 		A10003 /* UzumeEngine in Frameworks */ = {isa = PBXBuildFile; productRef = A80001; };
 		A10010 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20010; };
 		A10011 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20011; };
@@ -303,6 +304,7 @@
 		P20011 /* StreamingArtworkPublishingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingArtworkPublishingTests.swift; sourceTree = "<group>"; };
 		P20012 /* TrackChangePresetResetRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackChangePresetResetRegressionTests.swift; sourceTree = "<group>"; };
 		P20013 /* StemSeriesWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StemSeriesWiringTests.swift; sourceTree = "<group>"; };
+		RC125200 /* MVWarpFeedbackFormatRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MVWarpFeedbackFormatRegressionTests.swift; sourceTree = "<group>"; };
 		O20007 /* DarkVibrancyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DarkVibrancyView.swift; sourceTree = "<group>"; };
 		A20004 /* Uzume.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Uzume.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20005 /* UzumeEngine */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = UzumeEngine; path = UzumeEngine; sourceTree = "<group>"; };
@@ -840,6 +842,7 @@
 				P20011 /* StreamingArtworkPublishingTests.swift */,
 				P20012 /* TrackChangePresetResetRegressionTests.swift */,
 				P20013 /* StemSeriesWiringTests.swift */,
+				RC125200 /* MVWarpFeedbackFormatRegressionTests.swift */,
 			);
 			path = UzumeAppTests;
 			sourceTree = "<group>";
@@ -1159,6 +1162,7 @@
 				P10011 /* StreamingArtworkPublishingTests.swift in Sources */,
 				P10012 /* TrackChangePresetResetRegressionTests.swift in Sources */,
 				P10013 /* StemSeriesWiringTests.swift in Sources */,
+				RC125100 /* MVWarpFeedbackFormatRegressionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

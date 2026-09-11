@@ -2,7 +2,7 @@
   "name": "Root Choir",
   "family": "drawing",
   "duration": 40,
-  "description": "Liquid Script: tapered amber, magenta, and violet ink gestures write themselves across a charcoal field, braid through a persistent non-radial liquid flow, and dissolve before they congeal. Bass deviation continuously changes advection; beat onsets accent newly written local gestures. No global rotation, particle rings, central knot, or white bloom.",
+  "description": "Liquid Script: luminous pointed heads pull enamel-hot amber, magenta, and violet S-curves and fine curled tendrils through directed liquid cross-shear over a visible charcoal field. Bass deviation continuously changes advection; beat onsets accent newly written local gestures. No closed orbital flow, particle rings, central knot, or white bloom.",
   "author": "Matt",
   "inspired_by": {
     "milkdrop_filename": "Martin - liquid arrows",
@@ -14,7 +14,7 @@
   "passes": ["direct", "mv_warp"],
   "fragment_function": "root_choir_fragment",
   "vertex_function": "fullscreen_vertex",
-  "decay": 0.982,
+  "decay": 0.991,
   "feedback_pixel_format": "bgra8Unorm",
   "visual_density": 0.42,
   "motion_intensity": 0.46,

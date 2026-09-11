@@ -25,7 +25,7 @@ The source JSON is not redistributed.
 - New writing enters at local, distributed loci; existing writing keeps moving between beats.
 - Persistent seed → non-radial advection → bounded decay. No whole-field rotation.
 - Charcoal/violet negative space with amber, magenta, and violet ink.
-- Bass deviation changes continuous flow speed/curl. Pulse amplitude only strengthens the new local gesture.
+- Bass deviation changes continuous flow speed/curl. `beatComposite` only strengthens the new local gesture.
 - Silence stays dim and alive; peaks remain legible and do not wash out.
 
 ## Anti-references
@@ -38,7 +38,8 @@ The source JSON is not redistributed.
 
 ## Divergence from the inspiration source
 
-Root Choir is written from scratch. It changes palette character (jewel-on-charcoal instead
-of neutral/white), feature stack (three tapered calligraphic gestures instead of one random
-pentagon seed), and composition (distributed Lissajous entry loci instead of a central
-vortex). The source supplies the living-ink intent, not equations or a frame layout.
+Root Choir is written from scratch. It keeps the oracle's recognizable visual subject—pointed
+luminous heads pulling fine curled trails—while changing palette character to jewel
+amber/coral/violet and composition to distributed local entrances instead of a central pentagon
+or vortex. The source supplies the living-ink subject and motion oracle, not equations or a
+frame layout.

@@ -14,6 +14,20 @@ import Shared
 
 private let logger = Logger(subsystem: "io.uzume.mac", category: "VisualizerEngine")
 
+/// Resolve the feedback texture format from the sidecar-owned declaration.
+/// This must stay identical to `PresetLoader.feedbackFormat` and the replay harness:
+/// pipelines compiled for linear/HDR feedback cannot render into the sRGB drawable format.
+func mvWarpFeedbackFormat(
+    _ declared: PresetDescriptor.FeedbackPixelFormat?,
+    drawableFormat: MTLPixelFormat
+) -> MTLPixelFormat {
+    switch declared {
+    case .bgra8Unorm?:  return .bgra8Unorm
+    case .rgba16Float?: return .rgba16Float
+    case nil:           return drawableFormat
+    }
+}
+
 /// Map a `marks.primitive` descriptor string to an `MTLPrimitiveType` (Skein.ENGINE.1.1,
 /// D-143). The descriptor lives in the Presets module, which does not import Metal, so it
 /// stores the primitive as a string; the mapping lives here in the app (Metal-importing)
@@ -354,25 +368,18 @@ extension VisualizerEngine {
                     logger.error("mv_warp preset '\(desc.name)' missing compiled warp pipeline states")
                     break
                 }
-                // Feedback textures use the drawable (8-bit) format — matching
-                // butterchurn/Milkdrop (UNSIGNED_BYTE RGBA); the per-frame clamp is
+                // Feedback textures use the sidecar override when declared; nil keeps
+                // the drawable (sRGB 8-bit) format. The 8-bit per-frame clamp remains
                 // load-bearing for Dragon Bloom's saturated no-decay equilibrium.
                 // MUST match PresetLoader.feedbackFormat (the format the warp/compose/
                 // scene pipelines were compiled for) or the render encoder gets an
                 // attachment-format mismatch and the GPU stalls.
-                // Fata Morgana (D-139): LINEAR feedback (.bgra8Unorm) matching butterchurn
-                // + PresetLoader.feedbackFormat — MUST match the format the pipelines were
-                // compiled for or the GPU stalls (the D-138 attachment-mismatch pitfall).
-                // Nacre (NACRE.2b): HDR .rgba16Float feedback (unclamped iridescence/bloom;
-                // bounded by the 0.9 in-warp decay) — also MUST mirror PresetLoader.feedbackFormat.
-                let fbFormat: MTLPixelFormat
-                switch desc.name {
-                case "Fata Morgana": fbFormat = .bgra8Unorm
-                case "Nacre":        fbFormat = .rgba16Float
-                case "Floret":       fbFormat = .rgba16Float
-                case "Glaze":        fbFormat = .rgba16Float
-                default:             fbFormat = context.pixelFormat
-                }
+                // Linear `.bgra8Unorm` and HDR `.rgba16Float` declarations MUST match
+                // PresetLoader's compile-time format or Metal rejects the attachment
+                // (BUG-125: Root Choir was black when live setup ignored this field).
+                let fbFormat = mvWarpFeedbackFormat(
+                    desc.feedbackPixelFormat,
+                    drawableFormat: context.pixelFormat)
                 // Skein.ENGINE.1.1 (D-143): per-preset canvas clear ground. Marks-on-top
                 // presets skip Pass 0, so the feedback-texture clear IS the held ground
                 // (Skein's cream). Sourced from the preset's `marks.canvas_clear`; black

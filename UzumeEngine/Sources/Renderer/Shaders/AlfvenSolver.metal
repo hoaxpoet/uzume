@@ -152,6 +152,8 @@ struct AlfvenParams {
     float seedPhase;
     float blendRate;    // per-substep share of the re-seed crossfade
     float jCutoff;      // band limit for the DISPLAY quantity J; see alfven_j_spectrum
+    float expoAlpha;    // EMA coefficient for mean|J|, from REAL dt (ALFVEN.3g)
+    float expoBeta;     // partial-adaptation exponent; 0 = fixed, 1 = film.py
 };
 
 static inline float2 alf_wavenumber(uint2 gid, uint n) {
@@ -418,6 +420,56 @@ kernel void alfven_cfl_finish(
     dtOut[0] = min(p.dt, 0.25 * dx / max(c, 1e-3));
 }
 
+/// ALFVEN.3g — auto-exposure reduction: the field-wide mean of |J|.
+///
+/// film.py normalises by `1 / (p99.6 - p2)` of |J| (`autoexp`), which a fragment cannot
+/// compute. Measured across drive 5…24 — a 4.8x span of field energy — that percentile
+/// range tracks mean|J| at a ratio of 0.163 +/- 6 %, so the mean substitutes for it and is
+/// reachable by exactly the reduction the CFL timestep already performs each substep.
+///
+/// Fixed-point accumulation: `atomic_fetch_add` on floats is not universally available, so
+/// |J| is scaled by 64 and summed as integers. Headroom check at the production grid:
+/// 256^2 texels * |J| ~ 200 worst case * 64 = 2.1e8, an order of magnitude under UINT_MAX.
+kernel void alfven_exposure_reduce(
+    texture2d<float, access::read> state [[texture(0)]],
+    device atomic_uint* scratch          [[buffer(0)]],
+    constant AlfvenParams& p             [[buffer(1)]],
+    uint2 gid                            [[thread_position_in_grid]]
+) {
+    if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
+    float aj = fabs(state.read(gid).z);          // J rides in .z
+    atomic_fetch_add_explicit(scratch, uint(aj * 64.0), memory_order_relaxed);
+}
+
+/// Turns that sum into the exposure FACTOR the display multiplies its calibrated constant
+/// by. Writes `[0] = factor, [1] = the mean|J| EMA` so the EMA persists across frames.
+///
+/// Two deliberate departures from film.py, both because it renders STILLS and we render a
+/// TIMELINE:
+///   1. The EMA. Per-frame normalisation is fine for independent stills; at 60 fps an
+///      exposure that jumps between frames IS a flash, which D-157 governs.
+///   2. `expoBeta` < 1. film.py's job is to remove brightness variation; ours is partly to
+///      CARRY it, because the loudness cue is signal. beta = 1 reproduces film.py exactly
+///      and measured 1.25x loud/quiet response against 1.56x fixed; beta = 0.65 keeps 1.35x
+///      while removing 82 % of the clipping.
+kernel void alfven_exposure_finish(
+    device const atomic_uint* scratch [[buffer(0)]],
+    device float* out                 [[buffer(1)]],
+    constant AlfvenParams& p          [[buffer(2)]],
+    uint tid                          [[thread_position_in_grid]]
+) {
+    if (tid != 0) { return; }
+    float n = float(p.gridEdge) * float(p.gridEdge);
+    float mean = float(atomic_load_explicit(scratch, memory_order_relaxed)) / (64.0 * n);
+    mean = max(mean, 1e-4);
+    float prev = out[1];
+    float ema = (prev <= 0.0) ? mean : prev + p.expoAlpha * (mean - prev);
+    out[1] = ema;
+    // 1.917 = the mean|J| at which the ALFVEN.4d calibration of `displayExposure` is
+    // correct; at beta = 1 this reproduces film.py's 0.163 / mean|J| exactly.
+    out[0] = clamp(pow(1.917 / ema, p.expoBeta), 0.25, 2.0);
+}
+
 // ─── Display ────────────────────────────────────────────────────────────────
 //
 // The shipping look is docs/presets/alfven_spike/film.py, and the spike's README is
@@ -508,7 +560,8 @@ fragment float4 alfven_display_fragment(
     constant AlfvenDisplayParams& p [[buffer(0)]],
     texture2d<float, access::sample> stateTex [[texture(0)]],
     texture2d<float, access::sample> bloomNear [[texture(1)]],
-    texture2d<float, access::sample> bloomFar  [[texture(2)]]
+    texture2d<float, access::sample> bloomFar  [[texture(2)]],
+    device const float* expo                   [[buffer(1)]]
 ) {
     constexpr sampler smp(filter::linear, address::repeat);
     float J = stateTex.sample(smp, in.uv).z;
@@ -520,7 +573,11 @@ fragment float4 alfven_display_fragment(
     // value out also drove sJ to ~0.09, killing the hue opponency and leaving a flat
     // lavender frame. Both are fixed stand-ins for percentile/std reductions the fragment
     // cannot do, so both are calibrated against the measured field (ALFVEN.4d).
-    float aJ = clamp(abs(J) * p.exposure, 0.0, 1.0);
+    // ALFVEN.3g: `exposure` stays the ALFVEN.4d reference-matched calibration; the field
+    // statistic only SCALES it, so the two concerns remain separable. Polarity is left on
+    // the fixed scale on purpose — it is a hue signal, not a brightness one, and 4d's
+    // collapse of the two onto one constant is the trap this keeps closed.
+    float aJ = clamp(abs(J) * p.exposure * expo[0], 0.0, 1.0);
     float sJ = tanh(J * p.polarityScale);
 
     // film.py: h = centre + 0.30*sJ, s = 0.32 + 0.58*(1-aJ^2), v = filmic(1.9*aJ^0.85)

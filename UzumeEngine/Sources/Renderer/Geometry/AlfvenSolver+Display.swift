@@ -34,6 +34,7 @@ extension AlfvenSolver {
         encoder.setFragmentBytes(&params,
                                  length: MemoryLayout<AlfvenDisplayParams>.stride,
                                  index: 0)
+        encoder.setFragmentBuffer(exposureBuffer, offset: 0, index: 1)
         encoder.setFragmentTexture(stateTexture, index: 0)
         encoder.setFragmentTexture(fields.bloomNear, index: 1)
         encoder.setFragmentTexture(fields.bloomFar, index: 2)
@@ -71,5 +72,28 @@ extension AlfvenSolver {
                  via: fields.bloomTmp,
                  into: fields.bloomFar,
                  sigma: (49.0 - 4.0).squareRoot())
+    }
+
+    /// ALFVEN.3g — the mean|J| reduction and the exposure factor it yields.
+    ///
+    /// Mirrors `encodeCFL`: a field-wide atomic reduction, then a single thread turning it
+    /// into one number the rest of the frame reads. Costs one extra dispatch pair per
+    /// frame at the production grid, against the four the CFL already runs per substep.
+    func encodeExposure(_ params: inout AlfvenParams, into cmd: MTLCommandBuffer) {
+        exposureScratch.contents().assumingMemoryBound(to: UInt32.self).pointee = 0
+        let (gridSize, tgSize) = grid()
+        guard let enc = cmd.makeComputeCommandEncoder() else { return }
+        enc.setComputePipelineState(exposureReducePSO)
+        enc.setTexture(stateTexture, index: 0)
+        enc.setBuffer(exposureScratch, offset: 0, index: 0)
+        enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 1)
+        enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
+        enc.setComputePipelineState(exposureFinishPSO)
+        enc.setBuffer(exposureScratch, offset: 0, index: 0)
+        enc.setBuffer(exposureBuffer, offset: 0, index: 1)
+        enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 2)
+        enc.dispatchThreads(MTLSize(width: 1, height: 1, depth: 1),
+                            threadsPerThreadgroup: MTLSize(width: 1, height: 1, depth: 1))
+        enc.endEncoding()
     }
 }
