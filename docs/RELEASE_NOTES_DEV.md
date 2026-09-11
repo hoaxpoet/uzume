@@ -10,6 +10,14 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-145807] DOC.12 — scheduled documentation rotation
+
+The DOC.6 UTC age gate crossed its next boundary during PR #222 reconciliation. The canonical
+rotation script moved 16 completed August 27 engineering-plan narratives and four resolved issue
+entries verbatim into their history files, retaining plan status headers and searchable issue
+history. Release notes and artifact/skill hygiene required no further moves. This is documentation
+maintenance only; no product or rendering behavior changed.
+
 ### [dev-2026-09-10-165626] ROOTCHOIR.3.2 / BUG-125 — restore live feedback-format parity
 
 Matt's next review found ROOTCHOIR.3.1 completely black in the live app. The attached clean
