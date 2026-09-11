@@ -321,7 +321,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // BUG087.4: build the clock BEFORE the tap, because whether it exists decides whether the
         // tap forwards. Exactly one source drives the funnel — feeding it from both would deliver
         // the same audio twice on two different cadences.
-        let clock = PlayheadAnalysisClock.make(file: file, player: player, deliver: callback)
+        let clock = PlayheadAnalysisClock.make(url: url, player: player, deliver: callback)
 
         // The tap stays installed either way. It is the only thing that reports what AVAudioEngine
         // actually delivered (BUG-087's own instrumentation), the flag is a one-increment A/B, and

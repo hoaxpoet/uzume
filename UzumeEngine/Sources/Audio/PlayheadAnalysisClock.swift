@@ -284,13 +284,18 @@ extension PlayheadAnalysisClock {
     /// rendered since `play()` and keeps counting across a `scheduleFile` loop re-arm, so it is
     /// monotone across the loop boundary and `PlaybackClockSmoother` never sees the wrap as a seek.
     /// `LoopingFileReader` takes the wrap instead, where it is a modulo.
+    /// ⚠ Takes the URL, not the provider's `AVAudioFile`, and opens its OWN handle. `AVAudioFile`
+    /// is not thread-safe, and the player is reading the provider's instance on the render thread
+    /// for the whole of playback while this reader seeks it on the clock queue — sharing one handle
+    /// is a data race on an Apple object, which is not something a passing test would reliably show.
     static func make(
-        file: AVAudioFile,
+        url: URL,
         player: AVAudioPlayerNode,
         deliver: ((UnsafePointer<Float>, Int, Float, UInt32) -> Void)?
     ) -> PlayheadAnalysisClock? {
         guard PlayheadAnalysisClock.isEnabled, let deliver else { return nil }
-        guard let reader = LoopingFileReader(file: file) else {
+        guard let own = try? AVAudioFile(forReading: url),
+              let reader = LoopingFileReader(file: own) else {
             logger.error("[BUG087.4] analysis clock unavailable for this file layout — tap drives")
             return nil
         }
