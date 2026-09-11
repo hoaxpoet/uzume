@@ -113,6 +113,74 @@ struct PlayheadAnalysisClockTests {
         #expect(LoopingFileReader(file: file) == nil)
     }
 
+    // MARK: - BUG-130 — a stopped playhead is silence
+
+    @Test("A stalled or paused playhead delivers silence, not the last frame forever")
+    func stalledPlayheadDeliversSilence() throws {
+        let sampleRate = 44_100.0
+        let n = 20_000
+        let url = try Self.writeRamp(frames: n, sampleRate: sampleRate)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let reader = try #require(LoopingFileReader(file: try AVAudioFile(forReading: url)))
+
+        // A hand-driven playhead: `nil` models a paused node (no render time), a repeated value
+        // models one whose clock has stopped advancing.
+        final class Playhead: @unchecked Sendable { var seconds: Double? = 0 }
+        let playhead = Playhead()
+        var delivered: [[Float]] = []
+        let clock = PlayheadAnalysisClock(
+            reader: reader,
+            position: { playhead.seconds },
+            deliver: { samples, count, _, _ in
+                delivered.append(Array(UnsafeBufferPointer(start: samples, count: count)))
+            })
+
+        // Playing: first tick seeds the cursor, the next carries real audio.
+        clock.tick()
+        playhead.seconds = 0.1
+        clock.tick()
+        try #require(delivered.count == 2)
+        #expect(delivered[1].contains { $0 != 0 }, "a moving playhead must deliver real audio")
+
+        // Stopped — the playhead no longer advances. Before BUG-130 every tick here returned and
+        // the last FeatureVector re-published forever. `PlaybackClockSmoother` is entitled to dead
+        // reckon `maxDeadReckonSeconds` past the last distinct clock value, so drain that bounded
+        // tail first; after it every tick must be silence however long the stop lasts.
+        Thread.sleep(forTimeInterval: PlaybackClockSmoother.maxDeadReckonSeconds + 0.05)
+        clock.tick()
+        delivered.removeAll()
+        for _ in 0..<10 { clock.tick() }
+        #expect(delivered.count == 10, "a stalled playhead must keep feeding the chain")
+        #expect(delivered.allSatisfy { $0.allSatisfy { $0 == 0 } }, "stopped playback must read as silence")
+
+        // Paused — no render time at all.
+        delivered.removeAll()
+        playhead.seconds = nil
+        for _ in 0..<10 { clock.tick() }
+        #expect(delivered.count == 10, "a paused playhead must keep feeding the chain")
+        #expect(delivered.allSatisfy { $0.allSatisfy { $0 == 0 } }, "paused playback must read as silence")
+
+        // The silence is BOUNDED: once the chain has settled at silence, further stalled ticks
+        // deliver nothing, so a long pause costs `MIRPipeline.elapsedSeconds` at most the flush
+        // window rather than its whole duration.
+        delivered.removeAll()
+        for _ in 0..<(PlayheadAnalysisClock.stallFlushTicks * 3) { clock.tick() }
+        #expect(delivered.count == PlayheadAnalysisClock.stallFlushTicks - 20,
+                "a stall must stop feeding once the flush budget is spent")
+        #expect(delivered.allSatisfy { $0.allSatisfy { $0 == 0 } })
+
+        // Resuming picks real audio back up — one tick re-seeds the cursor from the playhead (and
+        // delivers nothing, the flush budget being spent), the next carries audio. No catching up
+        // to a position the smoother ran ahead to while stalled.
+        delivered.removeAll()
+        playhead.seconds = 0.2
+        clock.tick()
+        playhead.seconds = 0.21
+        clock.tick()
+        try #require(delivered.count == 1)
+        #expect(delivered[0].contains { $0 != 0 }, "resume must deliver real audio again")
+    }
+
     // MARK: - Task 1 — the position source, on a real player, across a real loop
 
     @Test("Smoothed playhead stays inside the band across a loop boundary", .timeLimit(.minutes(1)))
