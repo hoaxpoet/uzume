@@ -145,7 +145,6 @@ Where no hash was taken at authoring, `sha256` is omitted rather than invented.
 | `Floret` | `suksma - Rovastar - Sunflower Passion (Enlightment Mix)_Phat_edit + flexi und martin shaders - circumflex in character classes in regular expression` | suksma, Rovastar, Flexi, Martin | butterchurn built-in JSON (no hash taken) | ✅ |
 | `Meniscus` | `Martin - QBikal - Surface Turbulence IIb` | Martin, QBikal | butterchurn built-in JSON (hashed) | ✅ |
 | `Witchlight` | `martin - witchcraft reloaded` | Martin | butterchurn built-in JSON (hashed) | ✅ |
-| `RootChoir` | `Martin - liquid arrows` | Martin | butterchurn built-in JSON (hashed) | — |
 
 **Reference-image attribution (`docs/VISUAL_REFERENCES/`).** The Witchlight
 reference set (WL.1) is eleven license-verified images from Wikimedia

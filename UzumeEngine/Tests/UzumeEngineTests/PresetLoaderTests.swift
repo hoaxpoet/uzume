@@ -441,9 +441,6 @@ private func makeTempPresetDirectory(shaders: [(name: String, metalSource: Strin
     let loader = PresetLoader(device: device, pixelFormat: .bgra8Unorm_srgb)
     let expected: [String: (PresetDescriptor.FeedbackPixelFormat, MTLPixelFormat)] = [
         "Fata Morgana": (.bgra8Unorm, .bgra8Unorm),
-        // ROOTCHOIR.1: an 8-bit feedback canvas is deliberate — the ink accumulates
-        // and decays in LDR, so it needs the drawable format rather than a float one.
-        "Root Choir":   (.bgra8Unorm, .bgra8Unorm),
         "Nacre":        (.rgba16Float, .rgba16Float),
         "Floret":       (.rgba16Float, .rgba16Float),
         "Glaze":        (.rgba16Float, .rgba16Float),

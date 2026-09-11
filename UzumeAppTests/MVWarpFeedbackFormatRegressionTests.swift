@@ -1,8 +1,9 @@
 // MVWarpFeedbackFormatRegressionTests — BUG-125 live/replay format parity.
 //
-// ROOTCHOIR.3.1 declared linear bgra8Unorm feedback. PresetLoader and the replay
-// harness honored it, but the live app used a display-name allowlist and fell back
-// to the sRGB drawable format for Root Choir, producing a black live frame.
+// A linear bgra8Unorm sidecar exposed that PresetLoader and replay honored the
+// declaration while the live app used a display-name allowlist and fell back to
+// the sRGB drawable format, producing a black live frame. The originating preset
+// was retired at BUG-128; this generic contract remains independently load-bearing.
 
 import Metal
 import Presets
