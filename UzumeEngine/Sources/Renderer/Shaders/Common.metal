@@ -102,7 +102,10 @@ struct FeatureVector {
     // and so moves DOWN when the ear notices. Add it as a small accent on top of a slow
     // base; it needs no silence gate, since silence produces no rise.
     // Floats 54–56 — PADDING, mirroring Swift, for the same 16-byte alignment reason.
-    float spectral_level_rise, _pad54, _pad55, _pad56;   // 53 FTR.24, 54-56 padding
+    // 54 PR.20 — per-track hue anchor, 0…1, constant within a track. The only track-scoped
+    // value a `direct` preset can see (Lumen/Skein get theirs via per-preset state buffers).
+    // 55 PR.22 — transient rise: short-window sibling of level_rise, peaks ~120 ms earlier.
+    float spectral_level_rise, track_hue_anchor01, transient_rise, _pad56;   // 53 FTR.24, 56 pad
 };
 
 // MARK: - FeedbackParams

@@ -1030,6 +1030,17 @@ struct MultiPassRenderHarness {
                   + "(the LCG fill is bypassed)")
         }
 
+        // PR.21 — Nebula is the first `direct` preset with a slot-6 state buffer. Without
+        // this the shader reads an UNBOUND buffer: not a loud failure, just undefined bands,
+        // so the frame-budget row and every still would measure a preset that does not exist.
+        // Ticked from `fftPtr` below, so it sees whatever the spectrum currently is — the LCG
+        // fill by default, or injected real magnitudes when `realSpectrum` is set.
+        let nebula: NebulaState? = presetName == "Nebula"
+            ? NebulaState(device: ctx.device) : nil
+        if presetName == "Nebula" && nebula == nil {
+            throw HarnessError.setupFailed("NebulaState allocation")
+        }
+
         let history = SpectralHistoryBuffer(device: ctx.device)
         // The real generated textures, not placeholders — see the note above.
         let textures = try TextureManager(context: ctx, shaderLibrary: lib)
@@ -1045,6 +1056,9 @@ struct MultiPassRenderHarness {
                 let bins = injected[frame % injected.count]
                 for bin in 0..<min(512, bins.count) { fftPtr[bin] = bins[bin] }
             }
+            // After the spectrum is in place, never before — the peak-hold must see THIS
+            // frame's bins.
+            nebula?.tick(deltaTime: 1.0 / 60.0, magnitudes: fftPtr, binCount: 512)
             var features = drive[frame]
             var stem = stems[frame]
             enc.setRenderPipelineState(preset.pipelineState)
@@ -1053,6 +1067,7 @@ struct MultiPassRenderHarness {
             enc.setFragmentBuffer(wav, offset: 0, index: 2)
             enc.setFragmentBytes(&stem, length: MemoryLayout<StemFeatures>.size, index: 3)
             enc.setFragmentBuffer(history.gpuBuffer, offset: 0, index: 5)
+            if let nebula { enc.setFragmentBuffer(nebula.bandBuffer, offset: 0, index: 6) }
             textures.bindTextures(to: enc)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             enc.endEncoding()

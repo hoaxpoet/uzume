@@ -60,6 +60,91 @@ state, radial seam mechanism, flower centre, and white ring artifacts are remove
 The final 600-frame real-music replay was bounded and alive (mean saturation 0.532, mean luma
 0.083, zero clipped/near-white area); its sampled motion gate reported zero spikes and zero frozen
 transitions. The preset remains uncertified pending Matt's live review.
+### [dev-2026-09-11-020000] BUG087.5 — the tap is gone from the local-file path
+
+Follow-up Matt asked for after BUG-087 closed. `LocalFilePlaybackProvider` no longer installs a tap
+on the player node at all: `PlayheadAnalysisClock` is the sole analysis source on this path.
+
+The tap's only job was carrying audio to `onAudioSamples`, and on this path it was the thing capping
+the whole MIR chain at 10 Hz — AVAudioEngine hands it ~0.1 s buffers whatever `installTap(bufferSize:)`
+asks for. With the clock measured at 59.77 Hz on Matt's M7 capture, a real-time callback firing ten
+times a second to be discarded is cost with no consumer.
+
+Deleted with it: `handleTapBuffer`, `deliverSliced`, `interleavedScratch`, `requestedTapFrames`, the
+requested-vs-delivered diagnostic, the `removeTap` teardown step, and **`TapBufferSlicing` plus its
+test suite** — BUG087.3's slicing arithmetic, whose only production consumer was the slicing loop.
+The provider drops 615 → 500 lines.
+
+**Two things became errors that used to be quiet fallbacks, deliberately.** `PlayheadAnalysisClock.make`
+now THROWS instead of returning nil: while the tap still forwarded, a clock that could not be built
+degraded to it, and now there is nothing to degrade to — analysing nothing would render a dead
+visualizer against audible music, so the provider refuses to start and the app's existing local-file
+error path shows it. And `UZUME_LF_ANALYSIS_CLOCK` was removed: with no tap to return to, `=0` could
+only have produced silence, and a flag that cannot do the thing it names is worse than no flag.
+
+Streaming is untouched — it runs through `AudioHardwareCreateProcessTap`, a different capture path
+this increment never reaches.
+
+### [dev-2026-09-11-012500] BUG-087 RESOLVED — the local analysis clock is default-on after M7
+
+Matt, watching `2026-09-11T01-22-10Z` live: *"I like it. It's punchy. Not exact, but close."* Measured
+on that capture: bass **10.01 → 59.77 Hz**, mid 59.61, treble 59.20, centroid 59.66, flux 59.34,
+against a 59.83 fps render. **5.97×**, and the slowest continuous column now changes on 99 % of
+rendered frames. The local path matches streaming's 58.8 Hz; the arrival ceiling is gone.
+
+`PlayheadAnalysisClock.isEnabled` inverted to default-on. `UZUME_LF_ANALYSIS_CLOCK=0` still forces
+the tap back — kept because this replaces the audio source of the whole MIR chain on the path all
+development runs on, and an escape hatch that needs no rebuild is worth one line for now.
+
+**The option-A golden question turned out to be moot, which is worth recording rather than quietly
+dropping.** `PresetRegressionTests` renders from fixtures through the harness, which never constructs
+`LocalFilePlaybackProvider` — the clock is not in the golden path at all. The full suite run with it
+default-on moved nothing: 1956 tests, 315 suites, 1 known issue, zero goldens regenerated.
+
+⚠ **And VisualAudioOffset can no longer measure transport on this path.** `recordRawTapSamples` sits
+inside the funnel, so with the clock driving, `raw_tap.wav` is the clock's OWN INPUT rather than the
+tap's output — the test now measures analysis→row, not capture→row. Every band column also reads
+below the correlation floor on both sessions, and the only readable one moved +45 → +50 ms on
+different material, inside the noise. The rate is what carries this fix; the ear is what confirmed it.
+Anyone quoting that table as a local-path transport number must re-derive its reference first.
+
+*"Not exact, but close"* is the band-smoothing term — τ 77 ms bass / 116 ms mid-treble in
+`BandEnergyProcessor`, which Matt declined at the design stage and this increment did not touch. That
+is the next lever, and it is a D-004 trade rather than a defect.
+
+### [dev-2026-09-10-234500] BUG087.4 — the local-file analysis clock, decoupled from tap arrival (flagged)
+
+Local-file playback ran the whole MIR chain at **10.01 Hz** against a 59.8 fps render. Streaming runs
+it at 58.8 Hz. Since essentially all development and all preset review happens on local FLAC, every
+preset on that path was driven by a bus updating ~6x slower than the renderer.
+
+**The defect is CADENCE, not staleness**, and that correction is what made this fixable. `FFTProcessor`
+already fills its window from the newest frames of whatever it is handed, so audio is not old when it
+arrives — nothing simply happens between arrivals. AVAudioEngine delivers a tap buffer every 0.1 s
+whatever `installTap(bufferSize:)` asks for, so every `FeatureVector` field froze for ~100 ms: ~50 ms
+of added lag on average, plus a visible staircase. Slicing the buffer was already measured and does not
+help — all slices land in the same instant (BUG087.2/.3).
+
+So the clock stops waiting for audio to arrive. On this path the whole file is already decoded, and a
+read at the playhead is an array lookup bounded by nothing. `PlayheadAnalysisClock` ticks at 80 Hz on
+its own queue, reads the span the smoothed playhead has just passed out of a bounded read-ahead, and
+calls the same `onAudioSamples` funnel — so the MIR chain, and every consumer downstream of it, is
+untouched. This is the advantage LFSTEM.1 created for stems and had not yet spent for MIR.
+
+Measured through the real provider against a 59.8 fps render: produced 80.6 Hz, **observed 59.2 Hz**,
+delivery gap median 12.1 ms, and **0 of 237 deliveries bunched** — the property BUG087.3 lacked.
+Observed, not produced: BUG087.3's gate asserted `hz >= 40` from slice count and passed while the live
+rate was 16.4 Hz, so both new gates measure how many distinct values a renderer could actually tell
+apart. The session gate fails at 10.01 Hz on the pre-fix reference capture, as a real gate must.
+
+Position accuracy was gated before anything was built on it, because a drifting read position
+desynchronises analysis — worse than being uniformly late. Across 3.32 laps of a looping file:
+backwards 0, behind-player 0, beyond-band 0, max lead 10.7 ms.
+
+Behind `UZUME_LF_ANALYSIS_CLOCK=1` and **off by default**. The tap stays installed and keeps reporting
+what AVAudioEngine delivers; retiring it is a separate decision. Honest ceiling unchanged: this
+recovers the cadence term, not the τ 77–116 ms of band smoothing Matt declined to touch. BUG-087 stays
+OPEN pending Matt's M7 — a ~6x change in what every preset on this path sees is not a silent change.
 
 ### [dev-2026-09-09-205204] ROOTCHOIR.2 / BUG-125 — remove the particle ring and make harmony reshape instead of spin
 

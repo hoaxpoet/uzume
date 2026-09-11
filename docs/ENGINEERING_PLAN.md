@@ -1405,6 +1405,351 @@ only; diagnostics had no oversized non-LFS artifacts; all five legacy `.claude/s
 retained their instruction files. The four old non-completed plan entries reported for manual
 triage remain active and were not moved. No renderer, preset, application, or test behavior changed;
 the render capability registry is therefore unchanged.
+### BUG087.5 — retire the tap's forwarding role ✅ (2026-09-11, Matt: *"retire the tap's forwarding role"*)
+
+The follow-up named at BUG087.4's closeout. `LocalFilePlaybackProvider` installs **no tap**;
+`PlayheadAnalysisClock` is the only analysis source on the local-file path. Deleted: `handleTapBuffer`,
+`deliverSliced`, `interleavedScratch`, `requestedTapFrames`, the requested-vs-delivered diagnostic, the
+`removeTap` teardown step, and **`TapBufferSlicing` + `TapBufferSlicingTests`** — BUG087.3's slicing
+arithmetic, orphaned the moment the slicing loop went. Provider 615 → 500 lines.
+
+★ **Retiring a fallback means converting its cases into errors, not deleting them.** Two quiet
+degradations existed only because the tap was there to catch them, and both had to become loud:
+`PlayheadAnalysisClock.make` throws instead of returning nil (a clock that cannot be built used to fall
+back to the tap; now it would analyse nothing, and a dead visualizer against audible music is worse
+than refusing to start), and `UZUME_LF_ANALYSIS_CLOCK` is gone (with no tap to return to, `=0` could
+only produce silence — a flag that cannot do what it names is worse than no flag). Enumerating what the
+removed thing was silently absorbing is the actual work of a retirement; deleting the call site is not.
+
+Streaming untouched — different capture path (`AudioHardwareCreateProcessTap`).
+
+### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ M7 PASSED, default-on, BUG-087 RESOLVED (2026-09-11, Matt: *"I like it. It's punchy."*)
+
+**Why this and not the cheaper option.** The ~145 ms on every continuous primitive decomposes into
+band smoothing (τ 77 ms bass / 116 ms mid-treble, `BandEnergyProcessor.instantSmoothers`) plus
+~40–60 ms of real transport. Shortening the smoothers is hours of work against a session of
+architecture — and Matt declined it: *"i don't like that the smoothing constants will change the
+feel of every preset - too risky."* That is a D-004 judgement (smooth continuous energy is what
+makes visuals feel locked to music) and it is his to make.
+
+**The path this targets is the one he is actually testing on.** The session behind *"still feels
+slightly out of sync"* (`2026-09-10T22-07-34Z`) is a LOCAL FILE at **10.1 Hz**, not streaming.
+
+#### The defect is CADENCE, not staleness — and that is a correction
+
+`FFTProcessor.process` fills its window from `sourceOffset = max(0, samples.count - fftLength)` —
+**the NEWEST 1024 samples of each delivered buffer**. So audio is not stale when it arrives; a
+buffer is analysed at its own leading edge. The defect is that nothing happens between arrivals:
+every `FeatureVector` field freezes for ~100 ms, which adds **~50 ms of lag on average** (uniform
+over the window, up to 100 ms) and shows as a visible 100 ms staircase. Any design premised on
+"the audio is old when we see it" would be aimed at the wrong thing.
+
+#### Design
+
+In `.localFilePlayback` mode **only**, drive `AudioInputRouter.onAudioSamples` from a file-reading
+clock at render rate instead of from the tap callback.
+
+- **Source:** the already-decoded `AVAudioFile` held by `LocalFilePlaybackProvider`.
+- **Position:** `AVAudioPlayerNode.playerTime`, smoothed by the existing `PlaybackClockSmoother`
+  (LFSTEM.1d) — which exists precisely to dead-reckon between coarse ticks, is already gated by
+  `PlaybackClockSmootherTests`, and was built after a first version rewound the position on 27 of
+  1,871 frames.
+- **Each tick** reads the 1024 samples ENDING at the playhead and calls the same callback, so
+  **the MIR chain is untouched** — `onAudioSamples` is a single funnel and every analyzer
+  downstream is unaware of the change.
+
+**Precedent, not invention:** LFSTEM.1 already replaced live stem separation on this path with a
+pre-analysed series sampled by playback position. This is the same move for MIR — *"a pre-analysed
+series is an array lookup and is not bounded by audio arrival, which is the advantage LFSTEM.1
+created and has not spent."*
+
+**Expected win, from the measured basis:** cadence 10 Hz → ~60 Hz; cadence-induced lag ~50 ms →
+~8 ms; the 100 ms staircase disappears. It does **not** touch band smoothing (τ 77–116 ms), and it
+does **not** affect streaming, which already runs at 58.8 Hz through a different capture path.
+Honest ceiling: this recovers ~40–50 ms of ~145 ms on the local path, plus the staircase.
+
+#### Risks that must be gated, not assumed
+
+- **Playhead accuracy is the whole thing.** If the read position drifts from what is audible, the
+  analysis desynchronises — which is *worse* than being uniformly late, because a constant offset
+  is at least consistent. Needs a drift gate, not just the smoother.
+- **File IO off the render path.** 1024 frames per frame is small, but it must not run on the audio
+  or render thread; a read-ahead buffer is required.
+- **Check the tap's other consumers before retiring it.** `SilenceDetector` is fed from the router
+  callback and `SignalHealthMonitor` watches the chain. Removing the tap's role without checking is
+  the BUG-070 shape — the same "check every consumer first" step LFSTEM.2 had to do.
+- **Loop and seek.** `scheduleFileLoop` restarts the file; the clock has to follow, and a
+  restart-with-a-stale-position is a silent desync.
+
+#### Verification criteria (written BEFORE the fix, per the defect protocol)
+
+- **Automated:** a local-file session's feature-change rate ≥ 50 Hz, measured the way BUG-087's
+  evidence was — how often a `FeatureVector` column actually CHANGES across render rows, not how
+  often the analyzer is called. BUG087.3 shipped a regression test asserting `hz >= 40` from *slice
+  count* that passed while the live rate was 16.4 Hz; the metric must be the observed one.
+- **Automated:** read-position-vs-audible-position drift bounded across a whole file, including a
+  loop boundary.
+- **Manual:** Matt's M7. This changes what every preset sees on the local path; a ~6× change in
+  update rate is not a silent change.
+
+#### Built — what landed, and the one thing the design did not anticipate
+
+`PlayheadAnalysisClock` (80 Hz, own queue) + `LoopingFileReader` (bounded 1 s read-ahead, absolute
+frame addressing that wraps at EOF), wired into `LocalFilePlaybackProvider._startLocked` behind
+`UZUME_LF_ANALYSIS_CLOCK=1`. Flag off, nothing is constructed and the tap forwards as before.
+
+| | produced | **OBSERVED** at 59.8 fps | delivery gap | bunched |
+|---|---|---|---|---|
+| tap (today) | ~47 Hz sliced | **10.01 Hz** | mean 99.8 ms | all slices |
+| playhead clock | 80.6 Hz | **59.2 Hz** | median 12.1 ms | **0/237** |
+
+Position gate, 3.32 laps of a looping file: `backwards=0, behind-player=0, beyond-band=0, max lead
+10.7 ms`.
+
+**★ 80 Hz, not 60 — the tick rate is a gate decision, not a taste one.** What is measured is how many
+distinct values a ~59.8 fps sampler can tell apart. Two near-equal rates beat against each other and
+leave render frames empty; 12.5 ms inside a 16.7 ms frame does not.
+
+**★ The design assumed an app-layer `dt` change would be needed. It is not, and the reason is worth
+keeping:** the FFT never runs on the callback's samples. `makeAudioSampleCallback` writes them into the
+`AudioBuffer` ring and reads the newest 1024 frames back out of it — so the analysis WINDOW and the
+callback's HOP were already decoupled. Delivering hop-sized spans keeps a full window *and* makes
+BUG087.2's `frames / rate` exactly the playhead advance, which is what a seconds-based follower needs.
+The one-funnel property held all the way through: zero changes to `UzumeApp/`.
+
+**M7 PASSED on `2026-09-11T01-22-10Z`** — *"I like it. It's punchy. Not exact, but close."* Measured
+on that capture: bass **10.01 → 59.77 Hz** (mid 59.61, treble 59.20, centroid 59.66, flux 59.34)
+against a 59.83 fps render — **5.97×**, the slowest column changing on 99 % of rendered frames. Clock
+inverted to default-on; `UZUME_LF_ANALYSIS_CLOCK=0` forces the tap back.
+
+★ **Option A's question was moot, and finding that out was the cheap check I nearly skipped.** The
+goldens never see this clock: `PresetRegressionTests` renders from fixtures through the harness, which
+never constructs `LocalFilePlaybackProvider`. The full suite with the clock default-on moved nothing —
+1956 tests, zero goldens regenerated. Before agreeing an ordering for a regeneration, check whether the
+changed code is in the golden path at all.
+
+★ **A metric stopped being able to measure its own subject.** `recordRawTapSamples` is inside the
+funnel, so `raw_tap.wav` is now the CLOCK'S input, not the tap's output — VisualAudioOffset measures
+analysis→row on this path, not capture→row. Its columns also sit below the correlation floor on both
+sessions. It did not show the win and could not have. Re-derive its reference before quoting it.
+
+**The residual is named, not forgotten:** *"not exact, but close"* is `BandEnergyProcessor`'s τ 77/116 ms,
+declined at design (*"too risky"*) and untouched here. Next lever, D-004 trade, not a defect.
+
+**Superseded — the ordering call that is no longer needed. Matt, 2026-09-10: OPTION A, he watches
+first, goldens after.** Nothing is regression-locked to a look he has not approved; the goldens are regenerated only
+once he has said the new rate looks right. The reason is PR.19's: Nebula's old goldens were identical
+across all three fixtures, having locked in a preset drawing almost nothing — a golden only guards a
+regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN until the M7 lands.
+
+**One capture closes the rest.** The VisualAudioOffset before/after table could not be produced from
+`2026-09-10T22-07-34Z`: every continuous column there prints ⚠ TOO WEAK TO READ (`bass` r −0.058,
+`bassDev` r −0.008, `mid_dev` r 0.042), and only `transient_rise` is readable at +45 ms / r 0.184. A
+difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
+closes both the session rate gate and the offset table, and it is the same run as the M7.
+
+### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
+
+**Matt, on the PR.21 streaming build:** *"audio sync is still a little loose, not perfectly
+synced."* BUG-087's measurement split that into two terms — **~145 ms of transport** (engine work,
+still open) and **~130 ms of feature shape** (preset-side, this increment).
+
+**The shape term is `spectral_level_rise`'s own design, not a defect.** It is a fixed-lag
+difference — `level(t) − level(t−0.15)` on a level pre-smoothed at τ 40 ms — so it stays elevated
+until the lagged term catches up and its PEAK sits inside `[t, t+0.15]`. Nebula's event layer
+(PR.21) was keyed to it because it is the most event-SHAPED primitive available; nobody had checked
+*when it peaks*.
+
+**`transientRise` is a sibling, not a retune** — `levelRise` has consumers (FTR.24) whose behaviour
+must not move under them. Same statistic, shorter windows: pre-smooth τ **15 ms**, lag **40 ms**.
+
+#### Every constant came from measurement, and two of them inverted my assumptions
+
+**Timing** — both arms computed from the same `raw_tap.wav` and correlated against offline onset
+strength, so neither carries pipeline delay and the difference is purely detector shape:
+
+| detector | lag (streaming / local) | r |
+|---|---|---|
+| 40 ms smooth / 150 ms lag (the parent) | **+150 / +145 ms** | 0.225 / 0.166 |
+| 20 / 60 ms | +45 / +50 ms | 0.297 / 0.207 |
+| **15 / 40 ms** | **+30 / +30 ms** | 0.327 / 0.224 |
+| 10 / 25 ms | +20 / +20 ms | 0.339 / 0.235 |
+
+Shorter is **both faster and better correlated** — not the trade I expected. 15/40 over the faster
+10/25 because a 25 ms lag is 1.5 render frames at 60 Hz, too tight against frame-timing jitter, for
+10 ms.
+
+**★ And the dB band had to be re-calibrated, which the correlation could not have told me.**
+Cross-correlation is **scale-invariant** — a detector that never fires still reports a lag. Measured
+on real audio, the short window at the parent's 2–7 dB band fires **~3× more often** (1.87/s
+streaming, 1.66/s local against the parent's 0.53 and 0.67), because real transients are sharp
+enough that a 40 ms window captures nearly the whole rise. **4–10 dB** brackets the parent's fire
+rate on both sessions (0.63 / 0.57) — and the timing win survives the higher threshold, still
+**+30 ms**. Only *when* it peaks changes; *how often* it fires does not.
+
+#### Three wrong unit tests before a right one — recorded, because the mechanism is the lesson
+
+The synthetic probe kept measuring the wrong quantity:
+
+1. **A +10 dB step** — saturates the 2–7 dB band within two frames at *any* window. 33 ms apparent
+   lead. This is precisely the failure `SpectralAnalyzer+Density` already warns about for the old
+   `LevelRiseTests`.
+2. **A 250 ms ramp** — the opposite error: too gradual, so a 40 ms window spans only 1.6 dB and
+   never leaves the floor. The test asserted the sibling was *broken*.
+3. **A 50 ms burst** — both filters' differences return to zero at the same instant and the shared
+   release dominates. 17 ms.
+4. **A SUSTAINED step, measuring how long each stays elevated** — the parent keeps comparing now
+   against quiet-150-ms-ago while the sibling stops at 40 ms. **150 ms of separation**, matching
+   the mechanism (150 − 40, plus quantisation).
+
+The real-material evidence is the cross-correlation above; the unit test exists so the ordering
+cannot silently invert if the constants ever drift together.
+
+#### Degradation, stated rather than assumed
+
+`lagFrames` is a duration, so at the 10 Hz local-file rate (BUG-087) a 40 ms lag rounds to **one
+frame = 100 ms**. `transientRise` is never worse than `levelRise` there — gated by
+`degradesGracefullyAt10Hz` — and is ~120 ms better wherever the analysis rate is high. That is a
+property of the input, not of the statistic. ⚠ Also: the offline A/B computes from `raw_tap.wav` at
+5 ms in **both** cases, so it isolates detector shape and says **nothing** about rate invariance.
+The two sessions agreeing there is a consequence of the method, not evidence about the paths.
+
+#### Wiring
+
+FeatureVector float 55 (`_pad55` reclaimed) + both MSL sites + `SessionRecorder` CSV +
+`SessionReplayHarness` + `AudioRoutePrimitives`. Nebula's `core_pulse` and `ring_event_push` routes
+now name `transientRise`. QG.1 records a FIXTURE GAP — ⚠ **unlike `track_hue_anchor01`, this one IS
+verifiable**: it varies within a track, so regenerating the three route-coverage fixtures would gate
+it properly. It is listed only because the fixtures predate the column and the source audio is not
+in this checkout. A TODO with a known fix, not a permanent hole.
+
+**Available to every preset**, not just Nebula — Membrane, Meniscus, Mitosis and Plasma all carry
+sync complaints in the roster review.
+
+⚠ `AudioFeatures+Analyzed.swift` is now **at its 400-line cap**, hit twice in one day. Float 56 is
+the last pad; the next field needs the struct split before it needs a slot.
+
+### PR.21 — Nebula: make the coupling legible 🔨 code complete, M7 owed (2026-09-10)
+
+**Matt, on the PR.20 build:** *"looks good, but I'm not getting a clear understanding of how the
+visuals are tied to the audio."* Fidelity and activation were fixed at PR.19/PR.20; **legibility**
+was not — which is the roster note's *"needs better sync with music"* restated from the other side.
+
+#### Diagnosis, measured on session `2026-09-10T17-13-10Z`
+
+| # | Mechanism | Evidence |
+|---|---|---|
+| 1 | **The core glow — the biggest, brightest thing on screen — barely moved.** Driven by `presence = (bass+mid+treble)×0.5` on AGC-normalised bands. | `presence` measured **mean 0.157, max 0.375** — never near the top of its own range. So core brightness spanned 0.30→0.51 and radius 0.045→0.058 across a whole track. Effectively static. |
+| 2 | **The beat was invisible.** | It moved the core radius by 0.012 UV and affected **no brightness anywhere**. |
+| 3 | **Nothing marked a moment.** Ring on the spectrum (fast, everywhere), core on a slow level, haze on arousal over ~10 s. | Motion in every layer at all times reads as *busy*, not *responsive*. |
+| 4 | **The ring's own motion was shimmer, not response.** | Frame-to-frame volatility 0.40× the mean even after PR.19's log aggregation, so a loud moment appeared and vanished inside a frame or two. |
+
+**★ And the reflex fix would have been wrong.** Turning up the beat is the obvious move, and
+`beatComposite` measured **above 0.9 on 42.6 % of frames and above 0.5 on 70.7 %** — it is a pulse
+CLOCK, not an accent. Amplifying it yields a brighter constant, not a visible event. The
+FeatureVector's own comment says the `beat_*` fields score *below chance* against real audible
+events. **`spectral_level_rise` is the field documented for this**, and it measures event-shaped on
+the same session: mean 0.201, above 0.5 on **12 %** of frames, near zero on **31 %**.
+
+#### What landed
+
+- **An event layer.** `spectral_level_rise` drives a core flash (radius **and** brightness) and a
+  small outward push on the whole ring, so a landing is one gesture across the frame. The push is
+  deliberately small — the ring's shape is the thing being read, and this is an accent on it, not a
+  replacement (D-004). The dead `core_pulse ← beatComposite` route was **removed** rather than left
+  declared, because a sidecar that claims a route the shader no longer reads is a lie the gate
+  cannot catch.
+- **The core got a real range**, stretched against the range `presence` actually occupies.
+- **Peak-hold on the ring**, via a new `NebulaState` — fast attack (τ 25 ms), slow release
+  (τ 400 ms), so a spike shoots out and *decays* instead of flickering. Coefficients are
+  `1 − exp(−dt/τ)`, frame-rate independent: a fixed per-frame coefficient would make the release
+  twice as fast at 120 Hz as at 60, which is the BUG-096 class.
+
+**Nebula is the first `direct` preset with a state buffer.** Peak-hold needs the previous frame and
+the direct path carries no spectrum history (`SpectralHistoryBuffer` holds MIR scalars). The slot-6
+mechanism already existed — `RenderPipeline+DirectDraw` binds it — so this is `GossamerState`'s
+shape applied to a new paradigm, plus a row in `StatefulRuntimeRegistry`.
+
+**★ And it made the preset CHEAPER: 6.30 ms, exactly its recorded baseline, now cheaper than the
+two UNCHANGED direct presets** (Plasma 6.57, Waveform 7.43) in the same run. The log-band
+aggregation used to run **per pixel** — ~2 M fragments each re-deriving the same 256 bands. Doing it
+once per frame on the CPU paid for the peak-hold and then some.
+
+#### A diagnostic that paid for itself on first use
+
+`PresetLoader.compileLibrary` logged `"compilation failed for <private>: <private>"` — `os.Logger`
+redacts interpolated values by default. **The consequence is worse than the missing message: a
+preset that fails to compile is simply ABSENT from `PresetLoader.presets`, so every suite
+parameterised over the loaded presets passes VACUOUSLY.** Three sessions have now lost time to it
+(Gossamer's `half` keyword shadow, PR.19's, and this one), each surfacing only as a downstream
+`presetNotFound`. It now writes the full source plus the diagnostic to a temp file and logs the path
+`.public`. The very next run read *"program_source:5873:24: error: use of undeclared identifier
+'event'"* — a declaration placed below its first use.
+
+#### Owed / known limits
+
+- **M7.** Whether the event layer reads as *"that happened because of that"* is Matt's call.
+- **The regression goldens render Nebula with ZERO bands.** `PresetAcceptanceTests.renderFrame`
+  binds a zeroed placeholder at slot 6, so the golden encodes a band-less picture. Its three
+  fixture hashes are still distinct, so the gate can tell them apart, but it does not exercise the
+  ring. Shared with every other slot-6 preset; recorded, not worked around.
+- QG.1 still has **no primitive for the spectrum**, so the ring's shape remains ungated.
+
+### PR.20 — the per-track hue anchor 🔨 code complete, M7 owed (2026-09-10, Matt: *"do the per-track rotation"*)
+
+**The ask.** Matt, on Nebula's palette: *"go with the wider sweep, plus per-track rotation."* The
+sweep shipped in PR.19; the rotation did not, because nothing track-scoped could reach the preset.
+
+**Why it needed a new field, and the two derivations that were measured FALSE first.** Per-track
+variation already existed — `lumenTrackSeedHash` (an FNV-1a of `title|artist`) seeds Lumen Mosaic
+and Skein — but it reaches them through **per-preset state buffers**, which a `direct` preset does
+not have. So Nebula, Plasma, Waveform and Spectral Cartograph had no track-scoped input of any kind.
+
+Before adding to the GPU contract, two stateless derivations were tried against a real session:
+
+- `accumulated_audio_time − track_elapsed_s` *looks* like "the accumulated time at track start",
+  which would be constant within a track. **It is not** — the two clocks advance at different
+  rates (8.10 s against 60.10 s over one capture, ~1:11), so the difference is a ramp.
+- No other FeatureVector field is constant within a track and varies between them; mood and the
+  tonal family all drift mid-track.
+
+**What landed.** `FeatureVector` float 54 (`_pad54`, reclaimed — the same move DYN.1b/DYN.2 made on
+51–52 and D-158 made on `_pad7`, so ORDER IS THE CONTRACT holds and the struct size is unchanged):
+
+| Layer | Change |
+|---|---|
+| `FeatureVector` + MSL preamble | `trackHueAnchor01` / `track_hue_anchor01`, 0…1, 0 = no identity known |
+| `MIRPipeline` | `setTrackHueAnchor(_:)` — same lifecycle as `setBeatGrid` / `setLoudnessProfile`; clamps, and sends the whole non-finite class to 0 |
+| App | Published from `resetStemPipeline(for:caller:)`, the single funnel all four track-change call sites route through, **reusing** `lumenTrackSeedHash` rather than hashing again — two seeds from the same source are two seeds that can silently disagree |
+| `SessionRecorder` CSV | New `track_hue_anchor01` column, inserted BEFORE `stem_series_pos_s` because that one is optional and carries the row's terminating newline |
+| `SessionReplayHarness` + `AudioRoutePrimitives` | Carried and mapped, so QG.1 can see it |
+| `Nebula.metal` | The whole hue band rotates by the anchor |
+
+**Cleared on the complementary path.** `setTrackHueAnchor(0)` fires when identity is nil — this is
+CLAUDE.md §What NOT To Do in its plain stored-property form, and an uncleared anchor would leak the
+previous track's palette across a boundary. `clearingTakesEffect` gates it.
+
+**The test that is actually worth having.** An anchor that is stable but *identical for every
+track* passes every single-track test and produces exactly the bug this feature exists to prevent.
+`anchorsSpreadAcrossTracks` runs twelve real identities (Low's eleven plus one) through the app's
+own hash and asserts they land on distinct anchors occupying ≥5 of 10 deciles.
+
+**QG.1 records a FIXTURE GAP rather than a pass.** The route-coverage fixtures predate the column,
+so `columnsPostdatingFixtures` now lists it and the gate prints *"postdates love_rehab; route
+UNVERIFIED here"* every run. Re-capturing a fixture would not help: the anchor is constant within
+any one track by construction, so the property that matters is cross-track and is covered by the
+unit test instead. **A route that cannot be verified by the gate says so out loud.**
+
+**Trade-off worth naming.** With a full 0…1 rotation, Nebula's palette is no longer guaranteed cool
+on every track — some anchors land warm. That is the point of the feature, but it makes the
+sidecar's `color_temperature_range` (a *planner* hint: `PresetScorer.moodSubScore` matches its
+midpoint against a track's valence) a less accurate description of what the preset will actually
+look like. Bounding the rotation to the cool half would preserve it at the cost of variety —
+Matt's call if he wants it.
+
+**Available to every preset, not just Nebula.** Aurora Veil (*"purple is fleeting"*), Glaze
+(*"more mixture and blending of colors"*) and Dragon Bloom all carry colour-variation asks and can
+now read the same field.
 
 ### PR.19 — Nebula deep dive 🔨 code complete, M7 owed (2026-09-10, Matt: *"proceed with nebula"*)
 
@@ -9534,6 +9879,360 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
+
+### Increment ALFVEN.3g — the fixed exposure was calibrated for one energy level ✅ (2026-09-11)
+
+**Matt's pick** from the three certification-barrier options: chase the display headroom ALFVEN.3e
+found before building any event layer.
+
+**The defect.** `displayExposure` is a constant 0.085, calibrated once at ALFVEN.4d against a single
+reference frame. `aJ = clamp(|J| * exposure, 0, 1)`, so as the bass energises the field an ever-larger
+share of the frame pins at 1.0 and stops carrying information. film.py never had this problem: its
+`autoexp` divides by `1 / (p99.6 - p2)` of |J|, recomputed per frame. 4d substituted a constant
+because a fragment cannot do a percentile reduction.
+
+Measured at steady state, averaged over 300 frames:
+
+| drive | clipped (avg / peak frame) | exposure film.py would use |
+|---|---|---|
+| 5 | 0.23 % / 0.83 % | 0.1095 |
+| 11 | 2.26 % / 5.60 % | 0.0505 |
+| 16.5 | 6.27 % / 16.06 % | 0.0384 |
+| 18 | 8.61 % / 18.85 % | 0.0336 |
+
+The correct exposure spans **0.11 → 0.034**, a 3.3× swing. The fixed constant is right only near
+drive 7; at drive 18 — inside the range the ALFVEN.3e map reaches — it over-exposes by **2.5×**.
+
+**And clipping does not merely waste the top, it destroys motion.** Rendered motion PEAKS at drive 18
+(4.75) and declines at 20 (4.56) and 24 (4.47), tracking clipping 8.6 → 12.5 → 17.5 %. Clipped pixels
+are stuck at white and cannot change frame to frame. That is the real explanation for the "saturation
+above 18" ALFVEN.3e recorded.
+
+**mean|J| substitutes for the percentile.** Across drive 5…24 — a 4.8× span of field energy — the
+ratio `mean|J| / (p99.6 - p2)` holds at **0.163 ± 6 %**. So the reduction the solver ALREADY runs for
+the CFL timestep yields film.py's normaliser: at drive 16.5 the proxy predicts exposure 0.0386 against
+the true 0.0384.
+
+**⚠ film.py's auto-exposure is right for STILLS and wrong for a TIMELINE.** It normalises each frame
+independently because it renders independent images; for a visualiser the brightness variation it
+removes is *signal*. Porting it verbatim measured a loud/quiet motion response of 1.25× against 1.56×
+fixed. This is a context difference of exactly the kind FA #65 permits adapting — so exposure is
+`0.085 * (1.917 / mean|J|)^beta`, with beta = 1 reproducing film.py exactly:
+
+| beta | clipped @ 18 | loud/quiet response |
+|---|---|---|
+| 0 (was) | 8.61 % | 1.56× |
+| 0.5 | 2.52 % | 1.40× |
+| **0.65 (shipped)** | **1.60 %** | **1.35×** |
+| 1.0 (film.py) | 0.47 % | 1.25× |
+
+Clipping falls steeply, the loudness cue gently. **Matt's call on the rendered frames**, not the table.
+
+**Implementation.** `alfven_exposure_reduce` / `alfven_exposure_finish` mirror `encodeCFL` — a
+field-wide atomic reduction, then one thread producing a single number. The fragment binds the result
+buffer and reads the factor ON the GPU, so the adaptation costs no readback and no sync point; the
+CPU-side prototype that proved the design read J back every frame and does not ship. The buffer holds
+a *factor* which multiplies the 4d calibration, keeping calibration and adaptation separable — the trap
+4d fell into by collapsing brightness and hue-polarity onto one constant. Polarity is deliberately left
+on the fixed scale: it is a hue signal, not a brightness one. Two fields added to `AlfvenParams`
+(Swift + Metal in the same commit, since that layout is the GPU contract). Fixed-point accumulation
+because float atomics are not universal; headroom checked at 256² × |J| 200 × 64 = 2.1e8 vs UINT_MAX.
+
+**⚠ THE HONEST RESULT: this is a quality fix, not a reactivity lever.** Rendered side by side at
+matched field state, a 17× reduction in clipped pixels is a change you have to hunt for — 8.6 % of
+pixels, scattered as thin seam cores through a busy field, is statistically large and perceptually
+small. ALFVEN.3e pitched this as "plausibly larger than this whole increment"; that was wrong, and it
+was wrong because it had been measured and never LOOKED at. What Alfvén still lacks is something that
+marks a moment.
+
+**Four instrument failures in one increment, all the same shape** — the metric silently stopped
+modelling the pipeline, and the numbers stayed plausible:
+
+1. 240-frame runs measured a transient as steady state (the curve looked linear to drive 24; it is flat above 18).
+2. Single-frame aJ sampling on a chaotic field reported 1.3 % clipped where the 300-frame average is 6.3 %, and read non-monotonic in drive.
+3. `meanPixelDelta` scales with exposure, so comparing two exposure schemes on it measured brightness — it made film.py's own auto-exposure look like a 27 % motion loss. Fixed by `relDelta` (change / frame brightness).
+4. The clip metric kept reading `displayExposure` after part of the exposure moved to the GPU, reporting the pre-fix number against a fixed build.
+
+Each caveat is now recorded inline at its metric. This is the increment's most durable output.
+
+**Pending live M7.**
+
+### Increment ALFVEN.3f — remove the brightening, keep the glow ✅ (2026-09-10)
+
+**Matt's M7** (`2026-09-10T23-25-54Z`, `chain_health` verdict **`clean`**, peak −0.13 dBFS):
+*"I don't like the brightening effect on the preset. I would remove it."*
+
+**Which brightening.** The display path has exactly one dynamic brightening term — the seam bloom's
+`col += bloomAmount * glow * tint`, driven by `trebRel`. Everything else that lifts the frame is
+static (the D-037 non-black floor, the filmic `val` curve). Measured on Matt's own capture the glow
+sat at its 0.30 constant for **65 %** of frames, pinned at the 0.85 ceiling for **5.2 %**, and spent
+**36 %** of the track above 0.30 — bimodal, pumping between the approved look and nearly 3× it.
+
+**Fix: `bloomAmount: audioBloomAmount` → `bloomAmount: displayBloomAmount`,** a constant 0.30. Not a
+new value — the exact constant ALFVEN.4f shipped, which Matt saw and signed off (*"Looks great"*,
+`2026-09-10T16-07-07Z`) **before** ALFVEN.3b wired treble to it. The line being reverted is the line
+that introduced the complaint. Everything that existed only to feed it is deleted rather than left at
+zero: `rawBloomAmount`, `audioBloomAmount`, `trebleEnvelope`, and the `bloomMaxAmount` /
+`bloomSlewPerSecond` / `trebFloor` / `trebKnee` / `trebleTau` knobs.
+
+**Post-fix flash metric: 0.0038**, with treble bursting at the p99 of Matt's capture — against 0.0124
+for ALFVEN.3d's bounded version and 0.4153 for the original strobe. The glow no longer moves at all.
+
+**The lesson worth keeping: bounding a flash makes it legal, not wanted.** ALFVEN.3d took BUG-126
+from 8.3× over the D-157 gate to comfortably under it and reported the defect fixed. D-157 compliance
+was necessary and not sufficient — Matt's objection was never to the *rate* of the brightness change,
+it was to the brightness change. A gate passing is not a person approving. BUG-126 is now resolved by
+removal rather than by bound; the mechanism is gone, so it cannot recur.
+
+**Cost, stated plainly.** Alfvén drops from **three declared audio routes to two**
+(`stirring_vigour ← bassRel`, `palette_hue_centre ← spectralCentroid`); the sidecar manifest and
+`RouteCoverageTests` are updated. §7's routing table named five routes — **three of the five have now
+failed contact with real music**: its drive amplitude was inert, its drive primitive was one-sided,
+and its treble route is removed here. The table was written from the spike's parameters rather than
+from measurement, and should be treated as a hypothesis, not a specification.
+
+This also moves the preset *away* from the reactivity direction of ALFVEN.3e. That is the right call
+anyway — a coupling the listener dislikes is worse than no coupling — but it sharpens the open
+question: Alfvén now marks no moments and has one fewer continuous route. The remaining levers are
+§7's unbuilt `barPhase01` accent and the display-mapping headroom ALFVEN.3e found.
+
+**Pending live M7.**
+
+### Increment ALFVEN.3e — the drive map had no room at the top ✅ (2026-09-10)
+
+**The question that started it.** Matt: *"how are you planning to improve the preset's musical
+reactivity — how will Alfvén behave like an accompanist to the music?"* The honest first answer was
+not "add an event layer" but "the continuous route we already have is broken in a way nobody had
+measured."
+
+**The defect.** Re-measuring the `bassRel` tau-100ms envelope over Matt's two clean captures
+(`2026-09-10T21-24-18Z`, `T19-34-42Z`; 12 925 frames, `chain_health` verdict **`clean`** on both)
+gives p05 −0.18, p50 0.00, p95 +0.26, p99 +0.49. The ALFVEN.3c window mapped those onto drive p50
+**10.5**, p95 **15.7**, p99 **16.0** — the *median* frame already at 65 % of the ceiling, and the
+loudest 5 % of a track compressed into the last 0.3 of the range. Rendered through the production
+display path, the top of the map was flat: p95 → p99 moved mean frame-to-frame motion by **0.06**.
+
+Every drop, hit and chorus rendered the same amount of motion. That is the mechanism behind
+"coupled to the signal but arbitrary to the listener" — not latency, and not a missing route.
+
+**The fix** — `bassRelShift` 0.05 → 0, `bassRelScale` 0.16 → 0.45, `driveCeil` 16 → 18:
+
+| | p05 | p50 | p95 | p99 | p95→p99 |
+|---|---|---|---|---|---|
+| ALFVEN.3c | 1.52 | 2.95 | 4.30 | 4.36 | **0.06** |
+| ALFVEN.3e | 2.15 | 3.07 | 3.88 | **4.50** | **0.62** |
+
+The baseline Matt signed off is preserved (p50 +4 %, below perception), the top of the range is
+marginally brighter, and the loud moments are **ten times** more separated from each other.
+
+**⚠ The ceiling is not the lever.** The first plan was to raise `driveCeil` to ~21 and give loud
+moments room above the current top. Measured at steady state, that is wrong: the rendered response
+saturates near 18 (drive 16 → 4.37, 20 → 4.55, 24 → 4.47), so range has to be won by spending 0…18
+better. Two traps found on the way:
+
+- **A 240-frame run is still energising.** At 240 frames the curve looks linear all the way to 24
+  (1.20 → 1.53); at steady state it is flat above 18. The first measurement was of a transient.
+- **The saturation is in the DISPLAY, not the physics.** From drive 16 → 24 the field keeps
+  energising — `wRMS` 6.61 → 11.16, **+69 %** — while rendered motion moves +2 %. The top of the
+  solver's dynamic range is being discarded by the J → display mapping. `displayExposure` /
+  `polarityScale` is an unexplored reactivity lever, plausibly larger than this one.
+
+**BUG-127 — `ALFVEN_DRIVE` had been inert since ALFVEN.3.** `AlfvenSolverConfiguration.drive` was
+written by the initialiser and never read; ALFVEN.3 replaced it with `audioDrive` and left the field
+behind. The stability sweep in this increment returned byte-identical numbers for drive 16, 18 and
+20, which is what exposed it. **Every `ALFVEN_DRIVE=` measurement taken since ALFVEN.3 is void**,
+including the film harness's documented "`ALFVEN_DRIVE=0` gives an unforced decay run" — it did not.
+The dead field is removed and both harnesses now pin `ALFVEN_DRIVEFLOOR`/`ALFVEN_DRIVECEIL`.
+
+**Stability re-checked at the new ceiling** with a knob that works: drive 18 → `wMax` 67.4, 0.00 %
+clamped against a clamp of 200 (~3× margin); 24 is still clean at 94.2. Drive 16 reproduces the
+previously documented `wMax 57` exactly, which is the cross-check that the new override is live.
+
+**New diagnostic — `ALFVEN_VIGOUR`.** Mean per-frame absolute pixel delta on the production display
+path at a held `bassRel`; the metric that made every decision above. Deterministic (repeat runs are
+bit-identical, so differences are signal, not noise). Defaults to frames 600–900 because anything
+shorter measures the seed transient.
+
+**Regression gate:** `driveMapSeparatesLoudMoments` — CPU-side, asserts the median is not parked
+against the ceiling, that p95 → p99 spans more than 1.0 of drive, and that p99 is not pinned.
+Verified to FAIL on the ALFVEN.3c constants with exactly that diagnosis.
+
+**Not done, and not claimed:** this is a measured improvement to a continuous route, not the event
+layer. Alfvén still marks no moments. Pending live M7 — a fidelity claim on this needs Matt's ears,
+not a pixel-delta table.
+
+### Increment ALFVEN.3d — BUG-126, the seam bloom strobed ✅ (2026-09-10)
+
+**Matt's M7** (`2026-09-10T21-24-18Z`, `chain_health` **`clean`**): *"There's a strobing effect that
+is clearly attached to the music, but the timing is loose and the effect itself is jarring due to the
+bright white light that the strobing emits. It is also sporadic."*
+
+Measured max frame-to-frame Δluma **0.4153** against D-157's gate of **0.05** — 8.3× over, 15 frames
+in breach. Not pixel clipping (0.0 % of frames carried a pixel > 250/255): the whole frame jumped.
+Cause was ALFVEN.3b's own change — film.py's `amt` reaches 1.66 multiplying a whole-frame additive
+glow, while §7's ~30 ms treble τ moves the envelope 43 % toward target in a single frame at 60 fps.
+
+Fixed with `bloomMaxAmount` 0.85 + `bloomSlewPerSecond` 6.0/s, calibrated on the production path
+(unbounded 0.1041 Δluma / 3 frames over → shipped 0.0124 / 0 over). `ALFVEN_FLASH=1` added as the
+regression guard; it renders **every** frame, because a sampled harness cannot see a single-frame
+strobe. Filed BUG-126 (P1).
+
+**Only the brightness half of Matt's report was fixed.** The timing is still loose and the effect
+still sporadic: `trebRel` fires on incidental treble — hi-hats, cymbal wash — so it can be tightly
+coupled to the signal and still feel arbitrary. That is ALFVEN.3e's finding generalised, and the
+remaining lever is §7's unbuilt accent route on `barPhase01`.
+
+(This row was missing — ALFVEN.3d's closeout updated `KNOWN_ISSUES.md` but not the plan. Added at
+ALFVEN.3e.)
+
+### Increment ALFVEN.3c — "only a loose connection is perceived" ✅ (2026-09-10)
+
+**Matt's M7 on the first fully-routed build** (`2026-09-10T20-01-22Z`): *"Looks good. Only a loose
+connection is perceived between the visuals and audio signal."*
+
+**⚠ Chain verdict on that capture was `degraded`, not clean** (`tap_reinstalls(1)`, peak −5.99 dBFS
+against −0.13 on the local-file runs) — flagged per ASH.2 / D-184 rather than folded in silently.
+Checked before using it: the system-audio tap installed dead (rms 0.000000), reinstalled, and was
+**healthy at −6.0 dBFS from 20:02:21** — 7 s into the 88 s Alfvén window. So the finding below
+rests on ~81 s of healthy signal, but the verdict is stated.
+
+**What I now believe about why it read loose** — and it was not latency, which was my first guess.
+`bassDev` is a ONE-SIDED deviation from a running average, so steady music with no bass surprises
+reads as **zero**: 62 % of frames in that window were exactly zero. Delivered drive therefore sat
+**below 1 — the silence look — for 40 % of the music**. The field was rendering its relaxed
+two-lobe state while a track played. That is not a loose coupling; it is the coupling being
+*absent* for much of the time, which is what the eye reports as disconnection.
+
+**Fix: `bassRel`, the two-sided sibling.** Still a D-026 deviation primitive, so FA #67 holds — one
+primitive on the layer. Measured on the same window: **0 % below 1** (was 40 %), p50 9.44, p95
+14.55, still 3 % near the ceiling. Across the 7 canonical fixtures the map puts quiet at drive 0.8,
+median 9.8, loud 15.8. Rendered through the production path, the silence look is now reserved for
+genuinely quiet passages while steady music shows a stirred, seam-rich field.
+
+**This is the SECOND thing in §7's row for this route that did not survive real music.** ALFVEN.3
+found its amplitude inert (two to three orders too small); this finds its primitive one-sided.
+The design's routing table was written from the spike's parameters, not from measurement.
+
+**Both replay gates caught their own trap again:** `SessionReplayHarness` carried neither `trebRel`
+(3b) nor `bassRel` (here), so a replay would have measured each new route against ZERO. Mapped and
+registered both times. Worth noting the gate that keeps firing is the one testing the HARNESS, not
+the preset.
+
+**Still not addressed — the other half of "loose".** There is no event-locked accent: every route
+is a slow continuous envelope, and §7's per-bar reconnection flash (`barPhase01`, with 4-bar
+cold-start suppression) remains unimplemented. Continuous energy is the correct PRIMARY driver
+(the audio hierarchy is explicit), but a bounded per-bar event is the layer that produces crisp
+perceived sync. That is the next lever if the coupling still reads loose after this.
+
+**And the re-seed is still on a free-running 2 sim-second timer**, uncorrelated with the music — so
+the single most salient visual event in the frame currently has no musical cause. §7 routes it to
+section boundaries. This remains blocked on Matt's cadence decision and is a plausible contributor
+to the same complaint.
+
+### Increment ALFVEN.3b — the seam-bloom route was dead on arrival ✅ (2026-09-10)
+
+**Found by reviewing Matt's first audio-driven capture** (`2026-09-10T19-34-42Z`, local file,
+chain verdict **clean**, ~60 fps sustained, Alfvén ~95 s).
+
+**The bloom route never modulated.** ALFVEN.3 ported film.py's `sizzle = trebRel - 0.6`
+verbatim. Our `trebRel` is a relative deviation centred on zero — measured p05 −0.009 / p50 0.000 /
+p95 0.009 / p99 0.017 across 8 sessions — so `trebRel - 0.6` clipped to zero on **every frame** and
+`amt` sat at its 0.30 floor for **100 %** of the capture. Recalibrated to the measured window
+(`trebFloor` 0.002, `trebKnee` 0.017), keeping film.py's `0.30 / 0.85 / 1.6` shape: on the same
+capture the bloom now modulates on **38 %** of frames, p95 0.87, reaching film.py's 1.66 ceiling,
+with the median correctly resting at the floor through quiet passages.
+
+**⚠ The gate did not catch this, and that is the lesson.** `RouteCoverageTests` was green
+throughout: it asserts the **primitive fires**, not that the **consumer responds**. A declared
+route can be green and visually inert. The check that found it was reading the delivered value —
+`amt` — not the input. This is the `feedback_the_metric_is_a_model` failure in its exact shape:
+measuring a primitive correctly says nothing if the consumer's arithmetic discards it.
+
+**It is also an inconsistency in my own diligence, worth naming.** At ALFVEN.3 I explicitly checked
+that `spectralCentroid` was not on film.py's assumed scale and renormalised it — then ported the
+treble constant verbatim without applying the same check. One primitive was verified, the sibling
+was not.
+
+**What the capture confirms** (per-route firing evidence, D-179):
+
+| route | primitive | delivered |
+|---|---|---|
+| stirring_vigour | `bassDev` | drive p50 **5.02**, p95 15.85, max 16.0 — full span exercised |
+| seam_bloom | `trebRel` | was 0.30 flat; now p95 0.87, max 1.66, 38 % above floor |
+| palette_hue_centre | `spectralCentroid` | p50 0.125 → mid-traverse; anchored on 0.72 |
+
+**Motion verdict: PASS**, on the audio-driven run — and better than the unrouted one: mean
+inter-frame diff 4.14 (was 2.89, i.e. more motion, as bass-driven stirring should give) with spikes
+DOWN to **0.44 %** from 1.5 %. Sampled frames show the bass route working: dense braided seams at
+high drive, broad soft-seamed lobes when the bass eases, palette holding magenta↔teal throughout.
+
+**Known, not fixed:** the drive map saturates — p95 lands at 15.85 of a 16.0 ceiling, so ~5 % of
+frames are pinned and stop responding to further bass. Raising `bassKnee` would trade that against
+a lower median drive (knee 0.20 would put p50 at 2.6 instead of 5.0). Left as-is pending a live
+judgement of whether the loud passages feel flat.
+
+### Increment ALFVEN.3 — audio routing (3 of 5 routes) ⏳ (2026-09-10)
+
+**Done-when (design §7):** five routes declared and green on `RouteCoverageTests`; M7. **Three
+continuous routes land here**; the per-bar accent and the section-boundary re-seed do not — see
+below.
+
+**⚠ §7's PRIMARY ROUTE WAS INERT, and that is the finding.** `bassDev` → stirring vigour routes to
+`drive`. Measured before writing any routing code: sweeping drive 0 → 0.080 moves J std by **0.08 %**
+and mean luma not at all, at both re-seed cadences. The response only begins near drive ≈ 1 and
+spans the reference set by ≈ 16. So the design's nominal **0.012…0.020 is two to three orders of
+magnitude too small** — a number inherited from the spike, where it is equally inert (putting our
+forcing into the spike changed its result by nothing at ALFVEN.4c). Nobody had checked the preset's
+primary audio lever moved the picture.
+
+Recalibrated to **0.02…16**, the route does exactly what §7 promises and the span lands on the
+reference set: silence → two broad lobes with soft seams (`05_atmosphere_relaxed_state`), p95 →
+thin seams braided across the frame (`01_macro_braided_lobes`). Stability checked at the ceiling:
+**0.00 % clamped**, wMax 57 against a clamp of 200.
+
+**Routes (one primitive per layer, separate timescales — FA #67):**
+
+| layer | primitive | τ | calibration |
+|---|---|---|---|
+| stirring vigour → seam density | `bassDev` | 100 ms | soft-saturated at the p75 knee (0.094) |
+| seam bloom / sizzle | `trebRel` | 30 ms | film.py's `0.30 + 0.85·sizzle`, restored |
+| palette hue centre | `spectralCentroid` | 2.5 s | renormalised + anchored, see below |
+
+**Calibrated against ~20k frames** — 7 canonical fixture tracks plus a live capture. Raw `bassDev`
+is **zero for 58 % of frames** (a one-sided deviation), and a τ-100 ms envelope sits at p50 0.033 /
+p95 0.296 / p99 0.647. A linear map from zero would park the field at its silence look through most
+of a track, so the drive map is `tanh(env/knee)`: tuned against p99, never against 1.0 (D-026).
+Verified end-to-end through the production `update(features:)` path — p99 lands where p95 does, so
+rare spikes saturate rather than blow out.
+
+**The palette keeps the ALFVEN.4e time drift, deliberately against a literal reading of §7.**
+Centroid alone would have deleted Matt's approved feature on the tracks that need it most: its
+within-track span is median 0.35 of the range but only **0.16 on `there_there`** and 0.27 on
+`10_-_Weeping_Wall` — frozen. So centroid PLACES the palette and the drift GUARANTEES motion, as a
+convex blend that cannot leave the referenced family. FA #67 holds: one audio primitive on the
+layer; wall-clock is not a primitive.
+
+**`hueAnchorBias` on Matt's "anchor it harder toward 0.72".** At the first build only **5.4 %** of
+the time sat within 0.03 of his palette (mean hue 0.581 — it read green). Modelled against the real
+centroid distribution: bias 1.0 → 5.4 % / 30.2 % reaching past 0.55; **3.0 → 39.2 % / 9.3 %**;
+5.0 → 69.3 % / 5.7 % (anchored but nearly static). 3.0 makes 0.72 the home palette without
+collapsing the cycling he asked for. Note `centroidWeight` is NOT the knob for this — both terms
+average ~0.4, so trading one for the other leaves the mean where it was.
+
+**Gates:** `RouteCoverageTests` — every declared route fires on the canonical fixtures — **green**.
+`ReplayHarnessRouteCoverageTests` caught a real trap first: `SessionReplayHarness` did not carry
+`trebRel`, so a replay would have measured the bloom against **ZERO**; mapped and registered.
+
+**NOT done — the remaining two §7 routes:**
+- **Reconnection flash ← `barPhase01`** (accent, per bar) with 4-bar cold-start suppression.
+- **Re-seed ← section boundary** (structural). This one is **blocked on a product decision**: §7
+  wants re-seeds to be rare structural events with a ~35 s ceiling, while `cycleSeconds` is
+  currently **2.0 sim s**. A structural re-seed is imperceptible if the field re-seeds every two
+  seconds anyway. ALFVEN.4g's motion gate did establish the fast cadence is not popping, and the
+  drive route works at it — so the cadence is now a look choice, not a stability one. Matt's call.
+
+**Certification remains blocked** on those two routes plus a live M7 with audio; the preset stays
+`certified: false`.
 
 ### Increment ALFVEN.4g — the motion verdict, and what the capture's own artifacts look like ✅ (2026-09-10)
 

@@ -131,7 +131,7 @@ extension SessionRecorder {
         tonal_phase_fifths,tonal_phase_thirds,tonal_consonance,tonal_tension,harmonic_flux,\
         bass_att,mid_att,treble_att,mid_rel,mid_dev,treb_rel,treb_dev,mid_att_rel,treb_att_rel,beats_until_next,\
         spectral_density,spectral_density_slow,spectral_surge,spectral_section_ratio,\
-        spectral_level_rise,waveform_occupancy,stem_series_pos_s
+        spectral_level_rise,waveform_occupancy,track_hue_anchor01,transient_rise,stem_series_pos_s
 
         """
 
@@ -255,9 +255,15 @@ extension SessionRecorder {
         // sessions already recorded against it still line up.
         // BUG-109 appended `stem_series_pos_s` after this group, so the row's terminating newline
         // moved there — this format string deliberately no longer carries one.
-        let densityCols = String(format: ",%.5f,%.5f,%.5f,%.5f,%.5f,%.5f",
+        // PR.20 appends `track_hue_anchor01` — the per-track palette anchor. Recorded so a
+        // session says which anchor a track drew, which is the only way to tell "the palette
+        // rotation is not working" apart from "these two tracks happened to hash close".
+        // Inserted BEFORE `stem_series_pos_s` rather than after it: that column is the
+        // optional one and carries the row's terminating newline, so it stays last.
+        let densityCols = String(format: ",%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f",
                                  fv.spectralDensity, fv.spectralDensitySlow, fv.spectralSurge,
-                                 fv.spectralSectionRatio, fv.spectralLevelRise, fv.waveformOccupancy)
+                                 fv.spectralSectionRatio, fv.spectralLevelRise, fv.waveformOccupancy,
+                                 fv.trackHueAnchor01, fv.transientRise)
         // QG.1 — the remaining FeatureVector primitives presets consume that the
         // CSV never carried (attenuated bands + mid/treb deviation family +
         // beats_until_next). Without them, RouteCoverageTests cannot replay

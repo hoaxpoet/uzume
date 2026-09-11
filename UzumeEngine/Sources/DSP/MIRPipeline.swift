@@ -135,6 +135,10 @@ public final class MIRPipeline: @unchecked Sendable {
     /// `1.0 + 0.35 * stems.bass_energy_dev`. A/B-able from the same build.
     public var ffoColdStartFixEnabled: Bool = true
 
+    /// PR.20 — the current track's hue anchor (0…1), installed by `setTrackHueAnchor`
+    /// and written into every FeatureVector. 0 until a track identity is known.
+    private var trackHueAnchor01: Float = 0
+
     // MARK: - Diagnostics sink
 
     /// Session-log sink for one-shot engine diagnostics, wired by the app layer to
@@ -425,6 +429,7 @@ public final class MIRPipeline: @unchecked Sendable {
         // 1.0 — the cold-start path collapses to the warm path, restoring
         // pre-CSP.3 behaviour without recompiling.
         fv.trackElapsedS = ffoColdStartFixEnabled ? Float(elapsedSeconds) : 100.0
+        fv.trackHueAnchor01 = trackHueAnchor01
         // MV-1 / D-146 (BUG-027): derive deviation primitives against each band's own
         // running average (per-band EMA), not a fixed 0.5 pivot — see applyBandDeviations.
         applyBandDeviations(to: &fv)
@@ -615,6 +620,7 @@ extension MIRPipeline {
         fv.spectralSurge = spectral.surge
         fv.spectralSectionRatio = spectral.sectionRatio   // DYN.2b
         fv.spectralLevelRise = spectral.levelRise         // FTR.24
+        fv.transientRise     = spectral.transientRise     // PR.22
     }
 
     /// TONAL (D-178): write the Tonal Interval Vector signals onto floats 44–48.
@@ -666,6 +672,19 @@ extension MIRPipeline {
     public func setLoudnessProfile(_ profile: LoudnessProfile?) {
         spectralAnalyzer.setLoudnessProfile(profile)
         logger.info("MIR_LOUDNESS_PROFILE: \(profile?.summary ?? "cleared — fixed surge band")")
+    }
+
+    /// Install the track's hue anchor (0…1), or 0 when no identity is known. Same lifecycle
+    /// as `setBeatGrid` and `setLoudnessProfile`: the app layer calls it on every track change
+    /// from `resetStemPipeline(for:caller:)`, which is the single funnel every track change
+    /// routes through.
+    ///
+    /// The value is carried, not computed, here — the hash lives in the app layer next to
+    /// `TrackIdentity`, and duplicating it in the engine would give two seeds that could
+    /// silently disagree.
+    public func setTrackHueAnchor(_ anchor01: Float) {
+        trackHueAnchor01 = anchor01.isFinite ? min(max(anchor01, 0), 1) : 0
+        logger.info("MIR_TRACK_HUE_ANCHOR: \(self.trackHueAnchor01)")
     }
 }
 

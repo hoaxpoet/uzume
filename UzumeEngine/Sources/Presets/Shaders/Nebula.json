@@ -36,12 +36,12 @@
   "audio_routes": [
     {
       "route": "ring_reach",
-      "primitive": "bassAttRel",
+      "primitive": "bassDev",
       "kind": "continuous"
     },
     {
       "route": "ring_reach",
-      "primitive": "midAttRel",
+      "primitive": "midDev",
       "kind": "continuous"
     },
     {
@@ -65,11 +65,6 @@
       "kind": "continuous"
     },
     {
-      "route": "core_pulse",
-      "primitive": "beatComposite",
-      "kind": "accent"
-    },
-    {
       "route": "haze_density",
       "primitive": "arousal",
       "kind": "continuous"
@@ -78,6 +73,21 @@
       "route": "sparkle_gain",
       "primitive": "trebDev",
       "kind": "continuous"
+    },
+    {
+      "route": "palette_rotation",
+      "primitive": "trackHueAnchor01",
+      "kind": "structural"
+    },
+    {
+      "route": "core_pulse",
+      "primitive": "transientRise",
+      "kind": "accent"
+    },
+    {
+      "route": "ring_event_push",
+      "primitive": "transientRise",
+      "kind": "accent"
     }
   ]
 }

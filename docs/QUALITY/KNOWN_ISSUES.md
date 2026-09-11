@@ -59,7 +59,7 @@ reads" are not reads — see the entry.)*
 | BUG-091 | **P1** · instrumentation landed 2026-08-17; awaiting one reproduction | app.session / pipeline-wiring | **A single local file is selected, preparation succeeds, and NO PLAYBACK EVER STARTS — the session runs with every audio field exactly 0.0.** Matt, 2026-08-17. Measured on `2026-08-17T17-19-19Z`: 1262 frames over 84 s of render clock, and `playback_time_s` / `track_elapsed_s` / `accumulatedAudioTime` / `bass` / `mid` / `treble` / `pulse_amp01` / `beatPhase01` each hold **exactly one distinct value, 0.0**, for the whole session. Preparation is healthy — stem-cache hit, BeatGrid installed (94.1 BPM, 47 beats), plan built. **The discriminator is a diff against the working local-file session 1.5 h earlier (`16-19-13Z`, same file, same OS build):** the working run logs `WIRING: provider.start INSTANCE` and an AVAudioEngine node tap (`TAP_BUFFER: requested=1024 delivered=4410 → 10 Hz`) and NO process tap; the failed run has an identical preparation sequence with `provider.start` **absent**, an unexplained 8 s gap, and then `TAP: startCapture → createProcessTap` — the SYSTEM-AUDIO path — installed twice. `resetStemPipeline caller=other` has exactly one call site (`handleLocalFileReady`), so that function ran and cleared all three of its guards, then never reached the router start. **Root cause NOT asserted** (BUG-061's rule): the strongest candidate is the `catch` around `audioRouter.start(mode:.localFilePlayback)`, which logs to `os_log` only and calls `endSession()` → `currentSource = nil` → `startAudio()`'s LF.4 guard misses → the tap is installed and `stopInternal()` tears the provider down. **Unconfirmable from the artifacts: the app's `lfLogger` output is not retained** (`log show --predicate 'subsystem == "com.phosphene.app"'` over the window returns zero lines), which is itself the reason an 84 s silent session left no trace of its cause. Instrumentation for exactly that is now in (see below). Detail below |
 | BUG-085 | P1 · HANG.1–2 complete 2026-08-05; remains open | renderer / app.hang | **App intermittently hangs hard in `CAMetalLayer.nextDrawable`; window unresponsive, force-quit required.** The live stack proves a main-thread drawable request blocked at 0 % CPU after healthy frames, but the cause remains unknown; direct render-path leakage, the capture hook, preset-swap skip, inflight semaphore, GPU completion, display sleep, and occlusion have been ruled out. **HANG.1 instrumentation is merged to `main` via PR #37 (`c54a2e7c`)**. HANG.2 completed a full-track control plus a 10 min 36 s Witchlight soak with 34,811/34,811 drawables balanced and no stalls or imbalances, refuting a deterministic per-frame leak but not identifying the intermittent owner. **THE INSTRUMENTED CAPTURE NOW EXISTS (2026-08-05, session `2026-08-05T21-21-03Z`, Fractal Tree / Cherub Rock)** — and every lifecycle counter is BALANCED at the moment of the hang: `drawable=12045/12045`, `unique_presented=6012/6012`, `command_completed=6012/6012`, `failures=0`, `unpresented=0`, one request outstanding (`pending=frame:6013,site:mesh.descriptor`). The app held ZERO drawables and CoreAnimation still would not vend one, which independently confirms HANG.2's soak: there is no app-side leak, and the owner is outside the app. Two captures 98 s apart are byte-identical on those counters — a PERMANENT block, not a long stall. See the detail section. |
 | BUG-081 | P2 | app.hang | **3 instances now** (2026-08-03 ×1, 2026-08-04 ×2). | **App beachballed ~78 s into session `2026-08-03T22-54-06Z` and needed a force-quit; no `.ips` exists** (force-quit produces none) and `session.log` ends mid-normal-operation with no fatal. **Evidence-only — no root cause asserted.** What the capture DOES establish: the renderer was healthy to the last frame — steady 60 fps, Fractal Tree at **0.18 ms GPU against a 0.7 ms budget**, no degradation trend across 3756 frames; background ML load rising but modest (`stem_analyzer_ms` 0 → 3.4). **Ruled out by test:** FTR.2's shader overflowing the mesh primitive limit via a bad `branch_count` — no non-finite values in the capture and `branch_count` never exceeds 59 against the 63 ceiling. A frozen UI with a live render loop points away from the preset, but that is inference and BUG-061's rule forbids acting on it. **Same class as BUG-060** (force-quit hang, render loop died, no stack captured, never reproduced) — two instances now, both blocked on the same missing artifact. **Next evidence:** `sample UzumeApp 10 -file ~/Desktop/uzume-hang.txt` run DURING the beachball, before force-quitting |
-| BUG-087 | P2 · **partial fix 2026-08-13 (10 → 16.4 Hz); ≥40 Hz NOT met — audio arrival rate is the ceiling, not slicing** | audio.capture / calibration | **Local-file playback runs the whole MIR chain at 10 Hz where streaming runs it at 51 Hz — a 5.1× rate loss on the primary development session type.** `LocalFilePlaybackProvider` asks for `installTap(bufferSize: 1024)` (≈47 Hz) and AVAudioEngine ignores it, delivering **0.1-second** buffers instead — 4414 frames measured at 44.1 kHz, 4808/4810 at 48 kHz. `processAnalysisFrame` runs once per audio callback with no time gate, so the callback rate *is* the analysis rate: every `FeatureVector` field — bands, deviation primitives, `beatPhase01`, centroid, flux, mood inputs — updates at 10 Hz on local files. Proven a fixed *duration* rather than a frame count by the rate-independence discriminator (both sample rates land on 0.1 s). This is the same 10 Hz the FTR program hit from the preset side. Diagnosis only — no fix code. Detail below |
+| BUG-087 | P2 · **RESOLVED 2026-09-11 (BUG087.4) — 10.01 → 59.77 Hz observed on a real session; M7 PASSED, clock now default-on** | audio.capture / calibration | **Local-file playback runs the whole MIR chain at 10 Hz where streaming runs it at 51 Hz — a 5.1× rate loss on the primary development session type.** `LocalFilePlaybackProvider` asks for `installTap(bufferSize: 1024)` (≈47 Hz) and AVAudioEngine ignores it, delivering **0.1-second** buffers instead — 4414 frames measured at 44.1 kHz, 4808/4810 at 48 kHz. `processAnalysisFrame` runs once per audio callback with no time gate, so the callback rate *is* the analysis rate: every `FeatureVector` field — bands, deviation primitives, `beatPhase01`, centroid, flux, mood inputs — updates at 10 Hz on local files. Proven a fixed *duration* rather than a frame count by the rate-independence discriminator (both sample rates land on 0.1 s). This is the same 10 Hz the FTR program hit from the preset side. Diagnosis only — no fix code. Detail below |
 | BUG-084 | P3 | dsp.stem | **`StemAnalyzer` deviation reaches 35 where the primitive's real ceiling is ~3.4** — suspected divide-by-near-zero against a not-yet-converged per-track EMA baseline (the stem-side twin of the BUG-027 / AGC2.4.1 cold-start family). No product impact today: FFO's aurora is defended by the FBS.S3.2 soft knee (35 → 1.64), which is what let BUG-041 close. Filed 2026-08-03 (RECON.2) so it survives that closure — the *input* is wrong even though the output is defended. Unreproduced; fixtures retained |
 | BUG-070 | P2 | audio.capture / resource-management | **Fix landed 2026-07-12 (PUB.6), pending live validation** — a FAILED device-change tap reinstall left `_isCapturing=true` with zero callbacks: engine health detectors starved (SignalHealthMonitor.evaluate is sample-driven → deadTap never confirms) and the router's recovery restart blocked at the alreadyCapturing guard; only the app-layer poll-based stall card surfaced it. Fix: the catch now clears `_isCapturing` (recovery unblocked) and keeps the monitor as a diagnostic beacon; the false "create steps stopped the monitor" comment corrected. Residual OPEN half: the 3-queue lifecycle interleave (device-change reinstall vs silence-recovery vs user stop) stays unserialized — static-only evidence; restructuring the G1-validated (12/12) path without a reproduced artifact is the BUG-063 pattern. Existing breadcrumbs (per-step diagnostics + install generation) are the instrumentation; serialize only if a live session shows an interleave |
 | BUG-120 | **P1** · **FIXED 2026-09-08**, live-confirmed | preset.routing | **Witchlight's per-beat pulse rode BAR position, not the beat grid — so a track with no meter lost both tiers and went silent.** WL.9 is documented as two tiers, *"the steady pulse now rides the BEAT grid, which is the strong signal, while only the ACCENT rides bar position, which is the weak one"*. The code derived beat edges by SUBDIVIDING the bar (`Int(barPhase * beatsPerBar)`), so both tiers rode bar position; with `beatsPerBar == 1` there is one slot, it never changes, and the pulse never fires. Hidden while a meterless grid ramped bar phase at BEAT rate — the accent fired every beat, so it read over-eager rather than dead — and exposed the moment BUG-117 silenced that. Matt, 2026-09-08, on a session with no meter on 57 % of frames: *"Witchlight does not appear to be working."* **Fix:** the pulse tier reads `beatPhase01`, which exists whenever a grid does, so it survives a meterless track and only the bar ACCENT is withheld. Live-confirmed same day: *"Witchlight is working now."* |
@@ -1264,6 +1264,131 @@ last slice reflects the newest 1024 samples rather than a position inside a 4410
 a latency gain even where the rate did not move. Cost: ~5× the per-callback allocation on the
 audio thread, landing at ~47/s — the rate the system-tap path has always run at.
 
+#### Instrumentation — one remaining route ELIMINATED, and a fresh live measurement (2026-09-10)
+
+`TapDeliveryRateTests` measures what each node actually delivers and, crucially, **how far apart
+the deliveries land** — two buffers arriving in the same instant are worth one update to a preset
+however small they are. Real music (a session `raw_tap.wav`), `BUG087_AUDIO=<wav>`:
+
+| tap node | requested | delivered | rate | arrival gap |
+|---|---|---|---|---|
+| player | 1024 | 4410 | 10.0 Hz | mean 99.8 ms |
+| player | 4096 | 4410 | 10.0 Hz | mean 99.8 ms |
+| mixer  | 1024 | **4800** | **10.0 Hz** | mean 99.8 ms |
+| mixer  | 4096 | **4800** | **10.0 Hz** | mean 99.8 ms |
+| output | any | **nothing** | — | — |
+
+**"Tap a different node" is DEAD as a route.** The mixer delivers on the identical 0.1 s cadence —
+4800 frames at 48 kHz against the player's 4410 at 44.1 kHz, i.e. the same fixed *duration*, the
+same discriminator BUG087.1 used. `outputNode` delivers no buffers at all. The 0.1 s tap cadence is
+AVAudioEngine's, not the node's, and it ignores the requested size at both 1024 and 4096.
+
+**`AVAudioSinkNode` is INCONCLUSIVE, not eliminated.** It is a render-callback node rather than a
+tap, so it is not subject to the tap cadence — the right shape for this problem. But wiring it
+alongside live playback did not work here: a plain second `connect` from `mainMixerNode` (which
+already feeds `outputNode`) **aborts with signal 6 rather than throwing**, and the supported
+`AVAudioConnectionPoint` fan-out produced **zero callbacks**. Two configurations tried, both
+recorded; neither shows it working and neither proves it cannot. Stopped there per the two-strikes
+rule rather than permuting wiring.
+
+**Live rate confirmed independently, from Matt's own sessions** — the analysis rate measured as
+"how often does a `FeatureVector` field actually CHANGE across render rows":
+
+| session | type | bass | beatComposite | arousal | render |
+|---|---|---|---|---|---|
+| `2026-09-10T18-01-30Z` | local file | 10.2 Hz | 9.0 Hz | 9.6 Hz | 59.8 fps |
+| `2026-09-10T17-13-10Z` | local file | 10.3 Hz | — | — | ~60 fps |
+| `beat-match-test-session` | **streaming** | **58.8 Hz** | — | — | ~60 fps |
+
+So the row's "10 Hz local vs 51 Hz streaming" holds, and streaming now measures **58.8 Hz** —
+essentially render rate. **The 16.4 Hz from BUG087.2/.3 is not what a local session shows today;
+10 Hz is.** ⚠ **Product consequence worth stating plainly: the roster review was conducted on local
+FLAC**, and "sync is weak / loose / tenuous" appears against Membrane, Meniscus, Mitosis, Plasma and
+Nebula in it. A driver bus running ~5.8× slower than the renderer is a plausible common factor
+behind part of that cluster, and no per-preset tuning touches it.
+
+#### The residual is OFFSET, not rate — measured at ~145 ms transport (2026-09-10)
+
+Matt on a streaming build: *"audio sync is still a little loose, not perfectly synced."* On that
+path the rate ceiling is **gone** — bass 60.0 Hz, beatComposite 58.9, spectral_level_rise 59.3
+against a 59.9 fps render (`2026-09-10T19-45-58Z`). So whatever remains is not quantisation.
+
+`VisualAudioOffsetTests` turns it into a number. **The alignment is exact, not estimated:**
+`session.log` records `raw tap capture started ... wallclock=<t0>` and every `features.csv` row
+carries the same `wallclock_s`, so a sample index in `raw_tap.wav` and a feature row sit on ONE
+timeline — no CS.1-style onset pairing needed. Offline broadband onset strength (log-energy first
+difference, 5 ms grid) is cross-correlated against the recorded columns over the 21.3 s overlap:
+
+| column | best lag | r | r at zero lag |
+|---|---|---|---|
+| `bass` | **+145 ms** | 0.219 | −0.031 |
+| `treble` | **+175 ms** | 0.142 | 0.095 |
+| `spectral_level_rise` | **+275 ms** | 0.195 | 0.026 |
+| `beatComposite` | −280 ms | **0.060** | 0.016 |
+
+**★ SEVERAL COLUMNS ON PURPOSE — one column cannot tell transport delay from feature shape.**
+`bass` is a band energy that tracks the envelope directly and lags **+145 ms**: that is transport.
+`spectral_level_rise` lags **+275 ms**, and the extra ~130 ms is its OWN design — it compares level
+against a 0.15 s trailing floor, so it peaks after a transient by construction. Reading the 275 ms
+as pipeline latency would have over-stated the engine's share by nearly half.
+
+**Actionable consequence for presets, not just the engine:** an event layer keyed to
+`spectral_level_rise` (Nebula's, PR.21) is keyed to the *laggiest* available primitive. Roughly
+130 ms is recoverable preset-side by driving the accent from a faster one or compensating, without
+touching the audio path.
+
+**And `beatComposite` is independently confirmed as not event-aligned** — r = 0.060 at a *negative*
+lag, i.e. essentially uncorrelated with audible onsets. That matches the 42.6 %-above-0.9 duty
+cycle measured from the preset side, and the FeatureVector's own comment that the `beat_*` fields
+score below chance against real events.
+
+⚠ **Bounds.** Correlations are weak in absolute terms (0.14–0.22) because broadband onset strength
+and AGC-normalised band energy are different quantities; the corroboration is that `bass` and
+`treble` agree (+145/+175 ms) and that every peak is sharp rather than flat. And this measures tap
+capture → feature in a rendered row: it **excludes** output-device buffering between the tap point
+and the speaker, and display presentation. The true eye-vs-ear gap is ≥ these figures.
+
+#### The feature-shape half is FIXED (PR.22); the ~145 ms transport half is what remains
+
+The +275 ms measured on `spectral_level_rise` decomposed into ~145 ms transport and ~130 ms of the
+field's own fixed-lag design. **PR.22 recovers the second half** with `transientRise` — the same
+statistic at 15 ms pre-smooth / 40 ms lag, band re-calibrated to 4–10 dB so its fire rate still
+matches the parent's. Measured against offline onset strength: **+30 ms against the parent's
++150 ms**, on both a streaming and a local session.
+
+**So BUG-087's remaining scope is the ~145 ms transport term only.** A preset keyed to
+`transientRise` should now sit ~145 ms behind the audio rather than ~275 ms.
+
+#### The remaining term decomposes AGAIN, and the fix route is chosen (2026-09-10)
+
+Measured per primitive on a streaming session (offline onset strength, shared wallclock):
+
+| primitive | lag | r |
+|---|---|---|
+| `transientRise` (PR.22) | **+30…+45 ms** | 0.18–0.33 |
+| `bassDev` | +135 ms | 0.202 |
+| `bass` / `mid_dev` | +145 ms | 0.219 / **0.250** |
+| `bassAttRel` | +145 ms | 0.159 |
+| `mid_att_rel` | +170 ms | 0.142 |
+| `bass_att` | **+365 ms** | 0.143 |
+
+**Every continuous primitive sits at ~135–170 ms, and most of that is deliberate band smoothing** —
+`BandEnergyProcessor.instantSmoothers` run `rate30: 0.65/0.75/0.75`, i.e. **τ ≈ 77 ms (bass) and
+116 ms (mid, treble)**. Real transport is therefore only ~40–60 ms of it.
+
+⚠ **A correction worth keeping:** the raw attenuated band `bass_att` (τ ≈ 650 ms) lags +365 ms, and
+extrapolating from that to its `_rel` sibling is wrong — `bassAttRel` measures **+145 ms**, the same
+as the instant family. **The deviation transform removes almost all of the attenuation lag**, which
+makes D-026's "drive from deviation" a latency rule as well as an AGC-independence rule.
+
+**Matt's call on which lever** (2026-09-10): not the smoothing constants — *"i don't like that the
+smoothing constants will change the feel of every preset - too risky"* — but true transport. Scoped
+as **BUG087.4** in ENGINEERING_PLAN: drive the analysis clock from the decoded file at the smoothed
+playhead instead of from tap arrival, on the local-file path only. Honest ceiling: ~40–50 ms of the
+~145 ms, plus removal of the 100 ms staircase. ⚠ And the defect there is **cadence, not staleness** —
+`FFTProcessor` already analyses the NEWEST samples of each buffer, so a design premised on stale
+audio would aim at the wrong thing.
+
 **The remaining route is smaller buffers from AVAudioEngine** — manual rendering mode, an
 `AUAudioUnit` render block with a smaller `maximumFramesPerSlice`, or tapping a different
 node. BUG087.1 measured that a plain `installTap(bufferSize:)` request is ignored. **Filed as
@@ -1273,6 +1398,112 @@ its own increment, not a follow-on commit. BUG-087 stays OPEN.**
 capture measured 16.4 Hz — it was measuring the computation rate and calling it the delivered
 rate. Renamed and re-scoped, because a green tick against a refuted claim is worse than no
 test.
+
+#### Fix landed behind a flag — BUG087.4, the analysis clock decoupled from tap arrival (2026-09-10)
+
+`UZUME_LF_ANALYSIS_CLOCK=1` replaces tap arrival with a **playhead-driven clock** on the
+`.localFilePlayback` path: `PlayheadAnalysisClock` ticks at 80 Hz on its own queue, reads the span
+the smoothed playhead has just passed out of `LoopingFileReader` (bounded read-ahead over the
+already-decoded `AVAudioFile`), and calls the same `onAudioSamples` funnel. Streaming is untouched.
+
+**Measured through the real provider, against a 59.8 fps render:**
+
+| arm | produced | **OBSERVED** | delivery gap | bunched (<2 ms) |
+|---|---|---|---|---|
+| tap (today, `2026-09-10T22-07-34Z`) | ~47 Hz sliced | **10.01 Hz** | mean 99.8 ms | all slices |
+| playhead clock | 80.6 Hz | **59.2 Hz** | median 12.1 ms, p95 17.1 ms | **0 of 237** |
+
+**Observed, not produced — and that distinction is the whole increment.** BUG087.3's gate asserted
+`hz >= 40` from *slice count* and passed while the live rate was 16.4 Hz. Both new gates measure the
+observed quantity: `sessionRateGate` counts how often a column CHANGES between rendered rows of a
+real `features.csv` (it **fails at 10.01 Hz** on the pre-fix reference capture, as a real gate must),
+and `deliveryRateGate` buckets deliveries into 1/60 s render windows rather than counting them.
+
+**★ Why 80 Hz and not 60.** The gate is how many distinct values a ~59.8 fps sampler can tell apart.
+A 60 Hz clock against a 59.8 fps render is two near-equal rates beating against each other, leaving
+a share of render frames with no new value. A 12.5 ms period fits inside a 16.7 ms frame with 4.2 ms
+of jitter margin, so the observed rate becomes the render rate.
+
+**★ And no app-layer change was needed, which was not obvious.** The FFT does not run on the
+callback's samples: `makeAudioSampleCallback` writes them into the `AudioBuffer` ring
+(`UzumeApp/VisualizerEngine+Audio.swift:113`) and reads the newest 1024 frames back OUT of it
+(`:152`). The analysis WINDOW and the callback's HOP were already decoupled. So delivering hop-sized
+spans keeps a full window *and* makes BUG087.2's audio-derived `dt` exactly right — `frames / rate`
+is the playhead advance, which is what every seconds-based follower needs.
+
+**Position source gated before anything was built on it** (BUG087.4's own risk section: a drifting
+read position desynchronises analysis, which is worse than being uniformly late). Driving
+`AVAudioPlayerNode.playerTime` through `PlaybackClockSmoother` across **3.32 laps of a 1.2 s file**:
+`backwards=0, behind-player=0, beyond-band=0, max lead 10.7 ms`. The player's `sampleTime` keeps
+counting across a `scheduleFile` loop re-arm, so the position is monotone across the boundary and the
+smoother never reads the wrap as a seek; `LoopingFileReader` takes the wrap, where it is a modulo.
+
+**Tap consumers — checked, not assumed (the BUG-070 shape).** Every consumer sits downstream of the
+same funnel and is still fed, because what changed is the funnel's SOURCE, not the funnel:
+`silenceDetector.update` (`AudioInputRouter.swift:301`), `recordRawTapSamples`
+(`VisualizerEngine+Audio.swift:119`), `inputLevelMonitor.submitSamples` (`:130`),
+`signalHealthMonitor.ingest` (`:134`), `updateTapSampleRate` (`:143`), `stemSampleBuffer.write`
+(`:146`), the `AudioBuffer` ring (`:113`). `SilenceDetector` and `SignalHealthMonitor` are both
+time-windowed rather than call-counted, so an 8× rate change does not move their thresholds.
+
+⚠ **One consumer's constants ARE per-call:** `InputLevelMonitor.submitSamples`
+(`UzumeEngine/Sources/Audio/InputLevelMonitor.swift:199-201`) runs `peakEnvelope * 0.9995` and an RMS
+EMA at `0.95/0.05` per invocation, so its decay time constants shorten with the rate. It drives the
+diagnostic level meter, not any preset. Not changed here, and not a new regime: the streaming path has
+always fed it at ~47–59 Hz.
+
+**The tap is RETIRED (BUG087.5, 2026-09-11, Matt's call once the fix had landed).** The player node
+now carries no tap at all — `PlayheadAnalysisClock` is the only analysis source on this path.
+`TapBufferSlicing` went with it (its only consumer was the slicing loop), as did
+`UZUME_LF_ANALYSIS_CLOCK`: with no tap to return to, `=0` could only produce silence. A clock that
+cannot be built is now a thrown start error rather than a silent downgrade.
+
+**Honest ceiling, unchanged from the design:** this recovers the cadence term (~50 ms average, plus
+the 100 ms staircase) out of the ~145 ms on continuous primitives. The remaining τ 77–116 ms is
+`BandEnergyProcessor` band smoothing, which Matt declined to change (*"i don't like that the
+smoothing constants will change the feel of every preset - too risky"*). Not quietly reduced.
+
+#### RESOLVED — M7 PASSED and the clock is default-on (2026-09-11)
+
+**Matt, watching session `2026-09-11T01-22-10Z` live:** *"I like it. It's punchy. Not exact, but
+close."* Measured on that capture, `session.log` line 24 confirming `ANALYSIS_CLOCK: playhead-driven,
+80 Hz, file rate 44100` before any number was read off it:
+
+| column | before (`2026-09-10T22-07-34Z`, tap) | after (`2026-09-11T01-22-10Z`, clock) |
+|---|---|---|
+| `bass` | 10.01 Hz | **59.77 Hz** |
+| `mid` | 10.01 Hz | **59.61 Hz** |
+| `treble` | 10.01 Hz | **59.20 Hz** |
+| `spectralCentroid` | 10.01 Hz | **59.66 Hz** |
+| `spectralFlux` | 10.01 Hz | **59.34 Hz** |
+| render | 59.77 fps | 59.83 fps |
+
+**5.97×, and the slowest column now changes on 99 % of rendered frames.** The local path matches
+streaming's 58.8 Hz. `isEnabled` inverted to default-on; `UZUME_LF_ANALYSIS_CLOCK=0` forces the tap
+back, kept because this replaces the audio source of the whole MIR chain on the path all development
+runs on.
+
+**Goldens did not move.** The option-A question (regenerate before or after Matt watches) turned out
+to be moot: `PresetRegressionTests` renders from fixtures through the harness, which never constructs
+`LocalFilePlaybackProvider`, so the clock is not in the golden path at all. Verified by running the
+full suite with the clock default-on — no golden regenerated, none needed.
+
+⚠ **The VisualAudioOffset table does NOT demonstrate this win, and cannot — the metric's own
+reference moved under the fix.** `recordRawTapSamples` sits inside the funnel
+(`VisualizerEngine+Audio.swift:119`), so with the clock driving, `raw_tap.wav` is the CLOCK'S OWN
+INPUT rather than the tap's output. The test measures "what `raw_tap.wav` recorded → the feature in a
+rendered row", which on this path is now analysis→row, not capture→row. On top of that every band
+column reads below the correlation floor on BOTH sessions (`bass` r 0.036, `mid_dev` r 0.049 after;
+r −0.058 / 0.042 before), and the one readable column moved `transient_rise` +45 → +50 ms, i.e. inside
+the noise of a 20 ms lag grid on different material. **Anyone quoting VisualAudioOffset as a transport
+number on the local path must re-derive what its reference now is first.** The rate is what carries
+this fix; the ear is what confirmed it.
+
+**Still open, and named so it is not mistaken for this defect:** *"not exact, but close"* is the
+band-smoothing term — `BandEnergyProcessor.instantSmoothers` at τ 77 ms bass / 116 ms mid-treble,
+which Matt declined to change at the design stage (*"too risky"*) and which this increment did not
+touch. That is the next lever on local-path sync, and it is a D-004 trade, not a defect. Preset-side,
+`transientRise` (PR.22) already sits ~120 ms ahead of `spectral_level_rise` for event accents.
 
 #### Related
 
@@ -2048,6 +2279,63 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 ---
 
 ## Resolved (recent)
+
+### BUG-126 — RESOLVED (ALFVEN.3f): the strobing seam bloom is removed, not bounded (2026-09-10)
+
+ALFVEN.3d bounded this defect (`bloomMaxAmount` 0.85 + `bloomSlewPerSecond` 6.0/s), taking max
+frame-to-frame Δluma from **0.4153** to **0.0124** against D-157's 0.05 gate. That fixed the RATE of
+the flash and left what it looked like unchanged.
+
+**Matt's M7 on the bounded build** (`2026-09-10T23-25-54Z`, `chain_health` verdict **`clean`**,
+peak −0.13 dBFS): *"I don't like the brightening effect on the preset. I would remove it."*
+
+Measured on that capture, the glow sat at its 0.30 constant for **65 %** of frames and pinned at the
+0.85 ceiling for **5.2 %**, spending 36 % of the track above 0.30 — it pumped between the approved
+look and nearly 3× it. Bounding a flash makes it legal under D-157; it does not make it wanted.
+
+**Fix: the `trebRel` → seam-bloom route is removed.** `displayBloomAmount` is a constant 0.30 again —
+the exact value ALFVEN.4f shipped and Matt signed off (*"Looks great"*, `2026-09-10T16-07-07Z`).
+The defect cannot recur because the mechanism is gone: post-fix the flash metric reads **0.0038**
+with treble bursting at the p99 of Matt's own capture, and the glow no longer moves at all.
+
+**Cost, stated plainly:** Alfvén drops from three declared audio routes to two. §7's routing table
+named five; three of the five have now failed contact with real music.
+
+---
+
+
+### BUG-127 — RESOLVED (ALFVEN.3e): `ALFVEN_DRIVE` was inert, voiding every sweep since ALFVEN.3 (2026-09-10)
+
+**Expected.** `ALFVEN_DRIVE=<x>` sets the MHD forcing amplitude, so the solver's equilibrium and the
+film harness's decay run can be bisected without editing a test. Both harnesses documented it, and
+the film harness's comment specifically promised `ALFVEN_DRIVE=0` yields *"a decay run — the cleanest
+comparison against the spike, because an unforced field just relaxes"*.
+
+**Actual.** It set `AlfvenSolverConfiguration.drive`, which **nothing reads**. ALFVEN.3 replaced the
+constant with the audio-driven `audioDrive` (`AlfvenSolver.swift`, `drive: audioDrive`) and left the
+config field behind — written by the initialiser, never consumed. `ALFVEN_DRIVE=0` did not produce an
+unforced field; it produced whatever the audio map resolved to at a zero bass envelope.
+
+**How it surfaced.** A stability sweep across drive 16 / 18 / 20 returned **byte-identical** output
+for all three values, including the same `wMax` to three decimals. Identical numbers from a swept
+parameter are the signature of a dead knob, not of a flat response.
+
+**Blast radius.** Any measurement taken with `ALFVEN_DRIVE` between ALFVEN.3 and ALFVEN.3e is void
+and must not be cited. Measurements from before ALFVEN.3 are unaffected — the field was live then.
+No shipped behaviour was ever wrong: the knob is diagnostic-only, and production always ran
+`audioDrive`. The cost was to evidence, not to users.
+
+**Fix.** The dead `drive` field is removed from `AlfvenSolverConfiguration`. Both harnesses now
+override `ALFVEN_DRIVEFLOOR` / `ALFVEN_DRIVECEIL`, pinning them together to hold forcing at one
+value. Cross-check that the replacement is live: drive 16 reproduces the previously documented
+`wMax 57.029`, and 18 / 20 / 24 now differ as they should (67.4 / 77.1 / 94.2).
+
+**Lesson, already in memory as a recurring class.** An override placed on a field the production path
+stopped reading fails silently and *looks like* a measurement. When a sweep returns the same number
+twice, verify the knob before drawing a conclusion from the flatness.
+
+---
+
 
 ### BUG-114 — RESOLVED (PR.3): the bar-line estimator ran at half its calibrated analysis window (2026-09-04)
 

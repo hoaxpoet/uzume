@@ -200,11 +200,12 @@ public struct FeatureVector: Sendable {
     /// answers "how loud is this passage"; this answers "did something just LAND". Rationale
     /// and the measured event specificity of every alternative: `SpectralAnalyzer.Result`.
     public var spectralLevelRise: Float
-    // Floats 54–56 — PADDING. 53 floats is 212 bytes and a GPU constant buffer must be
-    // 16-byte aligned; the same reason floats 51–52 were padding before DYN.1b/DYN.2 claimed
-    // them. ORDER IS THE CONTRACT — `Common.metal` must match field-for-field.
+    /// PR.20 float 54 — per-track hue anchor, 0…1 (0 = no identity). See EP PR.20.
+    public var trackHueAnchor01: Float
+    /// PR.22 float 55 — transient rise 0…1, `spectralLevelRise`'s fast sibling (EP PR.22).
+    public var transientRise: Float
     // swiftlint:disable:next identifier_name
-    public var _pad54, _pad55, _pad56: Float
+    public var _pad56: Float
 
     public init(
         bass: Float = 0, mid: Float = 0, treble: Float = 0,
@@ -249,7 +250,7 @@ public struct FeatureVector: Sendable {
         self.spectralDensity = 0; self.spectralDensitySlow = 0; self.spectralSurge = 0
         self.spectralSectionRatio = 0
         self.spectralLevelRise = 0          // FTR.24, set per frame by SpectralAnalyzer
-        self._pad54 = 0; self._pad55 = 0; self._pad56 = 0
+        self.trackHueAnchor01 = 0; self.transientRise = 0; self._pad56 = 0   // PR.20 / PR.22
     }
 
     /// All-zero feature vector.

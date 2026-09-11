@@ -64,6 +64,8 @@ struct SessionReplayHarness {
         // both read as "not working" until these were mapped).
         var barPhase01: Float = 0
         var bassDev: Float = 0
+        var trebRel: Float = 0
+        var bassRel: Float = 0
         var pulseAmp01: Float = 0
         var pulsePhase01: Float = 0
         var pulseBeatIndex: Float = 0
@@ -91,6 +93,8 @@ struct SessionReplayHarness {
         var highMid: Float = 0
         var high: Float = 0
         var spectralLevelRise: Float = 0
+        var trackHueAnchor01: Float = 0
+        var transientRise: Float = 0
         var spectralSectionRatio: Float = 0
         var waveformOccupancy: Float = 0
     }
@@ -131,6 +135,8 @@ struct SessionReplayHarness {
             // the session logs bar phase in PERMILLE
             r.barPhase01 = get(f, "barPhase01_permille") / 1000.0
             r.bassDev = get(f, "bassDev")
+            r.trebRel = get(f, "trebRel")
+            r.bassRel = get(f, "bassRel")
             r.pulseAmp01 = get(f, "pulse_amp01")
             r.pulsePhase01 = get(f, "pulse_phase01")
             r.pulseBeatIndex = get(f, "pulse_beat_index")
@@ -148,6 +154,8 @@ struct SessionReplayHarness {
             r.highMid = get(f, "highMid")
             r.high = get(f, "high")
             r.spectralLevelRise = get(f, "spectral_level_rise")
+            r.trackHueAnchor01 = get(f, "track_hue_anchor01")
+            r.transientRise = get(f, "transient_rise")
             r.spectralSectionRatio = get(f, "spectral_section_ratio")
             r.waveformOccupancy = get(f, "waveform_occupancy")
             out.append(r)
@@ -167,6 +175,7 @@ struct SessionReplayHarness {
         f.valence = r.valence; f.arousal = r.arousal
         f.bassAttRel = r.bassAttRel; f.beatPhase01 = r.beatPhase01
         f.barPhase01 = r.barPhase01; f.bassDev = r.bassDev; f.pulseAmp01 = r.pulseAmp01
+        f.trebRel = r.trebRel; f.bassRel = r.bassRel
         f.pulsePhase01 = r.pulsePhase01
         f.pulseBeatIndex = r.pulseBeatIndex
         f.pulseRegionalBlend01 = r.pulseRegionalBlend01
@@ -180,6 +189,8 @@ struct SessionReplayHarness {
         f.midDev = r.midDev; f.trebDev = r.trebDev
         f.highMid = r.highMid; f.high = r.high
         f.spectralLevelRise = r.spectralLevelRise
+        f.trackHueAnchor01 = r.trackHueAnchor01
+        f.transientRise = r.transientRise
         f.spectralSectionRatio = r.spectralSectionRatio
         f.waveformOccupancy = r.waveformOccupancy
         f.aspectRatio = aspect

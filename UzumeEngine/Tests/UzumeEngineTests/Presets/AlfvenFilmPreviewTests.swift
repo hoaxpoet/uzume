@@ -61,16 +61,20 @@ struct AlfvenFilmPreviewTests {
         var cfg = AlfvenSolverConfiguration()
         cfg.edge = edge
         // Same override set as AlfvenSolverTests, so the film harness can be pointed at a
-        // decay run (ALFVEN_DRIVE=0) — the cleanest comparison against the spike, because
+        // decay run (ALFVEN_DRIVEFLOOR=0 ALFVEN_DRIVECEIL=0) — the cleanest comparison
+        // against the spike, because
         // an unforced field just relaxes from a statistically identical seed instead of
         // diverging chaotically.
         let env = ProcessInfo.processInfo.environment
-        if let d = env["ALFVEN_DRIVE"].flatMap(Float.init) { cfg.drive = d }
         if let a = env["ALFVEN_ALPHA"].flatMap(Float.init) { cfg.alpha = a }
         if let n4 = env["ALFVEN_NU4"].flatMap(Float.init) { cfg.nu4 = n4 }
         if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
         if let cy = env["ALFVEN_CYCLE"].flatMap(Float.init) { cfg.cycleSeconds = cy }
         if let jc = env["ALFVEN_JCUT"].flatMap(Float.init) { cfg.jCutoff = jc }
+        if let df = env["ALFVEN_DRIVEFLOOR"].flatMap(Float.init) { cfg.driveFloor = df }
+        if let dc = env["ALFVEN_DRIVECEIL"].flatMap(Float.init) { cfg.driveCeil = dc }
+        if let bh = env["ALFVEN_BASSSHIFT"].flatMap(Float.init) { cfg.bassRelShift = bh }
+        if let bl = env["ALFVEN_BASSSCALE"].flatMap(Float.init) { cfg.bassRelScale = bl }
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
                                       pixelFormat: ctx.pixelFormat, configuration: cfg)
 
@@ -102,7 +106,22 @@ struct AlfvenFilmPreviewTests {
                 guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                     throw HarnessError.commandBufferFailed
                 }
-                solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+                // ALFVEN.3: when audio values are supplied, go through the PRODUCTION
+                // `update(features:stemFeatures:)` entry point so the envelopes, the
+                // soft-saturating drive map and the hue blend are all exercised — not a
+                // back door that sets the solver's constants directly.
+                if let bd = env["ALFVEN_BASSDEV"].flatMap(Float.init) {
+                    var f = FeatureVector()
+                    f.time = Float(frame) / 60.0
+                    f.deltaTime = 1.0 / 60.0
+                    f.bassRel = bd
+                    f.bassDev = max(bd, 0)
+                    f.trebRel = env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0
+                    f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.12
+                    solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                } else {
+                    solver.update(time: Float(frame) / 60.0, commandBuffer: cmd)
+                }
                 if frame % 60 == 0 {
                     let pass = MTLRenderPassDescriptor()
                     pass.colorAttachments[0].texture = target
@@ -170,6 +189,217 @@ struct AlfvenFilmPreviewTests {
                          solver.displayExposure, solver.displayHueCentre,
                          lums.reduce(0, +) / Double(lums.count),
                          lums.min() ?? 0, lums.max() ?? 0))
+            return
+        }
+
+        // ALFVEN_VIGOUR: does more drive actually LOOK more vigorous? The drive map is a
+        // curve onto the forcing amplitude, but nothing guarantees the display responds
+        // to the top
+        // of it: substeps are fixed at 4 and dt is CFL-reduced, so a harder-forced field
+        // advances LESS sim time per frame. Whether net stirring still rises with drive is
+        // an empirical question about the whole pipeline, not a property of the map.
+        //
+        // Metric: mean per-frame absolute pixel delta on the PRODUCTION display path —
+        // "how much of the frame changed", which is what stirring vigour looks like. Held
+        // at a CONSTANT bassRel per run so the only variable is the drive level; sweep by
+        // re-running across the measured envelope percentiles.
+        if env["ALFVEN_VIGOUR"] == "1" {
+            let frames = Int(env["ALFVEN_FRAMES"] ?? "240") ?? 240
+            let settle = Int(env["ALFVEN_SETTLE"] ?? "60") ?? 60
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            var previous: [UInt8] = []
+            var deltas: [Double] = []
+            var drives: [Float] = []
+            var clipFractions: [Double] = []
+            var ajP50: [Double] = []
+            var ajP95: [Double] = []
+            var meanAbsJ: [Double] = []
+            var meanJEma = 0.0
+            var exposures: [Double] = []
+            var lumas: [Double] = []
+            var relDeltas: [Double] = []
+            var filmSpan: [Double] = []
+            for frame in 1...frames {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                f.bassRel = env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? 0.0
+                f.bassDev = max(f.bassRel, 0)
+                f.trebRel = env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0
+                f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.125
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                // ALFVEN_AUTOEXP: CPU-side PROTOTYPE of film.py's auto-exposure, to measure
+                // the visual outcome before committing to a GPU reduction. `autoexp` divides
+                // by (p99.6 - p2); measured over drive 5…24 that span tracks mean|J| at a
+                // ratio of 0.163 +/- 6% while the field energy moves 4.8x, so mean|J| — which
+                // the solver's existing CFL-style atomic reduction can produce — substitutes.
+                // The readback here is far too slow to ship; it is an instrument, not a design.
+                if env["ALFVEN_AUTOEXP"] == "1" {
+                    cmd.commit(); cmd.waitUntilCompleted()
+                    let jNow = Self.readJ(solver)
+                    let m = jNow.reduce(0.0) { $0 + abs($1) } / Double(jNow.count)
+                    let tau = Double(env["ALFVEN_AUTOEXP_TAU"] ?? "0.30") ?? 0.30
+                    let alpha = 1.0 - exp(-(1.0 / 60.0) / max(tau, 1e-4))
+                    meanJEma = meanJEma <= 0 ? m : meanJEma + alpha * (m - meanJEma)
+                    // PARTIAL adaptation. beta = 0 is the fixed constant; beta = 1 is
+                    // film.py exactly (0.085 * 1.917 = 0.163, the measured ratio). film.py
+                    // renders STILLS, each normalised independently, so it never had to
+                    // carry loudness across time — for a visualiser the brightness
+                    // variation it removes is signal. beta trades clipping against that.
+                    let beta = Double(env["ALFVEN_AUTOEXP_BETA"] ?? "1.0") ?? 1.0
+                    let meanRef = 1.917
+                    let expo0 = 0.085
+                    let e = expo0 * pow(meanRef / max(meanJEma, 1e-6), beta)
+                    solver.displayExposure = Float(min(max(e, 0.01), 0.40))
+                }
+                guard let cmd2 = env["ALFVEN_AUTOEXP"] == "1"
+                        ? ctx.commandQueue.makeCommandBuffer() : cmd else {
+                    throw HarnessError.commandBufferFailed
+                }
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = target
+                pass.colorAttachments[0].loadAction = .clear
+                pass.colorAttachments[0].storeAction = .store
+                pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                guard let enc = cmd2.makeRenderCommandEncoder(descriptor: pass) else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.render(encoder: enc, features: f)
+                enc.endEncoding()
+                cmd2.commit(); cmd2.waitUntilCompleted()
+                let now = Self.pixels(target)
+                // Skip the settle window: the seeded field's initial transient is not the
+                // steady-state stirring the metric is meant to describe.
+                if frame > settle, !previous.isEmpty {
+                    var sum = 0.0
+                    for i in stride(from: 0, to: now.count, by: 4) {
+                        sum += abs(Double(now[i]) - Double(previous[i]))
+                            + abs(Double(now[i + 1]) - Double(previous[i + 1]))
+                            + abs(Double(now[i + 2]) - Double(previous[i + 2]))
+                    }
+                    let d = sum / Double(now.count / 4 * 3)
+                    deltas.append(d)
+                    // ⚠ `meanPixelDelta` scales with EXPOSURE: the same structural change
+                    // under a 2.5x darker tone map yields 2.5x smaller pixel differences.
+                    // Comparing two exposure schemes on it measures brightness, not motion
+                    // (it made film.py's own auto-exposure look like a 27 % motion loss).
+                    // `relDelta` divides by the frame's own brightness, so it compares how
+                    // much of what is VISIBLE changed — the thing the eye actually reads.
+                    var lumaSum = 0.0
+                    for i in stride(from: 0, to: now.count, by: 4) {
+                        lumaSum += 0.0722 * Double(now[i]) + 0.7152 * Double(now[i + 1])
+                            + 0.2126 * Double(now[i + 2])
+                    }
+                    let meanLuma = lumaSum / Double(now.count / 4)
+                    lumas.append(meanLuma)
+                    relDeltas.append(d / max(meanLuma, 1e-6))
+                    drives.append(solver.audioDrive)
+                    // Per-frame, not a final snapshot: one frame of a chaotic field is far
+                    // too noisy to size a display lever from (a single-frame read made the
+                    // clip fraction non-monotonic in drive, which the field is not).
+                    let jf = Self.readJ(solver)
+                    // ⚠ Must include the GPU-computed factor. ALFVEN.3g moved part of the
+                    // exposure onto the GPU (`exposureBuffer[0]`); reading only
+                    // `displayExposure` here measured a quantity the shader no longer uses
+                    // and reported the pre-fix clip fraction against a fixed build.
+                    let factor = Double(
+                        solver.exposureBuffer.contents().assumingMemoryBound(to: Float.self).pointee)
+                    let expo = Double(solver.displayExposure) * factor
+                    clipFractions.append(
+                        Double(jf.filter { abs($0) * expo >= 1.0 }.count) / Double(jf.count))
+                    let aj = jf.map { abs($0) * expo }.sorted()
+                    ajP50.append(aj[aj.count / 2])
+                    ajP95.append(aj[min(aj.count - 1, aj.count * 95 / 100)])
+                    // ALFVEN.3g: can a cheap GPU-reducible statistic stand in for film.py's
+                    // percentile normaliser? `autoexp` divides by (p99.6 - p2) of |J|; a
+                    // fragment cannot do percentiles, but the solver already runs an atomic
+                    // reduction for the CFL timestep, so mean|J| IS reachable. Record both
+                    // per frame and compare — if their ratio is stable, mean substitutes.
+                    let absJ = jf.map { abs($0) }.sorted()
+                    meanAbsJ.append(absJ.reduce(0, +) / Double(absJ.count))
+                    exposures.append(Double(solver.displayExposure))
+                    let hi = absJ[min(absJ.count - 1, Int(0.996 * Double(absJ.count - 1)))]
+                    let lo = absJ[max(0, Int(0.02 * Double(absJ.count - 1)))]
+                    filmSpan.append(hi - lo)
+                }
+                previous = now
+            }
+            let mean = deltas.reduce(0, +) / Double(max(deltas.count, 1))
+            if let tag = env["ALFVEN_VIGOUR_PNG"] {
+                let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("uzume-alfven-beta")
+                try FileManager.default.createDirectory(at: dir,
+                                                        withIntermediateDirectories: true)
+                try Self.writePNG(previous, width: Self.edge, height: Self.edge,
+                                  to: dir.appendingPathComponent("\(tag).png"))
+            }
+            func avg(_ xs: [Double]) -> Double { xs.reduce(0, +) / Double(max(xs.count, 1)) }
+            print(String(format: "[alfven-vigour] bassRel %+.4f -> drive %.2f   "
+                                 + "meanPixelDelta %.4f  relDelta %.5f  luma %.1f  aJ p50 %.3f p95 %.3f   "
+                                 + "CLIPPED %.2f%% (max %.2f%%)   n %d",
+                         env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? 0.0,
+                         drives.last ?? 0, mean, avg(relDeltas), avg(lumas),
+                         avg(ajP50), avg(ajP95),
+                         avg(clipFractions) * 100.0, (clipFractions.max() ?? 0) * 100.0,
+                         deltas.count))
+            print(String(format: "               mean|J| %.4f   filmSpan(p99.6-p2) %.4f   "
+                                 + "ratio %.4f   film-exposure-equiv %.4f (fixed is %.4f)",
+                         avg(meanAbsJ), avg(filmSpan),
+                         avg(meanAbsJ) / max(avg(filmSpan), 1e-9),
+                         1.0 / max(avg(filmSpan), 1e-9), avg(exposures)))
+            return
+        }
+
+        // ALFVEN_FLASH: the D-157 flash-safety metric on the PRODUCTION path — max
+        // frame-to-frame delta of mean luminance while the audio drivers move. Renders
+        // EVERY frame (not every 60th), because a strobe is by definition a single-frame
+        // event and a sampled harness cannot see one.
+        if env["ALFVEN_FLASH"] == "1" {
+            let frames = Int(env["ALFVEN_FRAMES"] ?? "600") ?? 600
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            var lums: [Double] = []
+            var blooms: [Float] = []
+            for frame in 1...frames {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                f.bassRel = env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? -0.014
+                f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.125
+                // A percussive treble train: bursts to the p99 the fixtures actually show,
+                // silent between. This is the shape that produced Matt's strobe.
+                let burst = (frame % 24) < 3
+                f.trebRel = burst ? (env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0.017) : 0.0
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = target
+                pass.colorAttachments[0].loadAction = .clear
+                pass.colorAttachments[0].storeAction = .store
+                pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.render(encoder: enc, features: f)
+                enc.endEncoding()
+                cmd.commit(); cmd.waitUntilCompleted()
+                lums.append(Self.meanLuma(target))
+                blooms.append(solver.displayBloomAmount)
+            }
+            var maxDelta = 0.0
+            var over = 0
+            for i in 1..<lums.count {
+                let d = abs(lums[i] - lums[i - 1])
+                maxDelta = max(maxDelta, d)
+                if d > 0.05 { over += 1 }
+            }
+            print(String(format: "[alfven-flash] bloom %.2f...%.2f  maxDelta %.4f  over-gate %d/%d "
+                                 + "(D-157 gate 0.05)",
+                         blooms.min() ?? 0, blooms.max() ?? 0, maxDelta, over, lums.count - 1))
             return
         }
 
@@ -304,6 +534,20 @@ struct AlfvenFilmPreviewTests {
     /// Targets in this space: our film.py port 0.159, REF 01 0.114, REF 05 0.229.
     private static func srgbToLinear(_ c: Double) -> Double {
         c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+    }
+
+    /// Raw BGRA bytes of a rendered frame — the input to the vigour delta.
+    private static func pixels(_ tex: MTLTexture) -> [UInt8] {
+        var bgra = [UInt8](repeating: 0, count: tex.width * tex.height * 4)
+        bgra.withUnsafeMutableBytes { buf in
+            guard let base = buf.baseAddress else { return }
+            tex.getBytes(base, bytesPerRow: tex.width * 4,
+                         from: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
+                                         size: MTLSize(width: tex.width,
+                                                       height: tex.height, depth: 1)),
+                         mipmapLevel: 0)
+        }
+        return bgra
     }
 
     private static func meanLuma(_ tex: MTLTexture) -> Double {

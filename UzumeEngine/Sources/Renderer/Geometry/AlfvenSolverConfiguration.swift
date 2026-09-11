@@ -33,7 +33,6 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// as omega climbing. What should be held fixed is the dissipation RATE at the cutoff,
     /// so nu4 = C / k_cut^4 with C taken from the spike's own operating point.
     public var nu4: Float
-    public var drive: Float
     /// Hou-Li filter kmax. DERIVED, like `nu4`, and for the same reason: the spike uses
     /// `kmax = N/2` (alfven.py:37,41-42) — the Nyquist wavenumber — so the filter's shape
     /// relative to the grid is resolution-independent. A fixed constant here (it was 100)
@@ -103,6 +102,182 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// centre spends roughly twice as long in the near half of the range as the far half.
     /// 1.0 restores the symmetric cosine.
     public var displayHueDwell: Float
+    /// ── ALFVEN.3 audio routing (design §7, one primitive per layer — FA #67) ──
+    ///
+    /// Stirring vigour at silence and at full bass. `drive` is the forcing amplitude, and
+    /// its range here is 3 ORDERS OF MAGNITUDE above the design's nominal 0.012…0.020 —
+    /// deliberately, because that number was inherited from the spike and MEASURED INERT
+    /// in both implementations: sweeping it 0 → 0.080 moves J std by 0.08% and mean luma
+    /// not at all. The response only begins near drive ~1 and spans the reference set by
+    /// ~16: at 0.02 the field is two broad lobes with soft seams
+    /// (`05_atmosphere_relaxed_state`), at 16 it is many thin bright seams braided across
+    /// the frame (`01_macro_braided_lobes`). Those are exactly the two states §7 asks the
+    /// bass to move between. Stability was checked at the ceiling: 0.00% clamped, wMax 57
+    /// against a clamp of 200.
+    ///
+    /// ALFVEN.3e raised the ceiling 16 -> 18. Re-checked with a knob that works (see
+    /// below): at 18, wMax 67.4 and 0.00% clamped, ~3x margin on the clamp; 24 is still
+    /// clean at 94.2. The ceiling is bounded by the DISPLAY, not stability.
+    ///
+    /// ⚠ Do not raise it further expecting more motion. Between drive 16 and 24 the field
+    /// keeps energising — wRMS 6.61 -> 11.16, +69% — while rendered frame-to-frame motion
+    /// moves +2% (4.37 -> 4.47). The top of the solver's dynamic range is being discarded
+    /// by the J -> display mapping, so the lever up there is `displayExposure` /
+    /// `polarityScale`, not this number. Unexplored as of ALFVEN.3e.
+    public var driveFloor: Float
+    public var driveCeil: Float
+    /// Soft-saturation knee for the bass envelope, in `bassDev` units.
+    ///
+    /// Measured over 7 canonical fixture tracks plus a live capture (~20k frames): raw
+    /// `bassDev` is ZERO for 58% of frames (it is a one-sided deviation), and a tau-100ms
+    /// envelope — the timescale §7 specifies — sits at p50 0.033, p95 0.296, p99 0.647.
+    /// A linear map from 0 would therefore park the field at its silence look through most
+    /// of a track. `tanh(env / knee)` with the knee near p75 (0.094) spreads the COMMON
+    /// range across the drive range instead. Tuned against p99, never against 1.0 (D-026).
+    /// Stirring-vigour window, in `bassRel` units: the shift that centres steady music
+    /// mid-range, and the scale that spans quiet to loud.
+    ///
+    /// ⚠ Replaces a `bassDev` map, on Matt's M7: "only a loose connection is perceived
+    /// between the visuals and audio signal." Measured on that session's Alfvén window,
+    /// the cause was not latency — it was that `bassDev` is a ONE-SIDED deviation from a
+    /// running average, so steady music with no bass surprises reads as ZERO (62 % of
+    /// frames exactly zero). Drive therefore sat below 1 — the silence look — for **40 %
+    /// of the music**. The field was rendering its relaxed state while a track played,
+    /// which is precisely "not connected to the audio".
+    ///
+    /// `bassRel` is the two-sided sibling and still a D-026 deviation primitive, so FA #67
+    /// holds: one primitive on this layer. Same window, same session: 0 % below 1, p50
+    /// 9.44, p95 14.55 — the field stirs throughout the music and still tracks the bass.
+    /// Across the 7 canonical fixtures the map puts quiet at drive 0.8, median 9.8, loud
+    /// 15.8.
+    ///
+    /// This deviates from design §7, which names `bassDev`. §7's own amplitude for this
+    /// route was already falsified at ALFVEN.3 (measured inert); its choice of the
+    /// one-sided primitive is the second thing about that row that does not survive
+    /// contact with real music.
+    ///
+    /// ## ALFVEN.3e — shift 0.05 -> 0, scale 0.16 -> 0.45
+    ///
+    /// The 3c window was centred on the wrong place and far too narrow. Re-measured over
+    /// Matt's two clean captures (2026-09-10T21-24-18Z and T19-34-42Z, 12 925 frames,
+    /// `chain_health` verdict `clean` on both), the tau-100ms `bassRel` envelope sits at
+    /// p05 -0.18, p50 0.00, p95 +0.26, p99 +0.49. Under the 3c window that mapped to
+    /// drive p50 10.5, p95 15.7, p99 16.0 — the MEDIAN frame already at 65 % of the
+    /// ceiling and the loudest 5 % of the track compressed into the last 0.3 of it.
+    ///
+    /// Rendered through the production display path (`ALFVEN_VIGOUR`, mean per-frame
+    /// absolute pixel delta at steady state, frames 600-900):
+    ///
+    ///                  p05    p50    p95    p99   p95->p99
+    ///     3c window    1.52   2.95   4.30   4.36     0.06
+    ///     this         2.15   3.07   3.88   4.50     0.62
+    ///
+    /// The baseline Matt signed off is preserved (p50 +4 %, below perception) and the top
+    /// of the range is marginally brighter, but the loud moments are now TEN TIMES more
+    /// separated from each other. That was the defect: every drop, hit and chorus rendered
+    /// the same frame-to-frame motion, so the field could be perfectly coupled to the
+    /// signal and still read as arbitrary.
+    ///
+    /// ⚠ The ceiling is NOT the lever, and raising it further does nothing. The same
+    /// harness, sweeping drive directly at steady state, measures the solver's own
+    /// response saturating: drive 16 -> 4.37, 20 -> 4.55, 24 -> 4.47. Above ~18 the field
+    /// stops answering, so range must be won by spending 0…18 better, not by extending it.
+    /// (Do not re-measure this on a short run: at 240 frames the field is still
+    /// energising and the curve looks linear to 24. It is not.)
+    ///
+    /// Setting the shift to 0 does not undo 3c's M7 fix — the wider scale now carries it.
+    /// Steady music (`bassRel` ~ 0) renders MORE motion than before (3.07 vs 2.95), and
+    /// quiet passages more still (2.15 vs 1.52), so "drops to its silence look during
+    /// music" is further away than it was, not closer.
+    public var bassRelShift: Float
+    public var bassRelScale: Float
+    public var bassKnee: Float
+    /// Envelope time constants, seconds. §7's timescales: bass ~100 ms, treble ~30 ms,
+    /// centroid seconds. Different timescales per layer is the point — two layers sharing
+    /// one would read as the music fighting itself (FA #67).
+    /// ALFVEN.3g auto-exposure. `exposureBeta` 0 = the fixed ALFVEN.4d constant, 1 =
+    /// film.py's `autoexp` exactly; `exposureTau` smooths mean|J| in REAL seconds.
+    ///
+    /// Measured at drive 18 (the p99 the ALFVEN.3e map reaches), clipping vs the loud/quiet
+    /// motion ratio: beta 0 -> 8.61 % clipped, 1.56x; 0.5 -> 2.52 %, 1.40x; 0.65 -> 1.59 %,
+    /// 1.35x; 1.0 -> 0.47 %, 1.25x. Clipping falls steeply, the loudness cue gently, so
+    /// 0.65 takes 82 % of the blow-out for 13 % of the response. ⚠ Matt's call on the
+    /// rendered frames, not the table — the visual difference across this range is subtle.
+    public var exposureBeta: Float
+    public var exposureTau: Float
+    public var bassTau: Float
+    public var centroidTau: Float
+    /// Centroid range actually observed on real music, for the hue map.
+    ///
+    /// ⚠ NOT 0…1. Measured across the same 8 sessions: p05 0.047, p50 0.120, p95 0.186.
+    /// film.py's `hue = 0.46 + 0.26*centroid01` assumes a normalised 0…1 and would move
+    /// the centre by 0.028 — no visible drift, and nowhere near the palette Matt approved.
+    /// Seam-bloom sizzle window, in `trebRel` units — the floor below which treble adds
+    /// no bloom, and the value that reaches film.py's full sizzle of 1.6.
+    ///
+    /// ⚠ film.py's `sizzle = trebRel - 0.6` was ported VERBATIM at ALFVEN.3 and was
+    /// therefore DEAD: our `trebRel` is a relative deviation centred on zero, measured
+    /// p05 -0.009 / p50 0.000 / p95 0.009 / p99 0.017 across 8 sessions, so `trebRel - 0.6`
+    /// clipped to zero on every frame of a live capture and the bloom never left its 0.30
+    /// floor (measured: 0.00% of frames above it). Same class of mistake as the centroid
+    /// range — film.py's primitive scales are not ours — and the one I checked for centroid
+    /// but not for treble.
+    ///
+    /// Note `RouteCoverageTests` passed throughout: it asserts the PRIMITIVE fires, not
+    /// that the consumer responds to it. A route can be green and visually inert.
+    /// Ceiling on the seam bloom, and the fastest it may change per second.
+    ///
+    /// ⚠ FLASH SAFETY (D-157), on Matt's M7: "a strobing effect ... jarring due to the
+    /// bright white light ... also sporadic." Measured on that clean capture, max
+    /// frame-to-frame delta-luma was **0.4153 against the D-157 gate of 0.05** — 8.3x over,
+    /// on 15 frames. For scale, DS.5's arrival push measures 0.0174 on the same gate.
+    ///
+    /// Cause: film.py's `amt` reaches 1.66 and multiplies a WHOLE-FRAME additive glow,
+    /// while §7's ~30 ms treble timescale is ~2 frames at 60 fps — the envelope moves 43 %
+    /// toward its target in ONE frame. film.py is offline still art; its bloom was never
+    /// validated as a temporal sequence, and a whole-frame additive term is exactly the
+    /// unbounded footprint D-157 forbids.
+    ///
+    /// The ceiling caps the contribution; the slew bounds how fast it may arrive, which is
+    /// what actually bounds delta-luma. Both are needed: a low ceiling still strobes if it
+    /// is reached in one frame.
+    ///
+    /// Calibrated on the production path against a percussive treble train at the fixtures'
+    /// p-max (0.126) — max frame-to-frame delta-luma, gate 0.05:
+    ///
+    ///     unbounded (1.66, no slew)  bloom 0.30...1.66   0.1041   3 frames OVER
+    ///     ceil 0.85, slew 1.2/s      bloom 0.30...0.46   0.0036   0   (too subtle)
+    ///     ceil 0.85, slew 3.0/s      bloom 0.30...0.69   0.0070   0
+    ///     ceil 0.85, slew 6.0/s      bloom 0.30...0.85   0.0124   0   <- shipped
+    ///     ceil 0.85, slew 12/s       bloom 0.30...0.85   0.0227   0   (no extra range)
+    ///
+    /// 6.0 reaches the full ceiling — so the bloom still visibly answers the treble — with
+    /// a 4x margin under the gate, and below DS.5's arrival push (0.0174) which passed M7.
+    /// Beyond it the range stops growing and only the flash does.
+    public var centroidLo: Float
+    public var centroidHi: Float
+    /// How much of the palette excursion the centroid owns versus the time drift.
+    /// 0.6 = centroid-led, with the drift guaranteeing movement on spectrally-flat tracks
+    /// (`there_there` moves the centroid driver only 0.16 of its range).
+    public var centroidWeight: Float
+    /// How hard the palette is anchored on `displayHueCentre` (Matt's 0.72).
+    ///
+    /// The excursion away from the anchor is raised to this power, so typical values are
+    /// pushed toward the anchor while the extremes still reach the far end. It is the only
+    /// knob that actually moves the anchoring: `centroidWeight` barely does, because the
+    /// centroid term and the drift term both average ~0.4, so trading one for the other
+    /// leaves the mean where it was.
+    ///
+    /// Modelled against the real centroid distribution (7 fixture tracks) crossed with the
+    /// drift — fraction of time within 0.03 of 0.72 / fraction reaching below 0.55:
+    ///
+    ///     bias 1.0 ->  5.4% / 30.2%   (mean hue 0.581 — read as green, not his palette)
+    ///     bias 3.0 -> 39.2% /  9.3%   (mean hue 0.657)
+    ///     bias 5.0 -> 69.3% /  5.7%   (mean hue 0.682 — anchored, but nearly static)
+    ///
+    /// 3.0 on Matt's "anchor it harder toward 0.72" (2026-09-10): it makes 0.72 the clear
+    /// home palette while keeping the traverse he asked for at 4e from collapsing.
+    public var hueAnchorBias: Float
 
     public init(
         edge: Int = 256,
@@ -110,7 +285,6 @@ public struct AlfvenSolverConfiguration: Sendable {
         substeps: Int = 4,
         alpha: Float = 0.16,
         nu4: Float? = nil,     // nil => derived from `edge`, see the property comment
-        drive: Float = 0.020,
         spectralCutoff: Float? = nil,  // nil => Nyquist, edge/2
         clampOmega: Float = 200.0,     // a genuine backstop: ~25x the measured equilibrium
         clampPsi: Float = 100.0,
@@ -123,7 +297,20 @@ public struct AlfvenSolverConfiguration: Sendable {
         jCutoff: Float = 48.0,
         displayHueSpan: Float = 0.26,
         displayHuePeriodSeconds: Float = 80.0,
-        displayHueDwell: Float = 2.0
+        displayHueDwell: Float = 2.0,
+        driveFloor: Float = 0.02,
+        driveCeil: Float = 18.0,
+        bassRelShift: Float = 0.0,
+        bassRelScale: Float = 0.45,
+        bassKnee: Float = 0.094,
+        exposureBeta: Float = 0.65,
+        exposureTau: Float = 0.30,
+        bassTau: Float = 0.10,
+        centroidTau: Float = 2.5,
+        centroidLo: Float = 0.047,
+        centroidHi: Float = 0.186,
+        centroidWeight: Float = 0.6,
+        hueAnchorBias: Float = 3.0
     ) {
         self.edge = edge
         self.maxDt = maxDt
@@ -132,7 +319,6 @@ public struct AlfvenSolverConfiguration: Sendable {
         // C = 2.5e-7 * ((2/3)*128)^4 — the spike's dissipation rate at its own cutoff.
         let kCut = (2.0 / 3.0) * (Float(edge) / 2.0)
         self.nu4 = nu4 ?? (13.256 / (kCut * kCut * kCut * kCut))
-        self.drive = drive
         self.spectralCutoff = spectralCutoff ?? (Float(edge) / 2.0)
         self.clampOmega = clampOmega
         self.clampPsi = clampPsi
@@ -146,6 +332,19 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.displayHueSpan = displayHueSpan
         self.displayHuePeriodSeconds = displayHuePeriodSeconds
         self.displayHueDwell = displayHueDwell
+        self.driveFloor = driveFloor
+        self.driveCeil = driveCeil
+        self.bassRelShift = bassRelShift
+        self.bassRelScale = bassRelScale
+        self.bassKnee = bassKnee
+        self.exposureBeta = exposureBeta
+        self.exposureTau = exposureTau
+        self.bassTau = bassTau
+        self.centroidTau = centroidTau
+        self.centroidLo = centroidLo
+        self.centroidHi = centroidHi
+        self.centroidWeight = centroidWeight
+        self.hueAnchorBias = hueAnchorBias
     }
 }
 

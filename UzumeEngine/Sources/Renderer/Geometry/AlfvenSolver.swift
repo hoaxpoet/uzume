@@ -28,27 +28,6 @@ import Metal
 import simd
 import Shared
 
-/// Mirrors `AlfvenParams` in AlfvenSolver.metal. Layout is the GPU contract.
-struct AlfvenParams {
-    var dt: Float = 0
-    var alpha: Float = 0
-    var nu4: Float = 0
-    var drive: Float = 0
-    var time: Float = 0
-    var cutoff: Float = 0
-    var clampW: Float = 0
-    var clampP: Float = 0
-    var gridEdge: UInt32 = 0
-    var seedKOmega: UInt32 = 0
-    var seedKPsi: UInt32 = 0
-    var seedAmpOmega: Float = 0
-    var seedAmpPsi: Float = 0
-    var seedPhase: Float = 0
-    var blendRate: Float = 0
-    /// Band limit for the DISPLAY quantity J; see `alfven_j_spectrum`.
-    var jCutoff: Float = 0
-}
-
 public enum AlfvenSolverError: Error {
     case functionNotFound(String)
     case allocationFailed
@@ -93,12 +72,20 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     let finalizePSO: MTLComputePipelineState
     let cflReducePSO: MTLComputePipelineState
     let cflFinishPSO: MTLComputePipelineState
+    let exposureReducePSO: MTLComputePipelineState
+    let exposureFinishPSO: MTLComputePipelineState
     let jSpectrumPSO: MTLComputePipelineState
     let bloomCorePSO: MTLComputePipelineState
     let blurPSO: MTLComputePipelineState
 
     let dtBuffer: MTLBuffer
     let cflScratch: MTLBuffer
+    /// ALFVEN.3g auto-exposure: `[0]` the factor the fragment multiplies its calibrated
+    /// exposure by, `[1]` the persistent mean|J| EMA. Written on the GPU and READ on the
+    /// GPU — the fragment binds this buffer directly, so the adaptation costs no readback
+    /// and no CPU/GPU sync point.
+    let exposureBuffer: MTLBuffer
+    let exposureScratch: MTLBuffer
     let displayPipeline: MTLRenderPipelineState?
 
     /// Cycle index at the last step, so a re-seed is detected rather than recomputed.
@@ -114,6 +101,15 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// duration used for something that lives on another clock. Reading the PREVIOUS
     /// frame's dt keeps this stall-free — the reduction writes `dtBuffer` on the GPU.
     public private(set) var simClock: Float = 0
+
+    /// ALFVEN.3 audio envelopes (see AlfvenSolver+Audio). Real-time smoothed, per §7's
+    /// timescales; zero at silence, which is the state the preset relaxes to (D-037).
+    var bassEnvelope: Float = 0
+    var centroidEnvelope: Float = 0
+    /// Slew-limited bloom strength (D-157). Starts at film.py's silence floor.
+    private var lastFeatureTime: Float = 0
+    /// Real seconds elapsed on the listener's clock last frame — the exposure EMA's step.
+    private(set) var lastRealDt: Float = 1.0 / 60.0
 
     public init(device: MTLDevice, library: MTLLibrary,
                 pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb,
@@ -143,6 +139,8 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         finalizePSO  = try pso("alfven_finalize")
         cflReducePSO = try pso("alfven_cfl_reduce")
         cflFinishPSO = try pso("alfven_cfl_finish")
+        exposureReducePSO = try pso("alfven_exposure_reduce")
+        exposureFinishPSO = try pso("alfven_exposure_finish")
         jSpectrumPSO = try pso("alfven_j_spectrum")
         bloomCorePSO = try pso("alfven_bloom_core")
         blurPSO      = try pso("alfven_blur")
@@ -150,11 +148,22 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         guard let dtBuf = device.makeBuffer(length: MemoryLayout<Float>.size,
                                             options: .storageModeShared),
               let cfl = device.makeBuffer(length: MemoryLayout<UInt32>.size,
-                                          options: .storageModeShared) else {
+                                          options: .storageModeShared),
+              let expo = device.makeBuffer(length: MemoryLayout<Float>.size * 2,
+                                           options: .storageModeShared),
+              let expoScratch = device.makeBuffer(length: MemoryLayout<UInt32>.size,
+                                                  options: .storageModeShared) else {
             throw AlfvenSolverError.allocationFailed
         }
         dtBuffer = dtBuf
         cflScratch = cfl
+        exposureBuffer = expo
+        exposureScratch = expoScratch
+        // Factor 1.0 / EMA unseeded: the first frame renders at exactly the ALFVEN.4d
+        // calibration, and the finish kernel adopts the measured mean rather than easing
+        // up from zero (which would over-expose the opening frames).
+        exposureBuffer.contents().assumingMemoryBound(to: Float.self).pointee = 1.0
+        exposureBuffer.contents().assumingMemoryBound(to: Float.self).advanced(by: 1).pointee = 0
 
         (state, fields) = try Self.allocateTextures(device: device, edge: configuration.edge)
 
@@ -220,6 +229,12 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// the simulation's" — which is exactly the bug 4c fixed.
     public func update(features: FeatureVector, stemFeatures: StemFeatures,
                        commandBuffer: MTLCommandBuffer) {
+        let dt = features.deltaTime > 0
+            ? features.deltaTime
+            : max(features.time - lastFeatureTime, 1.0 / 60.0)
+        lastFeatureTime = features.time
+        lastRealDt = dt
+        advanceAudio(features, dt: dt)
         update(time: features.time, commandBuffer: commandBuffer)
     }
 
@@ -253,6 +268,7 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
             encodeSubstep(&params, into: commandBuffer)
         }
         encodeBloom(&params, into: commandBuffer)
+        encodeExposure(&params, into: commandBuffer)
     }
 
     /// Force a fresh seed — first frame, or recovery after a non-finite blow-up.
@@ -263,38 +279,6 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
         var params = makeParams(time: 0)
         params.seedPhase = 1.7
         encodeSeed(&params, into: commandBuffer)
-    }
-
-    private func makeParams(time: Float) -> AlfvenParams {
-        let cfg = configuration
-        // Per-substep share of the re-seed crossfade, raised cosine (the spike's
-        // advance_blend). Zero outside the blend window.
-        let cycleStart = floor(time / cfg.cycleSeconds) * cfg.cycleSeconds
-        let blendPhase = min(max((time - cycleStart) / cfg.blendTau, 0), 1)
-        // Per-substep share of the crossfade, raised cosine (the spike's advance_blend,
-        // alfven.py:115-127). The spike divides by its ACTUAL dt; this used `cfg.maxDt`,
-        // the 0.005 ceiling, so the crossfade ran ~2.5x fast whenever the CFL was biting.
-        let stepDt = lastAdaptiveDt > 0 ? lastAdaptiveDt : cfg.maxDt
-        let blendRate: Float = blendPhase < 1
-            ? (0.5 - 0.5 * cos(.pi * blendPhase)) * (stepDt / cfg.blendTau) * .pi
-            : 0
-        return AlfvenParams(
-            dt: cfg.maxDt,
-            alpha: cfg.alpha,
-            nu4: cfg.nu4,
-            drive: cfg.drive,
-            time: time,
-            cutoff: cfg.spectralCutoff,
-            clampW: cfg.clampOmega,
-            clampP: cfg.clampPsi,
-            gridEdge: UInt32(cfg.edge),
-            seedKOmega: UInt32(cfg.seedKOmega),
-            seedKPsi: UInt32(cfg.seedKPsi),
-            seedAmpOmega: cfg.seedAmpOmega,
-            seedAmpPsi: cfg.seedAmpPsi,
-            seedPhase: 7.31 * floor(time / cfg.cycleSeconds) + 1.7,
-            blendRate: blendRate,
-            jCutoff: cfg.jCutoff)
     }
 
     func grid() -> (MTLSize, MTLSize) {
@@ -341,6 +325,13 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// film.py uses `0.30 + 0.85 * clip(sizzle, 0, 1.6)` where `sizzle` is `trebRel - 0.6`;
     /// at silence that clips to 0 and the constant term is all that remains. The treble
     /// term needs audio, so it arrives with ALFVEN.3 and this is the floor it builds on.
+    /// Seam-glow strength. A CONSTANT, deliberately — the value ALFVEN.4f shipped and Matt
+    /// signed off ("Looks great", `2026-09-10T16-07-07Z`).
+    ///
+    /// ⚠ Do not route audio to this. ALFVEN.3b drove it from `trebRel`; it strobed 8.3x
+    /// over the D-157 gate (BUG-126), and bounding it fixed the RATE, not the look — on
+    /// the bounded build it still pumped to nearly 3x this value for 36 % of a track.
+    /// Matt: *"I don't like the brightening effect... I would remove it."* (ALFVEN.3f).
     public var displayBloomAmount: Float = 0.30
     /// The normalisation the BLOOM THRESHOLD is measured against — `1/(p99.6 - p2)`, the
     /// autoexp scale. J's p99.6 runs 3.99…4.66 across frames, so the true scale is

@@ -22,36 +22,19 @@ struct AlfvenDisplayParams {
 
 extension AlfvenSolver {
 
-    /// The drifting opponent centre at a given moment on the listener's clock.
-    ///
-    /// A raised cosine away from `displayHueCentre` and back: at t = 0 it is exactly the
-    /// anchor, at the half period it reaches `anchor - displayHueSpan` (0.46, film.py's
-    /// other end), with no discontinuity and no wrap. Both endpoints are the two ends
-    /// annotated in `04_palette_opponent_drift.png`, so the traverse cannot wander outside
-    /// the approved family.
-    ///
-    /// The fragment still opposes +/-0.30 about this centre, so what moves is WHICH
-    /// complementary pair is on screen, not how complementary it is.
-    func hueCentre(at time: Float) -> Float {
-        let period = max(configuration.displayHuePeriodSeconds, 0.001)
-        let phase = 2.0 * Float.pi * time / period
-        let traverse = 0.5 * (1.0 - cos(phase))          // 0 at the anchor, 1 at the far end
-        let shaped = pow(traverse, max(configuration.displayHueDwell, 0.01))
-        return displayHueCentre - configuration.displayHueSpan * shaped
-    }
-
     /// Draw the current field. `J` is what the fragment colours (§4); omega and psi are
     /// state and supply nothing visual on their own.
     public func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {
         guard let displayPipeline else { return }
         var params = AlfvenDisplayParams(exposure: displayExposure,
                                          polarityScale: displayPolarityScale,
-                                         hueCentre: hueCentre(at: features.time),
+                                         hueCentre: audioHueCentre(at: features.time),
                                          bloomAmount: displayBloomAmount)
         encoder.setRenderPipelineState(displayPipeline)
         encoder.setFragmentBytes(&params,
                                  length: MemoryLayout<AlfvenDisplayParams>.stride,
                                  index: 0)
+        encoder.setFragmentBuffer(exposureBuffer, offset: 0, index: 1)
         encoder.setFragmentTexture(stateTexture, index: 0)
         encoder.setFragmentTexture(fields.bloomNear, index: 1)
         encoder.setFragmentTexture(fields.bloomFar, index: 2)
@@ -89,5 +72,28 @@ extension AlfvenSolver {
                  via: fields.bloomTmp,
                  into: fields.bloomFar,
                  sigma: (49.0 - 4.0).squareRoot())
+    }
+
+    /// ALFVEN.3g — the mean|J| reduction and the exposure factor it yields.
+    ///
+    /// Mirrors `encodeCFL`: a field-wide atomic reduction, then a single thread turning it
+    /// into one number the rest of the frame reads. Costs one extra dispatch pair per
+    /// frame at the production grid, against the four the CFL already runs per substep.
+    func encodeExposure(_ params: inout AlfvenParams, into cmd: MTLCommandBuffer) {
+        exposureScratch.contents().assumingMemoryBound(to: UInt32.self).pointee = 0
+        let (gridSize, tgSize) = grid()
+        guard let enc = cmd.makeComputeCommandEncoder() else { return }
+        enc.setComputePipelineState(exposureReducePSO)
+        enc.setTexture(stateTexture, index: 0)
+        enc.setBuffer(exposureScratch, offset: 0, index: 0)
+        enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 1)
+        enc.dispatchThreads(gridSize, threadsPerThreadgroup: tgSize)
+        enc.setComputePipelineState(exposureFinishPSO)
+        enc.setBuffer(exposureScratch, offset: 0, index: 0)
+        enc.setBuffer(exposureBuffer, offset: 0, index: 1)
+        enc.setBytes(&params, length: MemoryLayout<AlfvenParams>.stride, index: 2)
+        enc.dispatchThreads(MTLSize(width: 1, height: 1, depth: 1),
+                            threadsPerThreadgroup: MTLSize(width: 1, height: 1, depth: 1))
+        enc.endEncoding()
     }
 }
