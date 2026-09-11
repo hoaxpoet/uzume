@@ -210,6 +210,15 @@ struct AlfvenFilmPreviewTests {
             var previous: [UInt8] = []
             var deltas: [Double] = []
             var drives: [Float] = []
+            var clipFractions: [Double] = []
+            var ajP50: [Double] = []
+            var ajP95: [Double] = []
+            var meanAbsJ: [Double] = []
+            var meanJEma = 0.0
+            var exposures: [Double] = []
+            var lumas: [Double] = []
+            var relDeltas: [Double] = []
+            var filmSpan: [Double] = []
             for frame in 1...frames {
                 guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                     throw HarnessError.commandBufferFailed
@@ -222,17 +231,45 @@ struct AlfvenFilmPreviewTests {
                 f.trebRel = env["ALFVEN_TREBREL"].flatMap(Float.init) ?? 0
                 f.spectralCentroid = env["ALFVEN_CENTROID"].flatMap(Float.init) ?? 0.125
                 solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                // ALFVEN_AUTOEXP: CPU-side PROTOTYPE of film.py's auto-exposure, to measure
+                // the visual outcome before committing to a GPU reduction. `autoexp` divides
+                // by (p99.6 - p2); measured over drive 5…24 that span tracks mean|J| at a
+                // ratio of 0.163 +/- 6% while the field energy moves 4.8x, so mean|J| — which
+                // the solver's existing CFL-style atomic reduction can produce — substitutes.
+                // The readback here is far too slow to ship; it is an instrument, not a design.
+                if env["ALFVEN_AUTOEXP"] == "1" {
+                    cmd.commit(); cmd.waitUntilCompleted()
+                    let jNow = Self.readJ(solver)
+                    let m = jNow.reduce(0.0) { $0 + abs($1) } / Double(jNow.count)
+                    let tau = Double(env["ALFVEN_AUTOEXP_TAU"] ?? "0.30") ?? 0.30
+                    let alpha = 1.0 - exp(-(1.0 / 60.0) / max(tau, 1e-4))
+                    meanJEma = meanJEma <= 0 ? m : meanJEma + alpha * (m - meanJEma)
+                    // PARTIAL adaptation. beta = 0 is the fixed constant; beta = 1 is
+                    // film.py exactly (0.085 * 1.917 = 0.163, the measured ratio). film.py
+                    // renders STILLS, each normalised independently, so it never had to
+                    // carry loudness across time — for a visualiser the brightness
+                    // variation it removes is signal. beta trades clipping against that.
+                    let beta = Double(env["ALFVEN_AUTOEXP_BETA"] ?? "1.0") ?? 1.0
+                    let meanRef = 1.917
+                    let expo0 = 0.085
+                    let e = expo0 * pow(meanRef / max(meanJEma, 1e-6), beta)
+                    solver.displayExposure = Float(min(max(e, 0.01), 0.40))
+                }
+                guard let cmd2 = env["ALFVEN_AUTOEXP"] == "1"
+                        ? ctx.commandQueue.makeCommandBuffer() : cmd else {
+                    throw HarnessError.commandBufferFailed
+                }
                 let pass = MTLRenderPassDescriptor()
                 pass.colorAttachments[0].texture = target
                 pass.colorAttachments[0].loadAction = .clear
                 pass.colorAttachments[0].storeAction = .store
                 pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
-                guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                guard let enc = cmd2.makeRenderCommandEncoder(descriptor: pass) else {
                     throw HarnessError.commandBufferFailed
                 }
                 solver.render(encoder: enc, features: f)
                 enc.endEncoding()
-                cmd.commit(); cmd.waitUntilCompleted()
+                cmd2.commit(); cmd2.waitUntilCompleted()
                 let now = Self.pixels(target)
                 // Skip the settle window: the seeded field's initial transient is not the
                 // steady-state stirring the metric is meant to describe.
@@ -243,16 +280,76 @@ struct AlfvenFilmPreviewTests {
                             + abs(Double(now[i + 1]) - Double(previous[i + 1]))
                             + abs(Double(now[i + 2]) - Double(previous[i + 2]))
                     }
-                    deltas.append(sum / Double(now.count / 4 * 3))
+                    let d = sum / Double(now.count / 4 * 3)
+                    deltas.append(d)
+                    // ⚠ `meanPixelDelta` scales with EXPOSURE: the same structural change
+                    // under a 2.5x darker tone map yields 2.5x smaller pixel differences.
+                    // Comparing two exposure schemes on it measures brightness, not motion
+                    // (it made film.py's own auto-exposure look like a 27 % motion loss).
+                    // `relDelta` divides by the frame's own brightness, so it compares how
+                    // much of what is VISIBLE changed — the thing the eye actually reads.
+                    var lumaSum = 0.0
+                    for i in stride(from: 0, to: now.count, by: 4) {
+                        lumaSum += 0.0722 * Double(now[i]) + 0.7152 * Double(now[i + 1])
+                            + 0.2126 * Double(now[i + 2])
+                    }
+                    let meanLuma = lumaSum / Double(now.count / 4)
+                    lumas.append(meanLuma)
+                    relDeltas.append(d / max(meanLuma, 1e-6))
                     drives.append(solver.audioDrive)
+                    // Per-frame, not a final snapshot: one frame of a chaotic field is far
+                    // too noisy to size a display lever from (a single-frame read made the
+                    // clip fraction non-monotonic in drive, which the field is not).
+                    let jf = Self.readJ(solver)
+                    // ⚠ Must include the GPU-computed factor. ALFVEN.3g moved part of the
+                    // exposure onto the GPU (`exposureBuffer[0]`); reading only
+                    // `displayExposure` here measured a quantity the shader no longer uses
+                    // and reported the pre-fix clip fraction against a fixed build.
+                    let factor = Double(
+                        solver.exposureBuffer.contents().assumingMemoryBound(to: Float.self).pointee)
+                    let expo = Double(solver.displayExposure) * factor
+                    clipFractions.append(
+                        Double(jf.filter { abs($0) * expo >= 1.0 }.count) / Double(jf.count))
+                    let aj = jf.map { abs($0) * expo }.sorted()
+                    ajP50.append(aj[aj.count / 2])
+                    ajP95.append(aj[min(aj.count - 1, aj.count * 95 / 100)])
+                    // ALFVEN.3g: can a cheap GPU-reducible statistic stand in for film.py's
+                    // percentile normaliser? `autoexp` divides by (p99.6 - p2) of |J|; a
+                    // fragment cannot do percentiles, but the solver already runs an atomic
+                    // reduction for the CFL timestep, so mean|J| IS reachable. Record both
+                    // per frame and compare — if their ratio is stable, mean substitutes.
+                    let absJ = jf.map { abs($0) }.sorted()
+                    meanAbsJ.append(absJ.reduce(0, +) / Double(absJ.count))
+                    exposures.append(Double(solver.displayExposure))
+                    let hi = absJ[min(absJ.count - 1, Int(0.996 * Double(absJ.count - 1)))]
+                    let lo = absJ[max(0, Int(0.02 * Double(absJ.count - 1)))]
+                    filmSpan.append(hi - lo)
                 }
                 previous = now
             }
             let mean = deltas.reduce(0, +) / Double(max(deltas.count, 1))
+            if let tag = env["ALFVEN_VIGOUR_PNG"] {
+                let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("uzume-alfven-beta")
+                try FileManager.default.createDirectory(at: dir,
+                                                        withIntermediateDirectories: true)
+                try Self.writePNG(previous, width: Self.edge, height: Self.edge,
+                                  to: dir.appendingPathComponent("\(tag).png"))
+            }
+            func avg(_ xs: [Double]) -> Double { xs.reduce(0, +) / Double(max(xs.count, 1)) }
             print(String(format: "[alfven-vigour] bassRel %+.4f -> drive %.2f   "
-                                 + "meanPixelDelta %.4f   n %d",
+                                 + "meanPixelDelta %.4f  relDelta %.5f  luma %.1f  aJ p50 %.3f p95 %.3f   "
+                                 + "CLIPPED %.2f%% (max %.2f%%)   n %d",
                          env["ALFVEN_BASSDEV"].flatMap(Float.init) ?? 0.0,
-                         drives.last ?? 0, mean, deltas.count))
+                         drives.last ?? 0, mean, avg(relDeltas), avg(lumas),
+                         avg(ajP50), avg(ajP95),
+                         avg(clipFractions) * 100.0, (clipFractions.max() ?? 0) * 100.0,
+                         deltas.count))
+            print(String(format: "               mean|J| %.4f   filmSpan(p99.6-p2) %.4f   "
+                                 + "ratio %.4f   film-exposure-equiv %.4f (fixed is %.4f)",
+                         avg(meanAbsJ), avg(filmSpan),
+                         avg(meanAbsJ) / max(avg(filmSpan), 1e-9),
+                         1.0 / max(avg(filmSpan), 1e-9), avg(exposures)))
             return
         }
 

@@ -9756,6 +9756,83 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.3g — the fixed exposure was calibrated for one energy level ✅ (2026-09-11)
+
+**Matt's pick** from the three certification-barrier options: chase the display headroom ALFVEN.3e
+found before building any event layer.
+
+**The defect.** `displayExposure` is a constant 0.085, calibrated once at ALFVEN.4d against a single
+reference frame. `aJ = clamp(|J| * exposure, 0, 1)`, so as the bass energises the field an ever-larger
+share of the frame pins at 1.0 and stops carrying information. film.py never had this problem: its
+`autoexp` divides by `1 / (p99.6 - p2)` of |J|, recomputed per frame. 4d substituted a constant
+because a fragment cannot do a percentile reduction.
+
+Measured at steady state, averaged over 300 frames:
+
+| drive | clipped (avg / peak frame) | exposure film.py would use |
+|---|---|---|
+| 5 | 0.23 % / 0.83 % | 0.1095 |
+| 11 | 2.26 % / 5.60 % | 0.0505 |
+| 16.5 | 6.27 % / 16.06 % | 0.0384 |
+| 18 | 8.61 % / 18.85 % | 0.0336 |
+
+The correct exposure spans **0.11 → 0.034**, a 3.3× swing. The fixed constant is right only near
+drive 7; at drive 18 — inside the range the ALFVEN.3e map reaches — it over-exposes by **2.5×**.
+
+**And clipping does not merely waste the top, it destroys motion.** Rendered motion PEAKS at drive 18
+(4.75) and declines at 20 (4.56) and 24 (4.47), tracking clipping 8.6 → 12.5 → 17.5 %. Clipped pixels
+are stuck at white and cannot change frame to frame. That is the real explanation for the "saturation
+above 18" ALFVEN.3e recorded.
+
+**mean|J| substitutes for the percentile.** Across drive 5…24 — a 4.8× span of field energy — the
+ratio `mean|J| / (p99.6 - p2)` holds at **0.163 ± 6 %**. So the reduction the solver ALREADY runs for
+the CFL timestep yields film.py's normaliser: at drive 16.5 the proxy predicts exposure 0.0386 against
+the true 0.0384.
+
+**⚠ film.py's auto-exposure is right for STILLS and wrong for a TIMELINE.** It normalises each frame
+independently because it renders independent images; for a visualiser the brightness variation it
+removes is *signal*. Porting it verbatim measured a loud/quiet motion response of 1.25× against 1.56×
+fixed. This is a context difference of exactly the kind FA #65 permits adapting — so exposure is
+`0.085 * (1.917 / mean|J|)^beta`, with beta = 1 reproducing film.py exactly:
+
+| beta | clipped @ 18 | loud/quiet response |
+|---|---|---|
+| 0 (was) | 8.61 % | 1.56× |
+| 0.5 | 2.52 % | 1.40× |
+| **0.65 (shipped)** | **1.60 %** | **1.35×** |
+| 1.0 (film.py) | 0.47 % | 1.25× |
+
+Clipping falls steeply, the loudness cue gently. **Matt's call on the rendered frames**, not the table.
+
+**Implementation.** `alfven_exposure_reduce` / `alfven_exposure_finish` mirror `encodeCFL` — a
+field-wide atomic reduction, then one thread producing a single number. The fragment binds the result
+buffer and reads the factor ON the GPU, so the adaptation costs no readback and no sync point; the
+CPU-side prototype that proved the design read J back every frame and does not ship. The buffer holds
+a *factor* which multiplies the 4d calibration, keeping calibration and adaptation separable — the trap
+4d fell into by collapsing brightness and hue-polarity onto one constant. Polarity is deliberately left
+on the fixed scale: it is a hue signal, not a brightness one. Two fields added to `AlfvenParams`
+(Swift + Metal in the same commit, since that layout is the GPU contract). Fixed-point accumulation
+because float atomics are not universal; headroom checked at 256² × |J| 200 × 64 = 2.1e8 vs UINT_MAX.
+
+**⚠ THE HONEST RESULT: this is a quality fix, not a reactivity lever.** Rendered side by side at
+matched field state, a 17× reduction in clipped pixels is a change you have to hunt for — 8.6 % of
+pixels, scattered as thin seam cores through a busy field, is statistically large and perceptually
+small. ALFVEN.3e pitched this as "plausibly larger than this whole increment"; that was wrong, and it
+was wrong because it had been measured and never LOOKED at. What Alfvén still lacks is something that
+marks a moment.
+
+**Four instrument failures in one increment, all the same shape** — the metric silently stopped
+modelling the pipeline, and the numbers stayed plausible:
+
+1. 240-frame runs measured a transient as steady state (the curve looked linear to drive 24; it is flat above 18).
+2. Single-frame aJ sampling on a chaotic field reported 1.3 % clipped where the 300-frame average is 6.3 %, and read non-monotonic in drive.
+3. `meanPixelDelta` scales with exposure, so comparing two exposure schemes on it measured brightness — it made film.py's own auto-exposure look like a 27 % motion loss. Fixed by `relDelta` (change / frame brightness).
+4. The clip metric kept reading `displayExposure` after part of the exposure moved to the GPU, reporting the pre-fix number against a fixed build.
+
+Each caveat is now recorded inline at its metric. This is the increment's most durable output.
+
+**Pending live M7.**
+
 ### Increment ALFVEN.3f — remove the brightening, keep the glow ✅ (2026-09-10)
 
 **Matt's M7** (`2026-09-10T23-25-54Z`, `chain_health` verdict **`clean`**, peak −0.13 dBFS):

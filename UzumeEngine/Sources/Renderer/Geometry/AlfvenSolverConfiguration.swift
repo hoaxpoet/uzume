@@ -195,6 +195,16 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// Envelope time constants, seconds. §7's timescales: bass ~100 ms, treble ~30 ms,
     /// centroid seconds. Different timescales per layer is the point — two layers sharing
     /// one would read as the music fighting itself (FA #67).
+    /// ALFVEN.3g auto-exposure. `exposureBeta` 0 = the fixed ALFVEN.4d constant, 1 =
+    /// film.py's `autoexp` exactly; `exposureTau` smooths mean|J| in REAL seconds.
+    ///
+    /// Measured at drive 18 (the p99 the ALFVEN.3e map reaches), clipping vs the loud/quiet
+    /// motion ratio: beta 0 -> 8.61 % clipped, 1.56x; 0.5 -> 2.52 %, 1.40x; 0.65 -> 1.59 %,
+    /// 1.35x; 1.0 -> 0.47 %, 1.25x. Clipping falls steeply, the loudness cue gently, so
+    /// 0.65 takes 82 % of the blow-out for 13 % of the response. ⚠ Matt's call on the
+    /// rendered frames, not the table — the visual difference across this range is subtle.
+    public var exposureBeta: Float
+    public var exposureTau: Float
     public var bassTau: Float
     public var centroidTau: Float
     /// Centroid range actually observed on real music, for the hue map.
@@ -293,6 +303,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         bassRelShift: Float = 0.0,
         bassRelScale: Float = 0.45,
         bassKnee: Float = 0.094,
+        exposureBeta: Float = 0.65,
+        exposureTau: Float = 0.30,
         bassTau: Float = 0.10,
         centroidTau: Float = 2.5,
         centroidLo: Float = 0.047,
@@ -325,6 +337,8 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.bassRelShift = bassRelShift
         self.bassRelScale = bassRelScale
         self.bassKnee = bassKnee
+        self.exposureBeta = exposureBeta
+        self.exposureTau = exposureTau
         self.bassTau = bassTau
         self.centroidTau = centroidTau
         self.centroidLo = centroidLo
