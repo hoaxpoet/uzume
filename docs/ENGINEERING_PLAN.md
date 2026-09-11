@@ -1538,7 +1538,62 @@ regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN un
 difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
 closes both the session rate gate and the offset table, and it is the same run as the M7.
 
-### PR.23 — Nebula: the core's BODY is the late thing 📋 SCOPED, not built (2026-09-11, Matt: *"the core activates with a delay"*)
+### PR.24 — Nebula CERTIFIED ✅ (2026-09-11, Matt: *"It's close enough"*)
+
+**24th certified preset.** M7 on `2026-09-11T16-47-03Z` — chain health **clean** (peak −0.13 dBFS),
+202 s, and the **first Nebula review conducted with BUG-087's rate ceiling gone**: bass changed at
+59.41 Hz against a 60.00 fps render, where every previous Nebula review ran on a ~10 Hz bus. Matt:
+*"The core is connected to the music ... there is a connection"*, then *"It's close enough ... we
+should leave Nebula alone and move to certification."*
+
+`Nebula.json` → `certified: true`; `FidelityRubricTests.certifiedPresets` += `"Nebula"`; the
+automated-gate comment asserting Nebula stays uncertified was corrected rather than left to rot.
+
+#### ★ Certifying enrolled Nebula in a SAFETY gate that had never run on it — and it failed at once
+
+The Harding/WCAG 2.3.1 photosensitivity gate covers the **certified** set only, so flipping the flag
+was itself the trigger. Nebula failed on `responded`, **not** on flashing: it rendered **static**. Its
+ring reads the slot-6 `NebulaState` buffer (PR.21) and the single-pass FeatureVector harness binds a
+**zeroed placeholder** there, so most of the preset drew nothing. The gate refuses to call a static
+frame safe — the CLEAN.0 vacuous-pass rule, on a safety check, working exactly as designed.
+
+**Not silenced.** `MultiPassRenderHarness` already allocates a live `NebulaState` at fragment index 6
+(QG.3.1 built it for the coupling report), so `MultiPassFlashHarnessTests.nebulaIsFlashSafe` measures
+the preset's real response over the shared worst-case beat train:
+
+> `[flash-safety] Nebula: MEASURED | peak 0.00 flashes/s (0 transitions) — SAFE | luma 0.028…0.059 (Δ0.031, mean 0.043) [limit 3.0]`
+
+Δluma 0.031 is ~6× the responsiveness floor, so the render is genuinely moving rather than quietly
+passing. **Transferable lesson: certifying a preset is not a flag flip — it enrols the preset in every
+gate scoped to the certified set, and a preset with a state buffer the single-pass harness cannot bind
+will fail the flash gate on liveness the moment it is certified.**
+
+⚠ **Certified with two known-and-accepted gaps, recorded so neither reads later as an undiscovered
+defect:**
+
+1. **The core's delay is real and unfixed.** Its body runs on the smoothed instant bands (+85 ms
+   measured) while its accent runs on `transient_rise` (+55 ms). PR.23 below scoped it; Matt declined.
+2. **The reference set is still an unfilled template** (`docs/VISUAL_REFERENCES/Nebula/README.md` —
+   palette slot, anti-references and stylization contract all `<...>`). Nebula is
+   `rubric_profile: lightweight`, so that contract IS its rubric substitute, and **nothing
+   mechanically gates it** — no test reads the README. The consequence is specific: Nebula now has no
+   recorded definition of what it should look like, so a future visual regression has nothing to fail
+   against. Curation is Matt's call and a separate increment.
+
+Also open, not blocking: QG.1 reports **FIXTURE GAP** on three Nebula routes (`palette_rotation`,
+`core_pulse`, `ring_event_push`) — their columns postdate the `love_rehab` fixture, so the gate prints
+*"route UNVERIFIED here"* rather than passing them. A route that cannot be verified says so out loud.
+
+### PR.23 — Nebula: the core's BODY is the late thing ⏸ DECLINED, not built (2026-09-11, Matt: *"risky, not necessarily a fix"*)
+
+**Matt's call, and it was the right one on the evidence I gave him:** the increment's own analysis
+says a follower downstream of τ 77 ms band smoothing makes the core's response *asymmetric*, not
+*early*. The remaining lever was a balance shift between body and accent — a judgment about feel, not
+a repair. Against a preset he had just called *"close enough"*, that is risk without a guaranteed
+return. **Kept as a scope**, because the diagnosis is durable even though the fix was declined: if
+Nebula's core is ever reopened, this is where the measurement already is.
+
+### PR.23 (scope retained) — Nebula: the core's BODY is the late thing (2026-09-11, Matt: *"the core activates with a delay"*)
 
 **Matt's M7 on session `2026-09-11T16-47-03Z`** (chain health **clean**, peak −0.13 dBFS, 202 s,
 59–60 Hz analysis — the first Nebula review with BUG-087's rate ceiling gone):

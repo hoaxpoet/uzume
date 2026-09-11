@@ -159,6 +159,18 @@ struct MultiPassFlashHarnessTests {
                         luma: try flashLuma("Stave", settle: 420, frames: 900))
     }
 
+    @Test("Nebula is flash-safe (direct pass + slot-6 band state, real headless render)")
+    func nebulaIsFlashSafe() throws {
+        // PR.24 — Nebula reaches this harness because the single-pass gate correctly REFUSED it.
+        // Nebula is the first `direct` preset with a slot-6 state buffer (PR.21's peak-hold over
+        // 256 aggregated bands), and the FeatureVector harness binds a zeroed placeholder there —
+        // so the ring, which is most of the preset, renders as nothing and the frame reads static.
+        // That is not "safe", it is unmeasured, and the single-pass gate failing loud on it is the
+        // CLEAN.0 vacuous-pass rule working. `MultiPassRenderHarness` allocates a real `NebulaState`
+        // and binds it at fragment index 6, so this is the preset's actual response.
+        assertFlashSafe(name: "Nebula", luma: try flashLuma("Nebula"))
+    }
+
     @Test("Meniscus is flash-safe (continuous band drive + a drop on every beat, real headless render)")
     func meniscusIsFlashSafe() throws {
         // Meniscus reaches this harness because the single-pass gate correctly REFUSED it:
