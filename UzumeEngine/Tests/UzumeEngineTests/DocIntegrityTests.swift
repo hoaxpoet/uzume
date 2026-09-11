@@ -498,3 +498,162 @@ struct DocIntegrityTests {
         #expect(unknown.isEmpty, "CLAUDE.md points to non-existent skill(s): \(unknown) — pointers reference only .claude/skills/{\(Self.expectedSkills.joined(separator: ","))}.")
     }
 }
+
+// MARK: - DOC.14 — stale increment rows
+
+/// Mechanizes the staleness that four separate rows carried on 2026-09-11 (D-161 rule 3:
+/// violated twice → mechanize). All four were the same failure with different faces — a row
+/// claiming work is open when it is not — and each was found by a person reading, which is
+/// exactly the detection method that had already failed for a month.
+///
+/// What was actually found that day:
+///
+/// 1. **WL.4 … WL.10** — eight rows reading *"pending live M7"* while `WL.CERT` had certified
+///    Witchlight on 2026-08-07. The reviews were given, not owed.
+/// 2. **PR.19 / PR.20 / PR.21** — *"M7 owed"* a day after Matt certified the Nebula build that
+///    contained all three.
+/// 3. **FD.2** — a 🔨 row under a preset's OLD name ("Fractal Descent") for a preset retired at
+///    FLY.14 / D-201. Open work for something that no longer exists.
+/// 4. **VL.1** — an increment ID reused for a second, unrelated increment.
+///
+/// ⚠ **What this gate deliberately does NOT try to catch.** WL.11 looked identical to the eight
+/// superseded rows — same preset, same date, same marker — and was the one genuinely open item,
+/// because it landed 24 minutes AFTER the certification commit. Only `git merge-base` separates
+/// those two cases, and a doc test has no business shelling out to git. So a certified preset's
+/// unfinished row is reported as **something to check**, and the row itself says which: if it
+/// really is superseded, close it; if it postdates certification, say so in the row and this gate
+/// accepts it. The escape hatch is deliberate — a gate that cannot express "genuinely still open"
+/// would be closed by deleting true information.
+extension DocIntegrityTests {
+
+    /// Increment-ID prefix → the preset it belongs to. Only prefixes that map to ONE preset
+    /// belong here; `PR.*` (the preset-roster program) spans the whole roster and is excluded by
+    /// construction, not by oversight.
+    static let incrementPrefixPreset: [String: String] = [
+        "WL": "Witchlight",
+        "VL": "Volumetric Lithograph",
+        "SKEIN": "Skein",
+        "FBS": "Ferrofluid Ocean",
+        "AV": "Aurora Veil",
+        "FTR": "Fractal Tree",
+        "CR": "Cymatic Resonance"
+    ]
+
+    /// A row is exempt when it SAYS why it is still open against a certified preset. The phrase
+    /// is required to be explicit so the exemption cannot be taken accidentally.
+    static let postCertExemption = "POSTDATES CERTIFICATION"
+
+    private static func planHeaders() -> [String] {
+        guard let plan = read("docs/ENGINEERING_PLAN.md") else { return [] }
+        return plan.components(separatedBy: "\n").filter { $0.hasPrefix("### ") }
+    }
+
+    /// `### Increment WL.4 — …` / `### PR.22 — …` → `("WL.4", "…")`. Requires the ` — ` so a
+    /// prose heading cannot masquerade as an increment row.
+    private static func incrementRow(_ header: String) -> (id: String, title: String)? {
+        let body = header.hasPrefix("### Increment ") ? String(header.dropFirst(14))
+                                                     : String(header.dropFirst(4))
+        guard let dash = body.range(of: " — ") else { return nil }
+        let id = String(body[body.startIndex..<dash.lowerBound])
+        guard !id.isEmpty, id.first!.isLetter,
+              id.contains(".") || id.contains("-"),
+              id.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" })
+        else { return nil }
+        return (id, String(body[dash.upperBound...]))
+    }
+
+    /// Title with status markers and trailing dates removed, for comparing two rows that carry
+    /// the same ID.
+    private static func normalizedTitle(_ title: String) -> String {
+        var t = title
+        if let i = t.rangeOfCharacter(from: CharacterSet(charactersIn: "✅⏸🔨📋")) { t = String(t[t.startIndex..<i.lowerBound]) }
+        if let i = t.range(of: "(20") { t = String(t[t.startIndex..<i.lowerBound]) }
+        return t.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+
+    /// IDs reused by two genuinely different increments BEFORE this gate existed. They are listed
+    /// rather than fixed because renaming a historical increment breaks every citation that
+    /// resolves to it (the `citationCorpus` gate above would fail), and the history is not worth
+    /// rewriting to satisfy a new rule.
+    ///
+    /// ⚠ **This is a record of debt, not a tolerance.** Do not add to it: an ID reused today is a
+    /// mistake being made now, and the fix is to pick a free one. `VL.1` was reused on 2026-09-11
+    /// and renumbered to `VL.2` the same day rather than landing here.
+    static let knownDuplicateIncrementIDs: Set<String> = [
+        "CA.5", "CA.6", "MD.0",                                   // reworded rotation headers
+        "CHR.3j", "DOC.7", "PERF.1", "PERF.2", "PERF.2-render", "PERF.3"   // genuinely two increments each
+    ]
+
+    @Test("EP: no increment ID is reused for two different increments (DOC.14)")
+    func incrementIDsAreUnique() {
+        guard Self.docsPresent else { print("DocIntegrityTests: repo docs not present — skipping"); return }
+        var titles: [String: Set<String>] = [:]
+        for h in Self.planHeaders() {
+            guard let row = Self.incrementRow(h) else { continue }
+            let t = Self.normalizedTitle(row.title)
+            guard !t.isEmpty else { continue }
+            titles[row.id, default: []].insert(t)
+        }
+        // A rotated header is a PREFIX of the full title (the body moves to history and the
+        // shortened header stays) — that is the DOC.6 convention, not a reuse. A reuse is two
+        // titles where neither contains the other from the start.
+        var dupes: [String] = []
+        for (id, set) in titles where set.count > 1 {
+            let list = Array(set)
+            let collides = list.indices.contains { i in
+                list[(i + 1)...].contains { !($0.hasPrefix(list[i]) || list[i].hasPrefix($0)) }
+            }
+            if collides && !Self.knownDuplicateIncrementIDs.contains(id) { dupes.append(id) }
+        }
+
+        #expect(dupes.sorted().isEmpty,
+                """
+                ENGINEERING_PLAN.md reuses \(dupes.sorted()) for two DIFFERENT increments.                 Derive the next free ID from the TREE, and grep BOTH `^### <PREFIX>` and                 `^### Increment <PREFIX>` — the rows use both forms, and grepping only the first                 is exactly how `VL.1` was reused on 2026-09-11.
+                """)
+    }
+
+    @Test("EP: an unfinished row for a certified or absent preset is stale until it says otherwise (DOC.14)")
+    func unfinishedRowsAreNotSuperseded() {
+        guard Self.docsPresent else { print("DocIntegrityTests: repo docs not present — skipping"); return }
+        let shaders = Self.repoRoot.appendingPathComponent("UzumeEngine/Sources/Presets/Shaders")
+        let sidecars = (try? FileManager.default.contentsOfDirectory(atPath: shaders.path))?
+            .filter { $0.hasSuffix(".json") } ?? []
+        guard !sidecars.isEmpty else { print("DocIntegrityTests: shaders dir not present — skipping"); return }
+
+        // Preset name → certified, read from the sidecars themselves (the same ground truth the
+        // rubric gate uses), never from a list duplicated here.
+        var certified: [String: Bool] = [:]
+        for file in sidecars {
+            guard let data = try? Data(contentsOf: shaders.appendingPathComponent(file)),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let name = obj["name"] as? String else { continue }
+            certified[name] = (obj["certified"] as? Bool) ?? false
+        }
+
+        var findings: [String] = []
+        for header in Self.planHeaders() where header.contains("🔨") {
+            guard let row = Self.incrementRow(header) else { continue }
+            let id = row.id
+            let prefix = id.components(separatedBy: CharacterSet(charactersIn: ".-")).first ?? id
+            guard let preset = Self.incrementPrefixPreset[prefix] else { continue }
+            if header.contains(Self.postCertExemption) { continue }
+            if certified[preset] == true {
+                findings.append("\(id) is unfinished but \(preset) is CERTIFIED")
+            } else if certified[preset] == nil {
+                findings.append("\(id) is unfinished but \(preset) has no sidecar — retired?")
+            }
+        }
+
+        #expect(findings.isEmpty,
+                """
+                \(findings.joined(separator: "; ")).
+                Either the review was already given (close the row — this is what eight Witchlight \
+                rows and PR.19/.20/.21 carried for weeks), or the preset is gone (FD.2's ghost row \
+                for retired Fractal Descent), or the increment genuinely postdates certification — \
+                in which case say so in the header with the words "\(Self.postCertExemption)" and \
+                state the evidence, as WL.11 did. ⚠ Establish supersession from COMMIT ORDER, not \
+                dates: WL.10, WL.CERT and WL.11 all landed on 2026-08-07 and only the commit times \
+                separate the superseded rows from the one that was genuinely open.
+                """)
+    }
+}
