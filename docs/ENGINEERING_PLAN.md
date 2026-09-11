@@ -1550,7 +1550,7 @@ closes both the session rate gate and the offset table, and it is the same run a
 
 ### PR.24 — Nebula CERTIFIED ✅ (2026-09-11, Matt: *"It's close enough"*)
 
-**24th certified preset.** M7 on `2026-09-11T16-47-03Z` — chain health **clean** (peak −0.13 dBFS),
+**23rd certified preset** (Gossamer was the 22nd). M7 on `2026-09-11T16-47-03Z` — chain health **clean** (peak −0.13 dBFS),
 202 s, and the **first Nebula review conducted with BUG-087's rate ceiling gone**: bass changed at
 59.41 Hz against a 60.00 fps render, where every previous Nebula review ran on a ~10 Hz bus. Matt:
 *"The core is connected to the music ... there is a connection"*, then *"It's close enough ... we

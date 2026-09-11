@@ -10,7 +10,7 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
-### [dev-2026-09-11-172000] Nebula certified — the 24th, and the first reviewed on a fixed clock
+### [dev-2026-09-11-172000] Nebula certified — the 23rd, and the first reviewed on a fixed clock
 
 Matt's M7 on `2026-09-11T16-47-03Z`: *"It's close enough ... we should leave Nebula alone and move to
 certification."* Chain health **clean**, 202 s, and the first Nebula review with BUG-087's rate ceiling

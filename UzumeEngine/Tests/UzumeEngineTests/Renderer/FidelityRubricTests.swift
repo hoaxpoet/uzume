@@ -366,7 +366,8 @@ struct FidelityRubricGateTests {
         // *"looks great. looks ready to certify"*. 81 s live on the V.8 uplift build, 5414
         // frames, zero drawable failures and zero unpresented.
         "Gossamer",
-        // PR.24 (2026-09-11) — the 24th. Matt's M7 on session `2026-09-11T16-47-03Z`, chain health
+        // PR.24 (2026-09-11) — the 23rd (Gossamer was the 22nd; count re-derived FROM this set,
+        // not inferred — the first write said "24th" without counting). Matt's M7 on session `2026-09-11T16-47-03Z`, chain health
         // `clean` (peak −0.13 dBFS), 202 s, and the FIRST Nebula review with BUG-087's rate ceiling
         // gone (bass 59.41 Hz against a 60.00 fps render, where every prior Nebula review ran at
         // ~10 Hz). His words: *"It's close enough ... We should leave Nebula alone and move to
