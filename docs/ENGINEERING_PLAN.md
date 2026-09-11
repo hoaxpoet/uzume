@@ -1746,7 +1746,9 @@ No new primitive, so the `audio_routes` manifest stays accurate (`core_glow ← 
 is `rubric_profile: lightweight`, so that contract IS the rubric substitute. **Nebula cannot certify
 with it blank**, however well the core reads. Curation is Matt's, and it is a separate increment.
 
-### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
+### PR.22 — `transientRise`: recovering 120 ms of the event lag ✅ CLOSED AS REVIEWED (2026-09-11, Matt's call)
+
+**Closed on Matt's instruction, not on a dedicated M7 session** — recorded that way so the evidence is not overstated. The supporting evidence is real but indirect: `transientRise` is the driver of Nebula's event layer, and Matt certified Nebula on `2026-09-11T16-47-03Z`, so the primitive was in front of him and judged in situ. Its own constants were measured rather than tuned (+30 ms against the parent's +150 ms, band re-calibrated to 4–10 dB so the fire rate still matches). **Not closed on a streaming session**, which is where Matt originally raised *"audio sync is still a little loose"*; if event timing is ever questioned on that path again, this row is not the evidence to cite.
 
 **Matt, on the PR.21 streaming build:** *"audio sync is still a little loose, not perfectly
 synced."* BUG-087's measurement split that into two terms — **~145 ms of transport** (engine work,
@@ -2664,7 +2666,9 @@ scored again, or five of nine tracks stay unmeasurable.
 ### Increment BUG110.3 — live confirmation ✅ (2026-08-27)
 ### Increment BUG110.2 — the tail is resolved once per frame, not once per pixel ✅ (2026-08-27)
 ### Increment BUG110.1 — Skein's cost, and the harness that could not see it ✅ diagnosis (2026-08-27)
-### Increment SKEIN.OVERLAP.1 — at an overlap, the last-laid mark wins 🔨 pending M7 (2026-08-27)
+### Increment SKEIN.OVERLAP.1 — at an overlap, the last-laid mark wins ✅ CLOSED AS REVIEWED (2026-09-11, Matt's call)
+
+**Closed on Matt's instruction. There was no dedicated M7 session, and — stated plainly because it is the thing a later reader needs — NOTHING automated covers this.** The rendered-overlap check BUG-108 asked for was never built: bursts spawn from audio and no offline harness renders Skein's marks, so the Skein goldens are green only because the regression harness binds no `SkeinState` and paints nothing. `SkeinCanvasHoldTest` gates the *property* (no colour selection by coverage, ever again) but not the rendered result. So if overlap flicker or a wrong-colour-wins case resurfaces, **no gate would have caught it and no review session ruled it out** — the closure rests on Skein having been in the roster since 2026-06-11 without Matt raising it again.
 
 **Done-when:** Skein's overlap colour stops flickering. Matt chose the lay-order tie-break (BUG-108 option a). `skeinClaimMark` gives the colour to the mark with the greatest lay time that covers the fragment by more than half — `spawnTau` for a burst, the nearest drawn segment's painter clock for the line, both frozen at lay time — replacing a per-fragment coverage argmax whose decision boundary was the equal-coverage contour and therefore flipped on sub-pixel motion. Coverage still supplies the alpha; the old argmax is the fringe-only fallback; no blending, so the §colour-mud rule is untouched. ⚠ **The rendered-overlap check BUG-108 specified is NOT met** — bursts spawn from audio and no offline harness renders Skein's marks, so staging a known overlap is its own increment; the Skein goldens are unchanged only because the regression harness binds no `SkeinState` and paints nothing. `SkeinCanvasHoldTest` gates the property (no colour selection by coverage, ever again). **Owed: Matt's M7** — the overlaps stop flickering AND the right colour wins.
 
