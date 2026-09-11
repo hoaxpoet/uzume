@@ -1489,8 +1489,17 @@ callback's HOP were already decoupled. Delivering hop-sized spans keeps a full w
 BUG087.2's `frames / rate` exactly the playhead advance, which is what a seconds-based follower needs.
 The one-funnel property held all the way through: zero changes to `UzumeApp/`.
 
-**Owed:** Matt's M7, and the golden decision (regenerate before or after he watches). BUG-087 stays
-OPEN until both.
+**Owed:** Matt's M7. **Matt's call on ordering, 2026-09-10: OPTION A — he watches first, goldens
+after.** Nothing is regression-locked to a look he has not approved; the goldens are regenerated only
+once he has said the new rate looks right. The reason is PR.19's: Nebula's old goldens were identical
+across all three fixtures, having locked in a preset drawing almost nothing — a golden only guards a
+regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN until the M7 lands.
+
+**One capture closes the rest.** The VisualAudioOffset before/after table could not be produced from
+`2026-09-10T22-07-34Z`: every continuous column there prints ⚠ TOO WEAK TO READ (`bass` r −0.058,
+`bassDev` r −0.008, `mid_dev` r 0.042), and only `transient_rise` is readable at +45 ms / r 0.184. A
+difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
+closes both the session rate gate and the offset table, and it is the same run as the M7.
 
 ### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
 
