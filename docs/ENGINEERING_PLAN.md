@@ -1549,10 +1549,14 @@ regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN un
 difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
 closes both the session rate gate and the offset table, and it is the same run as the M7.
 
-### VL.1 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats ✅ M7 PASSED (2026-09-11, Matt: *"I like the faster speed and it's synced well with the music"*)
+### VL.2 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats ✅ M7 PASSED (2026-09-11, Matt: *"I like the faster speed and it's synced well with the music"*)
 
 Found while censusing BUG-117's consumers, and it is **not** BUG-117 — it is a units error that is
 worst on a HEALTHY grid.
+
+⚠ **Shipped as `VL.1` and renumbered to VL.2 here — `VL.1` was already the 2026-07-23 rebuild.**
+The collision came from grepping `^### VL` when these rows are prefixed `### Increment `; the merged
+commits and PR #240 still say VL.1.
 
 `vl_foldRotation` built `beatPos = pulse_beat_index + pulse_phase01`, then divided by
 `f.beats_per_bar`. But **`pulse_beat_index` counts completed PULSE CYCLES**, and
@@ -1742,7 +1746,9 @@ No new primitive, so the `audio_routes` manifest stays accurate (`core_glow ← 
 is `rubric_profile: lightweight`, so that contract IS the rubric substitute. **Nebula cannot certify
 with it blank**, however well the core reads. Curation is Matt's, and it is a separate increment.
 
-### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
+### PR.22 — `transientRise`: recovering 120 ms of the event lag ✅ CLOSED AS REVIEWED (2026-09-11, Matt's call)
+
+**Closed on Matt's instruction, not on a dedicated M7 session** — recorded that way so the evidence is not overstated. The supporting evidence is real but indirect: `transientRise` is the driver of Nebula's event layer, and Matt certified Nebula on `2026-09-11T16-47-03Z`, so the primitive was in front of him and judged in situ. Its own constants were measured rather than tuned (+30 ms against the parent's +150 ms, band re-calibrated to 4–10 dB so the fire rate still matches). **Not closed on a streaming session**, which is where Matt originally raised *"audio sync is still a little loose"*; if event timing is ever questioned on that path again, this row is not the evidence to cite.
 
 **Matt, on the PR.21 streaming build:** *"audio sync is still a little loose, not perfectly
 synced."* BUG-087's measurement split that into two terms — **~145 ms of transport** (engine work,
@@ -1823,7 +1829,11 @@ sync complaints in the roster review.
 ⚠ `AudioFeatures+Analyzed.swift` is now **at its 400-line cap**, hit twice in one day. Float 56 is
 the last pad; the next field needs the struct split before it needs a slot.
 
-### PR.21 — Nebula: make the coupling legible 🔨 code complete, M7 owed (2026-09-10)
+### PR.21 — Nebula: make the coupling legible ✅ M7 PASSED via PR.24 (2026-09-11)
+
+**M7 satisfied by PR.24.** Matt certified Nebula on session `2026-09-11T16-47-03Z`, and the build he
+reviewed contained PR.19, PR.20 and PR.21 — so their review is given, not owed. Left reading *"M7 owed"*
+for a day after the fact, which is how a satisfied review turns back into phantom work.
 
 **Matt, on the PR.20 build:** *"looks good, but I'm not getting a clear understanding of how the
 visuals are tied to the audio."* Fidelity and activation were fixed at PR.19/PR.20; **legibility**
@@ -1889,7 +1899,11 @@ parameterised over the loaded presets passes VACUOUSLY.** Three sessions have no
   ring. Shared with every other slot-6 preset; recorded, not worked around.
 - QG.1 still has **no primitive for the spectrum**, so the ring's shape remains ungated.
 
-### PR.20 — the per-track hue anchor 🔨 code complete, M7 owed (2026-09-10, Matt: *"do the per-track rotation"*)
+### PR.20 — the per-track hue anchor ✅ M7 PASSED via PR.24 (2026-09-11, Matt: *"do the per-track rotation"*)
+
+**M7 satisfied by PR.24.** Matt certified Nebula on session `2026-09-11T16-47-03Z`, and the build he
+reviewed contained PR.19, PR.20 and PR.21 — so their review is given, not owed. Left reading *"M7 owed"*
+for a day after the fact, which is how a satisfied review turns back into phantom work.
 
 **The ask.** Matt, on Nebula's palette: *"go with the wider sweep, plus per-track rotation."* The
 sweep shipped in PR.19; the rotation did not, because nothing track-scoped could reach the preset.
@@ -1945,7 +1959,11 @@ Matt's call if he wants it.
 (*"more mixture and blending of colors"*) and Dragon Bloom all carry colour-variation asks and can
 now read the same field.
 
-### PR.19 — Nebula deep dive 🔨 code complete, M7 owed (2026-09-10, Matt: *"proceed with nebula"*)
+### PR.19 — Nebula deep dive ✅ M7 PASSED via PR.24 (2026-09-11, Matt: *"proceed with nebula"*)
+
+**M7 satisfied by PR.24.** Matt certified Nebula on session `2026-09-11T16-47-03Z`, and the build he
+reviewed contained PR.19, PR.20 and PR.21 — so their review is given, not owed. Left reading *"M7 owed"*
+for a day after the fact, which is how a satisfied review turns back into phantom work.
 
 #### Step 1 — definition
 
@@ -2648,7 +2666,9 @@ scored again, or five of nine tracks stay unmeasurable.
 ### Increment BUG110.3 — live confirmation ✅ (2026-08-27)
 ### Increment BUG110.2 — the tail is resolved once per frame, not once per pixel ✅ (2026-08-27)
 ### Increment BUG110.1 — Skein's cost, and the harness that could not see it ✅ diagnosis (2026-08-27)
-### Increment SKEIN.OVERLAP.1 — at an overlap, the last-laid mark wins 🔨 pending M7 (2026-08-27)
+### Increment SKEIN.OVERLAP.1 — at an overlap, the last-laid mark wins ✅ CLOSED AS REVIEWED (2026-09-11, Matt's call)
+
+**Closed on Matt's instruction. There was no dedicated M7 session, and — stated plainly because it is the thing a later reader needs — NOTHING automated covers this.** The rendered-overlap check BUG-108 asked for was never built: bursts spawn from audio and no offline harness renders Skein's marks, so the Skein goldens are green only because the regression harness binds no `SkeinState` and paints nothing. `SkeinCanvasHoldTest` gates the *property* (no colour selection by coverage, ever again) but not the rendered result. So if overlap flicker or a wrong-colour-wins case resurfaces, **no gate would have caught it and no review session ruled it out** — the closure rests on Skein having been in the roster since 2026-06-11 without Matt raising it again.
 
 **Done-when:** Skein's overlap colour stops flickering. Matt chose the lay-order tie-break (BUG-108 option a). `skeinClaimMark` gives the colour to the mark with the greatest lay time that covers the fragment by more than half — `spawnTau` for a burst, the nearest drawn segment's painter clock for the line, both frozen at lay time — replacing a per-fragment coverage argmax whose decision boundary was the equal-coverage contour and therefore flipped on sub-pixel motion. Coverage still supplies the alpha; the old argmax is the fringe-only fallback; no blending, so the §colour-mud rule is untouched. ⚠ **The rendered-overlap check BUG-108 specified is NOT met** — bursts spawn from audio and no offline harness renders Skein's marks, so staging a known overlap is its own increment; the Skein goldens are unchanged only because the regression harness binds no `SkeinState` and paints nothing. `SkeinCanvasHoldTest` gates the property (no colour selection by coverage, ever again). **Owed: Matt's M7** — the overlaps stop flickering AND the right colour wins.
 
@@ -2807,8 +2827,6 @@ loss was silent, which is the part worth not repeating.
 ### Increment VL-PSY.4 — Camera dolly speed moves to the sidecar (BUG-074 replay-harness parity) ✅ (2026-07-24)
 ### Increment VL-PSY.2 — Volumetric Lithograph performance fix (BUG-073) ✅ (2026-07-24)
 ### Increment VL.1 — Volumetric Lithograph rebuild: design doc adopted + multi-frame ray-march harness ✅ (2026-07-23)
-### Increment FD.2 — Fractal Descent look pass (jewel palette + materials + flash fix) 🔨 (2026-07-23)
-
 ### Increment BUG072.1 — app test runner launch failure diagnosed; merge gate re-armed ✅ (2026-07-23)
 ### Increment FLY.1 — Fractal Fly-By reframed as a FLY-THROUGH + enclosed backdrop (2026-07-23; Matt's call after the 3rd live M7) — RETIRED with the line (FLY.14, BUG-071 wontfix, D-201) ✅ (2026-07-25)
 ### Increment FD.2 — Fractal Fly-By look pass (jewel palette + materials + flash fix) (2026-07-23) — RETIRED with the line (FLY.14, BUG-071 wontfix, D-201) ✅ (2026-07-25)
@@ -6228,7 +6246,9 @@ Two curation errors produced it, both recorded in `docs/VISUAL_REFERENCES/witchl
 
 ---
 
-### Increment WL.4 — Witchlight: give it a continuous-energy driver 🔨 **CODE-COMPLETE 2026-08-04, pending live M7**
+### Increment WL.4 — Witchlight: give it a continuous-energy driver ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt's fourth M7, session `2026-08-04T19-23-28Z`: *"not synced to the music. failure."* Audio chain verdict `clean`, peak −0.26 dBFS — not an input problem.
 
@@ -6258,7 +6278,9 @@ CLAUDE.md's most important design rule is that continuous energy is the DEFAULT 
 
 ---
 
-### Increment WL.6 — Witchlight: star field decoupled; CAMERA FRAMING IS THE OPEN ITEM 🔨 (2026-08-05)
+### Increment WL.6 — Witchlight: star field decoupled; CAMERA FRAMING IS THE OPEN ITEM ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Matt's sixth M7** (session `2026-08-05T15-33-46Z`, ~128 s), on the first build that actually contained WL.5:
 
@@ -6289,7 +6311,9 @@ Reverted to keep `main` coherent — a half-tuned framing change that degrades b
 
 ---
 
-### Increment WL.5 — Witchlight: the pen only draws when there is music 🔨 **CODE-COMPLETE 2026-08-05, pending live M7**
+### Increment WL.5 — Witchlight: the pen only draws when there is music ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt's fifth M7, session `2026-08-05T13-06-38Z`: *"The starry background is moving too much. The witchlight pattern is still moving when the preset is idle, indicating that there is no real beat sync / connection to the music. The pattern / shape is fine, but it needs to feel connected to the music, otherwise it is not a Uzume preset I will certify."*
 
@@ -6315,7 +6339,9 @@ Reverted to keep `main` coherent — a half-tuned framing change that degrades b
 
 ---
 
-### Increment WL.7 — Witchlight: the coupling was real, and off screen 🔨 **CODE-COMPLETE 2026-08-05, pending live M7**
+### Increment WL.7 — Witchlight: the coupling was real, and off screen ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt, after six M7 rounds: *"You have not addressed 'still not tied to the music,' which is the most important thing."* Four consecutive increments added or deepened coupling and none of them moved his verdict. WL.6 recorded a third complaint alongside it — *"the ribbon is moving faster than the camera can catch up, leaving the front of the ribbon out of frame for much of the run"* — and left it open.
 
@@ -6341,7 +6367,9 @@ This is the opposite of the three WL.6 framing attempts, which all tried to fit 
 
 ---
 
-### Increment WL.8 — Witchlight: something that lands ON the beat 🔨 **CODE-COMPLETE 2026-08-05, pending live M7**
+### Increment WL.8 — Witchlight: something that lands ON the beat ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** WL.7's framing fix worked — Matt, first time in seven rounds: *"Ribbon feels connected to the music, though how is not obvious."* The remaining ask is legibility of the connection, and he proposed two mechanisms: speed tied to tempo, and drums/downbeats illuminating the head and other nodules.
 
@@ -6403,7 +6431,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.9 — Witchlight: every beat, with the downbeat harder 🔨 **CODE-COMPLETE 2026-08-06, pending live M7**
+### Increment WL.9 — Witchlight: every beat, with the downbeat harder ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt on the WL.8 build (session `2026-08-06T15-09-29Z`): *"Feels too polite. Beat match is also close but not exact. Not sure that this is better than the previous run."* Two complaints, two different causes, one of them mine and one an engine defect.
 
@@ -6429,7 +6459,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.9b — Witchlight: the ribbon stopped outrunning its own camera 🔨 **CODE-COMPLETE 2026-08-06, pending live M7**
+### Increment WL.9b — Witchlight: the ribbon stopped outrunning its own camera ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt, session `2026-08-06T17-27-21Z`: *"The ribbon builds too fast and not in sync with the actual beat and downbeat. In addition, the camera cannot keep up with the head of the ribbon because it is moving too fast. Not a great result."*
 
@@ -6457,7 +6489,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.10 — Witchlight: the camera comes back in 🔨 **CODE-COMPLETE 2026-08-07, pending live M7**
+### Increment WL.10 — Witchlight: the camera comes back in ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt, session `2026-08-06T19-36-40Z`: *"Does the camera ever zoom back in when the ribbon is back to making tighter shapes and forms? Other than this one question, the preset looks good and follows the music pretty well."* Measured answer: barely — `viewScale` ran 3.68 → 0.73 over two minutes with almost no recovery. Spec: `docs/prompts/WL10_CAMERA_COMES_BACK_IN.md`. **Matt's choice: option B** (frame roughly the last 10–15 s).
 
@@ -6506,7 +6540,13 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.11 — Witchlight: fire at the audible beat, not the grid 🔨 **CODE-COMPLETE 2026-08-07, pending live M7**
+### Increment WL.11 — Witchlight: fire at the audible beat, not the grid ✅ M7 PASSED (2026-09-11, Matt: *"Looks good"*)
+
+**Reviewed at last, a month and a day after it landed.** Session `2026-09-11T20-19-03Z` — Witchlight twice in the log, chain verdict `clean`, 75 s at 60.0 fps. And the numbers corroborate rather than merely accompany the verdict: **|drift_ms| median 7 ms / p90 12 ms**, against the **25 ms median / 63 ms p90 / 91 ms worst** that WL.11 was built to compensate. The drift compensation is doing what it was built to do.
+
+★ **It also survived the rebrand, which had to be checked rather than assumed.** The commit's paths are `PhospheneEngine/…`, so a path-wise diff against main reads as "changed" from the rename alone and proves nothing. Grepping for the symbols it INTRODUCED settles it: `ingestBeatDrift`, `driftCompensationCapMs` and `beatDriftSeconds` are all live on main, with a `WitchlightBeatAlignmentProbe` test alongside.
+
+⚠ **Witchlight is certified on a build that does not contain this increment.** WL.CERT's M7 session ran at 11:08 CDT on 2026-08-07 and its commit `e264cbb5` landed 11:37:17; **WL.11 (`29090b6d`) landed 12:01:19** — after both. `git merge-base --is-ancestor` confirms it is not in the certified build. So unlike WL.4–WL.10, this one's *"pending live M7"* is real: the shipping Witchlight carries a change to when its beat fires that Matt has never reviewed. Dates alone could not have told us this — all of WL.10, WL.CERT and WL.11 are 2026-08-07, and only the commit times separate them.
 
 **Why.** The last thing Matt raised that was still open: *"Beat match is also close but not exact."* The pulse is exact on the grid (0.000 beats, 100 % on-beat); the **grid** drifts against the audible beat — 25 ms median, 91 ms worst, 14.2 % of frames past the ~60 ms perceptual window (**BUG-065**).
 

@@ -10,6 +10,43 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-223000] Nine stale plan rows closed, one that was not stale, and a diagnostic defect
+
+Matt: *"WL.4 is stale. Witchlight is tuned and certified."* Correct — and it was **eight** Witchlight
+rows, not one. WL.4, .5, .6, .7, .8, .9, .9b and .10 all read *"pending live M7"* while WL.CERT had
+certified Witchlight on 2026-08-07.
+
+★ **WL.11 was the exception, and dates could not have found it.** WL.10, WL.CERT and WL.11 are all
+dated 2026-08-07; only the commit times separate them — WL.10 at 11:00:55, the M7 session at 11:08,
+WL.CERT at 11:37:17, **WL.11 at 12:01:19**. `git merge-base --is-ancestor` confirms WL.11 was not in
+the certified build, so a CERTIFIED preset was shipping a beat-timing change nobody had reviewed.
+**Establish supersession from commit order, never from dates.**
+
+It has now been reviewed — Matt, session `2026-09-11T20-19-03Z`: *"Looks good."* And the numbers
+corroborate rather than merely accompany: **|drift_ms| median 7 ms / p90 12 ms**, against the 25/63/91 ms
+grid drift WL.11 was built to compensate.
+
+★ **Whether WL.11 survived the rebrand had to be CHECKED, not assumed.** Its commit's paths are
+`PhospheneEngine/…`, so a path-wise diff against main reads as "changed" from the rename alone and
+proves nothing either way. Grepping for the symbols it introduced settles it: `ingestBeatDrift`,
+`driftCompensationCapMs`, `beatDriftSeconds` all live on main.
+
+Also closed on Matt's call, and recorded as **"closed as reviewed", not "M7 PASSED on session X"**,
+because no review session existed for either: **PR.22** (supported indirectly by Nebula's certification,
+explicitly not by a streaming session) and **SKEIN.OVERLAP.1** (whose row now states plainly that
+nothing automated covers it — BUG-108's rendered-overlap check was never built and the Skein goldens
+are green only because the harness paints nothing).
+
+Three further stale-row classes fixed: **PR.19/.20/.21** were still "M7 owed" a day after Matt
+certified the Nebula build containing them; **FD.2** was a ghost header under a preset's old name,
+retired at FLY.14; and **VL.1** was an ID collision I created by grepping `^### VL` when those rows
+are prefixed `### Increment ` — renumbered to **VL.2**, recorded rather than applied silently.
+
+⚠ **New: BUG-129.** `chain_health.json` reported `peakDBFS` **exactly 0** on the two most recent
+sessions while still grading `clean`, with empty reasons and `raw_tap.wav` present. It matters because
+D-184 makes a `clean` verdict the precondition for judging fidelity at all — and two M7s closed today
+cite `clean` over a 0 peak. Filed, not diagnosed.
+
 ### [dev-2026-09-11-213000] VL.1 — Volumetric Lithograph's notch was on a sixteen-beat cycle
 
 A units error found while censusing BUG-117's consumers, and not BUG-117. `vl_foldRotation` divided
