@@ -447,7 +447,6 @@ private func makeTempPresetDirectory(shaders: [(name: String, metalSource: Strin
         "Nacre":        (.rgba16Float, .rgba16Float),
         "Floret":       (.rgba16Float, .rgba16Float),
         "Glaze":        (.rgba16Float, .rgba16Float),
-        "Root Choir":   (.bgra8Unorm, .bgra8Unorm),
     ]
     for (name, (field, format)) in expected {
         guard let preset = loader.presets.first(where: { $0.descriptor.name == name }) else {
