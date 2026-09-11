@@ -29,7 +29,7 @@ extension AlfvenSolver {
         var params = AlfvenDisplayParams(exposure: displayExposure,
                                          polarityScale: displayPolarityScale,
                                          hueCentre: audioHueCentre(at: features.time),
-                                         bloomAmount: audioBloomAmount)
+                                         bloomAmount: displayBloomAmount)
         encoder.setRenderPipelineState(displayPipeline)
         encoder.setFragmentBytes(&params,
                                  length: MemoryLayout<AlfvenDisplayParams>.stride,

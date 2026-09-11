@@ -9790,6 +9790,47 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.3f — remove the brightening, keep the glow ✅ (2026-09-10)
+
+**Matt's M7** (`2026-09-10T23-25-54Z`, `chain_health` verdict **`clean`**, peak −0.13 dBFS):
+*"I don't like the brightening effect on the preset. I would remove it."*
+
+**Which brightening.** The display path has exactly one dynamic brightening term — the seam bloom's
+`col += bloomAmount * glow * tint`, driven by `trebRel`. Everything else that lifts the frame is
+static (the D-037 non-black floor, the filmic `val` curve). Measured on Matt's own capture the glow
+sat at its 0.30 constant for **65 %** of frames, pinned at the 0.85 ceiling for **5.2 %**, and spent
+**36 %** of the track above 0.30 — bimodal, pumping between the approved look and nearly 3× it.
+
+**Fix: `bloomAmount: audioBloomAmount` → `bloomAmount: displayBloomAmount`,** a constant 0.30. Not a
+new value — the exact constant ALFVEN.4f shipped, which Matt saw and signed off (*"Looks great"*,
+`2026-09-10T16-07-07Z`) **before** ALFVEN.3b wired treble to it. The line being reverted is the line
+that introduced the complaint. Everything that existed only to feed it is deleted rather than left at
+zero: `rawBloomAmount`, `audioBloomAmount`, `trebleEnvelope`, and the `bloomMaxAmount` /
+`bloomSlewPerSecond` / `trebFloor` / `trebKnee` / `trebleTau` knobs.
+
+**Post-fix flash metric: 0.0038**, with treble bursting at the p99 of Matt's capture — against 0.0124
+for ALFVEN.3d's bounded version and 0.4153 for the original strobe. The glow no longer moves at all.
+
+**The lesson worth keeping: bounding a flash makes it legal, not wanted.** ALFVEN.3d took BUG-126
+from 8.3× over the D-157 gate to comfortably under it and reported the defect fixed. D-157 compliance
+was necessary and not sufficient — Matt's objection was never to the *rate* of the brightness change,
+it was to the brightness change. A gate passing is not a person approving. BUG-126 is now resolved by
+removal rather than by bound; the mechanism is gone, so it cannot recur.
+
+**Cost, stated plainly.** Alfvén drops from **three declared audio routes to two**
+(`stirring_vigour ← bassRel`, `palette_hue_centre ← spectralCentroid`); the sidecar manifest and
+`RouteCoverageTests` are updated. §7's routing table named five routes — **three of the five have now
+failed contact with real music**: its drive amplitude was inert, its drive primitive was one-sided,
+and its treble route is removed here. The table was written from the spike's parameters rather than
+from measurement, and should be treated as a hypothesis, not a specification.
+
+This also moves the preset *away* from the reactivity direction of ALFVEN.3e. That is the right call
+anyway — a coupling the listener dislikes is worse than no coupling — but it sharpens the open
+question: Alfvén now marks no moments and has one fewer continuous route. The remaining levers are
+§7's unbuilt `barPhase01` accent and the display-mapping headroom ALFVEN.3e found.
+
+**Pending live M7.**
+
 ### Increment ALFVEN.3e — the drive map had no room at the top ✅ (2026-09-10)
 
 **The question that started it.** Matt: *"how are you planning to improve the preset's musical

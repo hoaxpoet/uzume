@@ -196,7 +196,6 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// centroid seconds. Different timescales per layer is the point — two layers sharing
     /// one would read as the music fighting itself (FA #67).
     public var bassTau: Float
-    public var trebleTau: Float
     public var centroidTau: Float
     /// Centroid range actually observed on real music, for the hue map.
     ///
@@ -245,10 +244,6 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// 6.0 reaches the full ceiling — so the bloom still visibly answers the treble — with
     /// a 4x margin under the gate, and below DS.5's arrival push (0.0174) which passed M7.
     /// Beyond it the range stops growing and only the flash does.
-    public var bloomMaxAmount: Float
-    public var bloomSlewPerSecond: Float
-    public var trebFloor: Float
-    public var trebKnee: Float
     public var centroidLo: Float
     public var centroidHi: Float
     /// How much of the palette excursion the centroid owns versus the time drift.
@@ -299,12 +294,7 @@ public struct AlfvenSolverConfiguration: Sendable {
         bassRelScale: Float = 0.45,
         bassKnee: Float = 0.094,
         bassTau: Float = 0.10,
-        trebleTau: Float = 0.03,
         centroidTau: Float = 2.5,
-        bloomMaxAmount: Float = 0.85,
-        bloomSlewPerSecond: Float = 6.0,
-        trebFloor: Float = 0.002,
-        trebKnee: Float = 0.017,
         centroidLo: Float = 0.047,
         centroidHi: Float = 0.186,
         centroidWeight: Float = 0.6,
@@ -336,12 +326,7 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.bassRelScale = bassRelScale
         self.bassKnee = bassKnee
         self.bassTau = bassTau
-        self.trebleTau = trebleTau
         self.centroidTau = centroidTau
-        self.bloomMaxAmount = bloomMaxAmount
-        self.bloomSlewPerSecond = bloomSlewPerSecond
-        self.trebFloor = trebFloor
-        self.trebKnee = trebKnee
         self.centroidLo = centroidLo
         self.centroidHi = centroidHi
         self.centroidWeight = centroidWeight

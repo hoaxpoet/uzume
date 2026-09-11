@@ -2,9 +2,11 @@
 //
 // One primitive per visual layer, each on its own timescale (FA #67):
 //
-//   stirring vigour -> seam density   bassDev           ~100 ms
-//   seam bloom / sizzle               trebRel            ~30 ms
+//   stirring vigour -> seam density   bassRel           ~100 ms
 //   palette hue centre                spectralCentroid   seconds
+//
+// The seam bloom was a third route (trebRel, ~30 ms). REMOVED at ALFVEN.3f on Matt's M7 —
+// see `displayBloomAmount` for why the glow is now a constant again.
 //
 // Every driver is a DEVIATION primitive (D-026); no absolute threshold is taken on an
 // AGC-normalised value (FA #31). The envelopes live here on the CPU rather than in the
@@ -30,14 +32,6 @@ extension AlfvenSolver {
         }
 
         bassEnvelope = ema(bassEnvelope, features.bassRel, configuration.bassTau)
-        // Slew-limit the bloom: D-157 bounds how fast whole-frame luminance may change,
-        // and the treble envelope alone moves 43% toward target in one frame at 60 fps.
-        let target = min(rawBloomAmount, configuration.bloomMaxAmount)
-        let maxStep = configuration.bloomSlewPerSecond * step
-        bloomAmount += min(max(target - bloomAmount, -maxStep), maxStep)
-        trebleEnvelope = ema(trebleEnvelope,
-                             max(0, features.trebRel),
-                             configuration.trebleTau)
         centroidEnvelope = ema(centroidEnvelope,
                                features.spectralCentroid,
                                configuration.centroidTau)
@@ -59,24 +53,6 @@ extension AlfvenSolver {
         return configuration.driveFloor
             + (configuration.driveCeil - configuration.driveFloor) * min(max(x, 0), 1)
     }
-
-    /// Seam-bloom strength — film.py's `amt = 0.30 + 0.85 * clip(sizzle, 0, 1.6)` with its
-    /// own `sizzle = trebRel - 0.6`, restored now that there is audio to feed it. At
-    /// silence this is the 0.30 floor ALFVEN.4f shipped; at full treble it reaches 1.66.
-    var rawBloomAmount: Float {
-        // film.py's `amt = 0.30 + 0.85 * clip(sizzle, 0, 1.6)` — but its `sizzle =
-        // trebRel - 0.6` assumes a primitive on a 0.6…2.2 scale. Ours is a relative
-        // deviation centred on zero (p50 0.000, p99 0.017), so the verbatim port clipped
-        // to zero on EVERY frame and the bloom never left its floor. The window is
-        // calibrated to our own measured range instead; the 0.30/0.85/1.6 shape is
-        // film.py's and unchanged.
-        let span = max(configuration.trebKnee - configuration.trebFloor, 1e-6)
-        let sizzle = 1.6 * min(max((trebleEnvelope - configuration.trebFloor) / span, 0), 1)
-        return 0.30 + 0.85 * sizzle
-    }
-
-    /// The slew-limited value the fragment actually receives.
-    var audioBloomAmount: Float { bloomAmount }
 
     /// Palette centre: spectral centroid PLACES it, the ALFVEN.4e time drift keeps it
     /// moving. Both, deliberately — and this is the one routing decision here that is not

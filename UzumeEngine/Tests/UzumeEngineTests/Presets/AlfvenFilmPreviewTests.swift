@@ -71,8 +71,6 @@ struct AlfvenFilmPreviewTests {
         if let sc = env["ALFVEN_CUTOFF"].flatMap(Float.init) { cfg.spectralCutoff = sc }
         if let cy = env["ALFVEN_CYCLE"].flatMap(Float.init) { cfg.cycleSeconds = cy }
         if let jc = env["ALFVEN_JCUT"].flatMap(Float.init) { cfg.jCutoff = jc }
-        if let bc = env["ALFVEN_BLOOMCEIL"].flatMap(Float.init) { cfg.bloomMaxAmount = bc }
-        if let bs = env["ALFVEN_BLOOMSLEW"].flatMap(Float.init) { cfg.bloomSlewPerSecond = bs }
         if let df = env["ALFVEN_DRIVEFLOOR"].flatMap(Float.init) { cfg.driveFloor = df }
         if let dc = env["ALFVEN_DRIVECEIL"].flatMap(Float.init) { cfg.driveCeil = dc }
         if let bh = env["ALFVEN_BASSSHIFT"].flatMap(Float.init) { cfg.bassRelShift = bh }
@@ -293,7 +291,7 @@ struct AlfvenFilmPreviewTests {
                 enc.endEncoding()
                 cmd.commit(); cmd.waitUntilCompleted()
                 lums.append(Self.meanLuma(target))
-                blooms.append(solver.audioBloomAmount)
+                blooms.append(solver.displayBloomAmount)
             }
             var maxDelta = 0.0
             var over = 0
