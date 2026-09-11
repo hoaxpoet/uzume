@@ -17,8 +17,8 @@
 // Position comes from `AVAudioPlayerNode.playerTime` through `PlaybackClockSmoother` (LFSTEM.1d),
 // which exists precisely to dead-reckon between coarse ticks without rewinding.
 //
-// Local-file playback ONLY. Default ON since M7; `UZUME_LF_ANALYSIS_CLOCK=0` forces the tap back.
-// Streaming already runs at ~59 Hz
+// Local-file playback ONLY, and since BUG087.5 it is the ONLY analysis source there — the player
+// node carries no tap at all. Streaming already runs at ~59 Hz
 // through a different capture path and is untouched.
 
 @preconcurrency import AVFoundation
@@ -165,18 +165,6 @@ final class LoopingFileReader {
 /// queue, which is what makes a bounded read-ahead sufficient rather than mandatory-lock-free.
 public final class PlayheadAnalysisClock: @unchecked Sendable {
 
-    /// **Default ON since Matt's M7 on session `2026-09-11T01-22-10Z`** — *"I like it. It's punchy."*
-    /// The one-increment A/B window the flag existed for has closed, and shipping a fix nobody runs
-    /// is not shipping it.
-    ///
-    /// `UZUME_LF_ANALYSIS_CLOCK=0` still forces the tap back, deliberately: this replaces the audio
-    /// source of the whole MIR chain on the path all development runs on, and an escape hatch that
-    /// needs no rebuild is worth one line for a while yet. Retiring the tap's forwarding role
-    /// altogether is the increment that removes this.
-    public static var isEnabled: Bool {
-        ProcessInfo.processInfo.environment["UZUME_LF_ANALYSIS_CLOCK"] != "0"
-    }
-
     /// Ticks per second.
     ///
     /// **80, not 60, and the reason is the gate.** What BUG-087 measures is how many DISTINCT
@@ -295,16 +283,24 @@ extension PlayheadAnalysisClock {
     /// is not thread-safe, and the player is reading the provider's instance on the render thread
     /// for the whole of playback while this reader seeks it on the clock queue — sharing one handle
     /// is a data race on an Apple object, which is not something a passing test would reliably show.
+    ///
+    /// **Throws rather than returning nil since BUG087.5.** While the tap still forwarded, a clock
+    /// that could not be built fell back to it; now there is nothing to fall back to, and analysing
+    /// nothing would render a dead visualizer against audible music. Refusing to start surfaces
+    /// through the app's existing local-file error path instead.
+    ///
+    /// `deliver` is nil only when a caller starts the provider without setting `onAudioSamples` —
+    /// a source with no analysis consumer, which is legitimate (playback only), so that case
+    /// produces a silent clock rather than an error.
     static func make(
         url: URL,
         player: AVAudioPlayerNode,
         deliver: ((UnsafePointer<Float>, Int, Float, UInt32) -> Void)?
-    ) -> PlayheadAnalysisClock? {
-        guard PlayheadAnalysisClock.isEnabled, let deliver else { return nil }
-        guard let own = try? AVAudioFile(forReading: url),
-              let reader = LoopingFileReader(file: own) else {
-            logger.error("[BUG087.4] analysis clock unavailable for this file layout — tap drives")
-            return nil
+    ) throws -> PlayheadAnalysisClock {
+        let own = try AVAudioFile(forReading: url)
+        guard let reader = LoopingFileReader(file: own) else {
+            throw PlayheadAnalysisClockError.unsupportedFileLayout(
+                format: String(describing: own.processingFormat), frames: own.length)
         }
         return PlayheadAnalysisClock(
             reader: reader,
@@ -316,7 +312,23 @@ extension PlayheadAnalysisClock {
                       playerTime.sampleRate > 0 else { return nil }
                 return Double(playerTime.sampleTime) / playerTime.sampleRate
             },
-            deliver: deliver
+            deliver: deliver ?? { _, _, _, _ in }
         )
+    }
+}
+
+// MARK: - PlayheadAnalysisClockError
+
+/// The clock is the only analysis source on the local-file path (BUG087.5), so a file it cannot
+/// address is a start failure rather than a downgrade.
+public enum PlayheadAnalysisClockError: Error, CustomStringConvertible {
+    case unsupportedFileLayout(format: String, frames: AVAudioFramePosition)
+
+    public var description: String {
+        switch self {
+        case let .unsupportedFileLayout(format, frames):
+            return "analysis clock cannot address this file (\(frames) frames, format \(format)) — "
+                + "expected non-interleaved float32 from AVAudioFile.processingFormat"
+        }
     }
 }
