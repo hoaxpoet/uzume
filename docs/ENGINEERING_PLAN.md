@@ -6540,7 +6540,11 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.11 — Witchlight: fire at the audible beat, not the grid 🔨 **M7 GENUINELY OWED — it landed AFTER certification**
+### Increment WL.11 — Witchlight: fire at the audible beat, not the grid ✅ M7 PASSED (2026-09-11, Matt: *"Looks good"*)
+
+**Reviewed at last, a month and a day after it landed.** Session `2026-09-11T20-19-03Z` — Witchlight twice in the log, chain verdict `clean`, 75 s at 60.0 fps. And the numbers corroborate rather than merely accompany the verdict: **|drift_ms| median 7 ms / p90 12 ms**, against the **25 ms median / 63 ms p90 / 91 ms worst** that WL.11 was built to compensate. The drift compensation is doing what it was built to do.
+
+★ **It also survived the rebrand, which had to be checked rather than assumed.** The commit's paths are `PhospheneEngine/…`, so a path-wise diff against main reads as "changed" from the rename alone and proves nothing. Grepping for the symbols it INTRODUCED settles it: `ingestBeatDrift`, `driftCompensationCapMs` and `beatDriftSeconds` are all live on main, with a `WitchlightBeatAlignmentProbe` test alongside.
 
 ⚠ **Witchlight is certified on a build that does not contain this increment.** WL.CERT's M7 session ran at 11:08 CDT on 2026-08-07 and its commit `e264cbb5` landed 11:37:17; **WL.11 (`29090b6d`) landed 12:01:19** — after both. `git merge-base --is-ancestor` confirms it is not in the certified build. So unlike WL.4–WL.10, this one's *"pending live M7"* is real: the shipping Witchlight carries a change to when its beat fires that Matt has never reviewed. Dates alone could not have told us this — all of WL.10, WL.CERT and WL.11 are 2026-08-07, and only the commit times separate them.
 
