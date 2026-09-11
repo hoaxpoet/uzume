@@ -10,6 +10,40 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-10-234500] BUG087.4 — the local-file analysis clock, decoupled from tap arrival (flagged)
+
+Local-file playback ran the whole MIR chain at **10.01 Hz** against a 59.8 fps render. Streaming runs
+it at 58.8 Hz. Since essentially all development and all preset review happens on local FLAC, every
+preset on that path was driven by a bus updating ~6x slower than the renderer.
+
+**The defect is CADENCE, not staleness**, and that correction is what made this fixable. `FFTProcessor`
+already fills its window from the newest frames of whatever it is handed, so audio is not old when it
+arrives — nothing simply happens between arrivals. AVAudioEngine delivers a tap buffer every 0.1 s
+whatever `installTap(bufferSize:)` asks for, so every `FeatureVector` field froze for ~100 ms: ~50 ms
+of added lag on average, plus a visible staircase. Slicing the buffer was already measured and does not
+help — all slices land in the same instant (BUG087.2/.3).
+
+So the clock stops waiting for audio to arrive. On this path the whole file is already decoded, and a
+read at the playhead is an array lookup bounded by nothing. `PlayheadAnalysisClock` ticks at 80 Hz on
+its own queue, reads the span the smoothed playhead has just passed out of a bounded read-ahead, and
+calls the same `onAudioSamples` funnel — so the MIR chain, and every consumer downstream of it, is
+untouched. This is the advantage LFSTEM.1 created for stems and had not yet spent for MIR.
+
+Measured through the real provider against a 59.8 fps render: produced 80.6 Hz, **observed 59.2 Hz**,
+delivery gap median 12.1 ms, and **0 of 237 deliveries bunched** — the property BUG087.3 lacked.
+Observed, not produced: BUG087.3's gate asserted `hz >= 40` from slice count and passed while the live
+rate was 16.4 Hz, so both new gates measure how many distinct values a renderer could actually tell
+apart. The session gate fails at 10.01 Hz on the pre-fix reference capture, as a real gate must.
+
+Position accuracy was gated before anything was built on it, because a drifting read position
+desynchronises analysis — worse than being uniformly late. Across 3.32 laps of a looping file:
+backwards 0, behind-player 0, beyond-band 0, max lead 10.7 ms.
+
+Behind `UZUME_LF_ANALYSIS_CLOCK=1` and **off by default**. The tap stays installed and keeps reporting
+what AVAudioEngine delivers; retiring it is a separate decision. Honest ceiling unchanged: this
+recovers the cadence term, not the τ 77–116 ms of band smoothing Matt declined to touch. BUG-087 stays
+OPEN pending Matt's M7 — a ~6x change in what every preset on this path sees is not a silent change.
+
 ### [dev-2026-09-09-205204] ROOTCHOIR.2 / BUG-125 — remove the particle ring and make harmony reshape instead of spin
 
 Matt's first live review rejected Root Choir: *“There is still white particles in a circular ring pattern,” “the center … looks like a muddle,” “not understanding the connection to the music,”* and *“the spin is odd and somewhat disorienting.”* The attached “Combat Baby” capture is clean and all five declared inputs fire, so this was the preset—not the audio or renderer.

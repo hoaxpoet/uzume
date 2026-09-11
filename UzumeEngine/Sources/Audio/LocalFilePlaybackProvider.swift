@@ -63,6 +63,11 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// Retained so `removeObserver` can be called during teardown.
     private var configChangeObserver: NSObjectProtocol?
 
+    /// BUG087.4 — when `UZUME_LF_ANALYSIS_CLOCK=1`, the analysis funnel is driven from the
+    /// decoded file at the smoothed playhead instead of from tap arrival. Nil when the flag is
+    /// off, and then this path behaves exactly as it did before.
+    private var analysisClock: PlayheadAnalysisClock?
+
     /// Serial queue the loop re-schedule / `onFileEnded` advance hops onto,
     /// OFF the AVAudioPlayerNode completion-handler queue (BUG-059). Re-entering
     /// the player (`scheduleFile`) directly from inside the completion handler
@@ -136,12 +141,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         let oldRefs = TeardownRefs(
             player: playerNode,
             engine: engine,
-            observer: configChangeObserver
+            observer: configChangeObserver,
+            clock: analysisClock
         )
         playerNode = nil
         engine = nil
         audioFile = nil
         configChangeObserver = nil
+        analysisClock = nil
         Self.teardownAVFoundation(refs: oldRefs, diagnostic: nil)
     }
 
@@ -171,12 +178,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             let previous = TeardownRefs(
                 player: playerNode,
                 engine: engine,
-                observer: configChangeObserver
+                observer: configChangeObserver,
+                clock: analysisClock
             )
             try _startLocked()
             let hadPrevious = previous.player != nil
                 || previous.engine != nil
                 || previous.observer != nil
+                || previous.clock != nil
             return hadPrevious ? previous : nil
         }
         if let stale {
@@ -211,7 +220,8 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             let refs = TeardownRefs(
                 player: playerNode,
                 engine: engine,
-                observer: configChangeObserver
+                observer: configChangeObserver,
+                clock: analysisClock
             )
             // Nil out under the lock so the scheduleFile completion callback
             // (which acquires the lock to check `playerNode === player`)
@@ -220,6 +230,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             engine = nil
             audioFile = nil
             configChangeObserver = nil
+            analysisClock = nil
             return refs
         }
         // LF.5.fix.2-FU1: skip the teardown helper entirely when the snapshot
@@ -229,7 +240,8 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // snapshot has nothing to release. Emitting the breadcrumb pair
         // anyway clutters session.log with paired ENTER/EXIT lines that
         // bracket zero work.
-        if oldRefs.player == nil && oldRefs.engine == nil && oldRefs.observer == nil {
+        if oldRefs.player == nil && oldRefs.engine == nil
+            && oldRefs.observer == nil && oldRefs.clock == nil {
             return
         }
         Self.teardownAVFoundation(refs: oldRefs, diagnostic: onDiagnosticEvent)
@@ -305,11 +317,22 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // "set the callback, then call start()." This matches the existing
         // `.localFile` mode pattern in `AudioInputRouter.startFilePlayback`.
         let callback = onAudioSamples
+
+        // BUG087.4: build the clock BEFORE the tap, because whether it exists decides whether the
+        // tap forwards. Exactly one source drives the funnel — feeding it from both would deliver
+        // the same audio twice on two different cadences.
+        let clock = PlayheadAnalysisClock.make(url: url, player: player, deliver: callback)
+
+        // The tap stays installed either way. It is the only thing that reports what AVAudioEngine
+        // actually delivered (BUG-087's own instrumentation), the flag is a one-increment A/B, and
+        // retiring it is a separate decision with its own consumer census — so this narrows its
+        // ROLE to reporting rather than removing it.
+        let tapCallback = clock == nil ? callback : nil
         player.installTap(onBus: 0, bufferSize: Self.requestedTapFrames, format: tapFormat) { [weak self] buffer, _ in
             self?.handleTapBuffer(buffer,
                                   sampleRate: sampleRate,
                                   channelCount: channelCount,
-                                  callback: callback)
+                                  callback: tapCallback)
         }
 
         // Test hygiene (BUG-052): under XCTest / `swift test`, mute the device
@@ -325,6 +348,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         try engine.start()
         _scheduleFileLoopLocked(player: player, file: file)
         player.play()
+
+        // After `play()` — `playerTime(forNodeTime:)` returns nil until the node is rendering, and
+        // the clock's first tick would otherwise be a wasted no-op.
+        if let clock {
+            clock.onDiagnosticEvent = onDiagnosticEvent
+            clock.start()
+        }
+        self.analysisClock = clock
 
         let observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -358,6 +389,8 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         let player: AVAudioPlayerNode?
         let engine: AVAudioEngine?
         let observer: NSObjectProtocol?
+        /// BUG087.4 — nil unless the playhead-driven analysis clock is enabled.
+        let clock: PlayheadAnalysisClock?
     }
 
     /// Tear down the AVFoundation objects held in `refs`. Safe to call from
@@ -369,6 +402,10 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         diagnostic: ((String) -> Void)?
     ) {
         diagnostic?("provider.teardown ENTER")
+        // BUG087.4: silence the analysis clock before the player goes away, so a tick in flight
+        // cannot read a file the teardown is about to release. `stop()` only cancels a dispatch
+        // source — it never blocks, so this does not reintroduce BUG-021's wait-on-render ABBA.
+        refs.clock?.stop()
         if let observer = refs.observer {
             diagnostic?("provider.teardown removeObserver BEGIN")
             NotificationCenter.default.removeObserver(observer)
@@ -544,14 +581,17 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         channelCount: AVAudioChannelCount,
         callback: ((UnsafePointer<Float>, Int, Float, UInt32) -> Void)?
     ) {
-        guard let callback else { return }
         guard let floatData = buffer.floatChannelData else { return }
         let frames = Int(buffer.frameLength)
         guard frames > 0 else { return }
 
-        let totalSamples = frames * Int(channelCount)
-
         reportDeliveredFramesOnce(frames: frames, sampleRate: sampleRate)
+
+        // BUG087.4: nil when the playhead clock owns the funnel. The tap keeps reporting what
+        // AVAudioEngine delivered (above) and forwards nothing.
+        guard let callback else { return }
+
+        let totalSamples = frames * Int(channelCount)
 
         if interleavedScratch.count < totalSamples {
             interleavedScratch = [Float](repeating: 0, count: totalSamples)

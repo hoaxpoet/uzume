@@ -1395,7 +1395,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
-### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) 📋 DESIGNED, not built (2026-09-10, Matt: *"i'm voting for true transport"*)
+### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ BUILT behind `UZUME_LF_ANALYSIS_CLOCK=1`, M7 owed (2026-09-10, Matt: *"i'm voting for true transport"*)
 
 **Why this and not the cheaper option.** The ~145 ms on every continuous primitive decomposes into
 band smoothing (τ 77 ms bass / 116 ms mid-treble, `BandEnergyProcessor.instantSmoothers`) plus
@@ -1464,8 +1464,42 @@ Honest ceiling: this recovers ~40–50 ms of ~145 ms on the local path, plus the
 - **Manual:** Matt's M7. This changes what every preset sees on the local path; a ~6× change in
   update rate is not a silent change.
 
-**Not started in code.** Scoped and committed as a definition so the next session begins from the
-measured premise rather than re-deriving it.
+#### Built — what landed, and the one thing the design did not anticipate
+
+`PlayheadAnalysisClock` (80 Hz, own queue) + `LoopingFileReader` (bounded 1 s read-ahead, absolute
+frame addressing that wraps at EOF), wired into `LocalFilePlaybackProvider._startLocked` behind
+`UZUME_LF_ANALYSIS_CLOCK=1`. Flag off, nothing is constructed and the tap forwards as before.
+
+| | produced | **OBSERVED** at 59.8 fps | delivery gap | bunched |
+|---|---|---|---|---|
+| tap (today) | ~47 Hz sliced | **10.01 Hz** | mean 99.8 ms | all slices |
+| playhead clock | 80.6 Hz | **59.2 Hz** | median 12.1 ms | **0/237** |
+
+Position gate, 3.32 laps of a looping file: `backwards=0, behind-player=0, beyond-band=0, max lead
+10.7 ms`.
+
+**★ 80 Hz, not 60 — the tick rate is a gate decision, not a taste one.** What is measured is how many
+distinct values a ~59.8 fps sampler can tell apart. Two near-equal rates beat against each other and
+leave render frames empty; 12.5 ms inside a 16.7 ms frame does not.
+
+**★ The design assumed an app-layer `dt` change would be needed. It is not, and the reason is worth
+keeping:** the FFT never runs on the callback's samples. `makeAudioSampleCallback` writes them into the
+`AudioBuffer` ring and reads the newest 1024 frames back out of it — so the analysis WINDOW and the
+callback's HOP were already decoupled. Delivering hop-sized spans keeps a full window *and* makes
+BUG087.2's `frames / rate` exactly the playhead advance, which is what a seconds-based follower needs.
+The one-funnel property held all the way through: zero changes to `UzumeApp/`.
+
+**Owed:** Matt's M7. **Matt's call on ordering, 2026-09-10: OPTION A — he watches first, goldens
+after.** Nothing is regression-locked to a look he has not approved; the goldens are regenerated only
+once he has said the new rate looks right. The reason is PR.19's: Nebula's old goldens were identical
+across all three fixtures, having locked in a preset drawing almost nothing — a golden only guards a
+regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN until the M7 lands.
+
+**One capture closes the rest.** The VisualAudioOffset before/after table could not be produced from
+`2026-09-10T22-07-34Z`: every continuous column there prints ⚠ TOO WEAK TO READ (`bass` r −0.058,
+`bassDev` r −0.008, `mid_dev` r 0.042), and only `transient_rise` is readable at +45 ms / r 0.184. A
+difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
+closes both the session rate gate and the offset table, and it is the same run as the M7.
 
 ### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
 
