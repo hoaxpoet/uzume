@@ -10,6 +10,89 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-223000] Nine stale plan rows closed, one that was not stale, and a diagnostic defect
+
+Matt: *"WL.4 is stale. Witchlight is tuned and certified."* Correct — and it was **eight** Witchlight
+rows, not one. WL.4, .5, .6, .7, .8, .9, .9b and .10 all read *"pending live M7"* while WL.CERT had
+certified Witchlight on 2026-08-07.
+
+★ **WL.11 was the exception, and dates could not have found it.** WL.10, WL.CERT and WL.11 are all
+dated 2026-08-07; only the commit times separate them — WL.10 at 11:00:55, the M7 session at 11:08,
+WL.CERT at 11:37:17, **WL.11 at 12:01:19**. `git merge-base --is-ancestor` confirms WL.11 was not in
+the certified build, so a CERTIFIED preset was shipping a beat-timing change nobody had reviewed.
+**Establish supersession from commit order, never from dates.**
+
+It has now been reviewed — Matt, session `2026-09-11T20-19-03Z`: *"Looks good."* And the numbers
+corroborate rather than merely accompany: **|drift_ms| median 7 ms / p90 12 ms**, against the 25/63/91 ms
+grid drift WL.11 was built to compensate.
+
+★ **Whether WL.11 survived the rebrand had to be CHECKED, not assumed.** Its commit's paths are
+`PhospheneEngine/…`, so a path-wise diff against main reads as "changed" from the rename alone and
+proves nothing either way. Grepping for the symbols it introduced settles it: `ingestBeatDrift`,
+`driftCompensationCapMs`, `beatDriftSeconds` all live on main.
+
+Also closed on Matt's call, and recorded as **"closed as reviewed", not "M7 PASSED on session X"**,
+because no review session existed for either: **PR.22** (supported indirectly by Nebula's certification,
+explicitly not by a streaming session) and **SKEIN.OVERLAP.1** (whose row now states plainly that
+nothing automated covers it — BUG-108's rendered-overlap check was never built and the Skein goldens
+are green only because the harness paints nothing).
+
+Three further stale-row classes fixed: **PR.19/.20/.21** were still "M7 owed" a day after Matt
+certified the Nebula build containing them; **FD.2** was a ghost header under a preset's old name,
+retired at FLY.14; and **VL.1** was an ID collision I created by grepping `^### VL` when those rows
+are prefixed `### Increment ` — renumbered to **VL.2**, recorded rather than applied silently.
+
+⚠ **New: BUG-129.** `chain_health.json` reported `peakDBFS` **exactly 0** on the two most recent
+sessions while still grading `clean`, with empty reasons and `raw_tap.wav` present. It matters because
+D-184 makes a `clean` verdict the precondition for judging fidelity at all — and two M7s closed today
+cite `clean` over a 0 peak. Filed, not diagnosed.
+
+### [dev-2026-09-11-213000] VL.1 — Volumetric Lithograph's notch was on a sixteen-beat cycle
+
+A units error found while censusing BUG-117's consumers, and not BUG-117. `vl_foldRotation` divided
+`pulse_beat_index` — which counts completed PULSE CYCLES, four beats each (D-154) — by the grid's beat
+meter. On a healthy 4/4 grid that is one notch step every **sixteen** beats; only the declined grid's
+`beats_per_bar = 1` produced the intended four.
+
+★ The first census said the opposite — that a declined grid ratcheted four times too FAST. That came
+from reading the expression's shape rather than tracing what `pulse_beat_index` counts, and the same
+error hit two other sites in the same sitting (Witchlight and MeshGenerator, both actually protected by
+the 2026-09-08 `barPhase01 = 0` hold). Tracing inputs is the step that was skipped, three times.
+
+Matt's call: the meter leaves the arithmetic. One pulse cycle is the bar this ratchet wants, so a grid
+with no bar information cannot mislead it because it is no longer asked.
+
+**M7 PASSED** the same day on `2026-09-11T19-58-15Z` — Matt: *"I like the faster speed and it's synced
+well with the music."* So the 4× motion change on a certified preset is accepted rather than merely
+shipped. ⚠ **The golden gate cannot see it**: the
+acceptance harness does not drive the pulse clock, so both arms compute an identical frame. Flash-safety
+re-measured and unchanged.
+
+### [dev-2026-09-11-200000] BUG-116 and BUG-119 closed on one Ferrofluid session
+
+Both were fixed-pending-live-confirm and both surface in Ferrofluid Ocean, so one sitting closed the
+pair. Session `2026-09-11T19-12-34Z`: **48 kHz** (the rate BUG-116 depends on — a 44.1 kHz file would
+have tested nothing, because the defective branch does not fire there), chain health **clean**, peak
+−6.03 dBFS, 180 s at 59.9 fps.
+
+**BUG-116** — *"On any local file that is not 44.1 kHz, the pre-analysed stem series is DEAD for ~0.4 s
+out of every 2 s."* Measured on this capture: **0 of 10,789 frames** with all four stems at zero,
+against the pre-fix signature of **279 of 1,875 (14.9 %)**. Matt: *"No periodic darkening. Visuals are
+steady."*
+
+**BUG-119** — the beat pulse held one whole-track average BPM, so a wrong average put every
+pulse-driven preset off the music. Measured: **|drift_ms| median 13.9 / p90 42.7**, **|onset_residual_ms|
+median 17.6 / p90 25.3** — sub-20 ms is the pulse landing on the beat. (For contrast, the Nebula session
+on a track whose grid was genuinely bad read |drift_ms| median 634.) Matt: *"No visible grain observed.
+Spike punches land with the music."*
+
+⚠ **A metric was built, measured, and DISCARDED here rather than reported.** An attempt to show the
+pulse now follows the grid's LOCAL period — by differencing `pulse_beat_index` over 5 s windows —
+returned a 1231 % spread, then 62–187 % after excluding gated frames. Neither figure means anything:
+`pulse_beat_index` steps in integers, so over a 5 s window the estimator quantises into buckets
+(5s/13, 5s/8, 5s/5) and is measuring the window arithmetic rather than the pulse. `drift_ms` and
+`onset_residual_ms` answer the question directly and are what the closure rests on.
+
 ### [dev-2026-09-11-172000] Nebula certified — the 23rd, and the first reviewed on a fixed clock
 
 Matt's M7 on `2026-09-11T16-47-03Z`: *"It's close enough ... we should leave Nebula alone and move to
