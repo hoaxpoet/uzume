@@ -22,8 +22,6 @@
 //   RATE_SESSION=~/Documents/uzume_sessions/<dir> \
 //     swift test --package-path UzumeEngine --filter AnalysisRateGate
 //   swift test --package-path UzumeEngine --filter AnalysisRateGate
-//     (the delivery arm runs by default now that the clock is default-on; UZUME_LF_ANALYSIS_CLOCK=0
-//      skips it, which is also how you reproduce the tap's cadence)
 import Testing
 import Foundation
 import AVFoundation
@@ -82,13 +80,8 @@ struct AnalysisRateGateTests {
     // MARK: - The mechanism gate: delivery spacing, under the flag
 
     @available(macOS 14.2, *)
-    @Test("Under the flag, deliveries land in distinct render windows (UZUME_LF_ANALYSIS_CLOCK=1)",
-          .timeLimit(.minutes(1)))
+    @Test("Deliveries land in distinct render windows", .timeLimit(.minutes(1)))
     func deliveryRateGate() throws {
-        guard PlayheadAnalysisClock.isEnabled else {
-            print("[rate] clock disabled (UZUME_LF_ANALYSIS_CLOCK=0) — delivery spacing not gated")
-            return
-        }
         let url = try PlayheadAnalysisClockTests.writeRamp(frames: 44_100 * 2)
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -100,7 +93,10 @@ struct AnalysisRateGateTests {
         provider.stop()
 
         let times = arrivals.snapshot()
-        try #require(times.count > 100, "only \(times.count) deliveries — the clock did not drive")
+        // BUG087.5: the clock is the ONLY analysis source on this path, so too few deliveries is
+        // silence reaching every preset, not a slower fallback.
+        let seen = times.count
+        try #require(seen > 100, "only \(seen) deliveries — this is silence, not a slower fallback")
         let span = times[times.count - 1] - times[0]
 
         // ★ The observed rate, simulated honestly: bucket deliveries into 1/60 s render windows

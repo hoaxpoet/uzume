@@ -10,6 +10,31 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-020000] BUG087.5 — the tap is gone from the local-file path
+
+Follow-up Matt asked for after BUG-087 closed. `LocalFilePlaybackProvider` no longer installs a tap
+on the player node at all: `PlayheadAnalysisClock` is the sole analysis source on this path.
+
+The tap's only job was carrying audio to `onAudioSamples`, and on this path it was the thing capping
+the whole MIR chain at 10 Hz — AVAudioEngine hands it ~0.1 s buffers whatever `installTap(bufferSize:)`
+asks for. With the clock measured at 59.77 Hz on Matt's M7 capture, a real-time callback firing ten
+times a second to be discarded is cost with no consumer.
+
+Deleted with it: `handleTapBuffer`, `deliverSliced`, `interleavedScratch`, `requestedTapFrames`, the
+requested-vs-delivered diagnostic, the `removeTap` teardown step, and **`TapBufferSlicing` plus its
+test suite** — BUG087.3's slicing arithmetic, whose only production consumer was the slicing loop.
+The provider drops 615 → 500 lines.
+
+**Two things became errors that used to be quiet fallbacks, deliberately.** `PlayheadAnalysisClock.make`
+now THROWS instead of returning nil: while the tap still forwarded, a clock that could not be built
+degraded to it, and now there is nothing to degrade to — analysing nothing would render a dead
+visualizer against audible music, so the provider refuses to start and the app's existing local-file
+error path shows it. And `UZUME_LF_ANALYSIS_CLOCK` was removed: with no tap to return to, `=0` could
+only have produced silence, and a flag that cannot do the thing it names is worse than no flag.
+
+Streaming is untouched — it runs through `AudioHardwareCreateProcessTap`, a different capture path
+this increment never reaches.
+
 ### [dev-2026-09-11-012500] BUG-087 RESOLVED — the local analysis clock is default-on after M7
 
 Matt, watching `2026-09-11T01-22-10Z` live: *"I like it. It's punchy. Not exact, but close."* Measured

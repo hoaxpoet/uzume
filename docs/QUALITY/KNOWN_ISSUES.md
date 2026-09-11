@@ -1446,10 +1446,11 @@ EMA at `0.95/0.05` per invocation, so its decay time constants shorten with the 
 diagnostic level meter, not any preset. Not changed here, and not a new regime: the streaming path has
 always fed it at ~47–59 Hz.
 
-**The tap is NOT retired.** It stays installed and keeps reporting what AVAudioEngine actually
-delivered (BUG-087's own instrumentation); when the clock exists it installs with a nil forwarding
-callback so exactly one source drives the funnel. It can go once the flag is default-on and the A/B
-window closes — a separate decision.
+**The tap is RETIRED (BUG087.5, 2026-09-11, Matt's call once the fix had landed).** The player node
+now carries no tap at all — `PlayheadAnalysisClock` is the only analysis source on this path.
+`TapBufferSlicing` went with it (its only consumer was the slicing loop), as did
+`UZUME_LF_ANALYSIS_CLOCK`: with no tap to return to, `=0` could only produce silence. A clock that
+cannot be built is now a thrown start error rather than a silent downgrade.
 
 **Honest ceiling, unchanged from the design:** this recovers the cadence term (~50 ms average, plus
 the 100 ms staircase) out of the ~145 ms on continuous primitives. The remaining τ 77–116 ms is

@@ -1395,6 +1395,24 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG087.5 — retire the tap's forwarding role ✅ (2026-09-11, Matt: *"retire the tap's forwarding role"*)
+
+The follow-up named at BUG087.4's closeout. `LocalFilePlaybackProvider` installs **no tap**;
+`PlayheadAnalysisClock` is the only analysis source on the local-file path. Deleted: `handleTapBuffer`,
+`deliverSliced`, `interleavedScratch`, `requestedTapFrames`, the requested-vs-delivered diagnostic, the
+`removeTap` teardown step, and **`TapBufferSlicing` + `TapBufferSlicingTests`** — BUG087.3's slicing
+arithmetic, orphaned the moment the slicing loop went. Provider 615 → 500 lines.
+
+★ **Retiring a fallback means converting its cases into errors, not deleting them.** Two quiet
+degradations existed only because the tap was there to catch them, and both had to become loud:
+`PlayheadAnalysisClock.make` throws instead of returning nil (a clock that cannot be built used to fall
+back to the tap; now it would analyse nothing, and a dead visualizer against audible music is worse
+than refusing to start), and `UZUME_LF_ANALYSIS_CLOCK` is gone (with no tap to return to, `=0` could
+only produce silence — a flag that cannot do what it names is worse than no flag). Enumerating what the
+removed thing was silently absorbing is the actual work of a retirement; deleting the call site is not.
+
+Streaming untouched — different capture path (`AudioHardwareCreateProcessTap`).
+
 ### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ M7 PASSED, default-on, BUG-087 RESOLVED (2026-09-11, Matt: *"I like it. It's punchy."*)
 
 **Why this and not the cheaper option.** The ~145 ms on every continuous primitive decomposes into
