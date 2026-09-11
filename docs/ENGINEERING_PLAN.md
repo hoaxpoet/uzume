@@ -6242,7 +6242,9 @@ Two curation errors produced it, both recorded in `docs/VISUAL_REFERENCES/witchl
 
 ---
 
-### Increment WL.4 — Witchlight: give it a continuous-energy driver 🔨 **CODE-COMPLETE 2026-08-04, pending live M7**
+### Increment WL.4 — Witchlight: give it a continuous-energy driver ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt's fourth M7, session `2026-08-04T19-23-28Z`: *"not synced to the music. failure."* Audio chain verdict `clean`, peak −0.26 dBFS — not an input problem.
 
@@ -6272,7 +6274,9 @@ CLAUDE.md's most important design rule is that continuous energy is the DEFAULT 
 
 ---
 
-### Increment WL.6 — Witchlight: star field decoupled; CAMERA FRAMING IS THE OPEN ITEM 🔨 (2026-08-05)
+### Increment WL.6 — Witchlight: star field decoupled; CAMERA FRAMING IS THE OPEN ITEM ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Matt's sixth M7** (session `2026-08-05T15-33-46Z`, ~128 s), on the first build that actually contained WL.5:
 
@@ -6303,7 +6307,9 @@ Reverted to keep `main` coherent — a half-tuned framing change that degrades b
 
 ---
 
-### Increment WL.5 — Witchlight: the pen only draws when there is music 🔨 **CODE-COMPLETE 2026-08-05, pending live M7**
+### Increment WL.5 — Witchlight: the pen only draws when there is music ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt's fifth M7, session `2026-08-05T13-06-38Z`: *"The starry background is moving too much. The witchlight pattern is still moving when the preset is idle, indicating that there is no real beat sync / connection to the music. The pattern / shape is fine, but it needs to feel connected to the music, otherwise it is not a Uzume preset I will certify."*
 
@@ -6329,7 +6335,9 @@ Reverted to keep `main` coherent — a half-tuned framing change that degrades b
 
 ---
 
-### Increment WL.7 — Witchlight: the coupling was real, and off screen 🔨 **CODE-COMPLETE 2026-08-05, pending live M7**
+### Increment WL.7 — Witchlight: the coupling was real, and off screen ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt, after six M7 rounds: *"You have not addressed 'still not tied to the music,' which is the most important thing."* Four consecutive increments added or deepened coupling and none of them moved his verdict. WL.6 recorded a third complaint alongside it — *"the ribbon is moving faster than the camera can catch up, leaving the front of the ribbon out of frame for much of the run"* — and left it open.
 
@@ -6355,7 +6363,9 @@ This is the opposite of the three WL.6 framing attempts, which all tried to fit 
 
 ---
 
-### Increment WL.8 — Witchlight: something that lands ON the beat 🔨 **CODE-COMPLETE 2026-08-05, pending live M7**
+### Increment WL.8 — Witchlight: something that lands ON the beat ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** WL.7's framing fix worked — Matt, first time in seven rounds: *"Ribbon feels connected to the music, though how is not obvious."* The remaining ask is legibility of the connection, and he proposed two mechanisms: speed tied to tempo, and drums/downbeats illuminating the head and other nodules.
 
@@ -6417,7 +6427,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.9 — Witchlight: every beat, with the downbeat harder 🔨 **CODE-COMPLETE 2026-08-06, pending live M7**
+### Increment WL.9 — Witchlight: every beat, with the downbeat harder ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt on the WL.8 build (session `2026-08-06T15-09-29Z`): *"Feels too polite. Beat match is also close but not exact. Not sure that this is better than the previous run."* Two complaints, two different causes, one of them mine and one an engine defect.
 
@@ -6443,7 +6455,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.9b — Witchlight: the ribbon stopped outrunning its own camera 🔨 **CODE-COMPLETE 2026-08-06, pending live M7**
+### Increment WL.9b — Witchlight: the ribbon stopped outrunning its own camera ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt, session `2026-08-06T17-27-21Z`: *"The ribbon builds too fast and not in sync with the actual beat and downbeat. In addition, the camera cannot keep up with the head of the ribbon because it is moving too fast. Not a great result."*
 
@@ -6471,7 +6485,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.10 — Witchlight: the camera comes back in 🔨 **CODE-COMPLETE 2026-08-07, pending live M7**
+### Increment WL.10 — Witchlight: the camera comes back in ✅ M7 satisfied by WL.CERT
+
+**M7 satisfied by WL.CERT (2026-08-07).** Matt's sign-off on session `2026-08-07T16-08-39Z` (11:08 CDT) — *"Looks great. Manual review passes!"* — reviewed a build containing this increment, so its review was given, not owed. Established from commit order, not dates: `WL.10` 11:00:55 → WL.CERT commit `e264cbb5` 11:37:17.
 
 **Why.** Matt, session `2026-08-06T19-36-40Z`: *"Does the camera ever zoom back in when the ribbon is back to making tighter shapes and forms? Other than this one question, the preset looks good and follows the music pretty well."* Measured answer: barely — `viewScale` ran 3.68 → 0.73 over two minutes with almost no recovery. Spec: `docs/prompts/WL10_CAMERA_COMES_BACK_IN.md`. **Matt's choice: option B** (frame roughly the last 10–15 s).
 
@@ -6520,7 +6536,9 @@ Circular spread rather than min/max because hue **wraps**: a trail spanning 0.95
 
 ---
 
-### Increment WL.11 — Witchlight: fire at the audible beat, not the grid 🔨 **CODE-COMPLETE 2026-08-07, pending live M7**
+### Increment WL.11 — Witchlight: fire at the audible beat, not the grid 🔨 **M7 GENUINELY OWED — it landed AFTER certification**
+
+⚠ **Witchlight is certified on a build that does not contain this increment.** WL.CERT's M7 session ran at 11:08 CDT on 2026-08-07 and its commit `e264cbb5` landed 11:37:17; **WL.11 (`29090b6d`) landed 12:01:19** — after both. `git merge-base --is-ancestor` confirms it is not in the certified build. So unlike WL.4–WL.10, this one's *"pending live M7"* is real: the shipping Witchlight carries a change to when its beat fires that Matt has never reviewed. Dates alone could not have told us this — all of WL.10, WL.CERT and WL.11 are 2026-08-07, and only the commit times separate them.
 
 **Why.** The last thing Matt raised that was still open: *"Beat match is also close but not exact."* The pulse is exact on the grid (0.000 beats, 100 % on-beat); the **grid** drifts against the audible beat — 25 ms median, 91 ms worst, 14.2 % of frames past the ~60 ms perceptual window (**BUG-065**).
 
