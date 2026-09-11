@@ -204,8 +204,8 @@ public struct FeatureVector: Sendable {
     public var trackHueAnchor01: Float
     /// PR.22 float 55 — transient rise 0…1, `spectralLevelRise`'s fast sibling (EP PR.22).
     public var transientRise: Float
-    // swiftlint:disable:next identifier_name
-    public var _pad56: Float
+    /// ALFVEN.3i — 1 on sustained near-silence (D-148 detector, relative to AGC's own average).
+    public var nearSilent01: Float
 
     public init(
         bass: Float = 0, mid: Float = 0, treble: Float = 0,
@@ -250,7 +250,7 @@ public struct FeatureVector: Sendable {
         self.spectralDensity = 0; self.spectralDensitySlow = 0; self.spectralSurge = 0
         self.spectralSectionRatio = 0
         self.spectralLevelRise = 0          // FTR.24, set per frame by SpectralAnalyzer
-        self.trackHueAnchor01 = 0; self.transientRise = 0; self._pad56 = 0   // PR.20 / PR.22
+        self.trackHueAnchor01 = 0; self.transientRise = 0; self.nearSilent01 = 0  // PR.20/.22, 3i
     }
 
     /// All-zero feature vector.

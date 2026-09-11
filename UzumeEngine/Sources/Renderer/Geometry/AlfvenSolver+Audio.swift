@@ -31,6 +31,29 @@ extension AlfvenSolver {
             return current + alpha * (target - current)
         }
 
+        // ALFVEN.3h — SILENCE GATE. `bassRel` is a DEVIATION primitive: it reads zero at
+        // silence AND during steady music, so it cannot tell them apart, and the two-sided
+        // map sends zero to its MIDPOINT (drive 9.0 of 18). ALFVEN.3 replaced the constant
+        // `cfg.drive` (0.020 — the relaxed state) with `audioDrive` and thereby silently
+        // broke the documented silence look: `05_atmosphere_relaxed_state.png` is labelled
+        // in the reference README as *"Silence / low-drive state (D-037) … this is what
+        // silence must look like"*, and it has been unreachable in production ever since.
+        //
+        // ⚠ NOT `bass + mid + treble <= 1e-6`. ALFVEN.3h used that (Witchlight's WL.5 test)
+        // and it fired on 0 of 5224 frames of a clean session: those bands are AGC-NORMALISED
+        // and never reach zero while the tap is alive — measured minimum 0.022. It succeeds
+        // only when the tap is DEAD, which is exactly how 3h's gate came to be "validated"
+        // against a capture whose own `chain_health` verdict was `broken`.
+        //
+        // `nearSilent01` is D-148/BUG-029's detector instead: RELATIVE to AGC's own running
+        // average (`total < 0.02 * runningAvg`, ~34 dB down) and sustained for 30 frames, so
+        // it cannot be fooled by AGC and does not trip on a between-beat gap.
+        let silent = features.nearSilent01 > 0.5
+        // Ramped, not switched: a step in drive is a step in the whole field's motion.
+        // Falls to the relaxed state in ~`silenceTau`, recovers at the same rate.
+        let gateTarget: Float = silent ? 0 : 1
+        silenceGate = ema(silenceGate, gateTarget, configuration.silenceTau)
+
         bassEnvelope = ema(bassEnvelope, features.bassRel, configuration.bassTau)
         centroidEnvelope = ema(centroidEnvelope,
                                features.spectralCentroid,
@@ -50,8 +73,13 @@ extension AlfvenSolver {
         // of dropping to its silence look. See `bassRelShift` for the M7 this fixes.
         let scale = max(configuration.bassRelScale, 1e-4)
         let x = 0.5 * (1.0 + tanh((bassEnvelope + configuration.bassRelShift) / scale))
-        return configuration.driveFloor
+        let driven = configuration.driveFloor
             + (configuration.driveCeil - configuration.driveFloor) * min(max(x, 0), 1)
+        // The gate interpolates toward the FLOOR, which is the relaxed state reference 05
+        // depicts. At `silenceGate == 1` this is exactly the driven value, so nothing about
+        // the music-playing behaviour measured in ALFVEN.3e changes.
+        return configuration.driveFloor
+            + (driven - configuration.driveFloor) * min(max(silenceGate, 0), 1)
     }
 
     /// Palette centre: spectral centroid PLACES it, the ALFVEN.4e time drift keeps it

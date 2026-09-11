@@ -192,6 +192,169 @@ struct AlfvenFilmPreviewTests {
             return
         }
 
+        // ALFVEN_TRANSITION: energise, then cut the audio — the LIVE scenario, which the
+        // fixed-drive review fixtures never exercised. Matt's M7 on the ALFVEN.3h build:
+        // "silence state looks the same as active state", on a session where Alfvén saw ~7 s
+        // of audio then ~110 s of silence. The review sheet reaches the relaxed state from a
+        // FRESH SEED; reaching it from an already-energised field is a different question,
+        // and it is the one production actually asks.
+        if env["ALFVEN_TRANSITION"] == "1" {
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            let dir = URL(fileURLWithPath: "/tmp/uzume_visual")
+                .appendingPathComponent("alfven_transition")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            func fv(_ frame: Int, silent: Bool) -> FeatureVector {
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                if !silent {
+                    f.bass = 0.30; f.mid = 0.30; f.treble = 0.30
+                    f.bassRel = 0.318; f.bassDev = 0.318
+                    f.spectralCentroid = 0.120
+                }
+                return f
+            }
+            func tick(_ f: FeatureVector) throws {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                cmd.commit(); cmd.waitUntilCompleted()
+            }
+            solver.silenceGate = 1
+            for i in 1...600 { try tick(fv(i, silent: false)) }   // energised, as live
+            print("[alfven-transition] energised: drive \(solver.audioDrive) simClock \(solver.simClock)")
+            // Now cut the audio and watch, in REAL seconds, what the listener would see.
+            for sec in 0...20 {
+                if sec > 0 { for i in 1...60 { try tick(fv(600 + sec * 60 + i, silent: true)) } }
+                let j = Self.readJ(solver)
+                let rms = (j.reduce(0.0) { $0 + $1 * $1 } / Double(j.count)).squareRoot()
+                print(String(format: "[alfven-transition] t=%2ds  gate %.3f  drive %6.2f  "
+                                     + "J rms %7.4f  simClock %6.2f",
+                             sec, solver.silenceGate, solver.audioDrive, rms, solver.simClock))
+                if sec % 5 == 0 {
+                    guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                        throw HarnessError.commandBufferFailed
+                    }
+                    let pass = MTLRenderPassDescriptor()
+                    pass.colorAttachments[0].texture = target
+                    pass.colorAttachments[0].loadAction = .clear
+                    pass.colorAttachments[0].storeAction = .store
+                    pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                    guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                        throw HarnessError.commandBufferFailed
+                    }
+                    solver.render(encoder: enc, features: fv(600, silent: true))
+                    enc.endEncoding(); cmd.commit(); cmd.waitUntilCompleted()
+                    try Self.writePNG(Self.pixels(target), width: Self.edge, height: Self.edge,
+                                      to: dir.appendingPathComponent(String(format: "t%02ds.png", sec)))
+                }
+            }
+            print("[alfven-transition] frames in \(dir.path)")
+            return
+        }
+
+        // ALFVEN_REVIEW: emit the D-181 still set and the D-195 motion sequence into the
+        // layout Scripts/compare_render.sh and Scripts/motion_gate.sh expect
+        // (/tmp/uzume_visual/<ISO8601>/alfven_*.png).
+        //
+        // ⚠ WHY THIS LIVES HERE AND NOT IN PresetVisualReviewTests. That harness draws with
+        // `preset.pipelineState`; Alfvén declares `passes: ["particles"]` and its field is
+        // drawn by `AlfvenSolver` through the ParticleGeometry seam. Its `Alfven.metal` is a
+        // 53-line stub, so adding "Alfvén" to that harness's preset list would composite a
+        // sheet of the D-037 background and nothing else — plausible-looking and entirely
+        // wrong. That is the Nebula/Plasma failure (the `direct` harness fed LCG noise and
+        // every still was noise). Driving the real solver is the whole point.
+        //
+        // Fixtures are the MEASURED operating range, not invented levels: bassRel p05/p50/p95
+        // over Matt's two clean captures (12,925 frames), which map through the ALFVEN.3e
+        // drive curve to roughly drive 5 / 9 / 14.5.
+        if env["ALFVEN_REVIEW"] == "1" {
+            let stamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "")
+            let dir = URL(fileURLWithPath: "/tmp/uzume_visual").appendingPathComponent(stamp)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            // Long enough to clear the seed transient: a 240-frame field is still energising
+            // and would misrepresent every fixture (the ALFVEN.3e measurement error).
+            let settle = Int(env["ALFVEN_SETTLE"] ?? "600") ?? 600
+            let seqFrames = Int(env["ALFVEN_SEQ"] ?? "48") ?? 48
+
+            // ⚠ `silent` is NOT `bassRel == 0`. bassRel is a deviation primitive and reads
+            // zero during steady music too; the first cut of these fixtures used bassRel 0.0
+            // for "silence" and -0.007 for "mid", which are the same input — two of the three
+            // sheet columns were identical and the silence column was not silence at all.
+            // Real silence means the MIX BANDS are zero, which is what the gate tests.
+            func drive(_ bassRel: Float, _ frame: Int, silent: Bool = false) -> FeatureVector {
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                if !silent {
+                    f.bass = 0.30; f.mid = 0.30; f.treble = 0.30   // any sound at all
+                    f.bassRel = bassRel
+                    f.bassDev = max(bassRel, 0)
+                    f.spectralCentroid = 0.120      // measured p50 across 8 sessions
+                }
+                return f
+            }
+            func step(_ f: FeatureVector) throws {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                cmd.commit(); cmd.waitUntilCompleted()
+            }
+            func shoot(_ f: FeatureVector, to url: URL) throws {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = target
+                pass.colorAttachments[0].loadAction = .clear
+                pass.colorAttachments[0].storeAction = .store
+                pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.render(encoder: enc, features: f)
+                enc.endEncoding()
+                cmd.commit(); cmd.waitUntilCompleted()
+                try Self.writePNG(Self.pixels(target), width: Self.edge, height: Self.edge, to: url)
+            }
+
+            // p05 / p50 / p95 of bassRel over Matt's two clean captures, plus TRUE silence.
+            for (tag, bassRel, silent) in [("silence", Float(0.0), true),
+                                           ("quiet", Float(-0.216), false),
+                                           ("mid", Float(-0.007), false),
+                                           ("energetic", Float(0.318), false)] {
+                solver.silenceGate = silent ? 0 : 1     // start settled, not mid-ramp
+                for i in 1...settle { try step(drive(bassRel, i, silent: silent)) }
+                try shoot(drive(bassRel, settle, silent: silent),
+                          to: dir.appendingPathComponent("alfven_\(tag).png"))
+            }
+            // D-195 motion sequence: CONTIGUOUS frames at the mid fixture. Stills cannot show
+            // jitter/pop/strobe — that is the Truchet hole the motion gate exists to close.
+            //
+            // ⚠ In a SUBDIRECTORY, deliberately. compare_render.sh globs `alfven_*.png` at
+            // maxdepth 1, so sequence frames sitting beside the stills get composited into
+            // the comparison sheet — 51 panels wide, 24,960 px, nothing legible. The sheet
+            // is the artifact the D-181 verdict is read from, so it must carry the three
+            // fixtures and nothing else. motion_gate.sh takes its frames-src explicitly.
+            let seqDir = dir.appendingPathComponent("seq")
+            try FileManager.default.createDirectory(at: seqDir, withIntermediateDirectories: true)
+            solver.silenceGate = 1
+            for i in 1...seqFrames {
+                try step(drive(-0.007, settle + i))
+                try shoot(drive(-0.007, settle + i),
+                          to: seqDir.appendingPathComponent(String(format: "alfven_seq_%04d.png", i)))
+            }
+            print("[alfven-review] 3 stills in \(dir.path)")
+            print("[alfven-review] \(seqFrames) sequence frames in \(seqDir.path)")
+            print("[alfven-review]   Scripts/compare_render.sh alfven \(dir.path)")
+            print("[alfven-review]   Scripts/motion_gate.sh alfven \(seqDir.path)")
+            return
+        }
+
         // ALFVEN_VIGOUR: does more drive actually LOOK more vigorous? The drive map is a
         // curve onto the forcing amplitude, but nothing guarantees the display responds
         // to the top

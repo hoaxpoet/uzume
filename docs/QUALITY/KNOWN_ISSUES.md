@@ -46,6 +46,7 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
+| BUG-130 | P1 · open 2026-09-11 | audio.pipeline | **Local-file stop/pause FREEZES the feature vector at its last values instead of decaying to silence.** Session `2026-09-11T21-00-42Z`: a 1617-frame (26.9 s) run with `bass/mid/treble` byte-identical at `0.27158/0.02265/0.00522` while `playback_time_s` advanced 0.01 s. Every preset sees a steady non-zero signal with playback stopped; no silence-dependent behaviour can fire. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -192,6 +193,54 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+---
+
+### BUG-130 — Local-file stop/pause freezes the feature vector instead of decaying to silence (2026-09-11)
+
+**Reported by Matt**, correcting my misreading of his M7: *"Audio did not play continuously
+throughout - I stopped and started playback of a local file a couple times during the session and had
+silence for more than 20 seconds."*
+
+**Expected.** Stopping playback produces silence: band energies decay toward zero and
+silence-dependent behaviour (D-037 relaxed states, `nearSilent01`, any silence gate) fires.
+
+**Actual.** The last analysed frame is retained and re-published every render frame. Measured on
+`2026-09-11T21-00-42Z` (chain_health **clean**, peak 0 dBFS):
+
+| evidence | |
+|---|---|
+| frozen run | frames 3041–4658 — **1617 frames / 26.9 s**, `bass/mid/treble` byte-identical |
+| frozen values | `bass 0.27158  mid 0.02265  treble 0.00522  bassRel 0.10214` — all non-zero |
+| `playback_time_s` | 50.7200 → 50.7307 across those 27 s — **playback genuinely stopped** |
+| `time` / `wallclock_s` / `deltaTime` | advancing normally — the render loop is healthy |
+| `SIGNAL_HEALTH` | a matching **28 s gap** (21:01:44 → 21:02:12): no analysis frames produced |
+| `near_silent01` | 0 across all 6088 frames — it cannot fire on frozen loud values |
+
+**Cause.** `LocalFilePlaybackProvider.pause()` pauses the player node only; nothing clears the
+published features. With the tap retired for local files (BUG087.5 — the clock is the only analysis
+source), a stopped clock produces no new frames and the last one persists indefinitely. This is the
+stale-publisher class CLAUDE.md §What NOT To Do names: *a publisher retains its last value
+indefinitely; a feature written on one path must be cleared on the complementary path.*
+
+**Blast radius: every preset**, not just Alfvén. With local-file playback stopped, all of them see a
+steady non-zero signal and keep animating as though music were playing. Anything silence-dependent is
+dead on the local-file path.
+
+**Why three M7 rounds missed it.** It makes stopped playback *indistinguishable* from playing — which
+is exactly the symptom Matt reported three times ("silence state looks the same as active state") and
+which I misdiagnosed twice: first as a dead tap, then as "the engine never saw silence / audio played
+continuously". `SIGNAL_HEALTH` showed no silence because analysis had **stopped**, not because audio
+was playing. Matt's correction located it; I had the evidence and drew the wrong conclusion from it.
+
+**Does NOT block ALFVEN.CERT.** Alfvén's own gates are green and its silence gate is correct in the
+harness from both a fresh seed and an energised field (ALFVEN.3h/.3i). It simply cannot be exercised
+live on the local-file path until this is fixed, so Alfvén's silence state is recorded as
+**unvalidated**, not working.
+
+**Suggested fix.** Clear or decay the published `FeatureVector` on the stop/pause path, the
+complementary write CLAUDE.md prescribes. Worth checking the streaming path for the same gap.
+
 
 ---
 

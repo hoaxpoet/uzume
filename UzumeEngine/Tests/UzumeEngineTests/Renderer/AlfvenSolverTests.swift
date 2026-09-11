@@ -189,6 +189,12 @@ struct AlfvenSolverTests {
                 var f = FeatureVector()
                 f.time = Float(frame) / 60.0
                 f.deltaTime = 1.0 / 60.0
+                // ⚠ The mix bands are REQUIRED, not decoration. ALFVEN.3h gates drive on
+                // `mixEnergy <= 1e-6`, and a vector carrying a bass DEVIATION with zero
+                // absolute energy is physically impossible — it cannot occur in production.
+                // Without these the gate reads silence and every drive collapses to the
+                // floor, which is what this test measured when 3h landed.
+                f.bass = 0.30; f.mid = 0.30; f.treble = 0.30
                 f.bassRel = bassRel
                 f.bassDev = max(bassRel, 0)
                 solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)

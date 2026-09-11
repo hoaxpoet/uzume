@@ -82,6 +82,13 @@ struct PhotosensitivityCertificationTests {
                            // MultiPassFlashHarnessTests.ricercar_isFlashSafe: 0.00 flashes/s
                            // peak, Δluma 0.019 (6.3× the responsiveness floor) — RICERCAR-CERT.1
         ,
+        "Alfvén"           // particles; the MHD field is drawn by `AlfvenSolver` through the
+                           // particles seam and `alfven_ground_fragment` is only the D-037
+                           // backdrop, so this single-pass harness renders it static (Δ0.000).
+                           // Measured for real by MultiPassFlashHarnessTests.alfvenIsFlashSafe:
+                           // 0.00 flashes/s peak, 0 transitions, luma 0.233…0.320 (Δ0.087)
+                           // against a 3.0 flashes/s limit — ALFVEN.CERT.
+        ,
         "Nebula"           // direct pass, but its ring reads the slot-6 NebulaState band buffer
                            // (PR.21) which this single-pass harness binds as a ZEROED placeholder —
                            // so most of the preset draws nothing here and the frame reads static.

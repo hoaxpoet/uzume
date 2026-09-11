@@ -205,6 +205,10 @@ public struct AlfvenSolverConfiguration: Sendable {
     /// rendered frames, not the table — the visual difference across this range is subtle.
     public var exposureBeta: Float
     public var exposureTau: Float
+    /// Seconds for the silence gate to fall to the relaxed state and to recover.
+    /// Slow on purpose: this is a scene change, not a reaction, and a fast gate would
+    /// chatter through the brief near-silences between tracks and inside quiet passages.
+    public var silenceTau: Float
     public var bassTau: Float
     public var centroidTau: Float
     /// Centroid range actually observed on real music, for the hue map.
@@ -305,6 +309,7 @@ public struct AlfvenSolverConfiguration: Sendable {
         bassKnee: Float = 0.094,
         exposureBeta: Float = 0.65,
         exposureTau: Float = 0.30,
+        silenceTau: Float = 1.20,
         bassTau: Float = 0.10,
         centroidTau: Float = 2.5,
         centroidLo: Float = 0.047,
@@ -339,6 +344,7 @@ public struct AlfvenSolverConfiguration: Sendable {
         self.bassKnee = bassKnee
         self.exposureBeta = exposureBeta
         self.exposureTau = exposureTau
+        self.silenceTau = silenceTau
         self.bassTau = bassTau
         self.centroidTau = centroidTau
         self.centroidLo = centroidLo
