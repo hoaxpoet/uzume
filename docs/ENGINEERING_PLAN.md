@@ -1549,10 +1549,14 @@ regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN un
 difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
 closes both the session rate gate and the offset table, and it is the same run as the M7.
 
-### VL.1 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats ✅ M7 PASSED (2026-09-11, Matt: *"I like the faster speed and it's synced well with the music"*)
+### VL.2 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats ✅ M7 PASSED (2026-09-11, Matt: *"I like the faster speed and it's synced well with the music"*)
 
 Found while censusing BUG-117's consumers, and it is **not** BUG-117 — it is a units error that is
 worst on a HEALTHY grid.
+
+⚠ **Shipped as `VL.1` and renumbered to VL.2 here — `VL.1` was already the 2026-07-23 rebuild.**
+The collision came from grepping `^### VL` when these rows are prefixed `### Increment `; the merged
+commits and PR #240 still say VL.1.
 
 `vl_foldRotation` built `beatPos = pulse_beat_index + pulse_phase01`, then divided by
 `f.beats_per_bar`. But **`pulse_beat_index` counts completed PULSE CYCLES**, and
@@ -1823,7 +1827,11 @@ sync complaints in the roster review.
 ⚠ `AudioFeatures+Analyzed.swift` is now **at its 400-line cap**, hit twice in one day. Float 56 is
 the last pad; the next field needs the struct split before it needs a slot.
 
-### PR.21 — Nebula: make the coupling legible 🔨 code complete, M7 owed (2026-09-10)
+### PR.21 — Nebula: make the coupling legible ✅ M7 PASSED via PR.24 (2026-09-11)
+
+**M7 satisfied by PR.24.** Matt certified Nebula on session `2026-09-11T16-47-03Z`, and the build he
+reviewed contained PR.19, PR.20 and PR.21 — so their review is given, not owed. Left reading *"M7 owed"*
+for a day after the fact, which is how a satisfied review turns back into phantom work.
 
 **Matt, on the PR.20 build:** *"looks good, but I'm not getting a clear understanding of how the
 visuals are tied to the audio."* Fidelity and activation were fixed at PR.19/PR.20; **legibility**
@@ -1889,7 +1897,11 @@ parameterised over the loaded presets passes VACUOUSLY.** Three sessions have no
   ring. Shared with every other slot-6 preset; recorded, not worked around.
 - QG.1 still has **no primitive for the spectrum**, so the ring's shape remains ungated.
 
-### PR.20 — the per-track hue anchor 🔨 code complete, M7 owed (2026-09-10, Matt: *"do the per-track rotation"*)
+### PR.20 — the per-track hue anchor ✅ M7 PASSED via PR.24 (2026-09-11, Matt: *"do the per-track rotation"*)
+
+**M7 satisfied by PR.24.** Matt certified Nebula on session `2026-09-11T16-47-03Z`, and the build he
+reviewed contained PR.19, PR.20 and PR.21 — so their review is given, not owed. Left reading *"M7 owed"*
+for a day after the fact, which is how a satisfied review turns back into phantom work.
 
 **The ask.** Matt, on Nebula's palette: *"go with the wider sweep, plus per-track rotation."* The
 sweep shipped in PR.19; the rotation did not, because nothing track-scoped could reach the preset.
@@ -1945,7 +1957,11 @@ Matt's call if he wants it.
 (*"more mixture and blending of colors"*) and Dragon Bloom all carry colour-variation asks and can
 now read the same field.
 
-### PR.19 — Nebula deep dive 🔨 code complete, M7 owed (2026-09-10, Matt: *"proceed with nebula"*)
+### PR.19 — Nebula deep dive ✅ M7 PASSED via PR.24 (2026-09-11, Matt: *"proceed with nebula"*)
+
+**M7 satisfied by PR.24.** Matt certified Nebula on session `2026-09-11T16-47-03Z`, and the build he
+reviewed contained PR.19, PR.20 and PR.21 — so their review is given, not owed. Left reading *"M7 owed"*
+for a day after the fact, which is how a satisfied review turns back into phantom work.
 
 #### Step 1 — definition
 
@@ -2807,8 +2823,6 @@ loss was silent, which is the part worth not repeating.
 ### Increment VL-PSY.4 — Camera dolly speed moves to the sidecar (BUG-074 replay-harness parity) ✅ (2026-07-24)
 ### Increment VL-PSY.2 — Volumetric Lithograph performance fix (BUG-073) ✅ (2026-07-24)
 ### Increment VL.1 — Volumetric Lithograph rebuild: design doc adopted + multi-frame ray-march harness ✅ (2026-07-23)
-### Increment FD.2 — Fractal Descent look pass (jewel palette + materials + flash fix) 🔨 (2026-07-23)
-
 ### Increment BUG072.1 — app test runner launch failure diagnosed; merge gate re-armed ✅ (2026-07-23)
 ### Increment FLY.1 — Fractal Fly-By reframed as a FLY-THROUGH + enclosed backdrop (2026-07-23; Matt's call after the 3rd live M7) — RETIRED with the line (FLY.14, BUG-071 wontfix, D-201) ✅ (2026-07-25)
 ### Increment FD.2 — Fractal Fly-By look pass (jewel palette + materials + flash fix) (2026-07-23) — RETIRED with the line (FLY.14, BUG-071 wontfix, D-201) ✅ (2026-07-25)
