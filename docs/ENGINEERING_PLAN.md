@@ -1549,6 +1549,41 @@ regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN un
 difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
 closes both the session rate gate and the offset table, and it is the same run as the M7.
 
+### VL.1 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats 🔨 code complete, M7 owed (2026-09-11, Matt: *"the pulse clock's 4-beat cycle, own increment"*)
+
+Found while censusing BUG-117's consumers, and it is **not** BUG-117 — it is a units error that is
+worst on a HEALTHY grid.
+
+`vl_foldRotation` built `beatPos = pulse_beat_index + pulse_phase01`, then divided by
+`f.beats_per_bar`. But **`pulse_beat_index` counts completed PULSE CYCLES**, and
+`BeatPulseClock.pulseBeats` fixes a cycle at **four beats** (D-154) — it is not a beat counter and
+the grid meter is not its unit. So:
+
+| grid | old: one notch step every | intended |
+|---|---|---|
+| healthy 4/4 (`beats_per_bar = 4`) | 4 cycles = **16 beats** | 4 beats |
+| declined (`beats_per_bar = 1`, BUG-117) | 1 cycle = **4 beats** | 4 beats |
+
+★ **The declined-grid value was the only one that produced the intended motion.** My first census
+claimed the opposite — that a declined grid made VL ratchet four times too fast — by reading the
+expression's shape instead of tracing `pulse_beat_index`'s units. Recorded because that error pattern
+repeated three times in one sitting: Witchlight and MeshGenerator were also wrongly flagged, and both
+turned out to be protected by the 2026-09-08 `barPhase01 = 0` hold once their inputs were traced.
+
+**Fix (Matt's call): the meter leaves the arithmetic entirely.** One pulse cycle IS the bar this
+ratchet wants, so `barsCompleted = floor(beatPos)` and the first-beat ease becomes
+`intoBar * VL_PULSE_BEATS`. A grid with no bar information can no longer mislead it, because it no
+longer asks.
+
+⚠ **This is a 4× motion change on a CERTIFIED preset, and M7 is owed.** On healthy material the notch
+now steps four times as often as the build Matt certified. Flash-safety re-measured and unchanged
+(0.00 flashes/s, Δluma 0.058).
+
+⚠ **The golden gate cannot see this change.** `PresetAcceptanceTests.renderFrame` does not drive the
+pulse clock, so `pulse_beat_index` is 0 and both arms compute `barsCompleted = 0` — the hashes are
+identical for a change that alters the preset's primary rotation. Same blind-spot class as Nebula's
+slot-6 bands (PR.24). Do not read the green regression suite as evidence that nothing moved.
+
 ### PR.24 — Nebula CERTIFIED ✅ (2026-09-11, Matt: *"It's close enough"*)
 
 **23rd certified preset** (Gossamer was the 22nd). M7 on `2026-09-11T16-47-03Z` — chain health **clean** (peak −0.13 dBFS),

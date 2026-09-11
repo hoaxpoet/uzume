@@ -10,6 +10,25 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-213000] VL.1 — Volumetric Lithograph's notch was on a sixteen-beat cycle
+
+A units error found while censusing BUG-117's consumers, and not BUG-117. `vl_foldRotation` divided
+`pulse_beat_index` — which counts completed PULSE CYCLES, four beats each (D-154) — by the grid's beat
+meter. On a healthy 4/4 grid that is one notch step every **sixteen** beats; only the declined grid's
+`beats_per_bar = 1` produced the intended four.
+
+★ The first census said the opposite — that a declined grid ratcheted four times too FAST. That came
+from reading the expression's shape rather than tracing what `pulse_beat_index` counts, and the same
+error hit two other sites in the same sitting (Witchlight and MeshGenerator, both actually protected by
+the 2026-09-08 `barPhase01 = 0` hold). Tracing inputs is the step that was skipped, three times.
+
+Matt's call: the meter leaves the arithmetic. One pulse cycle is the bar this ratchet wants, so a grid
+with no bar information cannot mislead it because it is no longer asked.
+
+⚠ **4× motion change on a certified preset — M7 owed**, and ⚠ **the golden gate cannot see it**: the
+acceptance harness does not drive the pulse clock, so both arms compute an identical frame. Flash-safety
+re-measured and unchanged.
+
 ### [dev-2026-09-11-200000] BUG-116 and BUG-119 closed on one Ferrofluid session
 
 Both were fixed-pending-live-confirm and both surface in Ferrofluid Ocean, so one sitting closed the
