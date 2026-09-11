@@ -17,7 +17,8 @@
 // Position comes from `AVAudioPlayerNode.playerTime` through `PlaybackClockSmoother` (LFSTEM.1d),
 // which exists precisely to dead-reckon between coarse ticks without rewinding.
 //
-// Local-file playback ONLY, behind `UZUME_LF_ANALYSIS_CLOCK=1`. Streaming already runs at ~59 Hz
+// Local-file playback ONLY. Default ON since M7; `UZUME_LF_ANALYSIS_CLOCK=0` forces the tap back.
+// Streaming already runs at ~59 Hz
 // through a different capture path and is untouched.
 
 @preconcurrency import AVFoundation
@@ -164,10 +165,16 @@ final class LoopingFileReader {
 /// queue, which is what makes a bounded read-ahead sufficient rather than mandatory-lock-free.
 public final class PlayheadAnalysisClock: @unchecked Sendable {
 
-    /// BUG087.4 ships behind a flag with a one-increment A/B path: off, this type is never
-    /// constructed and the tap drives the funnel exactly as it does today.
+    /// **Default ON since Matt's M7 on session `2026-09-11T01-22-10Z`** — *"I like it. It's punchy."*
+    /// The one-increment A/B window the flag existed for has closed, and shipping a fix nobody runs
+    /// is not shipping it.
+    ///
+    /// `UZUME_LF_ANALYSIS_CLOCK=0` still forces the tap back, deliberately: this replaces the audio
+    /// source of the whole MIR chain on the path all development runs on, and an escape hatch that
+    /// needs no rebuild is worth one line for a while yet. Retiring the tap's forwarding role
+    /// altogether is the increment that removes this.
     public static var isEnabled: Bool {
-        ProcessInfo.processInfo.environment["UZUME_LF_ANALYSIS_CLOCK"] == "1"
+        ProcessInfo.processInfo.environment["UZUME_LF_ANALYSIS_CLOCK"] != "0"
     }
 
     /// Ticks per second.

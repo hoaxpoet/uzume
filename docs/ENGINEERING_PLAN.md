@@ -1395,7 +1395,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
-### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ BUILT behind `UZUME_LF_ANALYSIS_CLOCK=1`, M7 owed (2026-09-10, Matt: *"i'm voting for true transport"*)
+### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ M7 PASSED, default-on, BUG-087 RESOLVED (2026-09-11, Matt: *"I like it. It's punchy."*)
 
 **Why this and not the cheaper option.** The ~145 ms on every continuous primitive decomposes into
 band smoothing (τ 77 ms bass / 116 ms mid-treble, `BandEnergyProcessor.instantSmoothers`) plus
@@ -1489,8 +1489,27 @@ callback's HOP were already decoupled. Delivering hop-sized spans keeps a full w
 BUG087.2's `frames / rate` exactly the playhead advance, which is what a seconds-based follower needs.
 The one-funnel property held all the way through: zero changes to `UzumeApp/`.
 
-**Owed:** Matt's M7. **Matt's call on ordering, 2026-09-10: OPTION A — he watches first, goldens
-after.** Nothing is regression-locked to a look he has not approved; the goldens are regenerated only
+**M7 PASSED on `2026-09-11T01-22-10Z`** — *"I like it. It's punchy. Not exact, but close."* Measured
+on that capture: bass **10.01 → 59.77 Hz** (mid 59.61, treble 59.20, centroid 59.66, flux 59.34)
+against a 59.83 fps render — **5.97×**, the slowest column changing on 99 % of rendered frames. Clock
+inverted to default-on; `UZUME_LF_ANALYSIS_CLOCK=0` forces the tap back.
+
+★ **Option A's question was moot, and finding that out was the cheap check I nearly skipped.** The
+goldens never see this clock: `PresetRegressionTests` renders from fixtures through the harness, which
+never constructs `LocalFilePlaybackProvider`. The full suite with the clock default-on moved nothing —
+1956 tests, zero goldens regenerated. Before agreeing an ordering for a regeneration, check whether the
+changed code is in the golden path at all.
+
+★ **A metric stopped being able to measure its own subject.** `recordRawTapSamples` is inside the
+funnel, so `raw_tap.wav` is now the CLOCK'S input, not the tap's output — VisualAudioOffset measures
+analysis→row on this path, not capture→row. Its columns also sit below the correlation floor on both
+sessions. It did not show the win and could not have. Re-derive its reference before quoting it.
+
+**The residual is named, not forgotten:** *"not exact, but close"* is `BandEnergyProcessor`'s τ 77/116 ms,
+declined at design (*"too risky"*) and untouched here. Next lever, D-004 trade, not a defect.
+
+**Superseded — the ordering call that is no longer needed. Matt, 2026-09-10: OPTION A, he watches
+first, goldens after.** Nothing is regression-locked to a look he has not approved; the goldens are regenerated only
 once he has said the new rate looks right. The reason is PR.19's: Nebula's old goldens were identical
 across all three fixtures, having locked in a preset drawing almost nothing — a golden only guards a
 regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN until the M7 lands.

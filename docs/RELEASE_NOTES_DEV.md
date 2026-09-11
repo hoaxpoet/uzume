@@ -10,6 +10,33 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-012500] BUG-087 RESOLVED — the local analysis clock is default-on after M7
+
+Matt, watching `2026-09-11T01-22-10Z` live: *"I like it. It's punchy. Not exact, but close."* Measured
+on that capture: bass **10.01 → 59.77 Hz**, mid 59.61, treble 59.20, centroid 59.66, flux 59.34,
+against a 59.83 fps render. **5.97×**, and the slowest continuous column now changes on 99 % of
+rendered frames. The local path matches streaming's 58.8 Hz; the arrival ceiling is gone.
+
+`PlayheadAnalysisClock.isEnabled` inverted to default-on. `UZUME_LF_ANALYSIS_CLOCK=0` still forces
+the tap back — kept because this replaces the audio source of the whole MIR chain on the path all
+development runs on, and an escape hatch that needs no rebuild is worth one line for now.
+
+**The option-A golden question turned out to be moot, which is worth recording rather than quietly
+dropping.** `PresetRegressionTests` renders from fixtures through the harness, which never constructs
+`LocalFilePlaybackProvider` — the clock is not in the golden path at all. The full suite run with it
+default-on moved nothing: 1956 tests, 315 suites, 1 known issue, zero goldens regenerated.
+
+⚠ **And VisualAudioOffset can no longer measure transport on this path.** `recordRawTapSamples` sits
+inside the funnel, so with the clock driving, `raw_tap.wav` is the clock's OWN INPUT rather than the
+tap's output — the test now measures analysis→row, not capture→row. Every band column also reads
+below the correlation floor on both sessions, and the only readable one moved +45 → +50 ms on
+different material, inside the noise. The rate is what carries this fix; the ear is what confirmed it.
+Anyone quoting that table as a local-path transport number must re-derive its reference first.
+
+*"Not exact, but close"* is the band-smoothing term — τ 77 ms bass / 116 ms mid-treble in
+`BandEnergyProcessor`, which Matt declined at the design stage and this increment did not touch. That
+is the next lever, and it is a D-004 trade rather than a defect.
+
 ### [dev-2026-09-10-234500] BUG087.4 — the local-file analysis clock, decoupled from tap arrival (flagged)
 
 Local-file playback ran the whole MIR chain at **10.01 Hz** against a 59.8 fps render. Streaming runs
