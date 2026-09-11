@@ -46,7 +46,6 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
-| BUG-126 | P1 · fixed, pending M7 2026-09-10 | preset.fidelity | **Alfvén's seam bloom strobed: max frame-to-frame Δluma 0.4153 against the D-157 gate of 0.05.** film.py's `amt` reaches 1.66 on a WHOLE-FRAME additive term while §7's ~30 ms treble timescale moves the envelope 43 % toward target in one frame. Bounded by a ceiling (0.85) and a slew limit (6.0/s): 0.0124, 0 frames over gate. |
 | BUG-125 | P2 · fix implemented; pending M7 2026-09-09 | preset.fidelity | **Root Choir read as a flat five-petal spinner with white circular speckle, a muddled centre, and no legible musical causality.** ROOTCHOIR.2 deletes the radial trap/white seam path, calibrates tension and consonance from the clean “Combat Baby” capture, bounds orientation, opens the centre, and adds a thirds/tension-driven complex fold. Automated and render gates pass; Matt's live judgment remains outstanding. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
@@ -97,40 +96,6 @@ reads" are not reads — see the entry.)*
 ## Open
 
 ---
-
-### BUG-126 — Alfvén's seam bloom strobed with a bright whole-frame flash (2026-09-10)
-
-**Reported by Matt (M7, clean capture `2026-09-10T21-24-18Z`):** *"There's a strobing effect that
-is clearly attached to the music, but the timing is loose and the effect itself is jarring due to
-the bright white light that the strobing emits. It is also sporadic."*
-
-**Measured:** max frame-to-frame Δluma **0.4153** against the D-157 gate of **0.05** — 8.3× over,
-on 15 frames of that capture. For scale DS.5's arrival push measures 0.0174. Notably NOT pixel
-clipping (0.0 % of frames had a pixel >250/255) — the whole frame jumps.
-
-**Cause — introduced by ALFVEN.3b, which made the bloom modulate for the first time.** film.py's
-`amt = 0.30 + 0.85*clip(sizzle,0,1.6)` reaches 1.66 and multiplies a **whole-frame additive
-glow**, while §7's ~30 ms treble timescale is ~2 frames at 60 fps: the envelope moves 43 % toward
-its target in a single frame. film.py is offline still art and its bloom was never validated as a
-temporal sequence; a whole-frame additive term is exactly the unbounded footprint D-157 forbids.
-
-**Fix:** ceiling `bloomMaxAmount` 0.85 (half film.py's) plus a slew limit `bloomSlewPerSecond`
-6.0/s. Both are needed — a low ceiling still strobes if reached in one frame. Reproduced and
-verified on the PRODUCTION path against a percussive treble train at the fixtures' max (0.126):
-
-    unbounded            bloom 0.30…1.66   Δluma 0.1041   3 frames OVER gate
-    shipped (0.85, 6/s)  bloom 0.30…0.85   Δluma 0.0124   0 frames over
-
-**Still open from the same report, and NOT this bug:** the *timing* is loose and the effect
-sporadic. `trebRel` fires on incidental treble — hi-hats, cymbal wash — not on musically salient
-events, so it can be tightly coupled to the signal and still feel arbitrary to a listener. §7's
-accent route is `barPhase01` (per bar, on the cached BeatGrid), which is regular and musically
-meaningful. That is the next lever, tracked with ALFVEN.3's remaining routes.
-
-**Regression guard:** `ALFVEN_FLASH=1` in `AlfvenFilmPreviewTests` renders EVERY frame through the
-production display path and reports max Δluma against the gate — a sampled harness cannot see a
-single-frame strobe.
-
 
 ### BUG-125 — Root Choir's radial orbit trap and uncalibrated tonal routes defeat its visual and musical premise (2026-09-09)
 
@@ -2307,6 +2272,30 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 ---
 
 ## Resolved (recent)
+
+### BUG-126 — RESOLVED (ALFVEN.3f): the strobing seam bloom is removed, not bounded (2026-09-10)
+
+ALFVEN.3d bounded this defect (`bloomMaxAmount` 0.85 + `bloomSlewPerSecond` 6.0/s), taking max
+frame-to-frame Δluma from **0.4153** to **0.0124** against D-157's 0.05 gate. That fixed the RATE of
+the flash and left what it looked like unchanged.
+
+**Matt's M7 on the bounded build** (`2026-09-10T23-25-54Z`, `chain_health` verdict **`clean`**,
+peak −0.13 dBFS): *"I don't like the brightening effect on the preset. I would remove it."*
+
+Measured on that capture, the glow sat at its 0.30 constant for **65 %** of frames and pinned at the
+0.85 ceiling for **5.2 %**, spending 36 % of the track above 0.30 — it pumped between the approved
+look and nearly 3× it. Bounding a flash makes it legal under D-157; it does not make it wanted.
+
+**Fix: the `trebRel` → seam-bloom route is removed.** `displayBloomAmount` is a constant 0.30 again —
+the exact value ALFVEN.4f shipped and Matt signed off (*"Looks great"*, `2026-09-10T16-07-07Z`).
+The defect cannot recur because the mechanism is gone: post-fix the flash metric reads **0.0038**
+with treble bursting at the p99 of Matt's own capture, and the glow no longer moves at all.
+
+**Cost, stated plainly:** Alfvén drops from three declared audio routes to two. §7's routing table
+named five; three of the five have now failed contact with real music.
+
+---
+
 
 ### BUG-127 — RESOLVED (ALFVEN.3e): `ALFVEN_DRIVE` was inert, voiding every sweep since ALFVEN.3 (2026-09-10)
 
