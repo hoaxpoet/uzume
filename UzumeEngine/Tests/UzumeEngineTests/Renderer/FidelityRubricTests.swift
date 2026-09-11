@@ -208,12 +208,31 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // so L2 cannot pass yet by design. certified: false.
     // Both are ALFVEN-program entries that render nothing a still-frame rubric can
     // score, so `false` is the correct locked value rather than a deficiency:
-    //   Alfvén      — the fragment is only the D-037 non-black ground; the field is
-    //                 drawn by `AlfvenSolver` through the ParticleGeometry seam, and
-    //                 the shipping look still awaits film.py's percentile auto-exposure
-    //                 and its seam bloom (both need a reduction/blur surface). Cyclable
-    //                 since ALFVEN.4d, but still `certified: false`, so the Orchestrator
-    //                 does not plan it (D-074).
+    //   Alfvén      — scores 2/4 on the lightweight ladder, and BOTH misses are by
+    //                 construction, not deficiency (ALFVEN.3h):
+    //
+    //                 L2 (deviation primitives) is a FALSE NEGATIVE. `evaluateM4` greps
+    //                 the PRESET's MSL source; `Alfven.metal` is a 53-line stub with zero
+    //                 primitive references because the routing is CPU-side in
+    //                 `AlfvenSolver+Audio.swift` (`features.bassRel` → stirring vigour,
+    //                 `features.spectralCentroid` → palette centre, both D-026 deviation
+    //                 primitives on their own timescales per FA #67). The field is drawn
+    //                 by `AlfvenSolver` through the ParticleGeometry seam, so the
+    //                 heuristic cannot see the coupling by design — the Lumen Mosaic
+    //                 slot-8 and Skein slot-6 precedent exactly. Routing evidence is the
+    //                 `audio_routes` manifest + `RouteCoverageTests` (QG.1/D-179), which
+    //                 is the mechanized gate and is GREEN on both declared routes.
+    //
+    //                 L4 (reference frame match) is always manual — it IS M7.
+    //
+    //                 ⚠ The previous note here claimed the look "still awaits film.py's
+    //                 percentile auto-exposure and its seam bloom". Both have since
+    //                 shipped: the bloom at ALFVEN.4f, and the auto-exposure at ALFVEN.3g
+    //                 via a mean|J| GPU reduction standing in for film.py's percentile
+    //                 (ratio stable to ±6 % across a 4.8x span of field energy).
+    //
+    //                 Cyclable since ALFVEN.4d. Still `certified: false` — the remaining
+    //                 gate is Matt's live M7, so the Orchestrator does not plan it (D-074).
     //   FFT Sandbox — a diagnostic (ALFVEN.1c), never user-facing.
     "Alfvén": false,
     "FFT Sandbox": false
