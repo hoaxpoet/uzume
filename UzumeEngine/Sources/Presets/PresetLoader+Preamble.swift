@@ -218,7 +218,7 @@ extension PresetLoader {
             // PR.22 float 55 — TRANSIENT RISE, 0…1: `spectral_level_rise`'s short-window
             // sibling, peaking ~120 ms earlier. Use it for an accent that must land ON the
             // hit; use `spectral_level_rise` for a held "this passage arrived" signal.
-            float spectral_level_rise, track_hue_anchor01, transient_rise, _pad56;
+            float spectral_level_rise, track_hue_anchor01, transient_rise, near_silent01;
         };
 
         struct VertexOut {

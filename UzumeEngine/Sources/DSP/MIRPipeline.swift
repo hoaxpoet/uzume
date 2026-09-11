@@ -473,6 +473,10 @@ public final class MIRPipeline: @unchecked Sendable {
         )
         applyPulseFields(pulse, to: &fv)
         applyAnalyzerFields(ctx, to: &fv)   // TONAL floats 44–48, DYN.1 floats 49–50
+        // ALFVEN.3i — publish D-148's near-silence detector to presets. It is RELATIVE to
+        // AGC's own running average, which is the only test that survives AGC: the bands
+        // themselves never reach zero while the tap is alive.
+        fv.nearSilent01 = ctx.energy.nearSilent01
         return fv
     }
 

@@ -106,6 +106,10 @@ public final class AlfvenSolver: ParticleGeometry, @unchecked Sendable {
     /// timescales; zero at silence, which is the state the preset relaxes to (D-037).
     var bassEnvelope: Float = 0
     var centroidEnvelope: Float = 0
+    /// 1 = sound present, 0 = silent. Ramps, so the field eases into the relaxed state
+    /// rather than stepping. Starts at 0: before any audio arrives the preset shows its
+    /// silence look, which is what a cold start should render (D-037).
+    var silenceGate: Float = 0
     /// Slew-limited bloom strength (D-157). Starts at film.py's silence floor.
     private var lastFeatureTime: Float = 0
     /// Real seconds elapsed on the listener's clock last frame — the exposure EMA's step.

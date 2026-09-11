@@ -10174,6 +10174,131 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
 
+### Increment ALFVEN.CERT — Alfvén certified, the 24th ✅ (2026-09-11)
+
+**Matt's M7** (`2026-09-11T21-00-42Z`): *"Please certify."*
+
+| evidence | |
+|---|---|
+| chain_health | **clean**, no reasons. ⚠ Its `peakDBFS` reads exactly 0, which BUG-129 shows is
+  unreliable (unmeasured-or-clipping); the session's health rests on the per-5 s `SIGNAL_HEALTH`
+  lines instead — −2.4 / −1.8 / −0.6 dBFS, real varying values |
+| live | 101 s, 6088 frames |
+| frame rate | **59.9 fps** median |
+| GPU | p50 9.99 ms / p95 14.83 ms vs a 16.6 ms budget |
+| drawable | **0 failures, 0 unpresented** |
+| routes | `stirring_vigour ← bassRel`, `palette_hue_centre ← spectralCentroid`, both green on `RouteCoverageTests` |
+
+Ships with **two** audio routes, not §7's five, on Matt's call: *"A 2-route Alfvén is musically
+complete. We can tweak it later if needed — this is release 1."*
+
+**Two deviations accepted at certification, neither a gate:**
+
+1. **The silence state is UNVALIDATED, not proven.** No M7 session ever contained real silence —
+   the engine logged no silent frame in any of the four — so `05_atmosphere_relaxed_state` has never
+   been observed live. It is correct in the harness from a fresh seed (3h) and from an energised
+   field (3i). Matt saw no difference between states in three sessions; in the last one the tap ran
+   at −3…0 dBFS throughout, so there was only ever one state to see.
+2. **Peak-energy density.** At the top of the range the frame approaches the "undifferentiated
+   filament" the reference README names as the signal that the drive ceiling is too high.
+
+**⚠ The process lesson, worth more than either deviation.** The silence work consumed ALFVEN.3f→.3i
+and was never on the certification path: the mechanized gates were green throughout and D-037 was
+already satisfied (Alfvén never rendered black — it rendered an energetic field). A reference-trait
+FAIL was escalated into three increments without putting the choice to Matt, against an explicit
+"release 1, tweak later". **Chasing a real defect is not the same as chasing the right one.**
+
+**What the arc leaves behind** beyond the preset: `FeatureVector.nearSilent01` (any preset can now
+ask whether the room is quiet, and get an answer that survives AGC — Witchlight had the same bug),
+`near_silent01` in the session CSV, the `ALFVEN_VIGOUR` / `ALFVEN_REVIEW` / `ALFVEN_TRANSITION`
+harness modes, and five recorded instrument failures whose shared shape is that a metric or fixture
+silently stopped matching production while its numbers stayed plausible.
+
+### Increment ALFVEN.3h — certification prep, and the silence state ALFVEN.3 broke ✅ (2026-09-11)
+
+Matt's call: *"A 2-route Alfvén is musically complete. We can tweak it later if needed — this is
+release 1."* Three owned certification barriers, plus a regression the first perception gate exposed.
+
+**1. ALFVEN.3's plan row closed.** It read "3 of 5 routes ⏳" with a done-when demanding five. Three
+of §7's five did not survive contact with real music, so that done-when measured a wrong spec rather
+than the preset; the row now carries a per-route outcome table and an amended done-when (declared
+routes green + M7). Both declared routes are green.
+
+**2. The rubric L2 exemption documented.** Alfvén scores 2/4 and both misses are by construction:
+`evaluateM4` greps the PRESET's MSL, but `Alfven.metal` is a 53-line stub because the routing is
+CPU-side in `AlfvenSolver+Audio.swift` — the Lumen Mosaic slot-8 / Skein slot-6 precedent exactly.
+L4 is always manual: it IS M7. Also corrected a stale claim in that note (the look "still awaits
+film.py's percentile auto-exposure and its seam bloom" — shipped at 4f and 3g respectively).
+
+**3. Alfvén wired into the perception gates — NOT by adding it to `PresetVisualReviewTests`.** That
+harness draws with `preset.pipelineState`; Alfvén declares `passes: ["particles"]` and its field is
+drawn by `AlfvenSolver` through the ParticleGeometry seam. Adding it there would have composited a
+sheet of the D-037 background — plausible-looking and entirely wrong, which is the Nebula/Plasma
+failure (the `direct` harness fed LCG noise and every still was noise). Instead `ALFVEN_REVIEW=1`
+emits into the layout the scripts expect. Sequence frames go in a SUBDIRECTORY: `compare_render.sh`
+globs `alfven_*.png` at maxdepth 1, and the first run composited all 48 into a 24,960 px sheet in
+which nothing was legible.
+
+**⚠ 4. THE FINDING: ALFVEN.3 silently broke the documented silence state.** Before audio routing the
+solver used `drive: cfg.drive` = **0.020** — the relaxed state. ALFVEN.3 replaced it with
+`audioDrive`. `bassRel` is a DEVIATION primitive: it reads zero at silence AND during steady music,
+and the two-sided map sends zero to its MIDPOINT. **Silence has rendered at drive ~9–10.4 ever
+since**, while `05_atmosphere_relaxed_state.png` is labelled in the reference README as *"Silence /
+low-drive state (D-037) … this is what silence must look like"*. Neither 3c, 3e nor 3g noticed,
+because none of them ever rendered the preset against its references — the gate that catches this is
+exactly the one that had never been runnable for Alfvén.
+
+**Fix: a silence gate on an ABSOLUTE level.** A deviation primitive structurally cannot distinguish
+silence from steady music. FA #31 forbids absolute thresholds for REACTIVITY, not for deciding
+whether there is any sound; the test and constant are Witchlight's (WL.5, `mixEnergy <= 1e-6`),
+including its hard-won detail that the live MIX bands collapse at silence while STEMS hold their last
+values — so stems get no vote. Ramped over `silenceTau` 1.2 s, because a step in drive is a step in
+the whole field's motion. `silenceGate` starts at 0, so a cold start shows the silence look. At
+`silenceGate == 1` the expression is exactly the previous driven value, so every ALFVEN.3e
+measurement still holds.
+
+**D-181 verdict (after the fix):** relaxed state PASS (was FAIL); seam, micro bloom, both
+anti-references PASS; palette PASS as Matt's approved 4e deviation. **One open deviation:** at peak
+energy the frame approaches "undifferentiated filament", which the README names as the signal that
+the drive ceiling is too high. Recorded, not changed — Matt's "tweak later" call.
+
+**D-195 motion verdict:** smooth and on-concept. 48 frames, median/max 1.85/1.90, **0 spikes, 0
+frozen**. Read as a sequence: continuous advection, structures stretch and shear with the same
+topology, no pop or freeze — the README's stated motion target.
+
+**The silence gate improved the WHOLE range, not just silence:** the four fixtures now show a visible
+structural gradient from broad lobes to dense braiding. That is closer to musical legibility than
+either ALFVEN.3e or 3g delivered.
+
+**Fixture bug, mine:** the first cut used `bassRel 0.0` for "silence" and `-0.007` for "mid" — the
+same input. Two of three sheet columns were identical and the silence column was never silence.
+
+**Pending live M7.**
+
+**⚠ M7 round 1 (`2026-09-11T19-52-40Z`) could not evaluate the fix, and the reason is the finding.**
+Matt: *"silence state looks the same as active state."* Alfvén became the active preset at 19:52:58
+and the audio stopped at 19:53:05 — **~7 seconds of music**, then ~110 s of silence.
+
+`ALFVEN_TRANSITION=1` (added here) measures the case every fixed-drive fixture misses: energise, then
+cut the audio. The gate is correct — drive 14.48 → 0.02 in ~9 s — and the rendered frames at t=0 and
+t=20 s are unmistakably different, the latter being `05_atmosphere_relaxed_state`. But the FIELD takes
+**10–20 s to take on its character at any energy level**, so 7 s of audio never reached the energised
+look. The comparison was a partially-energised field against a relaxing one.
+
+**That response time is the durable finding, and it is bigger than this increment.** It is set by the
+field's own physics — `alpha` 0.16 (a 6.2 sim-second e-folding) and the 2.0 sim-second re-seed — not
+by anything audio-side. Alfvén reads as weather rather than an accompanist partly because **its
+slowest timescale is ten seconds**; no routing change can fix that, and neither ALFVEN.3e's drive-map
+reshape nor 3g's exposure work touched it.
+
+⚠ A first reading of that session blamed a dead tap (`chain_health: broken`, 92.8 % of frames with
+`mixEnergy` ≤ 1e-6). The log falsifies it: the tap installed cleanly and delivered audio at −6.1 dBFS
+`band=healthy`; the `dead_tap` verdict describes the long silent tail after playback stopped. **A
+`broken` chain verdict is a reason to read the log, not a conclusion.**
+
+**Retest protocol:** 30+ seconds of music, then stop and watch for 20 s. Short clips cannot exercise
+a preset whose slowest timescale is ten seconds.
+
 ### Increment ALFVEN.3g — the fixed exposure was calibrated for one energy level ✅ (2026-09-11)
 
 **Matt's pick** from the three certification-barrier options: chase the display headroom ALFVEN.3e
@@ -10465,11 +10590,28 @@ frames are pinned and stop responding to further bass. Raising `bassKnee` would 
 a lower median drive (knee 0.20 would put p50 at 2.6 instead of 5.0). Left as-is pending a live
 judgement of whether the loud passages feel flat.
 
-### Increment ALFVEN.3 — audio routing (3 of 5 routes) ⏳ (2026-09-10)
+### Increment ALFVEN.3 — audio routing (2 of §7's 5 routes; three falsified) ✅ (2026-09-11)
 
-**Done-when (design §7):** five routes declared and green on `RouteCoverageTests`; M7. **Three
-continuous routes land here**; the per-bar accent and the section-boundary re-seed do not — see
-below.
+**Done-when, AMENDED (ALFVEN.3h).** The original read: *"five routes declared and green on
+`RouteCoverageTests`; M7."* Three of §7's five did not survive contact with real music, so that
+done-when was measuring a spec that turned out to be wrong rather than the preset:
+
+| §7 route | outcome |
+|---|---|
+| stirring vigour ← `bassDev` | **shipped**, but on `bassRel` — `bassDev` is one-sided and read ZERO for 62 % of frames (ALFVEN.3c); §7's amplitude was separately measured INERT (ALFVEN.3) |
+| palette hue centre ← `spectralCentroid` | **shipped** — renormalised; the primitive is not 0…1 (p05 0.047 / p95 0.186) |
+| seam bloom ← `trebRel` | **REMOVED** at ALFVEN.3f — Matt's M7: *"I don't like the brightening effect… I would remove it"* |
+| per-bar accent ← `barPhase01` | **not built** — the remaining lever for musical legibility |
+| re-seed ← section boundary | **not buildable as written** — section detection was built, live-tested and REMOVED (D-170); the planner emits equal slices, so this route would be a metronome wearing a costume. Matt's call: leave the re-seed free-running |
+
+**Amended done-when: the DECLARED routes are green on `RouteCoverageTests`, and M7.** Both declared
+routes are green. Matt's call, 2026-09-11: *"A 2-route Alfvén is musically complete. We can tweak it
+later if needed — this is release 1."*
+
+⚠ The durable lesson: **§7's routing table was written from the spike's parameters, not from
+measurement.** Three of five rows failed — one inert amplitude, one one-sided primitive, one route the
+listener disliked — and a fourth is infeasible on this engine. Treat a design-doc routing table as a
+hypothesis to measure, never as a specification to satisfy.
 
 **⚠ §7's PRIMARY ROUTE WAS INERT, and that is the finding.** `bassDev` → stirring vigour routes to
 `drive`. Measured before writing any routing code: sweeping drive 0 → 0.080 moves J std by **0.08 %**

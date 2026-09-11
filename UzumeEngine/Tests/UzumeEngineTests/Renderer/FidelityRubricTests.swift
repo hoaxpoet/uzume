@@ -208,12 +208,31 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // so L2 cannot pass yet by design. certified: false.
     // Both are ALFVEN-program entries that render nothing a still-frame rubric can
     // score, so `false` is the correct locked value rather than a deficiency:
-    //   Alfvén      — the fragment is only the D-037 non-black ground; the field is
-    //                 drawn by `AlfvenSolver` through the ParticleGeometry seam, and
-    //                 the shipping look still awaits film.py's percentile auto-exposure
-    //                 and its seam bloom (both need a reduction/blur surface). Cyclable
-    //                 since ALFVEN.4d, but still `certified: false`, so the Orchestrator
-    //                 does not plan it (D-074).
+    //   Alfvén      — scores 2/4 on the lightweight ladder, and BOTH misses are by
+    //                 construction, not deficiency (ALFVEN.3h):
+    //
+    //                 L2 (deviation primitives) is a FALSE NEGATIVE. `evaluateM4` greps
+    //                 the PRESET's MSL source; `Alfven.metal` is a 53-line stub with zero
+    //                 primitive references because the routing is CPU-side in
+    //                 `AlfvenSolver+Audio.swift` (`features.bassRel` → stirring vigour,
+    //                 `features.spectralCentroid` → palette centre, both D-026 deviation
+    //                 primitives on their own timescales per FA #67). The field is drawn
+    //                 by `AlfvenSolver` through the ParticleGeometry seam, so the
+    //                 heuristic cannot see the coupling by design — the Lumen Mosaic
+    //                 slot-8 and Skein slot-6 precedent exactly. Routing evidence is the
+    //                 `audio_routes` manifest + `RouteCoverageTests` (QG.1/D-179), which
+    //                 is the mechanized gate and is GREEN on both declared routes.
+    //
+    //                 L4 (reference frame match) is always manual — it IS M7.
+    //
+    //                 ⚠ The previous note here claimed the look "still awaits film.py's
+    //                 percentile auto-exposure and its seam bloom". Both have since
+    //                 shipped: the bloom at ALFVEN.4f, and the auto-exposure at ALFVEN.3g
+    //                 via a mean|J| GPU reduction standing in for film.py's percentile
+    //                 (ratio stable to ±6 % across a 4.8x span of field energy).
+    //
+    //                 Cyclable since ALFVEN.4d. Still `certified: false` — the remaining
+    //                 gate is Matt's live M7, so the Orchestrator does not plan it (D-074).
     //   FFT Sandbox — a diagnostic (ALFVEN.1c), never user-facing.
     "Alfvén": false,
     "FFT Sandbox": false
@@ -371,7 +390,27 @@ struct FidelityRubricGateTests {
         // makes the response asymmetric, not early. The core's body remains on the smoothed instant
         // bands at +85 ms while its accent runs at +55 ms. Recorded so a later session reads this as
         // an accepted trade rather than an undiscovered defect.
-        "Nebula"]
+        "Nebula",
+        // ALFVEN.CERT (2026-09-11) — the 24th. Matt's M7 on session `2026-09-11T21-00-42Z`:
+        // *"Please certify."* 101 s live on the ALFVEN.3i build, 6088 frames, chain_health
+        // `clean`, 59.9 fps median (GPU p50 9.99 ms / p95 14.83 ms against a
+        // 16.6 ms budget), zero drawable failures, zero unpresented.
+        //
+        // Ships with TWO audio routes, not §7's five, on Matt's call: *"A 2-route Alfvén is
+        // musically complete. We can tweak it later if needed — this is release 1."* Three of
+        // §7's rows failed contact with real music (an inert amplitude, a one-sided primitive,
+        // and a treble route Matt asked to remove); a fourth needs section detection, which
+        // D-170 removed. Scores 2/4 on the lightweight ladder and both misses are by
+        // construction — see the `Alfvén` note in the heuristic-gate map.
+        //
+        // ⚠ Known deviation, accepted at certification: the silence state is UNVALIDATED, not
+        // proven. No M7 session ever contained real silence — the engine logged no silent
+        // frame in any of them — so the relaxed state (`05_atmosphere_relaxed_state`) has
+        // never been observed live. It is correct in the harness from both a fresh seed and
+        // an energised field (ALFVEN.3h/.3i). Also open: at peak energy the frame approaches
+        // the "undifferentiated filament" the reference README names as a too-high drive
+        // ceiling.
+        "Alfvén"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()
