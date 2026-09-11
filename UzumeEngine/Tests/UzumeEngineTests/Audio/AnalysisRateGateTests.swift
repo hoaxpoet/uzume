@@ -21,8 +21,9 @@
 // Usage:
 //   RATE_SESSION=~/Documents/uzume_sessions/<dir> \
 //     swift test --package-path UzumeEngine --filter AnalysisRateGate
-//   UZUME_LF_ANALYSIS_CLOCK=1 \
-//     swift test --package-path UzumeEngine --filter AnalysisRateGate
+//   swift test --package-path UzumeEngine --filter AnalysisRateGate
+//     (the delivery arm runs by default now that the clock is default-on; UZUME_LF_ANALYSIS_CLOCK=0
+//      skips it, which is also how you reproduce the tap's cadence)
 import Testing
 import Foundation
 import AVFoundation
@@ -85,7 +86,7 @@ struct AnalysisRateGateTests {
           .timeLimit(.minutes(1)))
     func deliveryRateGate() throws {
         guard PlayheadAnalysisClock.isEnabled else {
-            print("[rate] set UZUME_LF_ANALYSIS_CLOCK=1 to gate the playhead clock's delivery spacing")
+            print("[rate] clock disabled (UZUME_LF_ANALYSIS_CLOCK=0) — delivery spacing not gated")
             return
         }
         let url = try PlayheadAnalysisClockTests.writeRamp(frames: 44_100 * 2)
