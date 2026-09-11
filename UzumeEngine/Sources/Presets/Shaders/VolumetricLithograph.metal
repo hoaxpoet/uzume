@@ -725,18 +725,28 @@ static inline float vl_heightAt(float3 worldP, float audioPhase,
 /// stepEase→1 ⇒ K·N; just after: barsCompleted N, stepEase 0 ⇒ K·N) — no jump,
 /// and it can never decrease. So the kaleidoscope clicks forward a notch each
 /// bar and holds, the ratchet-wheel motion a real one has, not a nervous tic.
+/// Beats per `BeatPulseClock` cycle (D-154). MUST equal `BeatPulseClock.pulseBeats`; the pulse
+/// clock's cycle is fixed at four beats and is NOT the grid's meter.
+constant float VL_PULSE_BEATS = 4.0f;
+
 static inline float vl_foldRotation(constant FeatureVector& f,
                                      constant SceneUniforms& s) {
     float audioPhase = s.sceneParamsA.x;
 
     // Continuous beat position off the cached grid (monotonic).
+    // VL.1 — `pulse_beat_index` counts COMPLETED PULSE CYCLES, and `BeatPulseClock.pulseBeats`
+    // fixes a cycle at FOUR beats (D-154). So `beatPos` is already in cycles, and dividing it by
+    // the grid's beat meter was a units error: at `beats_per_bar == 4` the notch stepped once
+    // every four CYCLES — sixteen beats — and only the declined-grid value of 1 happened to land
+    // on the intended four. The bug was on HEALTHY grids; the broken-looking case was the correct
+    // one. One cycle IS the bar this ratchet wants, so the meter does not enter the arithmetic at
+    // all and a grid with no bar information (BUG-117) cannot mislead it.
     float beatPos = f.pulse_beat_index + clamp(f.pulse_phase01, 0.0f, 1.0f);
-    float perBar  = max(1.0f, f.beats_per_bar);
-    float bars    = beatPos / perBar;
-    float barsCompleted = floor(bars);
-    float intoBar = beatPos - barsCompleted * perBar;    // 0 … perBar
-    // Ease the notch in over the bar's FIRST beat, then hold for the rest.
-    float stepEase = smoothstep(0.0f, 1.0f, clamp(intoBar, 0.0f, 1.0f));
+    float barsCompleted = floor(beatPos);
+    float intoBar = beatPos - barsCompleted;             // 0 … 1 across the cycle
+    // Ease the notch in over the cycle's FIRST BEAT, then hold — unchanged intent, expressed in
+    // cycle units: one beat is 1/pulseBeats of a cycle.
+    float stepEase = smoothstep(0.0f, 1.0f, clamp(intoBar * VL_PULSE_BEATS, 0.0f, 1.0f));
     // NOT gated by pulse_amp01. Multiplying an ACCUMULATED angle by a gate that
     // falls in a quiet section would collapse the whole ratchet backward — the
     // retraction this fix exists to kill, latent until a track has a quiet bar
