@@ -10,6 +10,56 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-145807] DOC.12 — scheduled documentation rotation
+
+The DOC.6 UTC age gate crossed its next boundary during PR #222 reconciliation. The canonical
+rotation script moved 16 completed August 27 engineering-plan narratives and four resolved issue
+entries verbatim into their history files, retaining plan status headers and searchable issue
+history. Release notes and artifact/skill hygiene required no further moves. This is documentation
+maintenance only; no product or rendering behavior changed.
+
+### [dev-2026-09-10-165626] ROOTCHOIR.3.2 / BUG-125 — restore live feedback-format parity
+
+Matt's next review found ROOTCHOIR.3.1 completely black in the live app. The attached clean
+session ruled out audio starvation and frame delivery: all 2,406 drawables were presented, both
+declared routes fired, and an exact 900-frame production replay remained visible at 0.202 mean
+luma. The divergence was app-only: Root Choir's pipelines were compiled for its declared linear
+`bgra8Unorm` feedback, but live setup ignored that declaration and allocated the default
+`bgra8Unorm_srgb` textures because Root Choir was absent from a preset-name switch.
+
+Live mv-warp setup now resolves `feedback_pixel_format` directly from the sidecar, matching the
+loader and replay harness for linear BGRA, HDR RGBA, and the drawable-format default. Focused app
+tests pin all three cases and remove the need to remember another display name when a preset
+declares an override. No shader, audio route, or visual tuning changed; Root Choir remains
+uncertified pending Matt's live Liquid Script verdict.
+
+### [dev-2026-09-10-143900] ROOTCHOIR.3.1 / BUG-125 — rebuild Liquid Script around its selected motion oracle
+
+Matt's first Liquid Script review found the replacement **VERY dark**, impossible to read, and
+unlike the reference he selected. The attached clean “Combat Baby” session reproduced the problem:
+a 900-frame production replay averaged 0.068 frame luma, only 27% of the 12-second oracle's 0.251
+average. The shader had deliberately removed the oracle's primary feature stack and stamped a
+moving broad ribbon for most of each writer lifetime, producing dim translucent bands.
+
+Root Choir now writes compact pointed leaf/arrow heads with enamel-hot spines, saturated
+amber/coral/violet rims, and paired fine S-curves from fixed local seeds. Feedback provides the
+movement instead of smearing a moving seed; the composite uses a visible charcoal field and
+bounded filmic lift. The same 900-frame session now averages 0.203 luma (0.190…0.218 trajectory),
+with zero clipped and zero near-white pixels. The focused visibility gate was raised from the
+meaningless 0.012 floor that admitted the defect to 0.14. Root Choir remains uncertified pending
+Matt's live visual and musical verdict.
+
+### [dev-2026-09-10-133622] ROOTCHOIR.3 / BUG-125 — replace the failed Newton flower with Liquid Script
+
+Root Choir is rebuilt as an uncertified `direct+mv_warp` preset. Three asynchronous tapered
+amber, magenta, and violet gestures write across a dark-violet field; persistent feedback bends
+them through distributed counter-rotating eddies without global spin. `bassDev` continuously
+changes advection and `beatComposite` accents new ink. The old Newton roots, circular tonal CPU
+state, radial seam mechanism, flower centre, and white ring artifacts are removed.
+
+The final 600-frame real-music replay was bounded and alive (mean saturation 0.532, mean luma
+0.083, zero clipped/near-white area); its sampled motion gate reported zero spikes and zero frozen
+transitions. The preset remains uncertified pending Matt's live review.
 ### [dev-2026-09-11-020000] BUG087.5 — the tap is gone from the local-file path
 
 Follow-up Matt asked for after BUG-087 closed. `LocalFilePlaybackProvider` no longer installs a tap

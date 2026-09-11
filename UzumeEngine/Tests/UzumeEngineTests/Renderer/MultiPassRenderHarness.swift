@@ -62,9 +62,8 @@ struct MultiPassRenderHarness {
         // cost scales with branch count rather than pixel count, which is exactly why it needs
         // its own row rather than an assumption.
         "Fractal Tree",
-        // PERF.10 — direct presets: one fullscreen fragment each. Root Choir additionally
-        // binds its compact circular-phase state at slot 6 through this same production-shaped
-        // path, so the budget measures the Newton work and CPU smoothing together.
+        // PERF.10 — direct presets: one fullscreen fragment each. Root Choir remains in the
+        // roster here but dispatches below to its production `direct+mv_warp` feedback path.
         "Nebula", "Plasma", "Spectral Cartograph", "Waveform", "Root Choir",
         // RICERCAR-CERT.1 — the fifth ParticleGeometry preset the harness reaches, and the
         // first with a geometry-owned resolution-dependent target (ensureAllocated). Absent

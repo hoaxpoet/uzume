@@ -55,7 +55,7 @@ struct RootChoirTests {
                     bright: Double(bright) / Double(width * height), hash: hash)
         }
         let tail = stats.suffix(32)
-        #expect(tail.allSatisfy { $0.mean > 0.012 }, "feedback starved to black")
+        #expect(tail.allSatisfy { $0.mean > 0.14 }, "Liquid Script visibility collapsed")
         #expect(tail.allSatisfy { $0.mean < 0.58 }, "feedback washed out")
         #expect(tail.allSatisfy { $0.bright < 0.12 }, "white content dominates")
         #expect(Set(tail.map(\.hash)).count > 24, "feedback motion froze")

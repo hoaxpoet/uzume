@@ -399,7 +399,6 @@ cost inside one preset).
 
 ---
 
-
 ### BUG-088 — RESOLVED (BUG088.1): Aurora Veil's "undeclared reads" were dead computation, and a silence gate is not a driver (2026-08-12, resolved 2026-08-26)
 
 **Status: ✅ RESOLVED 2026-08-26.** The diagnosis below is kept in full because the correction

@@ -46,7 +46,7 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
-| BUG-125 | P2 · fix implemented; pending M7 2026-09-09 | preset.fidelity | **Root Choir read as a flat five-petal spinner with white circular speckle, a muddled centre, and no legible musical causality.** ROOTCHOIR.2 deletes the radial trap/white seam path, calibrates tension and consonance from the clean “Combat Baby” capture, bounds orientation, opens the centre, and adds a thirds/tension-driven complex fold. Automated and render gates pass; Matt's live judgment remains outstanding. |
+| BUG-125 | P1 · live-format fix implemented 2026-09-10; pending live M7 | preset.fidelity / renderer | **Root Choir's corrected Liquid Script render was completely black in the live app despite visible production replay output.** Session `2026-09-10T16-39-01Z` isolated an app-only feedback-format mismatch; live setup now honors the sidecar exactly as the loader and replay do. Shader fidelity remains pending live review. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -99,34 +99,40 @@ reads" are not reads — see the entry.)*
 
 ### BUG-125 — Root Choir's radial orbit trap and uncalibrated tonal routes defeat its visual and musical premise (2026-09-09)
 
-**Severity:** P2  
-**Domain tag:** preset.fidelity  
-**Status:** Fix implemented; pending M7  
+**Severity:** P1
+**Domain tag:** preset.fidelity / renderer
+**Status:** Live feedback-format fix implemented; pending live M7
 **Introduced:** ROOTCHOIR.1  
 **Resolved:** —
 
-**Expected behavior.** Root Choir remains one clearly readable asymmetrical jewel-toned Newton-fractal organism. Harmonic movement should reshape its chirality and central opening without disorienting continuous spin; recursive seams should read as dark leadwork with sparse warm-gold light, never white particles or circular rings.
+**Expected behavior.** Root Choir reads immediately as the selected Liquid Script motion oracle: luminous arrow/leaf heads pull long fine S-curves and curled tendrils through a visible charcoal field, with enamel-hot cores, coloured rims, and persistent negative space. Bass activity changes the advection continuously and beat onsets strengthen only newly written local gestures. There is no global spin, radial particle field, white bloom, or fixed central knot.
 
-**Actual behavior.** Matt's first live review found white particles arranged in circular rings, a muddled flower centre, an odd/disorienting spin, no understandable connection to the music, and no convincing psychedelic character. The supplied screenshot shows large flat colour lobes, a tiny dark centre surrounded by competing seam detail, and pale dotted radial contours inside the territories.
+**Actual behavior.** Matt's first live review found white particles arranged in circular rings, a muddled flower centre, an odd/disorienting spin, no understandable connection to the music, and no convincing psychedelic character. The first replacement removed those defects but failed the selected concept: Matt's 2026-09-10 review found it **VERY dark**, impossible to read, and unlike the Liquid Script reference. ROOTCHOIR.3.1 corrected that authored output, but the next live review (`2026-09-10T16-39-01Z`) was completely black: no charcoal ground or gestures were visible at any point.
 
-**Reproduction steps.** Build the current ROOTCHOIR.1 tree, play Metric's “Combat Baby,” select Root Choir, and observe for at least 30 seconds at a 900×600 or 1800×1200 window. Minimum reproducer: session `~/Documents/uzume_sessions/2026-09-09T20-25-49Z/` plus `~/Desktop/Screenshot 2026-09-09 at 3.27.33 PM.png`.
+**Reproduction steps.** Build ROOTCHOIR.3.1, play Metric's “Combat Baby,” cycle to Root Choir in the live 900×600 app, and observe a black drawable while playback remains healthy. Minimum live reproducer: `~/Documents/uzume_sessions/2026-09-10T16-39-01Z/`. Earlier authored-darkness reproducer: `~/Documents/uzume_sessions/2026-09-10T14-09-13Z/`. Original Newton reproducer: `~/Documents/uzume_sessions/2026-09-09T20-25-49Z/` plus `~/Desktop/Screenshot 2026-09-09 at 3.27.33 PM.png`.
 
-**Session artifacts.** Chain health is `clean`; Root Choir ran for approximately 109 seconds after selection with no drawable or command-buffer failures. `PresetSessionReplay` reports all five declared routes live: fifths 73.16%, thirds 71.13%, tension 99.64%, consonance 99.99%, bass breath 41.03%. The useful calibration ranges are much smaller than the shader assumes: `tonal_tension` p50 0.0186 / p99 0.0757 / max 0.0914 and `tonal_consonance` p50 0.0924 / p99 0.2173. Raw fifths/thirds phases change by a median ~0.86/~0.89 rad per analysis update, so mapping fifths directly to full-field angle makes spin the dominant visible response even after smoothing.
+**Session artifacts.** All three review captures have `clean` chain health. The black live capture presents 2,406/2,406 drawable frames with zero recorded command failures, peaks at **−0.13 dBFS**, and contains 2,901 valid feature rows; route replay reports `bassDev` firing on **53.43%** and `beatComposite` on **99.97%**. The shipped app bundle's Root Choir shader and sidecar hashes are byte-identical to the source tree. Yet replaying 900 rows from that exact capture through the headless production chain renders normally at **0.202 mean luma** (trajectory **0.18…0.21**, zero clipping/near-white). Code inspection supplies the discriminator: `PresetLoader` compiles Root Choir's warp/compose pipelines for declared linear `.bgra8Unorm`, and `MultiPassRenderHarness` allocates matching linear textures, while live `VisualizerEngine.applyPreset` falls through a display-name switch to `MetalContext.pixelFormat` (`.bgra8Unorm_srgb`).
 
-**Suspected failure class:** `algorithm`.
+**Current failure class:** `pipeline-wiring`. Earlier visual failures were `algorithm` / `calibration`.
 
-**Evidence for this class.** The pale circular artifact is authored explicitly by `abs(length(z) - radius)` in the orbit trap and then promoted into seam selection; the tiny aperture follows directly from applying a 0…1 visual mapping to a source whose live maximum is 0.091. These are deterministic shader mappings, not renderer or input failures.
+**Evidence for this class.** Root Choir declares `feedback_pixel_format: bgra8Unorm`; the loader compiles all feedback-target pipelines for that exact format. The live app ignores the declaration and allocates `.bgra8Unorm_srgb` textures, while the replay honors it and renders the same session visibly. This one live/replay configuration divergence explains black live output without changing shader math or audio input.
 
 **Verification criteria (written before the fix).**
 
-- [ ] Automated: focused Root Choir tests pin a calibrated tension mapping, a bounded orientation mapping, phase-wrap continuity, finite/collision-free roots, non-black silence, and a non-collapsing production-path sweep.
-- [ ] Render artifact: `RENDER_VISUAL=1` contact sheet contains no pale circular particle/ring motif; centre remains cleanly open in stable and high-tension frames; five colour families remain subordinate to one macro organism.
-- [ ] Motion artifact: a real-music contiguous sequence passes `Scripts/motion_gate.sh`; orientation rocks within a bounded arc rather than completing disorienting turns, while aperture/chirality changes remain visible.
-- [ ] Manual M7: Matt can identify the harmonic reshaping, sees no white ring or centre muddle, and judges the result psychedelic enough to continue rather than retire.
+- [x] Automated live-path configuration gate: every supported `feedback_pixel_format` maps to the same `MTLPixelFormat` in app setup as in `PresetLoader` and `MultiPassRenderHarness`; Root Choir resolves to `.bgra8Unorm`, not `.bgra8Unorm_srgb`.
+- [x] Regression gate: app tests fail if mv-warp live setup ignores the sidecar's linear or HDR override; nil retains the drawable format.
+- [x] Exact-session render artifact: `2026-09-10T16-39-01Z` remains visible at mean luma **0.202** (trajectory **0.18…0.21**) with no clipping or near-white output; inspected frames contain no rings, central knot, or global spin.
+- [x] Automated: focused Root Choir tests pin the `direct+mv_warp` contract and a bounded, moving 96-frame production feedback loop.
+- [x] Render artifact: the final real-session sequence contains no white particles, circular rings, radial field, or flower centre.
+- [x] Motion artifact: `Scripts/motion_gate.sh` over 430 contiguous attached-session frames reports 0 spike transitions; 70/429 low-motion transitions are concentrated in the deliberately sparse opening.
+- [x] Automated visibility: the attached-session production replay holds mean frame luma in **0.18…0.38**, with clipped share below 1% and near-white share below 2%.
+- [x] Reference fidelity artifact: the comparison sheet visibly carries pointed luminous heads, fine S-curves, paired tendrils, hot cores, coloured rims, and persistent negative space. Matt's fidelity verdict remains the manual gate.
+- [ ] Manual live-path check: the newly built app visibly renders the charcoal ground immediately on Root Choir selection and gestures appear during “Combat Baby.”
+- [ ] Manual M7: Matt recognizes Liquid Script without explanation, can identify bass-driven flow and onset-driven new writing, and sees no white rings, centre muddle, global spin, or stalled symmetry.
 
 **Manual validation required:** Yes — musical causality, psychedelic character, and comfort in motion are perceptual criteria.
 
-**Fix scope.** Preset-local shader/state/test/design changes only. No `FeatureVector` or global renderer contract change.
+**Fix scope.** One live app format resolver plus an app regression test; no shader, audio route, `FeatureVector`, or renderer pass change. The sidecar already owns this value and the loader/replay already honor it. Exact black-session replay frames: `/tmp/root-choir-163901-frames/`.
 
 ---
 
@@ -2430,4 +2436,3 @@ re-check under the new identity, but nothing in the fix touches identity.
 `DerivedData/UzumeApp-*` glob and hit a stale build (25 such directories exist on this
 machine), reporting "only Open System Settings" — indistinguishable from the fix not working.
 Resolve the exact `BUILT_PRODUCTS_DIR` before quoting a launch path in any manual walk.
-

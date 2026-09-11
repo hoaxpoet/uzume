@@ -1395,6 +1395,16 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment DOC.12 — scheduled documentation rotation ✅ (2026-09-11)
+
+The UTC DOC.6 boundary fired while PR #222 was being reconciled with `main`. The deterministic
+`Scripts/rotate_docs.sh` pass moved 16 completed August 27 engineering-plan bodies verbatim into
+`ENGINEERING_PLAN_HISTORY.md` while retaining their status headers, and moved four resolved issue
+entries verbatim into `QUALITY/KNOWN_ISSUES_HISTORY.md`. Release notes were already current-month
+only; diagnostics had no oversized non-LFS artifacts; all five legacy `.claude/skills` entries
+retained their instruction files. The four old non-completed plan entries reported for manual
+triage remain active and were not moved. No renderer, preset, application, or test behavior changed;
+the render capability registry is therefore unchanged.
 ### BUG087.5 — retire the tap's forwarding role ✅ (2026-09-11, Matt: *"retire the tap's forwarding role"*)
 
 The follow-up named at BUG087.4's closeout. `LocalFilePlaybackProvider` installs **no tap**;
@@ -9727,7 +9737,50 @@ full engine suite green.
 
 ---
 
-### Increment ROOTCHOIR.2 — first-M7 structural redesign; pending live verdict (2026-09-09)
+### Increment ROOTCHOIR.3 — Liquid Script replacement; pending live verdict (2026-09-10)
+
+**ROOTCHOIR.3.2 live-path correction (2026-09-10).** Matt's ROOTCHOIR.3.1 review was completely
+black despite the corrected shader's visible headless output. Session `2026-09-10T16-39-01Z`
+separates the paths: 2,406/2,406 live drawables presented with healthy audio and both declared
+routes firing, while an exact 900-frame production replay rendered at 0.202 mean luma. The live
+app alone allocated `.bgra8Unorm_srgb` feedback from the drawable because its hard-coded
+preset-name switch omitted Root Choir; `PresetLoader` had compiled the pipelines for the
+sidecar-declared linear `.bgra8Unorm`. `mvWarpFeedbackFormat` now maps the descriptor declaration
+in live setup exactly as the loader and replay harness do, with focused app coverage for linear,
+HDR, and nil/default formats. No shader or audio route changed. Manual live review remains open.
+
+**ROOTCHOIR.3.1 M7 correction (2026-09-10).** The first replacement was rejected as extremely
+dark and unlike the selected Liquid Script oracle. A clean attached-session replay measured 0.068
+mean frame luma against the oracle's 0.251. The corrected shader restores the recognizable subject:
+pointed luminous heads, enamel-hot inner spines, saturated rims, and paired fine S-curves written
+from fixed local seeds. Final 900-frame attached-session replay: 0.203 mean luma, 0.190…0.218
+trajectory, zero clipped pixels, zero near-white pixels. The final contiguous motion gate reports
+mean/median change 0.72/0.74, zero spikes, and 70/429 low-motion transitions concentrated in the
+sparse opening. The old 0.012 automated darkness floor is raised to 0.14. Manual M7 remains open;
+this is not certification.
+
+**Done when:** the twice-rejected Newton mechanism and CPU state are removed; Root Choir becomes
+an uncertified shader-only `direct+mv_warp` preset with distributed tapered writing, no radial
+composition or global rotation, and two honest live routes; real-session still/motion gates,
+focused tests, and the app build pass.
+
+**Implemented.** Five asynchronous amber/coral/violet liquid-arrow gestures write into linear
+8-bit feedback. Persistent directed through-flow prevents the weak local curvature from closing
+into rings while it braids the fine paired tails without spinning the frame;
+`bassDev` continuously changes advection and `beatComposite` accents the current writing gesture.
+The Newton fragment, `RootChoirState`, slot-6 app plumbing, tonal routes, circular seams, flower
+centre, and white highlights are deleted. Source/reference provenance and the deliberate
+divergences are recorded in the sidecar, visual-reference README, CREDITS, and D-248.
+
+**Evidence.** The ROOTCHOIR.3.1 final 900-frame attached-session production replay reports mean
+luma 0.203, mean bright-pixel saturation 0.034, and zero clipped/near-white area. The final
+`Scripts/motion_gate.sh` run over 430 contiguous frames reports mean/median/max difference
+0.72/0.74/1.36, zero >3×-median spikes, and 70 low-motion transitions.
+Focused contract/accumulation tests pass. Manual M7 remains the certification boundary.
+
+---
+
+### Increment ROOTCHOIR.2 — first-M7 structural redesign; rejected and superseded (2026-09-09)
 
 **Done when:** the white circular particle mechanism is removed; the centre remains visibly open
 across the real tonal-tension range; harmonic geometry reads through bounded orientation,
