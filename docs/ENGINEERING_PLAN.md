@@ -1538,6 +1538,102 @@ regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN un
 difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
 closes both the session rate gate and the offset table, and it is the same run as the M7.
 
+### PR.23 — Nebula: the core's BODY is the late thing 📋 SCOPED, not built (2026-09-11, Matt: *"the core activates with a delay"*)
+
+**Matt's M7 on session `2026-09-11T16-47-03Z`** (chain health **clean**, peak −0.13 dBFS, 202 s,
+59–60 Hz analysis — the first Nebula review with BUG-087's rate ceiling gone):
+
+> *"The core is connected to the music but not tightly coupled, the core activates with a delay.
+> Unclear if it's connected to the bass, vocals, or other stems, but there is a connection. I suspect
+> this preset could be improved with additional routing and some level of beat syncing."*
+
+#### ★ The obvious reading of "add a leading edge" is WRONG — it is already there
+
+`core_pulse ← transientRise` is declared in the sidecar and live in the shader: `event * 0.55` on
+brightness and `event * 0.030` on radius (`Nebula.metal:174, 241, 244`). A second fast term is not
+the fix, and proposing one would have been a wasted increment.
+
+**What is late is the core's BODY.** Brightness is `0.16 + presenceLift * 0.70 + event * 0.55`, and
+`presenceLift = saturate(presence * 2.6)` where `presence = (bass + mid + treble) * 0.5` — the
+**instant AGC bands, carrying `BandEnergyProcessor`'s τ 77 ms bass / 116 ms mid-treble**. The accent
+is a brief flash on 7.8 % of frames; the *sustained* level the eye reads as "the core activating" is
+entirely on the slow signal, at gain 0.70 against the accent's 0.55.
+
+Measured on that session (offline onset strength, shared wallclock):
+
+| signal | lag | r | used by |
+|---|---|---|---|
+| `transient_rise` | **+55 ms** | 0.203 (readable) | the accent |
+| `bassRel` | +75 ms | 0.103 ⚠ marginal | — |
+| `bass` | +85 ms | 0.034 ⚠ too weak | **the core body** |
+| `bassDev` / `mid_dev` | +295 / +300 ms | 0.136 / 0.050 | the ring's reach |
+
+⚠ **And PR.21 gave peak-hold to the ring and not the core.** `NebulaState` runs asymmetric
+attack/release (τ 25 ms / 400 ms) over the 256 spectrum bands only. The core reads `features.bass`
+et al. raw. Two layers of one preset, two temporal treatments, and the slower one is the biggest
+brightest object on screen — which is exactly the mismatch a viewer reads as "delay".
+
+#### ★★ A fast follower on an already-smoothed signal CANNOT make it early
+
+Worth stating before anyone reaches for the obvious remedy: an envelope follower downstream of τ 77 ms
+of band smoothing cannot recover information the smoothing removed. It can only make the response
+*asymmetric*. So "put NebulaState's peak-hold on the core too" would change the core's feel — rise
+promptly, decay gracefully — without moving its onset earlier. That is worth having, and it is not
+what Matt asked for on its own.
+
+**The term that is genuinely early is the accent, and the lever is the BALANCE between the two.**
+Shifting the core's visible range from the slow body toward the fast accent is the documented-good
+move on this exact property: RENDER_CAPABILITY_REGISTRY §7 "Event accent on LIGHT (FTR.25)" — nothing
+is positioned relative to brightness, so an accent there costs zero peak velocity.
+
+⚠ **And the same registry row says the opposite for SIZE.** The two-layer pattern is ❌ RETIRED on
+scale properties (FTR.24a): every gain that marked events multiplied peak velocity up to 10.7× and
+Matt called it *"herky-jerky … looks defective"*. **`coreRadius` currently carries `event * 0.030`,
+which is that anti-pattern in miniature.** The scope should move the event out of radius, not deeper
+into it.
+
+#### Proposed shape (one primitive per layer, FA #67 respected)
+
+| core property | slow body | fast accent | note |
+|---|---|---|---|
+| brightness | `presenceLift`, reduced gain | `event`, raised gain, scaled into remaining headroom | FTR.25's pattern, on the property it is documented for |
+| radius | `presenceLift` + NebulaState-style attack/release | **none** | FTR.24a — events off scale properties |
+
+No new primitive, so the `audio_routes` manifest stays accurate (`core_glow ← bass/mid/treble`,
+`core_pulse ← transientRise` both already declared and both already green under QG.1).
+
+#### The two asks NOT taken, with reasons
+
+- **Stem routing** (*"unclear if it's bass, vocals, or other"*). Matt's read is exactly right about the
+  code: `presence` is a SUM of three bands and is structurally unattributable. But per-stem fields carry
+  **≈2.5 s latency** (BUG-086) — routing the core to `bassEnergyDev` would make it identifiable and
+  *far later*, trading the complaint he raised for a worse version of it. Stems measured healthy on this
+  session (`bassEnergyDev` mean 0.109 / max 1.251, ~58 % nonzero), so this is a design choice and not a
+  capability gap. **Bring to Matt as its own decision** — it changes what Nebula is.
+- **Beat syncing.** ⚠ Not on this evidence: `grid_bpm` 139.157 but **|drift_ms| median 634, p90 863** —
+  over half a beat — and `lock_state` flips 1↔2 across the session. Beat-locking the core to this grid
+  would land confidently in the wrong place, which is worse than late. And not `beatComposite`: PR.21
+  already deleted a dead `core_pulse ← beatComposite` route because it sits above 0.9 on 42.6 % of frames.
+
+#### Verification criteria (written before the fix)
+
+- **Temporal, in the production path.** Nebula is the first `direct` preset with a slot-6 state buffer
+  and the checklist's four harness templates do not cover `direct` — so a multi-frame harness driving
+  `NebulaState` across ≥60 frames must exist *before* shader work, not after.
+- **Motion gate before M7** (`Scripts/motion_gate.sh`), not the 3-still sheet: this is a purely temporal
+  change and stills cannot see it. ⚠ Nebula is `passes: ['direct']` and the direct harness feeds LCG
+  **noise**, so its still sheets have never shown the preset — recorded again here so nobody trusts one.
+- **Peak-velocity guard.** Assert the core's frame-to-frame radius velocity does not rise, or FTR.24a's
+  failure is being re-run.
+- **Matt's M7.** The question is whether the core now *arrives with* the music rather than after it.
+
+#### ⚠ Certification blocker that this increment does not touch
+
+`docs/VISUAL_REFERENCES/Nebula/README.md` is **still an unfilled template** — `<YYYY-MM-DD by Matt>`,
+`01_palette_<...>.jpg`, the anti-references and the whole stylization contract are placeholders. Nebula
+is `rubric_profile: lightweight`, so that contract IS the rubric substitute. **Nebula cannot certify
+with it blank**, however well the core reads. Curation is Matt's, and it is a separate increment.
+
 ### PR.22 — `transientRise`: recovering 120 ms of the event lag 🔨 code complete, M7 owed (2026-09-10)
 
 **Matt, on the PR.21 streaming build:** *"audio sync is still a little loose, not perfectly
