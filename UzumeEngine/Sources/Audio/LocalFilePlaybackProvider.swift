@@ -6,9 +6,14 @@
 // LF.1 spike (2026-05-27). Unlike the offline `.localFile(URL)` mode (which
 // only feeds PCM into the analysis pipeline at near-real-time without
 // playing audio), this provider plays the file via `AVAudioEngine` +
-// `AVAudioPlayerNode` and installs a tap on the player node's output bus
-// (pre-mixer, pre-volume). Uzume owns the playhead. Core Audio process
-// taps are bypassed entirely — no screen-capture permission required.
+// `AVAudioPlayerNode`. Uzume owns the playhead. Core Audio process taps are
+// bypassed entirely — no screen-capture permission required.
+//
+// BUG087.5 (2026-09-11): the analysis signal no longer comes from a tap at all.
+// `PlayheadAnalysisClock` reads the decoded file at the smoothed playhead and feeds
+// `onAudioSamples` directly. The tap it replaced was what held the whole MIR chain at
+// 10 Hz here (BUG-087) — AVAudioEngine hands this path ~0.1 s buffers whatever
+// `installTap(bufferSize:)` requests.
 
 @preconcurrency import AVFoundation
 import Foundation
@@ -23,12 +28,12 @@ private let logger = Logger(subsystem: "io.uzume.audio", category: "LocalFilePla
 /// `.localFile(URL)` mode's behavior so the spike's verification window
 /// is not bounded by the fixture's duration.
 ///
-/// Threading: the tap callback fires on an AVAudioEngine-owned background
-/// thread. `onAudioSamples` is invoked from that thread; consumers must
+/// Threading: `onAudioSamples` is invoked from the analysis clock's own serial queue
+/// (BUG087.5 — previously an AVAudioEngine-owned tap thread). Consumers must still
 /// handle off-main-thread delivery identically to the process-tap path.
 ///
-/// Lifecycle: `start()` opens the file, starts the engine, installs the
-/// tap, and begins playback. `stop()` reverses everything. Both are
+/// Lifecycle: `start()` opens the file, starts the engine, begins playback and
+/// starts the analysis clock. `stop()` reverses everything. Both are
 /// idempotent and safe to call concurrently (NSLock-serialized).
 ///
 /// `AVAudioEngineConfigurationChange` notifications are observed and
@@ -42,26 +47,23 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// provider's lifetime. A different file requires a new provider.
     private let url: URL
 
-    /// Guards `engine` / `playerNode` / `audioFile` / `interleavedScratch` /
+    /// Guards `engine` / `playerNode` / `audioFile` / `analysisClock` /
     /// `configChangeObserver` across `start()` / `stop()` / configuration-
-    /// change restart paths. NOT taken inside the tap callback — the
-    /// callback is real-time-ish (AVAudioEngine background thread) and
-    /// reads `interleavedScratch` only.
+    /// change restart paths. Never taken from the analysis clock's queue —
+    /// the clock reads its own file handle and touches no provider state.
     private let lock = NSLock()
 
     private var engine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
     private var audioFile: AVAudioFile?
 
-    /// Scratch buffer used to interleave AVAudioPCMBuffer's planar L/R
-    /// channels into the interleaved float32 layout the downstream
-    /// `onAudioSamples` callback expects. Sized to the largest tap buffer
-    /// seen so far; grown lazily inside the callback if a larger frame
-    /// count arrives.
-    private var interleavedScratch: [Float] = []
-
     /// Retained so `removeObserver` can be called during teardown.
     private var configChangeObserver: NSObjectProtocol?
+
+    /// BUG087.4 — when `UZUME_LF_ANALYSIS_CLOCK=1`, the analysis funnel is driven from the
+    /// decoded file at the smoothed playhead instead of from tap arrival. Nil when the flag is
+    /// off, and then this path behaves exactly as it did before.
+    private var analysisClock: PlayheadAnalysisClock?
 
     /// Serial queue the loop re-schedule / `onFileEnded` advance hops onto,
     /// OFF the AVAudioPlayerNode completion-handler queue (BUG-059). Re-entering
@@ -76,7 +78,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
 
     // MARK: - Callback
 
-    /// Receives interleaved float32 PCM samples from the player-node tap.
+    /// Receives interleaved float32 PCM samples read at the playhead (BUG087.5).
     /// Parameters: (samples pointer, total floats = frames × channels, sample rate, channel count).
     ///
     /// Matches the `SystemAudioCapture.onAudioBuffer` contract exactly so
@@ -102,25 +104,10 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// BUG-021 (2026-05-28) — synchronous diagnostic hook. When set, the
     /// `teardownAVFoundation` static helper (called from `stop()` and
     /// `start()`) emits a breadcrumb at each sub-step (remove observer,
-    /// player.stop, player.removeTap, engine.stop). App-layer wires this
+    /// player.stop, engine.stop). App-layer wires this
     /// to `SessionRecorder.log` so the breadcrumbs land in session.log
     /// on the call thread.
     public var onDiagnosticEvent: ((String) -> Void)?
-
-    // MARK: - Tap buffer size (BUG-087)
-
-    /// Frames requested from `installTap`. **AVAudioEngine treats this as a hint and
-    /// routinely ignores it**, delivering ~0.1 s buffers instead — 4414 frames measured
-    /// at 44.1 kHz and 4808 at 48 kHz, both exactly 0.1 s, i.e. a fixed *duration*
-    /// rather than a frame count. Since `processAnalysisFrame` runs once per callback,
-    /// that put the whole MIR chain at **10 Hz on this path against 51 Hz on the system
-    /// tap** (BUG-087). The request is kept because it is the documented way to ask;
-    /// what changed is that the gap is now reported instead of silently costing 5× rate.
-    public static let requestedTapFrames: AVAudioFrameCount = 1024
-
-    /// Set once the first tap buffer arrives, so the requested-vs-delivered line is
-    /// emitted a single time per playback rather than ~10× a second.
-    private var reportedDeliveredFrames = false
 
     // MARK: - Init
 
@@ -136,12 +123,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         let oldRefs = TeardownRefs(
             player: playerNode,
             engine: engine,
-            observer: configChangeObserver
+            observer: configChangeObserver,
+            clock: analysisClock
         )
         playerNode = nil
         engine = nil
         audioFile = nil
         configChangeObserver = nil
+        analysisClock = nil
         Self.teardownAVFoundation(refs: oldRefs, diagnostic: nil)
     }
 
@@ -171,12 +160,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             let previous = TeardownRefs(
                 player: playerNode,
                 engine: engine,
-                observer: configChangeObserver
+                observer: configChangeObserver,
+                clock: analysisClock
             )
             try _startLocked()
             let hadPrevious = previous.player != nil
                 || previous.engine != nil
                 || previous.observer != nil
+                || previous.clock != nil
             return hadPrevious ? previous : nil
         }
         if let stale {
@@ -189,7 +180,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     ///
     /// BUG-021 fix (2026-05-28): snapshots the AVFoundation refs + nil-outs
     /// the fields under the lock, then releases the lock and does the
-    /// AVFoundation teardown (player.stop / removeTap / engine.stop) outside
+    /// AVFoundation teardown (player.stop / engine.stop) outside
     /// it. Session `2026-05-28T19-35-13Z` hit a hang at `player.stop()`
     /// because:
     ///
@@ -211,7 +202,8 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             let refs = TeardownRefs(
                 player: playerNode,
                 engine: engine,
-                observer: configChangeObserver
+                observer: configChangeObserver,
+                clock: analysisClock
             )
             // Nil out under the lock so the scheduleFile completion callback
             // (which acquires the lock to check `playerNode === player`)
@@ -220,6 +212,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             engine = nil
             audioFile = nil
             configChangeObserver = nil
+            analysisClock = nil
             return refs
         }
         // LF.5.fix.2-FU1: skip the teardown helper entirely when the snapshot
@@ -229,7 +222,8 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // snapshot has nothing to release. Emitting the breadcrumb pair
         // anyway clutters session.log with paired ENTER/EXIT lines that
         // bracket zero work.
-        if oldRefs.player == nil && oldRefs.engine == nil && oldRefs.observer == nil {
+        if oldRefs.player == nil && oldRefs.engine == nil
+            && oldRefs.observer == nil && oldRefs.clock == nil {
             return
         }
         Self.teardownAVFoundation(refs: oldRefs, diagnostic: onDiagnosticEvent)
@@ -286,31 +280,31 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
 
-        // The tap sees the player's OUTPUT (post-attach, pre-mixer). After
-        // `connect(... format: file.processingFormat)`, that output format
-        // is the file's native processing format — typically Float32 planar
-        // at the file's sample rate (44100 Hz for love_rehab.m4a). The
-        // mixer downstream handles any sample-rate conversion to the
-        // output device's format (often 48 kHz on macOS). The tap is
-        // pre-volume, so the user's mainMixerNode.outputVolume does not
-        // affect the analysis signal.
-        let tapFormat = player.outputFormat(forBus: 0)
-        let sampleRate = Float(tapFormat.sampleRate)
-        let channelCount = tapFormat.channelCount
-
-        interleavedScratch = [Float](repeating: 0, count: Int(Self.requestedTapFrames) * Int(channelCount))
-        reportedDeliveredFrames = false
+        // BUG087.5: NO TAP. The analysis funnel is fed by `PlayheadAnalysisClock` reading the
+        // decoded file at the smoothed playhead; the player node's output bus is not observed at
+        // all. `installTap` existed here only to carry audio to the funnel, and on this path it was
+        // the thing capping the whole MIR chain at 10 Hz — AVAudioEngine delivers ~0.1 s buffers
+        // whatever `bufferSize` asks for (BUG-087). With the clock proven at 59.77 Hz on Matt's M7
+        // capture, a real-time callback firing 10x a second to be discarded is cost with no consumer.
+        //
+        // The player's output format is still the file's processing format (the `connect` above
+        // passes it), so nothing about the audio the analysis sees has changed: the clock reads the
+        // same decoded file, pre-volume by construction — `mainMixerNode.outputVolume` cannot touch
+        // a file read.
+        let format = file.processingFormat
+        let sampleRate = Float(format.sampleRate)
+        let channelCount = format.channelCount
 
         // Capture `onAudioSamples` at install time — the spike contract is
         // "set the callback, then call start()." This matches the existing
         // `.localFile` mode pattern in `AudioInputRouter.startFilePlayback`.
         let callback = onAudioSamples
-        player.installTap(onBus: 0, bufferSize: Self.requestedTapFrames, format: tapFormat) { [weak self] buffer, _ in
-            self?.handleTapBuffer(buffer,
-                                  sampleRate: sampleRate,
-                                  channelCount: channelCount,
-                                  callback: callback)
-        }
+
+        // The clock is now the ONLY source, so a clock that cannot be built is a hard failure
+        // rather than a quiet fall-back to a path that no longer exists. Before BUG087.5 this
+        // returned nil and the tap took over; silently analysing nothing would render a dead
+        // visualizer against playing audio, which is worse than refusing to start.
+        let clock = try PlayheadAnalysisClock.make(url: url, player: player, deliver: callback)
 
         // Test hygiene (BUG-052): under XCTest / `swift test`, mute the device
         // output so the suite never plays (churned, choppy) fixture audio through
@@ -325,6 +319,12 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         try engine.start()
         _scheduleFileLoopLocked(player: player, file: file)
         player.play()
+
+        // After `play()` — `playerTime(forNodeTime:)` returns nil until the node is rendering, and
+        // the clock's first tick would otherwise be a wasted no-op.
+        clock.onDiagnosticEvent = onDiagnosticEvent
+        clock.start()
+        self.analysisClock = clock
 
         let observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -358,6 +358,8 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         let player: AVAudioPlayerNode?
         let engine: AVAudioEngine?
         let observer: NSObjectProtocol?
+        /// BUG087.4 — nil unless the playhead-driven analysis clock is enabled.
+        let clock: PlayheadAnalysisClock?
     }
 
     /// Tear down the AVFoundation objects held in `refs`. Safe to call from
@@ -369,6 +371,10 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         diagnostic: ((String) -> Void)?
     ) {
         diagnostic?("provider.teardown ENTER")
+        // BUG087.4: silence the analysis clock before the player goes away, so a tick in flight
+        // cannot read a file the teardown is about to release. `stop()` only cancels a dispatch
+        // source — it never blocks, so this does not reintroduce BUG-021's wait-on-render ABBA.
+        refs.clock?.stop()
         if let observer = refs.observer {
             diagnostic?("provider.teardown removeObserver BEGIN")
             NotificationCenter.default.removeObserver(observer)
@@ -378,9 +384,9 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
             diagnostic?("provider.teardown player.stop BEGIN")
             player.stop()
             diagnostic?("provider.teardown player.stop COMPLETE")
-            diagnostic?("provider.teardown player.removeTap BEGIN")
-            player.removeTap(onBus: 0)
-            diagnostic?("provider.teardown player.removeTap COMPLETE")
+            // BUG087.5: no `removeTap` — nothing installs one any more. Left out rather than kept
+            // as a defensive no-op, because a teardown this delicate (BUG-021's ABBA lives here)
+            // should not carry a step for a thing that does not exist.
         }
         if let engine = refs.engine {
             diagnostic?("provider.teardown engine.stop BEGIN")
@@ -465,127 +471,6 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
                 advance?()
             }
         }
-    }
-
-    /// Report what AVAudioEngine actually delivered against what was requested (BUG-087),
-    /// once per playback rather than ~10x a second.
-    ///
-    /// An ignored `bufferSize` hint used to be invisible and cost 5x the analysis rate,
-    /// because `processAnalysisFrame` runs once per audio callback. The session artifact
-    /// now names the gap, so the next person reads it instead of measuring it.
-    private func reportDeliveredFramesOnce(frames: Int, sampleRate: Float) {
-        guard !reportedDeliveredFrames else { return }
-        reportedDeliveredFrames = true
-        let requested = Int(Self.requestedTapFrames)
-        let ms = sampleRate > 0 ? 1000.0 * Float(frames) / sampleRate : 0
-        let hz = ms > 0 ? 1000.0 / ms : 0
-        let flag = frames == requested ? "" : "  <- REQUEST IGNORED (BUG-087)"
-        let fmt = "TAP_BUFFER: requested=%d delivered=%d frames "
-            + "(%.1f ms → %.1f Hz analysis) rate=%.0f%@"
-        let msg = String(
-            format: fmt,
-            requested,
-            frames,
-            ms,
-            hz,
-            sampleRate,
-            flag
-        )
-        onDiagnosticEvent?(msg)
-    }
-
-    /// Hand the interleaved scratch to `callback` in `requestedTapFrames`-sized slices
-    /// (BUG087.3), so the analysis runs at the requested rate rather than the rate
-    /// AVAudioEngine happens to deliver buffers at.
-    ///
-    /// AVAudioEngine gives this path ~0.1 s buffers whatever the `installTap` request
-    /// said, and `processAnalysisFrame` runs once per callback — so one call per buffer
-    /// pinned the whole MIR chain at 10 Hz here against 51 Hz on the system tap.
-    ///
-    /// Allocation-free: pointer arithmetic into the scratch interleaved by the caller, no
-    /// per-slice arrays (BUG-036). No pacing or sleeping — that would block the render
-    /// thread; correct per-slice `dt` (BUG087.2) is what makes burst delivery safe for the
-    /// seconds-based followers. The tail slice is short, never zero-padded, because
-    /// padding would inject a fake transient into the onset detectors.
-    ///
-    /// Downstream allocation rate: `makeAudioSampleCallback` allocates one magnitudes
-    /// array per invocation, so this multiplies that by ~5 on this path — landing at
-    /// ~47/s, the rate the system-tap path has always run at. It matches an established
-    /// rate rather than exceeding one.
-    private func deliverSliced(
-        frames: Int,
-        channelCount: AVAudioChannelCount,
-        sampleRate: Float,
-        callback: (UnsafePointer<Float>, Int, Float, UInt32) -> Void
-    ) {
-        interleavedScratch.withUnsafeBufferPointer { ptr in
-            guard let base = ptr.baseAddress else { return }
-            let sliceFrames = Int(Self.requestedTapFrames)
-            var offset = 0
-            while true {
-                let take = TapBufferSlicing.frameCount(
-                    frames: frames, sliceFrames: sliceFrames, offset: offset
-                )
-                guard take > 0 else { break }
-                callback(
-                    base + offset * Int(channelCount),
-                    take * Int(channelCount),
-                    sampleRate,
-                    UInt32(channelCount)
-                )
-                offset += take
-            }
-        }
-    }
-
-    private func handleTapBuffer(
-        _ buffer: AVAudioPCMBuffer,
-        sampleRate: Float,
-        channelCount: AVAudioChannelCount,
-        callback: ((UnsafePointer<Float>, Int, Float, UInt32) -> Void)?
-    ) {
-        guard let callback else { return }
-        guard let floatData = buffer.floatChannelData else { return }
-        let frames = Int(buffer.frameLength)
-        guard frames > 0 else { return }
-
-        let totalSamples = frames * Int(channelCount)
-
-        reportDeliveredFramesOnce(frames: frames, sampleRate: sampleRate)
-
-        if interleavedScratch.count < totalSamples {
-            interleavedScratch = [Float](repeating: 0, count: totalSamples)
-        }
-
-        // Process-tap path delivers interleaved float32 stereo (L/R/L/R…).
-        // AVAudioPCMBuffer with the processing format gives planar channels.
-        // Interleave here so the downstream contract matches exactly.
-        if channelCount >= 2 {
-            let left = floatData[0]
-            let right = floatData[1]
-            interleavedScratch.withUnsafeMutableBufferPointer { ptr in
-                guard let base = ptr.baseAddress else { return }
-                for i in 0..<frames {
-                    base[i * 2] = left[i]
-                    base[i * 2 + 1] = right[i]
-                }
-            }
-        } else {
-            let src = floatData[0]
-            interleavedScratch.withUnsafeMutableBufferPointer { ptr in
-                guard let base = ptr.baseAddress else { return }
-                for i in 0..<frames {
-                    base[i] = src[i]
-                }
-            }
-        }
-
-        deliverSliced(
-            frames: frames,
-            channelCount: channelCount,
-            sampleRate: sampleRate,
-            callback: callback
-        )
     }
 
     /// AVAudioEngine fires this when the audio configuration changes
