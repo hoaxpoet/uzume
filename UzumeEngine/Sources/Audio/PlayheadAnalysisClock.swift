@@ -214,6 +214,10 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
         self.scratch = [Float](repeating: 0, count: maxFrames * reader.channelCount)
     }
 
+    /// ⚠ Cancel WITHOUT the barrier `stop()` uses. `deinit` can be reached on any thread — including
+    /// the clock queue, if a tick outlives its last external reference — and `queue.sync` from the
+    /// queue itself would deadlock. The barrier belongs to `stop()`, which the provider's teardown
+    /// always calls; this is the backstop for an instance dropped without one.
     deinit { timer?.cancel() }
 
     /// Begin ticking. Idempotent.
@@ -231,11 +235,32 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
         onDiagnosticEvent?("ANALYSIS_CLOCK: playhead-driven, \(hz) Hz, file rate \(rate)")
     }
 
-    /// Stop ticking. Idempotent, non-blocking, and safe to call from any thread — `cancel()` only
-    /// enqueues, so this never waits on the clock queue the way a teardown that blocked would.
+    /// Stop ticking, and **do not return until any tick already in flight has finished**.
+    ///
+    /// ⚠ **The barrier is the whole point, and its absence was a process-killing crash (BUG-130).**
+    /// `DispatchSourceTimer.cancel()` prevents FUTURE handlers; it does not wait for one that is
+    /// already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts
+    /// `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose
+    /// engine had just been released and threw `com.apple.coreaudio.avfaudio`, an Objective-C
+    /// exception no Swift `catch` can intercept. The process dies. Every track change and every
+    /// session stop is a teardown, so this was live on the local-file path.
+    ///
+    /// `queue.sync {}` after `cancel()` is the barrier: the clock queue is serial, so by the time
+    /// an empty block runs on it the in-flight handler has returned.
+    ///
+    /// This does NOT reintroduce BUG-021's ABBA. The clock queue never takes the provider's lock
+    /// and never calls into AVFoundation teardown — it only reads the player and the file — so
+    /// nothing it does can block on the thread calling `stop()`. The wait is bounded by one tick's
+    /// work: a memcpy from the read-ahead block, or at worst one 1-second block decode.
+    ///
+    /// ⚠ Never call this FROM the clock queue — `queue.sync` onto a serial queue from itself
+    /// deadlocks. Nothing does today: `stop()` is called from `teardownAVFoundation`, which runs on
+    /// the caller's thread, never on the clock queue.
     public func stop() {
-        timer?.cancel()
-        timer = nil
+        guard let timer else { return }
+        timer.cancel()
+        self.timer = nil
+        queue.sync { }
     }
 
     // MARK: - Private

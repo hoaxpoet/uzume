@@ -1595,6 +1595,50 @@ pulse clock, so `pulse_beat_index` is 0 and both arms compute `barsCompleted = 0
 identical for a change that alters the preset's primary rotation. Same blind-spot class as Nebula's
 slot-6 bands (PR.24). Do not read the green regression suite as evidence that nothing moved.
 
+### DOC.14 — the stale-increment-row gate ✅ (2026-09-11, Matt: *"add the doc gate for stale increment rows"*)
+
+Four rows carried the same lie on one day — *"this work is open"* when it was not — and all four were
+caught by a person reading, which is the detection method that had already missed them for a month.
+D-161 rule 3: violated twice → mechanize. Two tests in `DocIntegrityTests`:
+
+**`incrementIDsAreUnique`** — the same ID used for two genuinely different increments. ★ **The rule
+had to distinguish a reuse from the DOC.6 rotation convention**, which legitimately leaves a shortened
+duplicate header behind when a body moves to history. A first cut flagged 23 rows, nearly all of them
+that convention working correctly. The discriminator is prefix containment: a rotated header is a
+PREFIX of the full title; a reuse is two titles where neither contains the other.
+
+**`unfinishedRowsAreNotSuperseded`** — a 🔨 row whose ID prefix maps to a preset that is now
+`certified: true` (the review was given) or has no sidecar at all (the preset was retired, as FD.2's
+ghost row was). Certification is read from the sidecars, never from a list duplicated into the test.
+
+#### ⚠ What this gate deliberately CANNOT catch, and why the escape hatch exists
+
+WL.11 was indistinguishable from the eight superseded Witchlight rows by every property a doc test can
+see — same preset, same date, same marker — and it was the one genuinely open item, because it landed
+**24 minutes after** the certification commit. Only `git merge-base` separates those cases, and a doc
+test has no business shelling out to git. So the gate reports a certified preset's unfinished row as
+*something to check*, and a row that genuinely postdates certification says so with the words
+**`POSTDATES CERTIFICATION`** plus its evidence. **A gate that could not express "genuinely still open"
+would be satisfied by deleting true information**, which is worse than the staleness it replaces.
+
+#### The pre-existing debt is listed, not tolerated
+
+`knownDuplicateIncrementIDs` names **nine** IDs that were already reused before the gate existed — six
+of them genuinely two different increments (`PERF.1`, `PERF.2`, `PERF.2-render`, `PERF.3`, `DOC.7`,
+`CHR.3j`), three reworded rotation headers (`CA.5`, `CA.6`, `MD.0`). They are listed rather than fixed
+because renaming a historical increment breaks every citation that resolves to it — the
+`citationCorpus` gate in the same file would fail. ⚠ The list is a record of debt, **not a tolerance**:
+an ID reused today is a mistake being made now. `VL.1` was reused on 2026-09-11 and renumbered the same
+day rather than landing in it.
+
+#### Both gates were confirmed RED before being trusted
+
+A gate that has only ever been green is not evidence (the CLEAN.0 vacuous-pass rule, which the
+photosensitivity gate applied to Nebula the same day). Injecting a duplicate `PR.24` row fails
+`incrementIDsAreUnique` with `["PR.24"]`; re-opening `WL.9` against certified Witchlight fails
+`unfinishedRowsAreNotSuperseded` with *"WL.9 is unfinished but Witchlight is CERTIFIED"*. Both
+restored after.
+
 ### PR.24 — Nebula CERTIFIED ✅ (2026-09-11, Matt: *"It's close enough"*)
 
 **23rd certified preset** (Gossamer was the 22nd). M7 on `2026-09-11T16-47-03Z` — chain health **clean** (peak −0.13 dBFS),
