@@ -1549,7 +1549,7 @@ regression if the picture it encodes is one worth keeping. BUG-087 stays OPEN un
 difference on columns that weak is noise. A single local-file run with `UZUME_LF_ANALYSIS_CLOCK=1`
 closes both the session rate gate and the offset table, and it is the same run as the M7.
 
-### VL.1 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats 🔨 code complete, M7 owed (2026-09-11, Matt: *"the pulse clock's 4-beat cycle, own increment"*)
+### VL.1 — Volumetric Lithograph: the notch ratcheted once every SIXTEEN beats ✅ M7 PASSED (2026-09-11, Matt: *"I like the faster speed and it's synced well with the music"*)
 
 Found while censusing BUG-117's consumers, and it is **not** BUG-117 — it is a units error that is
 worst on a HEALTHY grid.
@@ -1575,9 +1575,16 @@ ratchet wants, so `barsCompleted = floor(beatPos)` and the first-beat ease becom
 `intoBar * VL_PULSE_BEATS`. A grid with no bar information can no longer mislead it, because it no
 longer asks.
 
-⚠ **This is a 4× motion change on a CERTIFIED preset, and M7 is owed.** On healthy material the notch
-now steps four times as often as the build Matt certified. Flash-safety re-measured and unchanged
+**M7 PASSED** on session `2026-09-11T19-58-15Z` — *"I like the faster speed and it's synced well with
+the music."* Volumetric Lithograph confirmed in the log; chain health `clean`. The 4× motion change on a
+certified preset is therefore accepted, not merely shipped. Flash-safety re-measured and unchanged
 (0.00 flashes/s, Δluma 0.058).
+
+⚠ **Chain-health caveat, recorded rather than glossed:** that session reports `peakDBFS` **exactly 0**
+against −0.13 and −6.03 on the two preceding captures. The verdict is `clean` with empty `reasons` and
+`notes` and `raw_tap.wav` is present, so the M7 is cited on it — but an exact 0 is more often a missing
+measurement than a real full-scale peak, and if `ChainAnalyzer` is under-reporting it that is its own
+defect.
 
 ⚠ **The golden gate cannot see this change.** `PresetAcceptanceTests.renderFrame` does not drive the
 pulse clock, so `pulse_beat_index` is 0 and both arms compute `barsCompleted = 0` — the hashes are

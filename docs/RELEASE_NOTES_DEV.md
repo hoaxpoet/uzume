@@ -25,7 +25,9 @@ the 2026-09-08 `barPhase01 = 0` hold). Tracing inputs is the step that was skipp
 Matt's call: the meter leaves the arithmetic. One pulse cycle is the bar this ratchet wants, so a grid
 with no bar information cannot mislead it because it is no longer asked.
 
-⚠ **4× motion change on a certified preset — M7 owed**, and ⚠ **the golden gate cannot see it**: the
+**M7 PASSED** the same day on `2026-09-11T19-58-15Z` — Matt: *"I like the faster speed and it's synced
+well with the music."* So the 4× motion change on a certified preset is accepted rather than merely
+shipped. ⚠ **The golden gate cannot see it**: the
 acceptance harness does not drive the pulse clock, so both arms compute an identical frame. Flash-safety
 re-measured and unchanged.
 
