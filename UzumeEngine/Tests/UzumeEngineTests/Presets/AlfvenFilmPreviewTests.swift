@@ -192,6 +192,68 @@ struct AlfvenFilmPreviewTests {
             return
         }
 
+        // ALFVEN_TRANSITION: energise, then cut the audio — the LIVE scenario, which the
+        // fixed-drive review fixtures never exercised. Matt's M7 on the ALFVEN.3h build:
+        // "silence state looks the same as active state", on a session where Alfvén saw ~7 s
+        // of audio then ~110 s of silence. The review sheet reaches the relaxed state from a
+        // FRESH SEED; reaching it from an already-energised field is a different question,
+        // and it is the one production actually asks.
+        if env["ALFVEN_TRANSITION"] == "1" {
+            let target = try Self.makeTarget(ctx, edge: Self.edge)
+            let dir = URL(fileURLWithPath: "/tmp/uzume_visual")
+                .appendingPathComponent("alfven_transition")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            func fv(_ frame: Int, silent: Bool) -> FeatureVector {
+                var f = FeatureVector()
+                f.time = Float(frame) / 60.0
+                f.deltaTime = 1.0 / 60.0
+                if !silent {
+                    f.bass = 0.30; f.mid = 0.30; f.treble = 0.30
+                    f.bassRel = 0.318; f.bassDev = 0.318
+                    f.spectralCentroid = 0.120
+                }
+                return f
+            }
+            func tick(_ f: FeatureVector) throws {
+                guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                    throw HarnessError.commandBufferFailed
+                }
+                solver.update(features: f, stemFeatures: StemFeatures(), commandBuffer: cmd)
+                cmd.commit(); cmd.waitUntilCompleted()
+            }
+            solver.silenceGate = 1
+            for i in 1...600 { try tick(fv(i, silent: false)) }   // energised, as live
+            print("[alfven-transition] energised: drive \(solver.audioDrive) simClock \(solver.simClock)")
+            // Now cut the audio and watch, in REAL seconds, what the listener would see.
+            for sec in 0...20 {
+                if sec > 0 { for i in 1...60 { try tick(fv(600 + sec * 60 + i, silent: true)) } }
+                let j = Self.readJ(solver)
+                let rms = (j.reduce(0.0) { $0 + $1 * $1 } / Double(j.count)).squareRoot()
+                print(String(format: "[alfven-transition] t=%2ds  gate %.3f  drive %6.2f  "
+                                     + "J rms %7.4f  simClock %6.2f",
+                             sec, solver.silenceGate, solver.audioDrive, rms, solver.simClock))
+                if sec % 5 == 0 {
+                    guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
+                        throw HarnessError.commandBufferFailed
+                    }
+                    let pass = MTLRenderPassDescriptor()
+                    pass.colorAttachments[0].texture = target
+                    pass.colorAttachments[0].loadAction = .clear
+                    pass.colorAttachments[0].storeAction = .store
+                    pass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+                    guard let enc = cmd.makeRenderCommandEncoder(descriptor: pass) else {
+                        throw HarnessError.commandBufferFailed
+                    }
+                    solver.render(encoder: enc, features: fv(600, silent: true))
+                    enc.endEncoding(); cmd.commit(); cmd.waitUntilCompleted()
+                    try Self.writePNG(Self.pixels(target), width: Self.edge, height: Self.edge,
+                                      to: dir.appendingPathComponent(String(format: "t%02ds.png", sec)))
+                }
+            }
+            print("[alfven-transition] frames in \(dir.path)")
+            return
+        }
+
         // ALFVEN_REVIEW: emit the D-181 still set and the D-195 motion sequence into the
         // layout Scripts/compare_render.sh and Scripts/motion_gate.sh expect
         // (/tmp/uzume_visual/<ISO8601>/alfven_*.png).

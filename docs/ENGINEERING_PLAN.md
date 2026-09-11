@@ -10109,6 +10109,30 @@ same input. Two of three sheet columns were identical and the silence column was
 
 **Pending live M7.**
 
+**⚠ M7 round 1 (`2026-09-11T19-52-40Z`) could not evaluate the fix, and the reason is the finding.**
+Matt: *"silence state looks the same as active state."* Alfvén became the active preset at 19:52:58
+and the audio stopped at 19:53:05 — **~7 seconds of music**, then ~110 s of silence.
+
+`ALFVEN_TRANSITION=1` (added here) measures the case every fixed-drive fixture misses: energise, then
+cut the audio. The gate is correct — drive 14.48 → 0.02 in ~9 s — and the rendered frames at t=0 and
+t=20 s are unmistakably different, the latter being `05_atmosphere_relaxed_state`. But the FIELD takes
+**10–20 s to take on its character at any energy level**, so 7 s of audio never reached the energised
+look. The comparison was a partially-energised field against a relaxing one.
+
+**That response time is the durable finding, and it is bigger than this increment.** It is set by the
+field's own physics — `alpha` 0.16 (a 6.2 sim-second e-folding) and the 2.0 sim-second re-seed — not
+by anything audio-side. Alfvén reads as weather rather than an accompanist partly because **its
+slowest timescale is ten seconds**; no routing change can fix that, and neither ALFVEN.3e's drive-map
+reshape nor 3g's exposure work touched it.
+
+⚠ A first reading of that session blamed a dead tap (`chain_health: broken`, 92.8 % of frames with
+`mixEnergy` ≤ 1e-6). The log falsifies it: the tap installed cleanly and delivered audio at −6.1 dBFS
+`band=healthy`; the `dead_tap` verdict describes the long silent tail after playback stopped. **A
+`broken` chain verdict is a reason to read the log, not a conclusion.**
+
+**Retest protocol:** 30+ seconds of music, then stop and watch for 20 s. Short clips cannot exercise
+a preset whose slowest timescale is ten seconds.
+
 ### Increment ALFVEN.3g — the fixed exposure was calibrated for one energy level ✅ (2026-09-11)
 
 **Matt's pick** from the three certification-barrier options: chase the display headroom ALFVEN.3e
