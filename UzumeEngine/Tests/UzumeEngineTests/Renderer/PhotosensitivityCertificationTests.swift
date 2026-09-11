@@ -81,6 +81,13 @@ struct PhotosensitivityCertificationTests {
                            // deep-ground backdrop. Measured for real by
                            // MultiPassFlashHarnessTests.ricercar_isFlashSafe: 0.00 flashes/s
                            // peak, Δluma 0.019 (6.3× the responsiveness floor) — RICERCAR-CERT.1
+        ,
+        "Nebula"           // direct pass, but its ring reads the slot-6 NebulaState band buffer
+                           // (PR.21) which this single-pass harness binds as a ZEROED placeholder —
+                           // so most of the preset draws nothing here and the frame reads static.
+                           // Measured for real by MultiPassFlashHarnessTests.nebulaIsFlashSafe,
+                           // where MultiPassRenderHarness allocates a live NebulaState at fragment
+                           // index 6 — PR.24.
     ]
 
     // MARK: - Gate

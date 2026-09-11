@@ -10,6 +10,38 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-172000] Nebula certified — the 24th, and the first reviewed on a fixed clock
+
+Matt's M7 on `2026-09-11T16-47-03Z`: *"It's close enough ... we should leave Nebula alone and move to
+certification."* Chain health **clean**, 202 s, and the first Nebula review with BUG-087's rate ceiling
+gone — bass changed at 59.41 Hz against a 60.00 fps render, where every prior review of this preset ran
+on a ~10 Hz bus. `certified: true`, added to `FidelityRubricTests.certifiedPresets`, and the
+automated-gate comment that asserted the opposite was corrected rather than left to rot.
+
+★ **Certifying enrolled Nebula in the Harding/WCAG 2.3.1 photosensitivity gate, which covers the
+certified set only — and it failed immediately.** Not on flashing: it rendered *static*, because its
+ring reads the slot-6 `NebulaState` buffer and the single-pass harness binds a zeroed placeholder
+there. The gate refuses to call a static frame safe, which is the vacuous-pass rule doing its job on a
+safety check. Nebula joined the multi-pass harness, where a live `NebulaState` is bound at fragment
+index 6: **peak 0.00 flashes/s, 0 transitions, SAFE, Δluma 0.031** (~6× the responsiveness floor).
+Certifying a preset is not a flag flip — it enrols it in every gate scoped to the certified set.
+
+**PR.23 was scoped and declined in the same session, and the decline was correct.** Matt reported *"the
+core activates with a delay"*; the scope found the obvious fix already shipped (`core_pulse ←
+transientRise` is live) and located the real lateness in the core's BODY — the smoothed instant bands at
++85 ms against the accent's +55 ms. But its own analysis said a follower downstream of τ 77 ms smoothing
+makes the response asymmetric rather than early, leaving only a balance shift between body and accent.
+Matt: *"risky, not necessarily a fix."* Against a preset he had just called close enough, that is risk
+without a guaranteed return. The scope is kept — the measurement is durable even though the fix was not
+taken.
+
+⚠ **Two gaps certified WITH, recorded so neither reads later as an undiscovered defect:** the core's
+delay above, and a reference set that is still an unfilled template. Nebula is `rubric_profile:
+lightweight`, so its stylization contract IS the rubric substitute — and **nothing mechanically gates
+it**; no test reads the README. Nebula therefore has no recorded definition of what it should look like,
+so a future visual regression has nothing to fail against. That curation is a product call and a
+separate increment.
+
 ### [dev-2026-09-11-145807] DOC.12 — scheduled documentation rotation
 
 The DOC.6 UTC age gate crossed its next boundary during PR #222 reconciliation. The canonical
