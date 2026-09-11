@@ -54,6 +54,7 @@ reads" are not reads — see the entry.)*
 | DEAD-003 | P3 · recorded, and the code deleted (DS.3, 2026-09-01) | app.view / dead-affordance | **`FullScreenErrorView` was written as a reusable §9.1/§9.2 blocking surface and never acquired a consumer.** Zero construction sites anywhere in `UzumeApp`; the only non-doc references were its own declaration and its path in `DynamicTypeRegressionTests.viewFiles`. It duplicated `PreparationFailureView` almost verbatim — same body, icon, text block, actions, headline, and the same two severity switches — so for its whole life the app carried two copies of a blocking-failure layout and shipped one. **Deleted at DS.3** as part of the `RecoveryScreen` consolidation, which is why this is recorded as history rather than as open work: there was no behaviour to preserve because there was never any behaviour. Detail below |
 | DEAD-001 | P3 · recorded not fixed (DS.2, 2026-09-01) | app.viewmodel / dead-code | **`ConnectorPickerViewModel.localFolderEnabled` is dead, and the comment above it claims a v1 gate the shipped build does not have.** Three hits, no reader: the declaration, the comment, and the test asserting its `false`. The view has enabled the local-folder tile unconditionally since GAP A (2026-05-28), and `ENABLE_LOCAL_FOLDER_CONNECTOR` — which the comment blames — gates a different thing entirely (the v2 playlist-connector scaffold in `UzumeEngine`, set in no xcconfig, not on the local-source path that ships). Left in place deliberately: deleting a property whose `false` a test asserts is a behaviour change wearing a cleanup costume, and it belongs with the connector-capability work, not a presentation increment. Pairs with the still-open **CA.3-FU-2**. Detail below |
 | BUG-106 | P2 · **FIXED + LIVE-CONFIRMED 2026-08-26 (BUG106.1)** — `ml_forced=0` across a 25 ms/frame 4K session; only the felt half (Matt's eye on stem timing / new stutter) is outstanding | ml.dispatch / calibration | **`MLDispatchScheduler`'s budget is a hardcoded 14/16 ms with no resolution term, so at 4K the gate can never open.** `recentMaxFrameMs` is the WORST frame of the window and 4K's median was 17.6 ms in BUG-100's own session, so every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires — against a 2.0 s stem period. Jank avoidance never happens and stems run ~a period late at 4K. ⚠ **Not** BUG-100's mechanism: the PERF.15 VL session was flat across 172 s at 4K while permanently over the same budget. Needs Matt's call between "stems on time" and "jank-free" at 4K. |
+| BUG-130 | **P1** · **FOUND + FIXED 2026-09-11, same session it was introduced** | audio.playback / concurrency | **The playhead analysis clock killed the process when a tick raced session teardown.** `PlayheadAnalysisClock.stop()` called `DispatchSourceTimer.cancel()`, which prevents FUTURE handlers but does NOT wait for one already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose engine had just been released and threw `com.apple.coreaudio.avfaudio: 'required condition is false: _engine != nil'`, an Objective-C exception no Swift `catch` can intercept. **Every track change and every session stop is a teardown**, so this was live on the local-file path from BUG087.4 onward. Introduced by me at BUG087.4 and shipped: the full suite was green on the BUG087.4, BUG087.5 and PR.24 runs, because it is a race. Detail below |
 | BUG-129 | P3 · new 2026-09-11 | diagnostics / measurement | **`chain_health.json` reports `peakDBFS` exactly 0 on two consecutive sessions, and the verdict is still `clean`.** Measured: `2026-09-11T19-12-34Z` → −6.03, then `2026-09-11T19-58-15Z` → **0**, `2026-09-11T20-19-03Z` → **0**. An exact 0 is full scale, which would be clipping — yet `reasons` and `notes` are both empty and the verdict is `clean`, so either the peak is not being measured and defaults to 0, or it is measured and the clipping check does not fire on it. **Why it matters beyond tidiness:** the preset-session rule is that a fidelity/M7 closeout must cite the session's chain-health verdict, and D-184 makes a `clean` verdict the precondition for judging fidelity at all. A peak field that silently reads 0 weakens every such citation — including two M7s closed today (VL.2 and WL.11), both of which cite `clean` over a 0 peak and are flagged as such in their entries. Not diagnosed; found while checking a session before quoting its verdict. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is being read at all. |
 | BUG-103 | P2 · open; intermittently kills the whole parallel engine suite (the regression gate) | audio.playback / test-infrastructure | **The parallel engine suite dies with an uncaught NSException from `-[AVAudioPlayerNode play]` — console: `com.apple.coreaudio.avfaudio: 'player did not see an IO cycle'` — thrown inside `LocalFilePlaybackProvider._startLocked()` on a racing-start test thread.** `play()` reports this state as an Objective-C exception, not a Swift error; the crashing tests drive `provider.start()` from raw `Thread.detachNewThread` threads (`try?` cannot catch an NSException), so the exception unwinds off the thread and aborts the entire test process — SIGABRT, no failing test line, same suite-level presentation as BUG-078. **Fourteen `.ips` on 2026-08-25 alone (11:19–17:05), every one the identical stack:** `_startLocked()` → `-[AVAudioPlayerNode play]` → `AVAudioPlayerNodeImpl::StartImpl` → `NSException`; throwers span `LocalFilePlaybackStartRaceTests.rescheduleRacingTeardown…` (11), `SessionLifecycleChurnTests.concurrentDoubleStart…` (2), and `SessionLifecycleChurnTests.completionCallbackVsStop…` (1). **Passes in isolation** (`swift test --filter SessionLifecycleChurn`), fires only under full-suite parallel load — and it is **pre-existing, baseline-verified at merge `8cbf936a` twice** (RECON.14's check, plus a first-hand clean-worktree run at that commit while filing; found at RECON.14 while running closeout evidence). NOT the BUG-078 trap: that was `StopImpl`/dealloc `dispatch_sync` on `CommandQueue` (SIGTRAP); this is `StartImpl` at play-time (SIGABRT). Same family — AVAudioPlayerNode lifecycle under parallel scheduler load. The throw site is the SHIPPED local-file start path (and `resume()` carries a second, unproven `play()` site), so the app-facing form would be a hard crash — P2 by BUG-078's rationale. Detail below |
 | BUG-091 | **P1** · instrumentation landed 2026-08-17; awaiting one reproduction | app.session / pipeline-wiring | **A single local file is selected, preparation succeeds, and NO PLAYBACK EVER STARTS — the session runs with every audio field exactly 0.0.** Matt, 2026-08-17. Measured on `2026-08-17T17-19-19Z`: 1262 frames over 84 s of render clock, and `playback_time_s` / `track_elapsed_s` / `accumulatedAudioTime` / `bass` / `mid` / `treble` / `pulse_amp01` / `beatPhase01` each hold **exactly one distinct value, 0.0**, for the whole session. Preparation is healthy — stem-cache hit, BeatGrid installed (94.1 BPM, 47 beats), plan built. **The discriminator is a diff against the working local-file session 1.5 h earlier (`16-19-13Z`, same file, same OS build):** the working run logs `WIRING: provider.start INSTANCE` and an AVAudioEngine node tap (`TAP_BUFFER: requested=1024 delivered=4410 → 10 Hz`) and NO process tap; the failed run has an identical preparation sequence with `provider.start` **absent**, an unexplained 8 s gap, and then `TAP: startCapture → createProcessTap` — the SYSTEM-AUDIO path — installed twice. `resetStemPipeline caller=other` has exactly one call site (`handleLocalFileReady`), so that function ran and cleared all three of its guards, then never reached the router start. **Root cause NOT asserted** (BUG-061's rule): the strongest candidate is the `catch` around `audioRouter.start(mode:.localFilePlayback)`, which logs to `os_log` only and calls `endSession()` → `currentSource = nil` → `startAudio()`'s LF.4 guard misses → the tap is installed and `stopInternal()` tears the provider down. **Unconfirmable from the artifacts: the app's `lfLogger` output is not retained** (`log show --predicate 'subsystem == "com.phosphene.app"'` over the window returns zero lines), which is itself the reason an 84 s silent session left no trace of its cause. Instrumentation for exactly that is now in (see below). Detail below |
@@ -1198,6 +1199,58 @@ Run it *during* the beachball, before force-quitting. Without a blocked stack th
 **Note.** Signal health was `critical` (−24 dBFS) for the session's first ~50 s before reaching green; unlikely to be related but recorded because the session is otherwise the only artifact.
 
 ---
+
+### BUG-130 — a clock tick racing teardown killed the process (2026-09-11)
+
+**Severity:** P1 — process death, on the path all development runs on. **Introduced and fixed in the
+same session; it reached `main` in between.**
+
+#### How it surfaced
+
+Two consecutive full engine-suite runs died with no completion line, during the
+`LocalFilePlaybackProvider` churn tests — the suite built for exactly this class (BUG-021 / BUG-059 /
+BUG-078). The stack names the culprit without ambiguity:
+
+```
+PlayheadAnalysisClock.tick → the position closure from make(url:player:deliver:)
+  → AVAudioNode.lastRenderTime → AVAE_CheckNodeHasEngine
+  → 'required condition is false: _engine != nil'
+```
+
+#### Root cause
+
+`stop()` was written as *"idempotent, non-blocking"* — and the comment even claimed that was a virtue,
+that it *"never waits on the clock queue the way a teardown that blocked would."* That reasoning was
+backwards. `cancel()` stops future handlers; a handler already running continues, and it holds a weak
+reference to a player whose engine `teardownAVFoundation` is about to release.
+
+#### Fix
+
+`queue.sync { }` after `cancel()`. The clock queue is serial, so an empty block running on it proves
+the in-flight handler has returned. It does **not** reintroduce BUG-021's ABBA: the clock queue never
+takes the provider's lock and never calls into AVFoundation teardown, so nothing it does can block on
+the thread calling `stop()`. The wait is bounded by one tick — a memcpy, or at worst one 1-second
+block decode.
+
+`deinit` keeps the bare `cancel()` deliberately: it can be reached on any thread including the clock
+queue, where `queue.sync` would deadlock.
+
+#### ★ Why the tests did not catch it before it shipped
+
+Three full-suite runs were green across BUG087.4, BUG087.5 and PR.24. It is a race, and the window is
+one tick against a teardown. **The lesson is not "run the suite more" — it is that a new
+real-time-ish loop touching AVFoundation objects owned by another lifecycle needs a teardown-ordering
+argument written down at review time, not a green suite.** The provider already had three such
+arguments (BUG-021, BUG-059, BUG-078); the clock was added without one, and the comment asserting
+non-blocking teardown was safe is where that gap is visible in hindsight.
+
+#### Verification criteria
+
+- Automated: the churn suites (`SessionLifecycleChurn`, `LocalFilePlaybackStartRace`,
+  `PlayheadAnalysisClock`) run repeatedly without the exception. Measured 5/5 clean after the fix,
+  against 2/2 full-suite deaths before it.
+- Automated: the full engine suite completes and prints a run line at all — the crash produced no
+  verdict, which is itself the signature.
 
 ### BUG-129 — `chain_health.json` reports `peakDBFS` exactly 0, and the verdict stays `clean` (2026-09-11)
 
