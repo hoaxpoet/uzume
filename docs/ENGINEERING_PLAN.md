@@ -1396,7 +1396,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
-### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ automated gate green, live M7 outstanding (2026-09-11)
+### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ M7 PASSED, BUG-130 RESOLVED (2026-09-12, Matt: *"silence pauses correctly now"*)
 
 `PlayheadAnalysisClock.tick()` delivers a tick's worth of zeros when the playhead is not moving —
 paused (no render time) or stopped (smoothed position not advancing). Before, every guard returned

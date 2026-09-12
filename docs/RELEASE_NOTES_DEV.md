@@ -10,6 +10,34 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-12-203000] BUG130.1 M7 PASSED — and silence turns out not to be one look
+
+Matt, on the canonical build from `a376f875`: *"silence pauses correctly now."* Session
+`2026-09-12T20-19-59Z`, Alfvén, one 34.1 s stop: `bass` decays 0.0558 → 0.0022 in **0.25 s**,
+`near_silent01` fires at +0.25 s and holds **1.0 for all 2046 frames**, the floor sits at exactly
+`0.000000` on all three bands for 1646 frames, and resume returns real audio **within one frame**.
+The elapsed clock advanced **1.11 s** and then flat-lined — the 1.5 s flush budget, inside its
+documented ceiling, measured rather than assumed. BUG-130 RESOLVED.
+
+★ **The frozen run is still in the capture, and that is the fix working.** 1646 identical frames,
+the same shape as the defect's 1617, at the opposite value. Frozen at `0.000000` is the correct
+reading of stopped playback; frozen at `0.27158` was the bug. A future search for constant runs will
+find one here — the value is the discriminator, not the run.
+
+★ **And the first thing the fix revealed was a design question, not a defect.** Matt, watching it
+live: *"motion is continuous despite pausing, but the visual gets less complex when the sound is
+paused."* That is Alfvén being a driven MHD simulation — `alf_force` scales entirely by `p.drive`,
+so at zero energy the stirring stops injecting structure while the field it holds keeps advecting.
+It coasts. His call: *"coasting is right"*, and the general rule — ***"silence will read as different
+things depending on the preset's design."*** A hard freeze on a fluid sim reads as a dropped frame,
+not as quiet; a particle preset may want the opposite. Recorded in
+`docs/PRESET_SESSION_CHECKLIST.md` so a future session does not file coasting as a bug.
+
+Worth noting what this means for every silence behaviour recorded on the local-file path before
+today: the feature vector never reached silence there, so none of it was ever actually exercised.
+
+---
+
 ### [dev-2026-09-11-214733] BUG130.1 — a stopped local file is silence again
 
 Matt, correcting my reading of his Alfvén M7: *"I stopped and started playback of a local file a

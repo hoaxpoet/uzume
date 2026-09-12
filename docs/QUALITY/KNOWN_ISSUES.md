@@ -99,7 +99,7 @@ reads" are not reads — see the entry.)*
 ### BUG-130 — Local-file stop/pause freezes the feature vector instead of decaying to silence (2026-09-11)
 
 **Severity:** P1 · **Domain tag:** `audio.pipeline` · **Failure class:** `pipeline-wiring`
-**Status:** Resolved — automated gate green, live M7 outstanding
+**Status:** **RESOLVED — live M7 PASSED 2026-09-12** (Matt: *"silence pauses correctly now"*)
 **Resolved:** BUG130.1
 
 **Reported by Matt**, correcting my misreading of his M7: *"Audio did not play continuously
@@ -137,10 +137,10 @@ which I misdiagnosed twice: first as a dead tap, then as "the engine never saw s
 continuously". `SIGNAL_HEALTH` showed no silence because analysis had **stopped**, not because audio
 was playing. Matt's correction located it; I had the evidence and drew the wrong conclusion from it.
 
-**Does NOT block ALFVEN.CERT.** Alfvén's own gates are green and its silence gate is correct in the
-harness from both a fresh seed and an energised field (ALFVEN.3h/.3i). It simply cannot be exercised
-live on the local-file path until this is fixed, so Alfvén's silence state is recorded as
-**unvalidated**, not working.
+**Did NOT block ALFVEN.CERT.** Alfvén's own gates were green and its silence gate correct in the
+harness from both a fresh seed and an energised field (ALFVEN.3h/.3i); it simply could not be
+exercised live on the local-file path until this was fixed. ✅ **Now validated live** — see the M7
+below; the "unvalidated" record this paragraph created is closed.
 
 **Suggested fix.** Clear or decay the published `FeatureVector` on the stop/pause path, the
 complementary write CLAUDE.md prescribes. Worth checking the streaming path for the same gap.
@@ -185,8 +185,33 @@ that resume returns real audio.
 **Streaming path checked, and it does not have this gap.** Its process tap keeps delivering buffers
 whatever the transport is doing, so stopped streaming audio arrives as actual zeros already.
 
-**Live M7 outstanding.** Stop and start a local file mid-session and confirm the visuals settle to
-their silence state and recover on resume.
+**Live M7 — PASSED 2026-09-12.** Matt, on the canonical build from `a376f875`: *"silence pauses
+correctly now."* Session `2026-09-12T20-19-59Z`, preset Alfvén, one 34.1 s stop (frames 3458–5503):
+
+| measured | |
+|---|---|
+| decay | `bass` 0.0558 → 0.0022 in **0.25 s**, → 0.00001 by 0.65 s — the band smoothers' own curve |
+| `near_silent01` | fires at +0.25 s and holds **1.0 for all 2046 frames** of the stop (it was 0 across all 6088 frames of the defect capture) |
+| floor | 1646 frames deep in the stop at exactly **0.000000** on all three bands, one distinct value |
+| elapsed clock | advanced **1.11 s**, then flat at 59.0095 for the remaining 33 s — the 1.5 s flush budget, **inside** its documented ceiling |
+| resume | `bass` back to 0.035 within **one frame** (0.03 s), `near_silent01` → 0 immediately — no dead quarter-second |
+
+★ **The frozen run is still there, and that is the fix working.** 1646 identical frames during the
+stop — the same shape as the defect's 1617, at the opposite value. Frozen at `0.000000` is the
+correct reading of stopped playback; frozen at `0.27158` was the bug. Anything scanning this capture
+for constant runs will find one; the value is what distinguishes them.
+
+`chain_health` reads `clean` over `peakDBFS: 0` — that is BUG-129, so the verdict is weakly
+supported here, per its own entry.
+
+**Alfvén's silence state: validated, and it COASTS rather than freezes.** Matt, seeing it live:
+*"motion is continuous despite pausing, but the visual gets less complex when the sound is paused"* —
+then, on what that should be: *"coasting is right."* Alfvén is a driven MHD simulation; `alf_force`
+scales entirely by `p.drive`, so at zero energy the stirring force stops injecting structure while
+the field it already holds keeps advecting and diffusing. Losing complexity while staying in motion
+is that preset's honest response to losing its drive, and a hard freeze on a fluid sim would read as
+a dropped frame rather than as quiet. **Silence is not one look** — Matt: *"silence will read as
+different things depending on the preset's design."* See `docs/PRESET_SESSION_CHECKLIST.md` §Silence.
 
 ---
 
