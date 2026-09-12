@@ -1396,6 +1396,34 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ automated gate green, live M7 outstanding (2026-09-11)
+
+`PlayheadAnalysisClock.tick()` delivers a tick's worth of zeros when the playhead is not moving —
+paused (no render time) or stopped (smoothed position not advancing). Before, every guard returned
+and, with the tap retired at BUG087.5, the last `FeatureVector` re-published indefinitely: 1617
+frames of byte-identical bands in session `2026-09-11T21-00-42Z` while playback was stopped, on
+every preset.
+
+★ **The fix belongs at the input, not at the publisher.** Clearing the published vector on the
+pause path would create a second definition of silence that has to be kept in step with the chain's
+own; feeding zeros in at the top of the funnel means the existing AGC, band smoothers and
+`nearSilent01` produce silence here exactly as they do for real musical silence on streaming.
+
+The silence is bounded at 1.5 s: `MIRPipeline.elapsedSeconds` accumulates analysis `dt` and the live
+drift tracker indexes the cached `BeatGrid` by it, so unbounded silence would walk the grid forward
+by the whole pause. Bounded, a pause costs ≤ 1.5 s of grid phase and what stays frozen afterwards is
+frozen at silence. The zero-cost version needs the analysis callback to carry "no playhead" — a
+change to the contract shared with `SystemAudioCapture`, named as the upgrade path in the code.
+
+A stall also resets `PlaybackClockSmoother` and re-seeds the cursor (otherwise the smoother's 0.25 s
+dead-reckon overshoot turns a resume into another quarter-second of silence), and the seeding tick
+delivers silence rather than returning. Gate: `PlayheadAnalysisClockTests` steps `tick()` through
+playing → stopped → paused → resumed. Streaming is unaffected — its tap already delivers real zeros.
+`LoopingFileReader` moved to its own file: this increment plus BUG-131's teardown barrier, landing
+in the same file minutes apart, crossed the 400-line lint budget together. Nothing moved but the
+type. No renderer, shader, preset or `FeatureVector` change; the render capability registry is
+unchanged.
+
 ### Increment DOC.12 — scheduled documentation rotation ✅ (2026-09-11)
 
 The UTC DOC.6 boundary fired while PR #222 was being reconciled with `main`. The deterministic

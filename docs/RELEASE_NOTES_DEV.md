@@ -10,6 +10,54 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-11-214733] BUG130.1 — a stopped local file is silence again
+
+Matt, correcting my reading of his Alfvén M7: *"I stopped and started playback of a local file a
+couple times during the session and had silence for more than 20 seconds."* The engine did not see
+any of it. With the tap retired (BUG087.5) `PlayheadAnalysisClock` is the only analysis source on the
+local-file path, and every one of its guards **returned** when the playhead stopped — so the last
+`FeatureVector` re-published forever. Session `2026-09-11T21-00-42Z`: 1617 frames (26.9 s) of
+byte-identical `bass/mid/treble` at `0.27158/0.02265/0.00522`, `near_silent01` zero throughout, while
+`playback_time_s` moved 0.01 s. Blast radius was **every preset**, not Alfvén: stopped playback was
+indistinguishable from playing, which is exactly the symptom Matt reported three times.
+
+★ **Fix the input, not the publisher.** The obvious fix — clear or decay the published feature
+vector on the pause path — adds a second, parallel definition of what silence looks like, one that
+has to be kept in step with the chain's own. Feeding a tick's worth of **zeros** in at the top of the
+funnel instead means silence is produced by the same AGC, the same band smoothers and the same
+`nearSilent01` that produce it for real musical silence on the streaming path. Nothing downstream
+knows the transport stopped, and nothing has to.
+
+The silence is **bounded at 1.5 s**, and the reason is the one thing feeding zeros does cost:
+`MIRPipeline.elapsedSeconds` accumulates each analysis frame's `dt`, and the live drift tracker
+indexes the cached `BeatGrid` by it. Unbounded, a 27 s pause would walk the grid 27 s forward;
+bounded, it costs ≤ 1.5 s of phase and the tracker recovers it. 1.5 s is well past the FFT window
+and the band smoothers, so what stays frozen after the flush is frozen at silence — the correct
+value. Zero cost would need the analysis callback to carry "this frame has no playhead", which
+changes the four-argument contract shared with `SystemAudioCapture`; that upgrade path is named in
+the code.
+
+Two other things fell out of doing it in `tick()`. A stall now also resets `PlaybackClockSmoother` and
+re-seeds the cursor — the smoother is entitled to dead reckon 0.25 s past the last distinct clock
+value, and left sitting there a resume would read as a further quarter-second of silence while the
+playhead caught up. And the cursor-seeding tick delivers silence rather than returning: no audio has
+passed the playhead at a seed, and it keeps the cadence flat while a stall alternates seed → stall.
+The same re-seed incidentally fixes a backward seek larger than the smoother's band, which used to
+deliver nothing at all until playback caught back up to the stale cursor.
+
+Streaming was checked and does not have the gap: its process tap keeps delivering buffers whatever
+the transport does, so a stopped stream already arrives as real zeros.
+
+`LoopingFileReader` now has its own file — this fix and BUG-131's teardown barrier landed in
+`PlayheadAnalysisClock.swift` minutes apart and crossed the 400-line budget together; neither did
+alone. Nothing moved but the type.
+
+Gate: `PlayheadAnalysisClockTests` drives `tick()` directly through playing → stopped → paused →
+resumed. **Live M7 outstanding** — Alfvén's silence state stays recorded as unvalidated until Matt
+stops a local file mid-session and sees the visuals settle.
+
+---
+
 ### [dev-2026-09-11-223000] Nine stale plan rows closed, one that was not stale, and a diagnostic defect
 
 Matt: *"WL.4 is stale. Witchlight is tuned and certified."* Correct — and it was **eight** Witchlight
