@@ -48,6 +48,10 @@ deliver nothing at all until playback caught back up to the stale cursor.
 Streaming was checked and does not have the gap: its process tap keeps delivering buffers whatever
 the transport does, so a stopped stream already arrives as real zeros.
 
+`LoopingFileReader` now has its own file — this fix and BUG-131's teardown barrier landed in
+`PlayheadAnalysisClock.swift` minutes apart and crossed the 400-line budget together; neither did
+alone. Nothing moved but the type.
+
 Gate: `PlayheadAnalysisClockTests` drives `tick()` directly through playing → stopped → paused →
 resumed. **Live M7 outstanding** — Alfvén's silence state stays recorded as unvalidated until Matt
 stops a local file mid-session and sees the visuals settle.

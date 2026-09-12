@@ -1419,7 +1419,10 @@ A stall also resets `PlaybackClockSmoother` and re-seeds the cursor (otherwise t
 dead-reckon overshoot turns a resume into another quarter-second of silence), and the seeding tick
 delivers silence rather than returning. Gate: `PlayheadAnalysisClockTests` steps `tick()` through
 playing → stopped → paused → resumed. Streaming is unaffected — its tap already delivers real zeros.
-No renderer, shader, preset or `FeatureVector` change; the render capability registry is unchanged.
+`LoopingFileReader` moved to its own file: this increment plus BUG-131's teardown barrier, landing
+in the same file minutes apart, crossed the 400-line lint budget together. Nothing moved but the
+type. No renderer, shader, preset or `FeatureVector` change; the render capability registry is
+unchanged.
 
 ### Increment DOC.12 — scheduled documentation rotation ✅ (2026-09-11)
 
