@@ -302,7 +302,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 |---|---|---|
 | **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | ✅ **PR.18 — CERTIFIED 2026-09-09, the 22nd.** Matt: *"looks great. looks ready to certify."* Sync half addressed (14 routes, BUG-124); fidelity half built (silk material, strand irregularity, node glints, atmosphere, wave displacement, catenary scallop). Rubric 4/15 → 8/15; cost 6.6 → ~9.8 ms, inside budget. Reference set recurated (12 images). Open items listed under PR.18 step 4. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
-| **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ✅ **M7 PASSED 2026-09-14 (PR.25 → PR.27)** — Matt: *"Looks much better. The downbeats on The Suburbs and Rococo read as real impacts... Music sync feels tighter overall."* Strike moved to the cached beat grid (26 % on-beat → 100 %); metric accent gave it a 19.7× dynamic range; the X-seam `min()` crease fixed. **Not yet certified** — reference images are gone (D-211) so the D-181 check cannot run. Residual sync on two tracks is **BUG-132**, engine-side and parked. |
+| **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ✅ **M7 PASSED 2026-09-14 (PR.25 → PR.27)** — Matt: *"Looks much better. The downbeats on The Suburbs and Rococo read as real impacts... Music sync feels tighter overall."* Strike moved to the cached beat grid (26 % on-beat → 100 %); metric accent gave it a 19.7× dynamic range; the X-seam `min()` crease fixed. **Not yet certified** — reference images are gone (D-211) so the D-181 check cannot run. Residual sync on two tracks is **BUG-134**, engine-side and parked. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | 🔨 **PR.19, code complete — M7 owed.** Five measured mechanisms fixed: linear-bin→angle (2 % of the circle carried 27 % of the energy), a band pinned at its floor, 0.60× spatial noise, level-dependence, zero declared routes. Nine routes now declared. No cost increase. Reference set is still an unfilled template. |
 | **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
 | **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
@@ -386,12 +386,12 @@ feel much too active... why are there seam lines forming an X?"*
 the original — all three `PresetRegression` goldens and the `FeedbackPathHarnessTemplate` golden pass
 at their **unchanged pre-PR.25 values**. The visible change exists only where there is a real beat.
 
-**Escalated, not fixed: BUG-132.** `beat_phase01` advances at 163.3 BPM against an installed grid of
+**Escalated, not fixed: BUG-134.** `beat_phase01` advances at 163.3 BPM against an installed grid of
 154.311 on *Ready to Start* (+5.8 %), and on *Modern Man* the rate is right but the phase shows no
 lock to the audio. Engine-side, BeatGrid/drift-tracker, parked under D-206. Membrane consumes whatever
 phase it is handed correctly.
 
-**Left alone on Matt's call: BUG-133.** Whether the grid's bar position is the true musical downbeat
+**Left alone on Matt's call: BUG-135.** Whether the grid's bar position is the true musical downbeat
 cannot be determined from the recorded features — `bassDev` is the only signal with separation and it
 cannot tell beat 1 from beat 3; `harmonic_flux`, `spectral_surge` and `spectralFlux` disagree with it
 and each other across a ~2 % spread. Automated cold-start downbeat derivation is retired (Matt's

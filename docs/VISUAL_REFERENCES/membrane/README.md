@@ -39,8 +39,8 @@
 > below describes a failure mode, not a licence to redesign the palette — it was read as one, and the
 > result was *"why did you eliminate the rainbow background and replace it with a drab-colored one?"*
 >
-> **Known-open, both engine-side, neither a preset defect:** BUG-132 (`beatPhase01` running +5.8 %
-> fast against its own installed grid on some tracks) and BUG-133 (bar position cannot be confirmed
+> **Known-open, both engine-side, neither a preset defect:** BUG-134 (`beatPhase01` running +5.8 %
+> fast against its own installed grid on some tracks) and BUG-135 (bar position cannot be confirmed
 > to be the true downbeat; Matt's call is to leave it).
 >
 > **Current musical role (PR.25, unchanged through PR.27):** *the surface is the drumhead — a bass-heavy strike lands
