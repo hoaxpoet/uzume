@@ -126,17 +126,50 @@ extension VisualizerEngine {
 
             // Pre-load the BeatGrid for the first planned track so Spectral Cartograph
             // shows "PLANNED · UNLOCKED" immediately after plan-build. DSP.3.2.
+            //
+            // ⚠ **Only while nothing is playing (BUG-132).** This pre-fire primes the live
+            // pipeline with the plan's FIRST track — which is what you want before a session
+            // starts and actively wrong once one has. A plan rebuilt behind a playing session
+            // decides what plays NEXT; it must not touch the grid the current track is running on.
+            //
+            // Measured on session `2026-09-14T13-49-57Z`: five of nine rebuilds installed track
+            // 1's 164.4 BPM grid over a different playing track, and `grid_bpm` stayed wrong
+            // until the next track change — 13,190 frames inside a 175.0 BPM track and 13,928
+            // inside a 108.0 BPM track in 3/4. The stem series was clobbered with it. Harmless
+            // for years because the plan was built once; PREP.2 made the rebuild happen once per
+            // prepared track, which turned a rare race into every local session with an early
+            // start. A wrong tempo grid does not stutter, so no felt review had caught it.
+            let isPlaying = !Self.shouldPreFirePlan(sessionState: sessionManager.state)
             let firstTrackTitle = plan.tracks.first?.track.title ?? "<none>"
-            let aboutToPreFire = plan.tracks.first?.track != nil
+            let aboutToPreFire = plan.tracks.first?.track != nil && !isPlaying
             logWiringBuildPlanDone(firstTrackTitle: firstTrackTitle, aboutToPreFire: aboutToPreFire)
 
-            if let firstTrack = plan.tracks.first?.track {
+            if let firstTrack = plan.tracks.first?.track, !isPlaying {
                 resetStemPipeline(for: firstTrack, caller: .preFire)
+            } else if isPlaying {
+                logger.info("Orchestrator: plan rebuilt while playing — pre-fire skipped (BUG-132)")
             }
         } catch {
             logger.error("Orchestrator: plan failed — \(error)")
             logWiringBuildPlanFailed(error)
         }
+    }
+
+    // MARK: - Pre-fire policy (BUG-132)
+
+    /// Whether a freshly-built plan may prime the live pipeline with its FIRST track.
+    ///
+    /// The pre-fire exists so Spectral Cartograph can show "PLANNED · UNLOCKED" the moment a plan
+    /// is built (DSP.3.2), which is a pre-playback concern. Once a session is `.playing`, the live
+    /// pipeline belongs to the track being heard, and a rebuild — which decides what plays NEXT —
+    /// must not reach into it. See BUG-132 for the measurement: five of nine rebuilds in one
+    /// session installed the first track's grid over a different playing track.
+    ///
+    /// A free function of the state so it is testable without a Metal device, a session manager
+    /// and a preset loader — the app-layer wire is asserted separately, because a correct policy
+    /// with no call site is BUG-015 all over again.
+    static func shouldPreFirePlan(sessionState: SessionState) -> Bool {
+        sessionState != .playing
     }
 
     // MARK: - Plan Queries
