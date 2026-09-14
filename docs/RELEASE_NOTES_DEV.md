@@ -10,6 +10,40 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-15-010000] BUG133.2 — near-tie sampling: the ranking's precision exceeded its accuracy
+
+Matt, after BUG133.1 failed its live check: *"do the near-tie sampling."*
+
+The planner took `max(by:)` over scores whose whole eligible catalog spans **0.612 → 0.459**, with
+the **top twelve inside 0.05**. A 0.003 gap between Cytokinesis (0.612) and Dragon Bloom (0.611) was
+deciding every segment. `selectPreset` now samples **uniformly among presets within 0.05 of the
+best** — uniform on purpose, because inside that band the differences are precisely what is being
+called noise, and weighting by them would re-import the precision being discarded.
+
+**Measured on Matt's own cached profile** (*The Suburbs*, production scorer): planner first pick over
+12 seeds, **4 distinct → 10 distinct**. Cytokinesis 5/12 → 3/12.
+
+Three properties keep it safe rather than merely different: it is **deterministic** on
+`(seed, trackIndex, elapsedSessionTime)` so plan extension stays byte-identical (PREP.2 extends live
+plans and `PartialPlanTests` pins it); **`seed == 0` stays pure argmax** so the unseeded goldens
+still pin the scorer; and it is **a band, not a lottery** — a preset 0.15 below the best still never
+plays, because that gap is a real preference.
+
+★ **The first regression test passed with the fix removed.** Its fixture presets sat within 0.016 of
+each other — inside the scorer's own ±0.02 seeded noise — so the noise already shuffled them and the
+test proved nothing. The fixture now carries `MidBand`, placed ~0.04 below the best from *measured*
+scores: outside the noise, inside the band. 0 of 24 seeds without sampling, reliably with it.
+
+**That is twice in one session that an existing source of variety made a new gate look green** —
+BUG132.1's wire test matched its own declaration, and this one matched noise. The check that caught
+both is the same and costs one minute: remove the fix, re-run, confirm red.
+
+`SessionPlanner+Selection.swift` split out (400-line budget); Module Map row added.
+
+Live check owed. Baselines: 10 distinct in 59 selections, 13 in 50.
+
+---
+
 ### [dev-2026-09-14-233000] BUG133.1 correction — a filtered test run is not evidence about the suite
 
 The BUG133.1 entry below claims *"nothing in the existing suite caught the change — 45

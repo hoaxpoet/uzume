@@ -1410,6 +1410,24 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ (2026-09-14, Matt: *"do the near-tie sampling"*, live check owed)
+
+BUG133.1 (per-preset fatigue) was necessary and failed its live check — Matt saw the same presets.
+Measured with the production scorer on his own cached profiles, the eligible catalog spans
+0.612 → 0.459 with the **top twelve inside 0.05**, so `max(by:)` was deciding segments on gaps of
+0.003 and fourteen certified presets were unreachable at any cooldown setting. `selectPreset` now
+samples uniformly within 0.05 of the best. First pick over 12 seeds: **4 distinct → 10**.
+
+Deterministic on `(seed, trackIndex, elapsedSessionTime)` so PREP.2's plan extension stays
+byte-identical; `seed == 0` remains argmax so the unseeded goldens still pin the scorer; and it is a
+band, not a lottery — 0.15 below the best still never plays.
+
+★ The first regression test passed with the fix removed (fixture inside the ±0.02 noise); rebuilt
+around a preset measured ~0.04 below the best. Twice this session a pre-existing source of variety
+made a new gate look green — remove the fix and re-run, every time.
+`SessionPlanner+Selection.swift` split out for the 400-line budget. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
+
 ### BUG133.1 — preset fatigue cools the preset, not the family ✅ (2026-09-14, Matt: *"cool down the preset, not the family"*, live check owed)
 
 Both of `PresetScorer`'s anti-repetition levers keyed on the family, so a family was one rotation

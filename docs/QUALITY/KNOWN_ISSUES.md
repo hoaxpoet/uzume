@@ -47,7 +47,7 @@ reads" are not reads — see the entry.)*
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
 | BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
-| BUG-133 | P2 · **STILL OPEN** — BUG133.1 landed and was **falsified live**; the binding cause is a flat, near-constant ranking, not the cooldown | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
+| BUG-133 | P2 · **RESOLVED 2026-09-14 (BUG133.2)** — near-tie sampling; live check owed | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -574,12 +574,41 @@ into one envelope. A scorer that spends **25 % of its weight** on stem selectivi
 dimension the catalog deliberately does not vary on. Not a metadata gap — a mismatch between the
 scorer's model and the audio doctrine.
 
-**Remaining measurement for whatever comes next:** the seeded noise is **±0.02**
-(`SessionPlanner.seededNoise`) against a top-twelve spread of 0.05 and a full-catalog spread of
-0.153 — which is why the 12-seed first-pick histogram only ever yields four distinct presets. The
-ranking's precision (three decimal places) far exceeds its accuracy; a 0.003 gap between Cytokinesis
-and Dragon Bloom is not a musical preference. **Awaiting Matt's direction** — recorded rather than
-chosen.
+**The measurement the fix is built on:** the seeded noise is **±0.02** (`SessionPlanner.seededNoise`)
+against a top-twelve spread of 0.05 and a full-catalog spread of 0.153 — which is why the 12-seed
+first-pick histogram only ever yielded four distinct presets. The ranking's precision (three decimal
+places) far exceeds its accuracy; a 0.003 gap between Cytokinesis and Dragon Bloom is not a musical
+preference.
+
+#### Fix (BUG133.2) — Matt's call: near-tie sampling
+
+`selectPreset` now picks **uniformly among the presets within `nearTieBandWidth` (0.05) of the best
+score** instead of taking `max(by:)`. Uniform on purpose: inside the band the differences are exactly
+what is being called noise, so weighting by them would re-import the precision being discarded.
+
+- **Deterministic**, keyed on `(seed, trackIndex, elapsedSessionTime, candidate ids)` — a plan grown
+  3 → 6 → 12 stays byte-identical to one planned at once, which `PartialPlanTests` pins and PREP.2
+  depends on every time the walk extends a live plan.
+- **`seed == 0` stays pure argmax**, so the unseeded golden fixtures still pin scorer behaviour
+  rather than a sample. That also means the goldens do **not** cover this path.
+- **A band, not a lottery.** A preset 0.15 below the best still never plays — that gap is a real
+  preference; a band wide enough to admit it would replace the planner with a shuffle.
+
+**Measured effect, production scorer on Matt's own cached profile** (*The Suburbs*): planner first
+pick over 12 seeds went from **4 distinct presets** (Cytokinesis 5, Membrane 3, Cymatic 2, Dragon
+Bloom 2) to **10 distinct** (Cytokinesis 3, then Nacre, Membrane, Cymatic, Glaze, Floret, Fractal
+Tree, Ferrofluid Ocean, Plasma, Dragon Bloom one each).
+
+★ **The first version of the regression test passed with the fix removed.** Its fixture presets all
+sat within 0.016 of each other — inside the scorer's own ±0.02 noise — so the pre-existing noise
+already shuffled them and the test proved nothing. Caught by reverting. The fixture now carries
+`MidBand`, deliberately placed ~0.04 below the best from measured scores: outside the noise, inside
+the band. It appears in 0 of 24 seeds without sampling and reliably with it. **Second time in this
+session a source of variety made a gate look green** — the check is to remove the fix and re-run,
+every time.
+
+**Live check owed:** a multi-track session counting distinct presets. Baselines to beat: 10 distinct
+in 59 selections and 13 in 50.
 
 ---
 
