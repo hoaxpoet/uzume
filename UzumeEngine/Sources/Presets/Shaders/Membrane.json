@@ -30,5 +30,5 @@
     { "route": "impact_point_drift_h",  "primitive": "arousal",      "kind": "continuous" },
     { "route": "impact_point_drift_v",  "primitive": "valence",      "kind": "continuous" }
   ],
-  "certified": false
+  "certified": true
 }

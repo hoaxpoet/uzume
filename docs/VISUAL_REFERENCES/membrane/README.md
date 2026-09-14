@@ -67,10 +67,10 @@ and the traits that must be **actively disregarded**.
 - [x] **Graceful silence.** Non-black, non-constant, bounded — accumulator meanLuma 0.196 at silence,
       no strikes. Matches the coasting design stated above.
 - [x] **Performance.** `feedback` is the cheapest pass in the engine; not at risk at 1080p.
-- [ ] **Matt-approved reference frame match.** M7 **passed** 2026-09-14 (*"Looks much better... read as
-      real impacts... sync feels tighter overall"*), but that was a **live** review, not a
-      frame-vs-reference comparison against this folder — the folder did not exist. **This box needs
-      one `Scripts/compare_render.sh membrane` pass and Matt's sign-off on the sheet.**
+- [x] **Matt-approved reference frame match.** ✅ Two approvals, both recorded. Live M7 2026-09-14:
+      *"Looks much better... read as real impacts... Music sync feels tighter overall."* Then the
+      comparison sheet against THIS folder, same day: *"re: Matt-approved reference frame match -
+      approved."* **7/7 mandatory.**
 
 ## Expected traits (per §12.2 — at least 2 of 4)
 
@@ -172,9 +172,12 @@ Anyone tempted to "fix" this by calming the field should read `06_anti_desaturat
 
 ## Open
 
-- **The Matt-approved frame match is the one unticked mandatory box.** Run
-  `Scripts/compare_render.sh membrane`, read the sheet, write the per-trait verdict table (D-181),
-  and get sign-off. That is what remains between Membrane and certification.
+- **✅ CERTIFIED 2026-09-14 (PR.29) — the 25th.** 7/7 mandatory, 2/4 expected, 1/4 preferred.
+  Flash-safety measured for real rather than skipped: under a worst-case 4.5 accents/s beat train the
+  single-pass gate reports **MEASURED (Δ0.109 — the largest response of any preset in that set),
+  0.00 flashes/s, SAFE**. Membrane is deliberately NOT on the `multiPassMeasured` skip list: its
+  strike is computed in the fragment from the FeatureVector, so this harness genuinely reaches it.
+- Residual `01` gap (no negative space) is a standing constraint, not a defect — see the box above.
 - Known-open and **not preset defects**: **BUG-134** (`beatPhase01` running +5.8 % fast against its own
   installed grid on some tracks) and **BUG-135** (bar position cannot be confirmed to be the true
   downbeat; Matt's call is to leave it). Both cap how tight the sync can read on affected tracks.
