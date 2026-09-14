@@ -1420,9 +1420,12 @@ member 7–8 times each — frequency set by family size, not fit. `fatigueMulti
 the rest of a family becomes reachable one segment later.
 
 ★ The A/B reproduces the complaint as a unit test — four consecutive picks from a six-member family
-return ONE distinct preset on the shipped code and four on the fix — and **none of the existing 45
-scorer/planner tests could distinguish the two scopings**, which is how it survived to a live
-session. Cooldown windows unchanged and flagged for re-check rather than silently re-tuned. No
+return ONE distinct preset on the shipped code and four on the fix. ⚠ **Correction:** the first
+write-up said no existing test could distinguish the two scopings; that was a `--filter` run that
+never reached `GoldenSessionFixtures`, which fails on exactly this. Its Session A golden — pinned at
+`[VL, Membrane ×4]` — carried a 2026-05-13 comment describing this defect precisely and calling it
+*"correct given the inputs"*. Regenerated to 3 distinct with a trace; B/C/D unchanged. Cooldown
+windows unchanged and flagged for re-check rather than silently re-tuned. No
 renderer, preset or `FeatureVector` change; the render capability registry is unchanged.
 
 ### BUG132.1 — a plan rebuild no longer pre-fires over the playing track ✅ (2026-09-14, live re-check owed)

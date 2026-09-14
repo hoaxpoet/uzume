@@ -10,6 +10,32 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-14-233000] BUG133.1 correction — a filtered test run is not evidence about the suite
+
+The BUG133.1 entry below claims *"nothing in the existing suite caught the change — 45
+scorer/planner tests passed against both scopings."* **That is wrong.** It was measured with
+`--filter "PresetScorer|SessionPlanner"`, and the suite that catches the change is named
+`GoldenSessionFixtures` — the filter never ran it. The full closeout run failed on
+`GoldenSessionTests` "Session A: preset IDs match golden sequence", which pins the planner's output
+sequence exactly.
+
+★ **And that golden contained BUG-133, described accurately, four months before it was filed.** Its
+expectation was `[VL, Membrane, Membrane, Membrane, Membrane]`, and the comment above it (2026-05-13)
+reads: *"Membrane is the only `reaction` preset in the catalog, so once selected it has no
+family-repeat competitor and gets picked across remaining slots… This reveals a real catalog
+clustering symptom… the orchestrator's behavior is correct given the inputs."* Someone saw the
+mechanism, wrote it down, called the behaviour correct, and froze it as the expected output. Matt
+found the same thing from the other end by getting tired of Cytokinesis.
+
+Regenerated to `[VL, VL, Fractal Tree, Fractal Tree, Ferrofluid Ocean]` — 3 distinct, the
+four-in-a-row monopoly gone — with the justification trace the file demands. Sessions B, C and D
+unchanged.
+
+The general lesson is the cheaper one: **run the full suite before asserting what the suite does or
+does not cover.** The filtered run cost nothing and bought a false claim in three documents.
+
+---
+
 ### [dev-2026-09-14-220000] BUG133.1 — the cooldown was rationing the roster by family size
 
 Matt, on a second session in a row: *"still seeing many of the same presets across tracks (getting

@@ -496,9 +496,27 @@ presets. Four tests in `FatigueCooldownScopeTests`; two of them fail on the pre-
 two that pass on both are there to pin what must NOT change (the preset itself is still cooled, and
 its window still expires on schedule).
 
-**Nothing in the existing suite caught the change** — 45 scorer/planner tests passed against both
-scopings, which is why the old behaviour survived to a live session. That absence is the reason
-these tests are written against the family/preset distinction specifically.
+★ **Correction — one existing test DID catch it, and I claimed otherwise.** The first write-up of
+this fix said *"nothing in the existing suite caught the change — 45 scorer/planner tests passed
+against both scopings."* That was measured with `--filter "PresetScorer|SessionPlanner"`, and the
+suite that catches it is named **`GoldenSessionFixtures`**, so the filter never ran it. The full
+closeout run failed on `GoldenSessionTests` "Session A: preset IDs match golden sequence". **A
+filtered test run is not evidence about the suite.**
+
+★ **And that golden had BUG-133 written into it four months before it was filed.** Its expectation
+was `[VL, Membrane, Membrane, Membrane, Membrane]` — 2 distinct presets over 5 tracks — above a
+2026-05-13 comment reading: *"Membrane is the only `reaction` preset in the catalog, so once
+selected it has no family-repeat competitor and gets picked across remaining slots… This reveals a
+real catalog clustering symptom (4 of 12 aesthetic presets share `geometric`); the orchestrator's
+behavior is correct given the inputs."* The symptom was seen, described accurately, judged correct
+and pinned as a golden. It was the inputs that were wrong.
+
+Regenerated to `[VL, VL, Fractal Tree, Fractal Tree, Ferrofluid Ocean]` — **3 distinct, monopoly
+gone** — with the trace the file requires. Sessions B, C and D are unchanged, including *"Session C:
+genre diversity produces ≥3 distinct preset families"*, so the change is narrow to the case the old
+comment flagged. ⚠ Adjacent repeats persist at TRACK granularity and are a different thing: those
+are track-first segments 180 s apart against 60/120/300 s windows, so a preset legitimately recovers
+inside one track.
 
 **Live check owed:** one multi-track local session, counting distinct presets. The pre-fix baseline
 is 10 distinct in 59 selections with Cytokinesis ×14 (`2026-09-14T14-34-41Z`) and 13 in 50
