@@ -131,7 +131,14 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // `manual`, so this flag is NOT certification — the sidecar
                                      // `certified` stays false pending Matt's FTR.5.
     "Gossamer":             false,   // full; M3 fails
-    "Membrane":             false,   // full; M3 fails
+    // PR.29 — CERTIFIED 2026-09-14 (Matt: "re: Matt-approved reference frame match - approved").
+    // Still false on the AUTOMATED gate, and that is correct, not an oversight: M3 counts
+    // >= 3 distinct `mat_*` material call sites in the MSL, and Membrane is a non-PBR
+    // feedback surface with no material calls at all. Its 3-distinct-zones requirement is
+    // met by three independent FBM thickness fields, which the source heuristic cannot see
+    // (the Filigree / Mitosis / Cymatic Resonance precedent — certified with the automated
+    // gate false because the coupling or the material is invisible to a source scan).
+    "Membrane":             false,   // full; M3 N/A — no mat_* calls in a non-PBR feedback surface
     "Cytokinesis":          false,   // lightweight; coupling (energyEnv→pace / centroidEnv→palette /
                                      // hit→glow) is computed CPU-side in MitosisGen2Geometry and reaches
                                      // the fragment via Gen2 uniforms, invisible to the MSL heuristic
@@ -372,7 +379,7 @@ struct FidelityRubricGateTests {
     // ⚠ Verified the reviewed BINARY, not just the session: `ArrivalStep.o` compiled 12:24:46,
     // app built 12:24:50, last run 12:25:06, session log opens 12:25:04 CDT — so the M7 was on
     // the FTR.33 build and not a stale one (the BUG-051 discipline).
-    private static let certifiedPresets: Set<String> = ["Lumen Mosaic", "Ferrofluid Ocean", "Dragon Bloom", "Fata Morgana", "Murmuration", "Nimbus", "Skein", "Nacre", "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Aurora Veil", "Cymatic Resonance", "Volumetric Lithograph", "Meniscus", "Witchlight", "Stave", "Fractal Tree", "Ricercar",
+    private static let certifiedPresets: Set<String> = ["Membrane", "Lumen Mosaic", "Ferrofluid Ocean", "Dragon Bloom", "Fata Morgana", "Murmuration", "Nimbus", "Skein", "Nacre", "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Aurora Veil", "Cymatic Resonance", "Volumetric Lithograph", "Meniscus", "Witchlight", "Stave", "Fractal Tree", "Ricercar",
         // PR.18 (2026-09-09) — the 22nd. Matt's M7 on session `2026-09-09T22-36-18Z`:
         // *"looks great. looks ready to certify"*. 81 s live on the V.8 uplift build, 5414
         // frames, zero drawable failures and zero unpresented.
