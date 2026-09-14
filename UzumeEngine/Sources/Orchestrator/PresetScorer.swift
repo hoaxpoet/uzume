@@ -65,7 +65,8 @@ public struct DefaultPresetScorer: Sendable {
     /// Multiplicative penalty when the candidate shares the same family as the current preset.
     internal static let familyRepeatPenalty: Float = 0.2
 
-    /// Fatigue cooldown windows in seconds, indexed by `FatigueRisk`.
+    /// Fatigue cooldown windows in seconds, indexed by `FatigueRisk`. Applied **per preset**
+    /// since BUG133.1 — see `fatigueMultiplier`.
     internal static let fatigueCooldown: [FatigueRisk: Float] = [
         .low: 60,
         .medium: 120,
@@ -344,13 +345,38 @@ public struct DefaultPresetScorer: Sendable {
         return Self.familyRepeatPenalty
     }
 
-    /// Smoothstep cooldown based on how recently this preset's family was last used.
-    /// Presets without a family (diagnostics) are never cooled down by history.
+    /// Smoothstep cooldown based on how recently **this preset** was last used.
+    ///
+    /// ★ **Per preset, not per family, and that is the whole of BUG-133** (Matt, 2026-09-14:
+    /// *"cool down the preset, not the family"*). Keyed on the family, this made a family behave
+    /// as ONE rotation slot: its highest-scoring member held that slot permanently, and the
+    /// siblings competed with each other for a single turn instead of with the catalog. Measured
+    /// over 59 selections on `2026-09-14T14-34-41Z`: the six-member `particles` family produced
+    /// exactly **one** preset (Cytokinesis ×14 — Nebula, Witchlight, Murmuration, Mitosis and
+    /// Filigree never appeared at all), the nine-member `hypnotic` family produced three of nine,
+    /// and the SINGLETON families produced their one member 7–8 times each. A singleton was a
+    /// guaranteed private slot; a nine-member family hid eight presets. Selection frequency was
+    /// set by family size, not by fit — which is how a preset certified four days earlier had
+    /// never once been chosen.
+    ///
+    /// Adjacency between same-family presets is still handled, by `familyRepeatMultiplier` against
+    /// the CURRENT preset — so two similar looks do not land back to back, while the rest of the
+    /// family stays reachable a segment later. That separation is deliberate: back-to-back
+    /// similarity is a real visual concern, whereas a shared multi-minute cooldown was a
+    /// same-concept penalty in all but name (D-004 family rules were never meant to ration the
+    /// roster).
+    ///
+    /// Diagnostics are exempt as before — they never auto-install, so their history is irrelevant.
+    ///
+    /// ⚠ The cooldown windows (`low` 60 / `medium` 120 / `high` 300 s) were calibrated when this
+    /// was family-scoped and are unchanged here, so the same numbers now gate a narrower thing.
+    /// That is the conservative direction — a preset waits at least as long as it used to — but it
+    /// means they are worth re-checking against a live session rather than assumed still right.
     private func fatigueMultiplier(preset: PresetDescriptor, context: PresetScoringContext) -> Float {
         let cooldown = Self.fatigueCooldown[preset.fatigueRisk] ?? 120
-        guard let family = preset.family else { return 1.0 }
-        // Find the most recent history entry from the same family.
-        guard let entry = context.recentHistory.last(where: { $0.family == family }) else {
+        guard preset.family != nil else { return 1.0 }
+        // Find the most recent history entry for this preset.
+        guard let entry = context.recentHistory.last(where: { $0.presetID == preset.id }) else {
             return 1.0
         }
         let gap = Float(context.elapsedSessionTime - entry.endTime)

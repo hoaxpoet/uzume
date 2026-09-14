@@ -78,7 +78,7 @@ playback chrome retokenized in place — never a parallel `CuratorControlSurface
 behaviour or hierarchy and each needs its own review; DS.1 deliberately does not.
 **DS.2** ✅ 2026-09-01 (D-233), M7 approved. **DS.3** ✅ 2026-09-01 (D-234, D-235) + **DS.3a** (D-236, silence is fatal) + **DS.3b** (D-237, the banner severity split) — both called by Matt at the M7 hard stop; merged as [#188](https://github.com/hoaxpoet/uzume/pull/188) (`45b002ab`).
 **DS.4** design pass 2026-09-02 (`docs/reviews/DS.4/DESIGN.md`, [#189](https://github.com/hoaxpoet/uzume/pull/189)); ✅ **merged 2026-09-02 (D-238)**, M7 approved, as [#190](https://github.com/hoaxpoet/uzume/pull/190) (`6de5b58e`). **DS.4a** ✅ same-day follow-up (D-239) — Matt's live feedback that the preparation-view preference had no reachable control during `.preparing` at all. **DS.5** design pass 2026-09-02 (`docs/reviews/DS.5/DESIGN.md`) + camera-push prototype; ✅ **2026-09-03 (D-240), M7 passed** — two ready experiences over the open cave, one camera push into it, plan preview deleted; the M7 found that Ready's first-audio autodetect had never listened (BUG-112, fixed same day); see the entries below.
-**DS.6** ✅ 2026-09-03 (D-241), **M7 passed** (*"Looks good."*) on `claude/ds6-prompt-execution-bbd3e4`, unpushed — the chrome retokenized in place, gone completely after inactivity and back on mouse / tap / key / track change (Matt's call), Show/Hide track info, the orchestrator pill removed; found and fixed BUG-113 (toasts stretched to the window height). **DS.7** waits on a design pass with Matt: `PerformancePreflight` comes only after its integration point and settings summary model are defined in the app (census §Migration order, step 7).
+**DS.6** ✅ 2026-09-03 (D-241), **M7 passed** (*"Looks good."*) and **merged as [#194](https://github.com/hoaxpoet/uzume/pull/194)** (this read *"unpushed"* for eleven days after the merge) — the chrome retokenized in place, gone completely after inactivity and back on mouse / tap / key / track change (Matt's call), Show/Hide track info, the orchestrator pill removed; found and fixed BUG-113 (toasts stretched to the window height). **DS.7** waits on a design pass with Matt: `PerformancePreflight` comes only after its integration point and settings summary model are defined in the app (census §Migration order, step 7).
 
 ## Phase PREP — Session preparation throughput 🔨 (2026-09-03; D-242)
 
@@ -155,7 +155,7 @@ to beat sync** — `computeBeatGrids` is timed and nothing else.
 **Done-when:** ✅ the figure is reproduced, ✅ every stage is timed (stages sum to 100.0 % of
 per-track wall clock), ⏸ **Matt has the report and picks a direction** — the hard stop.
 
-### Increment PREP.2 — Release, an early start, and a paced walk ✅ code-complete (2026-09-04), pending live validation
+### Increment PREP.2 — Release, an early start, and a paced walk ✅ **LIVE-VALIDATED 2026-09-14** (Matt: *"Looks good overall - no noticeable disruption to the music or visuals"*)
 
 **Matt's pick from PREP.1's options: *"do 1 and 4, pace the walk."*** [D-242] amended accordingly
 (§Amendment — two budgets, and Release is the configuration they are measured in). Option 2 (the
@@ -202,12 +202,26 @@ the whole walk; a real downgrade with an early start. Now driven by a new
 **Done-when:** ✅ engine + app green, lint 0, doc gates green; ✅ `LocalFileEarlyStartTests` (6)
 pins readiness advancing mid-walk, the plan carrying resolved identities mid-walk, a late walk not
 resetting a playing session, pacing off before playback and on after it — three of them fail on the
-pre-PREP.2 code. ⏸ **Live validation outstanding:** one local folder session, started early from the
-Start-now control, confirming the music starts, the first tracks carry their cached grids, and the
-visuals hold while the walk continues behind. That session is also the frame-time measurement §5b
-could not make.
+pre-PREP.2 code. ✅ **Live validation PASSED 2026-09-14** on session `2026-09-14T13-49-57Z` — 13
+local FLACs, cold cache, Release build from `9e0a6041`:
 
-**PREP.3 candidates:** tune `pacingRate` against the live number; the unexplained 23–45 GB at four
+| criterion | result |
+|---|---|
+| Start-now appears on a local session | ✅ **~50 s** to the control (Matt); `startSession→ready (startNow) cacheTrackCount=3` — the three-track threshold, on a path where the control had **never appeared at all** before this increment |
+| music starts and keeps playing | ✅ six tracks played through, `advanceLocalFileQueue EXIT ok=true` at every boundary |
+| early tracks carry their cached grids | ✅ every install `source=preparedCache`, and `STEM_SOURCE: series frames=11192` — the `local:sha256:` identity resolves, so the LFSTEM.1 series is found |
+| visuals hold while the walk runs behind | ✅ **105 `DRAWABLE_LIFECYCLE` heartbeats, `failures=0 unpresented=0` throughout**, and Matt saw no disruption — this is the §5b frame-time measurement PREP.1 could not make offline |
+| plan grows with the walk | ✅ nine rebuilds at `trackCount=13`, `planIdx` advancing 0→5 with the tracks |
+
+⚠ **The same session exposed BUG-132 (P1), which the criteria above could not catch.** Each of those
+nine plan rebuilds pre-fires the plan's FIRST track into the live pipeline: five of them installed
+track 1's 164.4 BPM grid over a different playing track, and `grid_bpm` stayed wrong for ~13,000
+frames at a time — essentially the whole of tracks 3 and 4. Not created by PREP.2 (the pre-fire
+predates it) but **made routine by it**, since the plan now rebuilds once per prepared track. PREP.2
+guarded the neighbouring readiness path against exactly this shape and not this one. A wrong tempo
+grid does not stutter, so a review asked to watch for stutter cannot see it.
+
+**PREP.3 candidates:** **BUG-132 first — it is a P1 this increment made routine.** Then: tune `pacingRate` against the live number; the unexplained 23–45 GB at four
 concurrent workers (PREP.1 §5); and Option 2 if Matt wants *fully prepared* inside 300 s.
 
 **Superseded planning note.** PREP.2 was originally "whichever option Matt picks", with concurrency
@@ -303,7 +317,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | ✅ **PR.18 — CERTIFIED 2026-09-09, the 22nd.** Matt: *"looks great. looks ready to certify."* Sync half addressed (14 routes, BUG-124); fidelity half built (silk material, strand irregularity, node glints, atmosphere, wave displacement, catenary scallop). Rubric 4/15 → 8/15; cost 6.6 → ~9.8 ms, inside budget. Reference set recurated (12 images). Open items listed under PR.18 step 4. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ✅ **M7 PASSED 2026-09-14 (PR.25 → PR.27)** — Matt: *"Looks much better. The downbeats on The Suburbs and Rococo read as real impacts... Music sync feels tighter overall."* Strike moved to the cached beat grid (26 % on-beat → 100 %); metric accent gave it a 19.7× dynamic range; the X-seam `min()` crease fixed. **Not yet certified** — reference images are gone (D-211) so the D-181 check cannot run. Residual sync on two tracks is **BUG-134**, engine-side and parked. |
-| **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | 🔨 **PR.19, code complete — M7 owed.** Five measured mechanisms fixed: linear-bin→angle (2 % of the circle carried 27 % of the energy), a band pinned at its floor, 0.60× spatial noise, level-dependence, zero declared routes. Nine routes now declared. No cost increase. Reference set is still an unfilled template. |
+| **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ✅ **CERTIFIED 2026-09-11, the 24th** (PR.24; the reviewed build carried PR.19/.20/.21, so their review is given). Five measured mechanisms fixed at PR.19: linear-bin→angle (2 % of the circle carried 27 % of the energy), a band pinned at its floor, 0.60× spatial noise, level-dependence, zero declared routes. Nine routes now declared. No cost increase. ⚠ Reference set is still an unfilled template — the one open item. |
 | **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
 | **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
 | **Nacre** | *"Slow down the speed slightly or make it match the tempo of the music. Too fast overall."* | ⏳ **open.** Primary complaint is a constant that is too high; tempo-matching is his *alternative*, not the requirement. |
@@ -1575,6 +1589,67 @@ and think the ball has a personality."* That is the preset working; it is not to
 only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
+
+### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ **LIVE-MEASURED 2026-09-14** — 10 → 16 distinct presets on an identical window (Matt's felt verdict outstanding)
+
+BUG133.1 (per-preset fatigue) was necessary and failed its live check — Matt saw the same presets.
+Measured with the production scorer on his own cached profiles, the eligible catalog spans
+0.612 → 0.459 with the **top twelve inside 0.05**, so `max(by:)` was deciding segments on gaps of
+0.003 and fourteen certified presets were unreachable at any cooldown setting. `selectPreset` now
+samples uniformly within 0.05 of the best. First pick over 12 seeds: **4 distinct → 10**.
+
+Deterministic on `(seed, trackIndex, elapsedSessionTime)` so PREP.2's plan extension stays
+byte-identical; `seed == 0` remains argmax so the unseeded goldens still pin the scorer; and it is a
+band, not a lottery — 0.15 below the best still never plays.
+
+**Live result** (`2026-09-14T15-52-43Z`, same folder, same first 59 selections as the pre-fix
+baseline): distinct **10 → 16**, Cytokinesis **14 → 7**, top-3 share **51 % → 33 %**; Alfvén appeared
+for the first time since certification. Eleven presets still never appear — they score 0.459–0.532
+against a band floor of 0.562, so that is the band as specified, and the next question is the
+scorer's discrimination rather than the sampling.
+
+★ The first regression test passed with the fix removed (fixture inside the ±0.02 noise); rebuilt
+around a preset measured ~0.04 below the best. Twice this session a pre-existing source of variety
+made a new gate look green — remove the fix and re-run, every time.
+`SessionPlanner+Selection.swift` split out for the 400-line budget. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
+
+### BUG133.1 — preset fatigue cools the preset, not the family ✅ (2026-09-14, Matt: *"cool down the preset, not the family"*, live check owed)
+
+Both of `PresetScorer`'s anti-repetition levers keyed on the family, so a family was one rotation
+slot held permanently by its argmax. Measured over 59 selections: `particles` (6 members) produced
+one preset (Cytokinesis ×14), `hypnotic` (9) produced three, and singleton families produced their
+member 7–8 times each — frequency set by family size, not fit. `fatigueMultiplier` now matches on
+`presetID`; `familyRepeatMultiplier` is untouched, so back-to-back similarity is still handled while
+the rest of a family becomes reachable one segment later.
+
+★ The A/B reproduces the complaint as a unit test — four consecutive picks from a six-member family
+return ONE distinct preset on the shipped code and four on the fix. ⚠ **Correction:** the first
+write-up said no existing test could distinguish the two scopings; that was a `--filter` run that
+never reached `GoldenSessionFixtures`, which fails on exactly this. Its Session A golden — pinned at
+`[VL, Membrane ×4]` — carried a 2026-05-13 comment describing this defect precisely and calling it
+*"correct given the inputs"*. Regenerated to 3 distinct with a trace; B/C/D unchanged. Cooldown
+windows unchanged and flagged for re-check rather than silently re-tuned. No
+renderer, preset or `FeatureVector` change; the render capability registry is unchanged.
+
+### BUG132.1 — a plan rebuild no longer pre-fires over the playing track ✅ (2026-09-14, live re-check owed)
+
+`_buildPlan` pre-fired the plan's FIRST track into the live pipeline on every rebuild. Five of nine
+rebuilds in PREP.2's validation session installed track 1's 164.4 BPM grid over a different playing
+track; `grid_bpm` stayed wrong until the next track change (13,190 frames inside a 175.0 BPM track,
+13,928 inside a 108.0 BPM track in 3/4). Now gated on `shouldPreFirePlan(sessionState:) != .playing`
+— every non-playing state still primes, since the DSP.3.2 priming is a pre-playback concern.
+
+Latent for as long as the plan has existed, because the plan was built once. **PREP.2 made it
+routine** by rebuilding once per prepared track.
+
+★ **The gate passed against the reverted guard on its first attempt** — it matched the `static func`
+declaration rather than a call site, i.e. a green gate over dead code (BUG-015's shape). Found only
+by reverting and re-running; it now matches the call over comment-stripped source, red on the
+pre-fix code and green on the fix. Criterion 1 was met in substance, not where written — the named
+`LocalFileEarlyStartTests` is in the engine and `_buildPlan` is in the app; criterion 2's replay
+harness does not exist and is recorded as not-built rather than dropped. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
 
 ### BUG129.1 — the chain-health peak had no ceiling, and the 0 dBFS it reported was correct ✅ (2026-09-13)
 

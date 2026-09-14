@@ -46,6 +46,8 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
+| BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
+| BUG-133 | P2 · **RESOLVED + LIVE-MEASURED 2026-09-14 (BUG133.2)** — 10 → 16 distinct on the same window; Matt's felt verdict outstanding | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -400,6 +402,329 @@ every four beats with a medium one between, displaced but structurally intact. M
 2026-09-14, presented with this measurement: **leave it** — the preset reads correctly and the
 alignment is not worth reopening retired work for. Recorded so a later session does not "fix" a
 displacement it cannot measure.
+### BUG-132 — a plan rebuild installs the wrong track's BeatGrid over the playing track (2026-09-14)
+
+**Severity:** P1 · **Domain tag:** `orchestrator` / `pipeline-wiring` · **Failure class:** `pipeline-wiring`
+**Found:** in PREP.2's live validation session, by reading the log — **not** visible to the listener who ran it.
+
+#### Expected
+
+While a track plays, the installed `BeatGrid` is that track's grid. A plan rebuild behind a playing
+session changes what will play NEXT; it does not touch the live pipeline.
+
+#### Actual
+
+Every `_buildPlan` rebuild ends `aboutToPreFire=true` and pre-fires **the plan's first track** —
+`resetStemPipeline caller=preFire` → `StemCache.loadForPlayback` → `BeatGrid installed` — regardless
+of what is playing. Session `2026-09-14T13-49-57Z` (13 local FLACs, early start):
+
+| rebuild | grid installed | actually playing | |
+|---|---|---|---|
+| 13:52:34 / :48, 13:55:12, 13:56:47 | 01 Monkey (164.4) | 01 Monkey | ok |
+| 13:58:40 | 01 Monkey (164.4) | **02 California (118.6)** | ⚠ |
+| 14:00:30, 14:02:15 | 01 Monkey (164.4) | **03 Everybody's Song (175.0)** | ⚠ |
+| 14:04:43, 14:08:10 | 01 Monkey (164.4) | **04 Silver Rider (108.0, meter 3/X)** | ⚠ |
+
+**5 of 9 pre-fires installed the wrong grid**, and the primary observable agrees — `grid_bpm` in
+`features.csv` reverts to 164.421 and *stays there until the next track change*: **13,190 frames**
+inside track 3 and **13,928 frames** inside track 4, i.e. essentially the whole of both. Track 4 is
+in 3, driven on a 4/X grid at 164 BPM against its true 108.
+
+The stem series is clobbered with it — the same pre-fire logs
+`STEM_SOURCE: series frames=11192 covers=259.9s` for Monkey while California plays.
+
+#### Why nobody saw it
+
+Matt reviewed this session for the PREP.2 criteria — playback starts, no stutter — and reported
+*"no noticeable disruption to the music or visuals"*, which was true of everything he was asked to
+watch. A wrong tempo grid does not stutter; it puts beat-locked motion on the wrong clock, and most
+of the presets this session selected are continuous-energy driven (D-004), where it barely shows.
+**A felt review cannot be expected to catch a defect nobody asked it to look for.**
+
+#### Relationship to PREP.2
+
+Not created by PREP.2 — the pre-fire-on-rebuild behaviour predates it — but **PREP.2 turned it from
+rare into routine**: the plan now rebuilds once per prepared track (its item ④), so a 13-track walk
+behind a playing session fires it nine times. PREP.2 anticipated exactly this shape on the
+neighbouring path — *"a walk finishing behind a playing session must not drag it back to `.ready`"* —
+and guarded readiness. The plan-rebuild path has no such guard.
+
+#### Suspected fix, not yet attempted
+
+The pre-fire is correct when the plan is built for a session that has not started. It is wrong when
+a track is already playing: the rebuild should pre-fire nothing, or pre-fire the CURRENT track.
+Evidence for the shape of the guard is in the log — `Orchestrator: wire active (planIdx=N)` tracks
+the playing index correctly throughout, so the information needed is present at the call site.
+
+#### Verification criteria (written before any fix)
+
+- Automated: a plan rebuild while a session is playing leaves the installed grid untouched — a
+  regression test in the `LocalFileEarlyStartTests` family, which already has the harness.
+- Automated: `grid_bpm` in a replayed multi-track local session changes only at track boundaries.
+- Manual: one local-folder session with an early start on tracks of visibly different tempo, watching
+  a beat-locked preset — the felt check the automated ones cannot make.
+
+#### Fix (BUG132.1)
+
+`_buildPlan` pre-fires only when nothing is playing:
+`VisualizerEngine.shouldPreFirePlan(sessionState:)` is `sessionState != .playing`, and the pre-fire
+call site consults it. Every non-playing state still pre-fires, because the DSP.3.2 priming this
+call exists for is a pre-playback concern; only `.playing` suppresses it.
+
+⚠ **Criterion 1 could not be met where it was written.** `LocalFileEarlyStartTests` is in the ENGINE
+and `_buildPlan` is `@MainActor` on `VisualizerEngine` in the APP, needing a Metal device, a session
+manager and a preset loader to reach — the criterion was written without checking where the code
+lived. Met in substance instead, in two halves: the policy is a pure function of `SessionState`,
+unit-tested over **every** case, and the wire is a source-presence assertion in
+`PlanPreFireRegressionTests` (app target). Criterion 2's replay gate is **not** built — see below.
+
+★ **The wire test passed against the reverted guard on its first attempt.** It searched for
+`shouldPreFirePlan(sessionState:`, which the `static func` declaration satisfies by itself — a
+green gate over dead code, which is BUG-015's shape exactly. Caught only by reverting the fix and
+re-running. It now matches the CALL (`Self.shouldPreFirePlan(`) over comment-stripped source, and
+the A/B is recorded: **red on the exact pre-fix code, green on the fix.**
+
+**Not yet done, and named rather than quietly dropped:** criterion 2 (a replayed multi-track local
+session asserting `grid_bpm` changes only at track boundaries) needs a harness that replays a plan
+rebuild against a playing session; none exists. The live re-check below is what covers it today.
+
+**Live re-check PASSED** on `2026-09-14T14-34-41Z` (16 local MP3s, early start, Release from
+`5e6a109b`). Eleven plan rebuilds, **ten of them while playing, every one logging
+`aboutToPreFire=false`** — the guard fired under exactly the condition that produced the defect.
+`grid_bpm` changed **7 times for 7 tracks**, each at a track boundary (117.9 → 154.3 → 122.7 → 82.9
+→ 161.7 → 128.2 → 93.4) and never reverted. The prior session reverted to 164.421 four times, twice
+for ~13,000 frames. ⚠ The `pre-fire skipped` breadcrumb goes to `os.log`, not `session.log`, so
+`aboutToPreFire=false` is the recorded evidence — worth knowing before grepping a session dir for
+the skip line and concluding the guard never ran.
+
+---
+
+### BUG-133 — preset selection cycles a short fixed list instead of drawing on the roster (2026-09-14)
+
+**Severity:** P2 · **Domain tag:** `orchestrator` / selection · **Reported by Matt** during PREP.2's
+live validation: *"the same presets are being selected and cycled through for the tracks I played -
+Uzume did not take advantage of all the certified presets."*
+
+#### Measured on `2026-09-14T13-49-57Z`
+
+- **50 selections, 13 distinct.** Cytokinesis took **11 of 50** (22 %).
+- **14 of the 24 certified presets never appeared**: Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana,
+  Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph,
+  Witchlight.
+- Three **uncertified** presets did appear — Membrane (7), Plasma, Waveform — so the pool is not
+  gated on `certified`.
+- Within track 4 an eight-preset sequence repeats **verbatim, twice**: Cytokinesis → Glaze → Fractal
+  Tree → Stave → Cytokinesis → Cymatic Resonance → Membrane → Ricercar. Selections change every
+  ~17–24 s.
+
+#### Not the same defect as BUG-132
+
+The cycle repeats inside a single track with no plan rebuild between the two passes, so it is not the
+rebuild resetting the plan. They were found in the same session and must not be conflated.
+
+#### Root cause — ★ both anti-repetition levers are FAMILY-scoped, so a family gets one slot and its argmax keeps it
+
+Diagnosed 2026-09-14 after Matt raised it a second time (*"getting REALLY tired of cytokinesis"*) on
+session `2026-09-14T14-34-41Z`: 59 selections, **10 distinct**, Cytokinesis ×14.
+
+`PresetScorer` has exactly two levers against repetition and **neither is per-preset**:
+`familyRepeatMultiplier` (0.2× when the candidate shares the CURRENT preset's family) and
+`fatigueMultiplier` (smoothstep cooldown since that FAMILY was last used). So a family behaves as a
+single rotation slot, and the slot goes to whichever member scores highest on the material. Its
+siblings are not competing with the rest of the catalog — they are competing with each other for one
+turn, and they lose it every time.
+
+**The prediction and the data agree, per family:**
+
+| family | members | presets that ever appeared |
+|---|---|---|
+| particles | **6** | **1** — Cytokinesis ×14 (Nebula, Witchlight, Murmuration, Mitosis, Filigree: never) |
+| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) |
+| geometric | 4 | 1 — Cymatic Resonance ×8 |
+| painterly | 2 | 1 — Ricercar ×3 |
+| waveform | 2 | 2 — Stave ×8, Waveform ×1 |
+| fractal / reaction (singletons) | 1 | 1 each — Fractal Tree ×7, Membrane ×8 |
+
+**A singleton family is a guaranteed private slot; a nine-member family hides eight presets.**
+Frequency is set by family size and cooldown, not by fit.
+
+**Why Cytokinesis specifically, and more often than the singletons.** Its `fatigue_risk` is `low` →
+a **60 s** cooldown, the shortest of the three (`low` 60 / `medium` 120 / `high` 300). Segments run
+~17–24 s, so it is eligible again after roughly three of them, and as the particles argmax it takes
+the slot every time it is. Low risk + sole family winner is the whole of it.
+
+**Budget is NOT the cause** — measured against the 16.6 ms tier budget, only Volumetric Lithograph
+(24.0/18.0 ms) is excluded. Every other catalog preset fits.
+
+⚠ **The fix is not a stronger repetition penalty** — Matt's standing call is best SET per song, no
+same-concept / back-to-back penalties. Note the irony this diagnosis turns up: the *existing*
+family-scoped penalty is what suppresses variety, because it treats nine distinct certified presets
+as one thing.
+
+#### Fix (BUG133.1) — Matt's call: *"cool down the preset, not the family"*
+
+`fatigueMultiplier` matches `recentHistory` on `presetID` instead of `family`. One line of behaviour;
+`PresetHistoryEntry` already carried `presetID`, so nothing upstream changed.
+
+**Adjacency is still handled, deliberately by a different lever.** `familyRepeatMultiplier` (0.2×
+against the CURRENT preset's family) is untouched, so two similar looks still do not land back to
+back — while the rest of the family becomes reachable one segment later instead of never. Splitting
+the two was the point: back-to-back similarity is a real visual concern; a shared multi-minute
+cooldown was a same-concept penalty in all but name.
+
+**Cooldown windows unchanged** (`low` 60 / `medium` 120 / `high` 300 s). They were calibrated against
+family scope, so the same numbers now gate a narrower thing — conservative (a preset waits at least
+as long as it did), but worth re-checking live rather than assuming still right.
+
+★ **The adversarial A/B reproduces Matt's complaint in a unit test.** Four consecutive picks from a
+six-member family, scored against identical material: on the shipped code `Set(chosen).count == 1`
+— the *same preset four times*, which is Cytokinesis in miniature. On the fix, four different
+presets. Four tests in `FatigueCooldownScopeTests`; two of them fail on the pre-fix code, and the
+two that pass on both are there to pin what must NOT change (the preset itself is still cooled, and
+its window still expires on schedule).
+
+★ **Correction — one existing test DID catch it, and I claimed otherwise.** The first write-up of
+this fix said *"nothing in the existing suite caught the change — 45 scorer/planner tests passed
+against both scopings."* That was measured with `--filter "PresetScorer|SessionPlanner"`, and the
+suite that catches it is named **`GoldenSessionFixtures`**, so the filter never ran it. The full
+closeout run failed on `GoldenSessionTests` "Session A: preset IDs match golden sequence". **A
+filtered test run is not evidence about the suite.**
+
+★ **And that golden had BUG-133 written into it four months before it was filed.** Its expectation
+was `[VL, Membrane, Membrane, Membrane, Membrane]` — 2 distinct presets over 5 tracks — above a
+2026-05-13 comment reading: *"Membrane is the only `reaction` preset in the catalog, so once
+selected it has no family-repeat competitor and gets picked across remaining slots… This reveals a
+real catalog clustering symptom (4 of 12 aesthetic presets share `geometric`); the orchestrator's
+behavior is correct given the inputs."* The symptom was seen, described accurately, judged correct
+and pinned as a golden. It was the inputs that were wrong.
+
+Regenerated to `[VL, VL, Fractal Tree, Fractal Tree, Ferrofluid Ocean]` — **3 distinct, monopoly
+gone** — with the trace the file requires. Sessions B, C and D are unchanged, including *"Session C:
+genre diversity produces ≥3 distinct preset families"*, so the change is narrow to the case the old
+comment flagged. ⚠ Adjacent repeats persist at TRACK granularity and are a different thing: those
+are track-first segments 180 s apart against 60/120/300 s windows, so a preset legitimately recovers
+inside one track.
+
+#### ★ Live check FAILED — the prediction was wrong, and the real cause is upstream of the cooldown
+
+Matt, on `2026-09-14T15-16-36Z` running the fixed build (verified: binary built 10:16:33 from
+`704606c7`, committed 10:09:28): *"it's the same presets as before for Arcade Fire's Suburbs album.
+I'm not seeing different presets I haven't seen before."*
+
+**BUG133.1 is correct and stays** — a family was one rotation slot, the unit A/B and the regenerated
+golden both prove the scoping change — **but it was never going to fix this, and I said it would.**
+Predicting the hidden presets would surface required them to be competitive once uncooled. They are
+not.
+
+**Measured with the production scorer** (`PlanRankingDumpTests`, real cached profiles from Matt's own
+album). Ranking on *The Suburbs*, all 26 eligible presets: **0.612 (Cytokinesis) → 0.459 (Nebula)**,
+with the top twelve inside 0.05 of each other. Nebula must wait for the fifteen presets above it to
+be cooled simultaneously — no cooldown window achieves that, so its rank is effectively permanent.
+
+★ **Half the scoring weight discriminates nothing.** Read the per-preset breakdowns: within a track,
+`aff` is **identical for every preset** (0.06 on *The Suburbs*, 0.02 on *Deep Blue*, 0.34 on *City
+With No Children*, 0.56 on *Wasted Hours*) and `sect` is 1.00 for all. Stem affinity is 25 % of the
+weight and **19 of the 24 certified presets declare no `stem_affinity` at all** — only Dragon Bloom,
+Fata Morgana, Gossamer, Lumen Mosaic and Volumetric Lithograph do — so the rest all receive the same
+track-mean number. A quarter of the score is a per-track constant for 79 % of the roster.
+
+What is left to separate presets is mood (30 %) + tempo (20 %), and across one album those barely
+move: the top three over four Suburbs tracks are drawn from {Membrane, Cytokinesis, Glaze, Dragon
+Bloom, Cymatic Resonance, Stave, Floret} — precisely the set Matt keeps seeing. The seeded-noise
+histogram agrees: over 12 seeds the planner's first pick is only ever one of four presets.
+
+**So the roster is not being rationed by fatigue. It is being ranked by half a scorer, and the
+bottom fourteen are unreachable at any cooldown setting.**
+
+#### ★ And declaring the missing `stem_affinity` cannot fix it — checked before writing any
+
+Matt chose "give the 19 presets real stem affinities". Derived from each preset's own `audio_routes`
+manifest (the artifact that records which primitives it actually reads), rather than from an
+impression of what each preset feels like:
+
+| what the routes say | presets |
+|---|---|
+| reads **all four** stems into ONE route (`division_pace`, `energy_env`, `energy_swell`, `stem_mix_gate`, …) | Cytokinesis, Mitosis, Murmuration, Nacre, Nimbus, Skein, Floret, Filigree, Glaze |
+| reads **no stem primitive at all** — band/spectral driven | Alfvén, Aurora Veil, Ferrofluid Ocean, Fractal Tree, Meniscus, Nebula, Ricercar, Stave, Witchlight |
+| reads a **single** stem | Cymatic Resonance (drums → `beat_burst`) |
+
+**Declaring all four stems scores identically to declaring none** — `stemAffinitySubScore` averages
+the declared stems' deviations, and the undeclared default already averages all four. So a truthful
+declaration for nine of them is a no-op, a truthful declaration for nine more is *no declaration*,
+and only Cymatic Resonance would move. Making this dimension discriminate would mean declaring
+couplings the shaders do not have, which fabricates the QG.1 manifest and builds to an invented
+metaphor (the KSRETIRE.1 / D-188 failure).
+
+★ **The roster is not stem-selective, and that is D-004 working as designed.** Continuous energy is
+the mandated primary driver, so presets are band-driven; where they do read stems they sum all four
+into one envelope. A scorer that spends **25 % of its weight** on stem selectivity is measuring a
+dimension the catalog deliberately does not vary on. Not a metadata gap — a mismatch between the
+scorer's model and the audio doctrine.
+
+**The measurement the fix is built on:** the seeded noise is **±0.02** (`SessionPlanner.seededNoise`)
+against a top-twelve spread of 0.05 and a full-catalog spread of 0.153 — which is why the 12-seed
+first-pick histogram only ever yielded four distinct presets. The ranking's precision (three decimal
+places) far exceeds its accuracy; a 0.003 gap between Cytokinesis and Dragon Bloom is not a musical
+preference.
+
+#### Fix (BUG133.2) — Matt's call: near-tie sampling
+
+`selectPreset` now picks **uniformly among the presets within `nearTieBandWidth` (0.05) of the best
+score** instead of taking `max(by:)`. Uniform on purpose: inside the band the differences are exactly
+what is being called noise, so weighting by them would re-import the precision being discarded.
+
+- **Deterministic**, keyed on `(seed, trackIndex, elapsedSessionTime, candidate ids)` — a plan grown
+  3 → 6 → 12 stays byte-identical to one planned at once, which `PartialPlanTests` pins and PREP.2
+  depends on every time the walk extends a live plan.
+- **`seed == 0` stays pure argmax**, so the unseeded golden fixtures still pin scorer behaviour
+  rather than a sample. That also means the goldens do **not** cover this path.
+- **A band, not a lottery.** A preset 0.15 below the best still never plays — that gap is a real
+  preference; a band wide enough to admit it would replace the planner with a shuffle.
+
+**Measured effect, production scorer on Matt's own cached profile** (*The Suburbs*): planner first
+pick over 12 seeds went from **4 distinct presets** (Cytokinesis 5, Membrane 3, Cymatic 2, Dragon
+Bloom 2) to **10 distinct** (Cytokinesis 3, then Nacre, Membrane, Cymatic, Glaze, Floret, Fractal
+Tree, Ferrofluid Ocean, Plasma, Dragon Bloom one each).
+
+★ **The first version of the regression test passed with the fix removed.** Its fixture presets all
+sat within 0.016 of each other — inside the scorer's own ±0.02 noise — so the pre-existing noise
+already shuffled them and the test proved nothing. Caught by reverting. The fixture now carries
+`MidBand`, deliberately placed ~0.04 below the best from measured scores: outside the noise, inside
+the band. It appears in 0 of 24 seeds without sampling and reliably with it. **Second time in this
+session a source of variety made a gate look green** — the check is to remove the fix and re-run,
+every time.
+
+**Live check — measured on `2026-09-14T15-52-43Z`** (same Suburbs folder, Release from `919cfd6c`,
+87 selections over ~30 min). Compared over the **same first 59 selections** as the pre-fix baseline
+`2026-09-14T14-34-41Z`, so the windows are identical:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| distinct presets | 10 | **16** |
+| Cytokinesis | 14 | **7** |
+| top-3 share | 51 % | **33 %** |
+| most-frequent preset | Cytokinesis 24 % | Stave 13 % |
+
+**Six presets appeared that never had:** Alfvén (its first live appearance since certification),
+Ferrofluid Ocean, Glaze, Mitosis, Nacre, Plasma.
+
+★ **Eleven certified presets still never appear, and that is the band working as specified, not a
+residual defect.** Aurora Veil, Filigree, Gossamer, Lumen Mosaic, Meniscus, Murmuration, Nebula,
+Nimbus, Skein, Volumetric Lithograph, Witchlight. Checked against the scorer dump: on this material
+they score **0.459–0.532**, and the band admits ≥ 0.562 (best 0.612 − 0.05). They are not hidden by a
+mechanism any more — they are rated lower, and the band deliberately does not reach a preset the
+scorer genuinely prefers against. Whether they *should* be reachable on this album is the next
+product question, and it points back at the scorer's discrimination (mood + tempo only), not at the
+sampling.
+
+**BUG-132 held across the long session:** 8 `grid_bpm` changes for 1 opener + 7 track changes, none
+mid-track. `chain_health` clean, peak −0.07 dBFS, `maxFullScaleRun` 0 (BUG129.1's field reporting on
+a real capture).
+
+⚠ **Matt's felt verdict is still outstanding** — the automated question was "do more presets
+appear", and the answer is yes; the question only he can answer is whether any of the newly-admitted
+presets is *wrong for the song*. That is the failure mode of widening the band, and no count detects
+it.
 
 ---
 

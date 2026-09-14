@@ -285,6 +285,95 @@ struct PresetScorerTests {
 
 // MARK: - Fixture Builders
 
+// MARK: - BUG-133 — fatigue is per PRESET, not per family
+
+/// The defect these pin, in one sentence: keyed on the family, the cooldown made a family behave as
+/// ONE rotation slot, so its highest-scoring member held that slot permanently and its siblings
+/// never appeared. Measured over 59 selections on session `2026-09-14T14-34-41Z` — the six-member
+/// `particles` family produced exactly one preset (Cytokinesis ×14), and the singleton families
+/// produced their one member 7–8 times each. Matt's call: *"cool down the preset, not the family."*
+@Suite("Fatigue cooldown scope (BUG-133)")
+struct FatigueCooldownScopeTests {
+
+    private let scorer = DefaultPresetScorer()
+
+    @Test("A sibling of the just-played preset is NOT cooled down by it")
+    func siblingIsNotCooledByItsFamily() {
+        let played = makePreset(name: "Cytokinesis", family: .particles)
+        let sibling = makePreset(name: "Nebula", family: .particles)
+        let track = makeTrack(bpm: 120, valence: 0.5, arousal: 0.5)
+        // The family played one second ago — deep inside every cooldown window.
+        let history = [PresetHistoryEntry(presetID: played.id, family: .particles,
+                                          startTime: 0, endTime: 10)]
+        // `currentPreset` is nil so this isolates fatigue from the back-to-back family penalty.
+        let context = makeContext(recentHistory: history, elapsedSessionTime: 11)
+
+        let siblingScore = scorer.score(preset: sibling, track: track, context: context)
+        let playedScore = scorer.score(preset: played, track: track, context: context)
+
+        #expect(siblingScore > 0,
+                "a sibling must stay reachable — family-scoped cooldown is what hid five of the six particles presets")
+        #expect(playedScore < siblingScore,
+                "the preset that just played must still be cooled down; only its siblings are freed")
+    }
+
+    @Test("The preset that just played IS cooled down")
+    func thePresetItselfIsCooled() {
+        let preset = makePreset(name: "Cytokinesis", family: .particles, fatigueRisk: .low)
+        let track = makeTrack(bpm: 120, valence: 0.5, arousal: 0.5)
+        let fresh = makeContext(elapsedSessionTime: 11)
+        let justPlayed = makeContext(
+            recentHistory: [PresetHistoryEntry(presetID: preset.id, family: .particles,
+                                               startTime: 0, endTime: 10)],
+            elapsedSessionTime: 11)
+
+        #expect(scorer.score(preset: preset, track: track, context: justPlayed)
+                < scorer.score(preset: preset, track: track, context: fresh))
+    }
+
+    @Test("Cooldown expires on the preset's own window, and it becomes available again")
+    func cooldownExpires() {
+        let preset = makePreset(name: "Cytokinesis", family: .particles, fatigueRisk: .low)
+        let track = makeTrack(bpm: 120, valence: 0.5, arousal: 0.5)
+        let history = [PresetHistoryEntry(presetID: preset.id, family: .particles,
+                                          startTime: 0, endTime: 10)]
+        // `.low` is a 60 s window; 80 s past the end is clear of it.
+        let afterCooldown = makeContext(recentHistory: history, elapsedSessionTime: 90)
+        let fresh = makeContext(elapsedSessionTime: 90)
+
+        #expect(scorer.score(preset: preset, track: track, context: afterCooldown)
+                == scorer.score(preset: preset, track: track, context: fresh))
+    }
+
+    @Test("Two presets of one family can both appear in a rotation — the point of the change")
+    func familyIsNotOneRotationSlot() {
+        // Six particles presets, as the real catalog has. Play each in turn and check the family
+        // does not collapse to a single representative the way the shipped behaviour did.
+        let family: [PresetDescriptor] = (1...6).map {
+            makePreset(name: "Particles\($0)", family: .particles, motionIntensity: 0.5)
+        }
+        let track = makeTrack(bpm: 120, valence: 0.5, arousal: 0.5)
+        var history: [PresetHistoryEntry] = []
+        var chosen: [String] = []
+        var clock: TimeInterval = 0
+
+        for _ in 0..<4 {
+            let context = makeContext(recentHistory: history, elapsedSessionTime: clock)
+            let ranked = family
+                .map { ($0, scorer.score(preset: $0, track: track, context: context)) }
+                .sorted { $0.1 > $1.1 }
+            let winner = ranked[0].0
+            chosen.append(winner.id)
+            history.append(PresetHistoryEntry(presetID: winner.id, family: .particles,
+                                              startTime: clock, endTime: clock + 20))
+            clock += 20
+        }
+
+        #expect(Set(chosen).count == 4,
+                "four consecutive picks from one family must be four DIFFERENT presets; got \(chosen)")
+    }
+}
+
 private func makePreset(
     name: String = "TestPreset",
     family: PresetCategory = .geometric,
