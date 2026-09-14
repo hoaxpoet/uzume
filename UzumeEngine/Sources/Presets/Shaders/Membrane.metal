@@ -165,6 +165,28 @@ float membrane_bass_strength(float bassDev) {
     return bassDev / (bassDev + 0.12);
 }
 
+/// Metric accent — how hard THIS beat of the bar should be struck.
+///
+/// PR.27, from Matt's M7: "Every strike is the same intensity, which makes the
+/// preset feel much too active." PR.26 gave every beat a floor of 0.42 and a
+/// bass term that on real material only spanned 0.42..0.87 — four near-identical
+/// hits per bar, which is a machine, not a drummer.
+///
+/// Music is not flat. In 4/4 the downbeat carries the bar, beat 3 is the
+/// secondary stress, and 2 and 4 are weak. Giving the skin that hierarchy does
+/// two things at once: strikes stop being interchangeable, and three of every
+/// four drop far enough back that the frame reads as CALM between downbeats.
+///
+/// `bar_phase01` is 0 at the downbeat and ramps to 1 at the next, so the beat
+/// index within the bar is just floor(bar_phase01 * beats_per_bar).
+float membrane_metric_accent(float barPhase01, float beatsPerBar) {
+    float n = max(beatsPerBar, 1.0);
+    float idx = floor(saturate(barPhase01) * n + 0.0001);
+    if (idx < 0.5) return 1.00;                       // downbeat  — the bar lands
+    if (abs(idx - floor(n * 0.5)) < 0.5) return 0.52; // mid-bar   — secondary stress
+    return 0.22;                                      // off-beats — a light tick
+}
+
 // ── Total displacement ──────────────────────────────────────────
 
 float membrane_D(float2 uv, float2 asp, float t,
@@ -196,50 +218,50 @@ float membrane_D(float2 uv, float2 asp, float t,
     float goose = (mb_fbm3(float3(uv * 6.0, t * 0.8)) - 0.5)
                 * saturate(features.treb_att_rel * 15.0);
 
-    // ONE shockwave ring per BEAT, phase-locked to the cached grid.
+    // ONE shockwave ring per beat, phase-locked to the cached grid, struck as
+    // hard as the METRE and the bass say it should be.
     //
-    // Every beat fires. Matt's M7: "too sparse" — PR.25 fired 65 ragged
-    // strikes/min through a gate that could not open at median bass; at
-    // 117 BPM this fires ~118/min, on the beat, and the loud beats are the
-    // big ones rather than the only ones. `0.42 +` is that floor.
-    // Silence gate. `beat_phase01` is 0 at silence, and a ring at phase 0 is a
-    // ring of radius 0 — a permanent blob pinned at the impact point. The grid
-    // clock also keeps ticking through a quiet passage, so without this the
-    // skin would be struck by an inaudible beat. `pulse_amp01` is exactly the
-    // right signal: 0 before the first note and across sustained silence, 1
-    // while music plays (declared as `kind: "gate"` in the sidecar per
-    // SHADER_CRAFT §17.1 — an enable is never `continuous`).
+    // PR.26 fired every beat at >= 0.42 and Matt read it as "the same intensity
+    // ... much too active". Strength is now metric accent x bass, with no floor:
+    // a weak off-beat under quiet bass lands near 0.05 and is barely a tick,
+    // while a downbeat under a strong kick reaches 1.0. Measured on his session
+    // that is a 15x spread where PR.26 had 2x.
     //
-    // Membrane's silence design (the per-preset silence rule, Matt 2026-09-12):
-    // NO strikes, but the skin is not frozen — the always-on breath FBM and the
-    // feedback accumulator keep it slowly alive. A struck drum that nobody is
-    // striking should be still and taut, not dead.
-    float beatGate = smoothstep(0.05, 0.30, features.pulse_amp01);
+    // The downbeat ring is also BIGGER and travels FURTHER (speed scales with
+    // the accent), so the bar reads as one large slow wave with small ripples
+    // inside it, rather than four identical circles.
+    float beatGate   = smoothstep(0.05, 0.30, features.pulse_amp01);
     float bassWeight = membrane_bass_strength(features.bass_dev);
-    float strength = (0.42 + 0.58 * bassWeight) * beatGate;
+    float accent     = membrane_metric_accent(features.bar_phase01, features.beats_per_bar);
+    float strength   = accent * (0.18 + 0.82 * bassWeight) * beatGate;
     float ring = membrane_ring(asp, impactAsp, features.beat_phase01,
-                               strength, 1.15, 0.040);
-
-    // The downbeat gets its own larger, slower ring — the bar is the accent a
-    // listener actually feels, and it stops four identical beats reading as a
-    // machine. bar_phase01 is 0 at the downbeat and ramps to 1 at the next.
-    float barRing = membrane_ring(asp, impactAsp, features.bar_phase01,
-                                  (0.55 + 0.45 * bassWeight) * beatGate, 1.75, 0.070);
+                               strength, 0.70 + 0.85 * accent, 0.040);
 
     float raw = breath * 0.40
               + wave * (0.08 + bassPush * 0.40)
               + goose * 0.13
-              + ring * 1.45
-              + barRing * 0.85;
+              + ring * 1.70;
 
     // Edge tension: the drumskin is anchored at the frame boundary.
     // Displacement is free in the interior and forced smoothly to zero
     // at the edges. This is the single strongest cue that what you are
     // looking at is a stretched sheet, not a free-floating color field.
-    float2 edgeDist = min(uv, 1.0 - uv);
-    float edgeFactor = saturate(min(edgeDist.x, edgeDist.y) * 3.0);
-    edgeFactor = edgeFactor * edgeFactor * (3.0 - 2.0 * edgeFactor);
-    return raw * edgeFactor;
+    // PR.27 — the X seams. This used to be
+    //     saturate(min(edgeDist.x, edgeDist.y) * 3.0)
+    // and min() of two smooth fields has a GRADIENT DISCONTINUITY along the
+    // locus where they are equal — for a centred rectangle, exactly the two
+    // diagonals. `membrane_D` is finite-differenced and multiplied by 28 to
+    // build the surface normal, so that crease became a hard bright/dark line
+    // and the two of them crossed as an X over the whole frame.
+    //
+    // The bug is original, not PR.26's, but PR.26 raised the ring's
+    // displacement weight and made a latent crease plainly visible.
+    //
+    // A PRODUCT of the two per-axis falloffs is C1-continuous everywhere and
+    // anchors the skin at the frame exactly as before.
+    float2 ed = saturate(min(uv, 1.0 - uv) * 3.0);
+    ed = ed * ed * (3.0 - 2.0 * ed);
+    return raw * (ed.x * ed.y);
 }
 
 // ── Fragment entry point ────────────────────────────────────────
@@ -338,16 +360,15 @@ fragment float4 membrane_fragment(
     float specK = pow(NdotH, 48.0);
     color += float3(1.0) * specK * 0.55;
 
-    // Same three scalars membrane_D used, recomputed here (pure scalar maths,
-    // no noise) so the bright ring and the physical deformation are the SAME
-    // event and cannot drift apart.
+    // The same scalars membrane_D used, recomputed here (pure scalar maths, no
+    // noise) so the bright ring and the physical deformation are the SAME event
+    // and cannot drift apart.
     float beatGate   = smoothstep(0.05, 0.30, features.pulse_amp01);
     float bassWeight = membrane_bass_strength(features.bass_dev);
-    float strength   = (0.42 + 0.58 * bassWeight) * beatGate;
+    float accent     = membrane_metric_accent(features.bar_phase01, features.beats_per_bar);
+    float strength   = accent * (0.18 + 0.82 * bassWeight) * beatGate;
     float ring       = membrane_ring(asp, impactAsp, features.beat_phase01,
-                                     strength, 1.15, 0.040);
-    float barRing    = membrane_ring(asp, impactAsp, features.bar_phase01,
-                                     (0.55 + 0.45 * bassWeight) * beatGate, 1.75, 0.070);
+                                     strength, 0.70 + 0.85 * accent, 0.040);
 
     // ── The strike, as a RIPPLE rather than a glow ──────────────
     //
@@ -367,9 +388,9 @@ fragment float4 membrane_fragment(
     // Global luminance is preserved because the crest gain and the trough
     // loss sit side by side in a thin annulus (D-157: bounded per-beat
     // footprint, steady global luminance).
-    float strikeRing = ring + barRing * 0.7;
+    float strikeRing = ring;
     float trough = membrane_ring(asp, impactAsp, features.beat_phase01,
-                                 strength, 1.15, 0.105) - ring;
+                                 strength, 0.70 + 0.85 * accent, 0.105) - ring;
     color *= 1.0 + strikeRing * 1.25 - saturate(trough) * 0.55;
 
     // A thin specular glint riding the crest — a highlight on the wet skin,
