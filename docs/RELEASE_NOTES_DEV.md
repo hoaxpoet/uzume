@@ -10,6 +10,41 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-14-200000] BUG132.1 — a plan rebuild no longer clobbers the playing track's grid
+
+Found in PREP.2's own validation session by reading the log, not by watching it. Every `_buildPlan`
+rebuild ends by pre-firing **the plan's first track** into the live pipeline — `resetStemPipeline` →
+`StemCache.loadForPlayback` → `BeatGrid installed`. On `2026-09-14T13-49-57Z`, **five of nine
+rebuilds installed track 1's 164.4 BPM grid over a different playing track**, and `grid_bpm` stayed
+wrong until the next track change: 13,190 frames inside a 175.0 BPM track and 13,928 inside a
+108.0 BPM track **in 3/4**. Essentially both whole tracks ran beat-locked motion on the wrong clock,
+with track 1's stem series loaded alongside.
+
+The pre-fire is right before a session starts — it is how Spectral Cartograph shows
+"PLANNED · UNLOCKED" straight after plan-build (DSP.3.2). It is wrong once one is playing, because a
+rebuild decides what plays NEXT. `shouldPreFirePlan(sessionState:)` is now `!= .playing`; every
+other state still primes.
+
+★ **PREP.2 did not create this, but it is why it matters now.** The pre-fire has behaved this way
+for as long as the plan has existed; the plan was built once, so it fired once, before playback.
+PREP.2 rebuilds it once per PREPARED track, which turned a latent race into every local session with
+an early start. PREP.2 anticipated this exact shape one path over — *"a walk finishing behind a
+playing session must not drag it back to `.ready`"* — and guarded readiness, not this.
+
+★ **The regression test passed against the reverted guard on its first attempt**, because it
+searched for `shouldPreFirePlan(sessionState:` and the `static func` declaration satisfies that by
+itself: a green gate over dead code, which is BUG-015's shape exactly. It only surfaced because the
+fix was reverted and the suite re-run. The assertion now matches the CALL over comment-stripped
+source, and the A/B is on the record — red on the exact pre-fix code, green on the fix. **A
+source-presence gate that has not been run against the bug is not yet a gate.**
+
+Also worth stating: Matt reviewed this session against the criteria he was given — playback starts,
+nothing stutters — and reported them accurately. A wrong tempo grid does not stutter, and most of
+the presets that session selected are continuous-energy driven. The defect was invisible to the
+check he was asked to make, which is a fact about the check.
+
+---
+
 ### [dev-2026-09-13-000500] BUG129.1 — the peak was right, and that was the finding
 
 BUG-129 was filed on a reasonable suspicion: `chain_health.json` reporting `peakDBFS` exactly 0 with

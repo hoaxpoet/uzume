@@ -1410,6 +1410,25 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG132.1 — a plan rebuild no longer pre-fires over the playing track ✅ (2026-09-14, live re-check owed)
+
+`_buildPlan` pre-fired the plan's FIRST track into the live pipeline on every rebuild. Five of nine
+rebuilds in PREP.2's validation session installed track 1's 164.4 BPM grid over a different playing
+track; `grid_bpm` stayed wrong until the next track change (13,190 frames inside a 175.0 BPM track,
+13,928 inside a 108.0 BPM track in 3/4). Now gated on `shouldPreFirePlan(sessionState:) != .playing`
+— every non-playing state still primes, since the DSP.3.2 priming is a pre-playback concern.
+
+Latent for as long as the plan has existed, because the plan was built once. **PREP.2 made it
+routine** by rebuilding once per prepared track.
+
+★ **The gate passed against the reverted guard on its first attempt** — it matched the `static func`
+declaration rather than a call site, i.e. a green gate over dead code (BUG-015's shape). Found only
+by reverting and re-running; it now matches the call over comment-stripped source, red on the
+pre-fix code and green on the fix. Criterion 1 was met in substance, not where written — the named
+`LocalFileEarlyStartTests` is in the engine and `_buildPlan` is in the app; criterion 2's replay
+harness does not exist and is recorded as not-built rather than dropped. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
+
 ### BUG129.1 — the chain-health peak had no ceiling, and the 0 dBFS it reported was correct ✅ (2026-09-13)
 
 `chain_health.json` read `peakDBFS: 0` with a `clean` verdict on three consecutive sessions. Read
