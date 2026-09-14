@@ -81,6 +81,7 @@ struct SessionReplayHarness {
         var tonalTension: Float = 0
         var harmonicFlux: Float = 0
         var midAttRel: Float = 0
+        var trebAttRel: Float = 0        // PR.25 — Membrane's hi-hat stipple
         // PR.10 — the fields non-ray-march presets declare. Every one of these was
         // ALREADY in the recorded CSVs; the harness simply never read them, so any
         // preset routed off them replayed against ZERO. Names differ between the CSV
@@ -147,6 +148,7 @@ struct SessionReplayHarness {
             r.tonalTension = get(f, "tonal_tension")
             r.harmonicFlux = get(f, "harmonic_flux")
             r.midAttRel = get(f, "mid_att_rel")
+            r.trebAttRel = get(f, "treb_att_rel")
             r.bassAtt = get(f, "bass_att")
             r.trebleAtt = get(f, "treble_att")
             r.midDev = get(f, "mid_dev")
@@ -185,6 +187,7 @@ struct SessionReplayHarness {
         f.tonalTension = r.tonalTension
         f.harmonicFlux = r.harmonicFlux
         f.midAttRel = r.midAttRel
+        f.trebAttRel = r.trebAttRel
         f.bassAtt = r.bassAtt; f.trebleAtt = r.trebleAtt
         f.midDev = r.midDev; f.trebDev = r.trebDev
         f.highMid = r.highMid; f.high = r.high
