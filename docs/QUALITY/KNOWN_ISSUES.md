@@ -46,8 +46,8 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
-| BUG-132 | **P1** · **RESOLVED 2026-09-14 (BUG132.1)** — pending live re-check | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
-| BUG-133 | P2 · new 2026-09-14 (Matt, PREP.2 validation) | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
+| BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
+| BUG-133 | P2 · **DIAGNOSED 2026-09-14**, awaiting Matt's product call | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -401,9 +401,14 @@ the A/B is recorded: **red on the exact pre-fix code, green on the fix.**
 session asserting `grid_bpm` changes only at track boundaries) needs a harness that replays a plan
 rebuild against a playing session; none exists. The live re-check below is what covers it today.
 
-**Live re-check owed.** One local-folder session with an early start across tracks of clearly
-different tempo — the same shape as `2026-09-14T13-49-57Z`, where `grid_bpm` should now change
-**only** at the five track boundaries instead of reverting to 164.421 four times.
+**Live re-check PASSED** on `2026-09-14T14-34-41Z` (16 local MP3s, early start, Release from
+`5e6a109b`). Eleven plan rebuilds, **ten of them while playing, every one logging
+`aboutToPreFire=false`** — the guard fired under exactly the condition that produced the defect.
+`grid_bpm` changed **7 times for 7 tracks**, each at a track boundary (117.9 → 154.3 → 122.7 → 82.9
+→ 161.7 → 128.2 → 93.4) and never reverted. The prior session reverted to 164.421 four times, twice
+for ~13,000 frames. ⚠ The `pre-fire skipped` breadcrumb goes to `os.log`, not `session.log`, so
+`aboutToPreFire=false` is the recorded evidence — worth knowing before grepping a session dir for
+the skip line and concluding the guard never ran.
 
 ---
 
@@ -430,15 +435,44 @@ Uzume did not take advantage of all the certified presets."*
 The cycle repeats inside a single track with no plan rebuild between the two passes, so it is not the
 rebuild resetting the plan. They were found in the same session and must not be conflated.
 
-#### No root cause asserted (BUG-061 rule)
+#### Root cause — ★ both anti-repetition levers are FAMILY-scoped, so a family gets one slot and its argmax keeps it
 
-Candidates worth measuring, not assuming: whether the eligible pool is being narrowed before scoring
-(frame-budget tiers exclude Volumetric Lithograph by design — 24 ms against a 16.6 ms budget — which
-may not be the only exclusion); whether scoring is near-deterministic on this material so the same
-ranking recurs; and whether the ~17 s selection interval is intended at all. ⚠ **The fix is not a
-repetition penalty** — Matt's standing call is that the planner picks the best SET per song, and
-same-concept / back-to-back penalties are explicitly not wanted. The question is why the pool is
-small, not how to punish reuse.
+Diagnosed 2026-09-14 after Matt raised it a second time (*"getting REALLY tired of cytokinesis"*) on
+session `2026-09-14T14-34-41Z`: 59 selections, **10 distinct**, Cytokinesis ×14.
+
+`PresetScorer` has exactly two levers against repetition and **neither is per-preset**:
+`familyRepeatMultiplier` (0.2× when the candidate shares the CURRENT preset's family) and
+`fatigueMultiplier` (smoothstep cooldown since that FAMILY was last used). So a family behaves as a
+single rotation slot, and the slot goes to whichever member scores highest on the material. Its
+siblings are not competing with the rest of the catalog — they are competing with each other for one
+turn, and they lose it every time.
+
+**The prediction and the data agree, per family:**
+
+| family | members | presets that ever appeared |
+|---|---|---|
+| particles | **6** | **1** — Cytokinesis ×14 (Nebula, Witchlight, Murmuration, Mitosis, Filigree: never) |
+| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) |
+| geometric | 4 | 1 — Cymatic Resonance ×8 |
+| painterly | 2 | 1 — Ricercar ×3 |
+| waveform | 2 | 2 — Stave ×8, Waveform ×1 |
+| fractal / reaction (singletons) | 1 | 1 each — Fractal Tree ×7, Membrane ×8 |
+
+**A singleton family is a guaranteed private slot; a nine-member family hides eight presets.**
+Frequency is set by family size and cooldown, not by fit.
+
+**Why Cytokinesis specifically, and more often than the singletons.** Its `fatigue_risk` is `low` →
+a **60 s** cooldown, the shortest of the three (`low` 60 / `medium` 120 / `high` 300). Segments run
+~17–24 s, so it is eligible again after roughly three of them, and as the particles argmax it takes
+the slot every time it is. Low risk + sole family winner is the whole of it.
+
+**Budget is NOT the cause** — measured against the 16.6 ms tier budget, only Volumetric Lithograph
+(24.0/18.0 ms) is excluded. Every other catalog preset fits.
+
+⚠ **The fix is not a stronger repetition penalty** — Matt's standing call is best SET per song, no
+same-concept / back-to-back penalties. Note the irony this diagnosis turns up: the *existing*
+family-scoped penalty is what suppresses variety, because it treats nine distinct certified presets
+as one thing. **Product decision needed before any code** — see the options recorded with it.
 
 ---
 
