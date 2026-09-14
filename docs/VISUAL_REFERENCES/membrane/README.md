@@ -28,13 +28,28 @@
 > folder against the drumskin concept is the prerequisite for any Membrane certification
 > attempt, and is the next increment for this preset.
 >
-> **Current musical role (PR.25):** *the surface is the drumhead — a bass-heavy strike lands
+> **M7 PASSED 2026-09-14 (PR.27).** Matt: *"Looks much better. The downbeats on The Suburbs and
+> Rococo read as real impacts; I think they land on the actual downbeat, but if not they land on the
+> beat. Music sync feels tighter overall."* **Still NOT certified** — the missing images below are the
+> blocker, not the preset.
+>
+> **PR.25's palette change was reverted at PR.26 and must not be reattempted without Matt asking.**
+> He never requested it; the colour field, the 1.30x saturation boost, the 0.40 luminance floor and
+> the fresnel rim are byte-identical to 9e0a6041. The anti-reference `anti_02_oversaturated_specular`
+> below describes a failure mode, not a licence to redesign the palette — it was read as one, and the
+> result was *"why did you eliminate the rainbow background and replace it with a drab-colored one?"*
+>
+> **Known-open, both engine-side, neither a preset defect:** BUG-132 (`beatPhase01` running +5.8 %
+> fast against its own installed grid on some tracks) and BUG-133 (bar position cannot be confirmed
+> to be the true downbeat; Matt's call is to leave it).
+>
+> **Current musical role (PR.25, unchanged through PR.27):** *the surface is the drumhead — a bass-heavy strike lands
 > at a point and travels outward as an expanding coral ring, so the listener sees each hit
 > land and move; between hits the sheet is dark and quiet enough that the next strike reads
 > as an event.*
 >
 > **Current silence design (per-preset silence rule, Matt 2026-09-12):** no strikes —
-> `spectral_level_rise` is 0 in silence, so no rings are born. The sheet keeps breathing on
+> the strike is gated on `pulse_amp01`, so no rings are born. The sheet keeps breathing on
 > its always-on FBM and the accumulator keeps advecting. Membrane **coasts**; it does not
 > freeze. Measured at silence over the production path: accumulator meanLuma 0.196,
 > non-black, non-constant, bounded.
