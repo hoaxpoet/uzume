@@ -656,4 +656,57 @@ extension DocIntegrityTests {
                 separate the superseded rows from the one that was genuinely open.
                 """)
     }
+
+    /// The same staleness, one surface over (BUG129 session, 2026-09-14): the roster register is a
+    /// TABLE, and `unfinishedRowsAreNotSuperseded` reads only `###` headers — so Nebula's register
+    /// row still said *"M7 owed"* three days after PR.24 certified it, while the PR.21 header two
+    /// screens below already recorded the review as given. Second instance of one class ⇒ mechanize
+    /// it (D-161 rule 3).
+    ///
+    /// ⚠ Scoped to rows that CLAIM A REVIEW IS OWED, never to open rows in general. Most certified
+    /// presets legitimately carry an open register row — the register lists Matt's asks, and an ask
+    /// survives certification (Mitosis, Nacre, Floret and Glaze are all certified with open asks).
+    /// Only "M7 owed" / "pending live M7" against a certified preset is self-contradicting.
+    @Test("EP register: no row claims a review is owed for a preset that is already certified (DOC.14)")
+    func registerRowsDoNotOweReviewsForCertifiedPresets() {
+        guard Self.docsPresent else { print("DocIntegrityTests: repo docs not present — skipping"); return }
+        guard let plan = Self.read("docs/ENGINEERING_PLAN.md") else { return }
+        let shaders = Self.repoRoot.appendingPathComponent("UzumeEngine/Sources/Presets/Shaders")
+        let sidecars = (try? FileManager.default.contentsOfDirectory(atPath: shaders.path))?
+            .filter { $0.hasSuffix(".json") } ?? []
+        guard !sidecars.isEmpty else { print("DocIntegrityTests: shaders dir not present — skipping"); return }
+
+        var certified: Set<String> = []
+        for file in sidecars {
+            guard let data = try? Data(contentsOf: shaders.appendingPathComponent(file)),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let name = obj["name"] as? String,
+                  (obj["certified"] as? Bool) == true else { continue }
+            certified.insert(name)
+        }
+
+        let owedPhrases = ["m7 owed", "pending live m7", "m7 pending"]
+        var findings: [String] = []
+        for line in plan.components(separatedBy: "\n") where line.hasPrefix("| **") {
+            let cells = line.components(separatedBy: "|")
+            guard cells.count >= 4 else { continue }
+            let preset = cells[1].replacingOccurrences(of: "*", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            guard certified.contains(preset) else { continue }
+            let status = cells[3...].joined(separator: "|")
+            guard !status.contains(Self.postCertExemption) else { continue }
+            let lowered = status.lowercased()
+            if let phrase = owedPhrases.first(where: { lowered.contains($0) }) {
+                findings.append("the register row for \(preset) says \"\(phrase)\" but \(preset) is CERTIFIED")
+            }
+        }
+
+        #expect(findings.isEmpty,
+                """
+                \(findings.joined(separator: "; ")).
+                A certified preset cannot owe the review that certified it. Close the claim in the \
+                register row — or, if this increment genuinely postdates the certification, say so \
+                with the words "\(Self.postCertExemption)" and cite the commit order.
+                """)
+    }
 }
