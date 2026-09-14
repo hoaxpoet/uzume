@@ -910,7 +910,11 @@ closeout runs on degraded audio without a red flag in the artifacts.
 
 **Automatic.** At the end of every session (`SessionRecorder.finish()`) the analyzer
 writes two things into `~/Documents/uzume_sessions/<timestamp>/`:
-- `chain_health.json` — `{verdict, reasons[], peakDBFS, outputSampleRateHz, loveRehabMedianOnsetsPer5s, notes[]}`
+- `chain_health.json` — `{verdict, reasons[], peakDBFS, outputSampleRateHz, loveRehabMedianOnsetsPer5s, maxFullScaleRun, notes[]}`
+  - ⚠ **`peakDBFS: 0` is a real measurement, not a default** (BUG-129). It means the capture touches full scale, which is ordinary for a
+    limited master — read `maxFullScaleRun` beside it: **1** is a master grazing the rail once, a long run is flat-topping and raises
+    `clipped(run=…)`. Since BUG087.5 retired the tap, local-file captures are the decoded file at unity gain, so 0 dBFS is common there
+    where tap captures used to read ≈ −6.
 - a `session.log` line: `CHAIN_HEALTH: verdict=<clean|degraded|broken> reasons=[…]`
 
 **On demand / retroactive** (grades any dir, including pre-ASH ones — missing

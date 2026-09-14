@@ -45,15 +45,24 @@ public struct ChainHealth: Codable, Sendable, Equatable {
     public var outputSampleRateHz: Int?
     /// Median sub-bass onsets per 5 s over the Love Rehab segment, if present.
     public var loveRehabMedianOnsetsPer5s: Int?
+    /// Longest run of CONSECUTIVE full-scale samples in raw_tap.wav, or nil when the
+    /// file is absent/unreadable. **Reported even when it is 0 or 1, and that is the
+    /// point (BUG-129):** `peakDBFS: 0` is indistinguishable from an unset default by
+    /// eye, and this field is the evidence that says which it is. 1 means a master that
+    /// touches full scale once — normal for a limited master; a long run is flat-topping.
+    public var maxFullScaleRun: Int?
+
     /// Non-fatal observations (e.g. `no_raw_tap`) that did not change the verdict.
     public var notes: [String]
 
     public init(verdict: Verdict, reasons: [String] = [], peakDBFS: Double? = nil,
                 outputSampleRateHz: Int? = nil, loveRehabMedianOnsetsPer5s: Int? = nil,
+                maxFullScaleRun: Int? = nil,
                 notes: [String] = []) {
         self.verdict = verdict
         self.reasons = reasons
         self.peakDBFS = peakDBFS
+        self.maxFullScaleRun = maxFullScaleRun
         self.outputSampleRateHz = outputSampleRateHz
         self.loveRehabMedianOnsetsPer5s = loveRehabMedianOnsetsPer5s
         self.notes = notes
@@ -77,6 +86,22 @@ public enum ChainAnalyzer {
     public static let healthyFloorDBFS = -12.0
     /// Peak dBFS below which the level is critical (broken); between the two: low.
     public static let criticalCeilingDBFS = -15.0
+    /// Consecutive full-scale samples that constitute flat-topping — real clipping in the
+    /// capture chain, as opposed to a loud master that legitimately touches full scale.
+    ///
+    /// ★ **Why a RUN and not the peak (BUG-129).** The obvious upper guard is "peak at 0 dBFS
+    /// ⇒ not clean", and it is wrong: measured on the three sessions that prompted this bug,
+    /// the peak is a true `-1.00000000` reached by **exactly one sample out of 2,880,000**,
+    /// with the second-highest at −0.24 dBFS. That is an ordinary limited master, and grading
+    /// every loud track `degraded` would make the verdict useless precisely where D-184 needs
+    /// it to mean something. Clipping in a chain leaves FLAT TOPS — consecutive samples pinned
+    /// at the rail — which a limiter's output does not. 4 samples is 83 µs at 48 kHz.
+    ///
+    /// Calibration data: all three sessions show a longest run of **1**. Both the count and the
+    /// run are reported on every capture, so re-tuning this threshold is a data question rather
+    /// than a guess.
+    public static let clippingRunSamples = 4
+
     /// Sub-bass onset rising-edge threshold on the `beatBass` column. Calibrated so
     /// the real Love Rehab capture yields the validated 11 onsets/5 s across
     /// [0.05, 0.5]; 0.2 sits mid-band. (docs/ARCHITECTURE.md §Validated Onset Counts)
@@ -98,13 +123,24 @@ public enum ChainAnalyzer {
         var broken = false
 
         // 1. raw_tap.wav peak level.
-        let peakDBFS = peakDBFS(rawTapURL: sessionDir.appendingPathComponent("raw_tap.wav"))
-        if let peak = peakDBFS {
-            if peak < criticalCeilingDBFS {
+        let scan = peakScan(rawTapURL: sessionDir.appendingPathComponent("raw_tap.wav"))
+        let peakDBFS = scan?.peakDBFS
+        if let scan {
+            if scan.peakDBFS < criticalCeilingDBFS {
                 broken = true
-                reasons.append("critical_peak(\(fmt(peak))dBFS)")
-            } else if peak < healthyFloorDBFS {
-                reasons.append("low_peak(\(fmt(peak))dBFS)")
+                reasons.append("critical_peak(\(fmt(scan.peakDBFS))dBFS)")
+            } else if scan.peakDBFS < healthyFloorDBFS {
+                reasons.append("low_peak(\(fmt(scan.peakDBFS))dBFS)")
+            }
+            // The upper guard the peak check never had (BUG-129). Gated on flat-topping,
+            // not on the peak: a limited master touching full scale once is healthy audio.
+            if scan.maxFullScaleRun >= clippingRunSamples {
+                reasons.append("clipped(run=\(scan.maxFullScaleRun),samples=\(scan.fullScaleSamples))")
+            }
+            // Above full scale cannot be a mastering choice in a float capture — it is gain
+            // applied somewhere it should not have been.
+            if scan.peakDBFS > 0 {
+                reasons.append("over_full_scale(\(fmt(scan.peakDBFS))dBFS)")
             }
         } else {
             notes.append("no_raw_tap")
@@ -136,6 +172,7 @@ public enum ChainAnalyzer {
             peakDBFS: peakDBFS,
             outputSampleRateHz: log.lastSampleRateHz,
             loveRehabMedianOnsetsPer5s: loveRehabMedian,
+            maxFullScaleRun: scan?.maxFullScaleRun,
             notes: notes)
     }
 
@@ -164,8 +201,26 @@ public enum ChainAnalyzer {
 
     // MARK: - raw_tap.wav peak
 
+    /// What one pass over raw_tap.wav yields: the peak, and the flat-topping evidence that
+    /// says whether a full-scale peak is a clipped chain or just a loud master (BUG-129).
+    struct PeakScan {
+        let peakDBFS: Double
+        /// Samples at or above full scale, across all channels.
+        let fullScaleSamples: Int
+        /// Longest run of consecutive full-scale samples within a single channel.
+        let maxFullScaleRun: Int
+    }
+
     /// Peak absolute sample of raw_tap.wav as dBFS, or nil if absent/unreadable.
     static func peakDBFS(rawTapURL: URL) -> Double? {
+        peakScan(rawTapURL: rawTapURL)?.peakDBFS
+    }
+
+    /// One pass over raw_tap.wav for the peak and its flat-topping evidence.
+    ///
+    /// Runs are counted PER CHANNEL: consecutive samples within one channel's buffer are
+    /// adjacent in time, whereas concatenating channels would invent a run across the seam.
+    static func peakScan(rawTapURL: URL) -> PeakScan? {
         guard FileManager.default.fileExists(atPath: rawTapURL.path),
               let file = try? AVAudioFile(forReading: rawTapURL) else { return nil }
         let format = file.processingFormat
@@ -175,12 +230,25 @@ public enum ChainAnalyzer {
               (try? file.read(into: buffer)) != nil,
               let channels = buffer.floatChannelData else { return nil }
         var peak: Float = 0
+        var fullScale = 0
+        var maxRun = 0
         let frameLength = Int(buffer.frameLength)
         for channel in 0..<Int(format.channelCount) {
             let samples = channels[channel]
-            for i in 0..<frameLength { peak = max(peak, abs(samples[i])) }
+            var run = 0
+            for i in 0..<frameLength {
+                let magnitude = abs(samples[i])
+                peak = max(peak, magnitude)
+                if magnitude >= 1.0 {
+                    fullScale += 1
+                    run += 1
+                    maxRun = max(maxRun, run)
+                } else {
+                    run = 0
+                }
+            }
         }
-        return dbfs(peak: peak)
+        return PeakScan(peakDBFS: dbfs(peak: peak), fullScaleSamples: fullScale, maxFullScaleRun: maxRun)
     }
 
     /// Linear peak → dBFS. Silence maps to −120 (matches SignalHealthMonitor).

@@ -4,6 +4,7 @@
 // FA-#27-clean — no audio is synthesized) plus the checked-in REAL Love Rehab
 // capture for the clean + onset-report case.
 
+import AVFoundation
 import Foundation
 import Testing
 @testable import Shared
@@ -34,6 +35,88 @@ struct ChainAnalyzerTests {
         try FileManager.default.copyItem(at: url, to: dir.appendingPathComponent("features.csv"))
         try write("[t] track → Love Rehab — Chaim\n", to: dir, "session.log")
         return dir
+    }
+
+    /// Write a float32 stereo `raw_tap.wav` from a per-sample generator, so the peak path can
+    /// be driven with audio whose shape at the rail is known exactly (BUG-129).
+    private func writeRawTap(to dir: URL, frames: Int, sampleRate: Double = 48_000,
+                             _ sample: (Int) -> Float) throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        let file = try AVAudioFile(forWriting: dir.appendingPathComponent("raw_tap.wav"),
+                                   settings: settings,
+                                   commonFormat: .pcmFormatFloat32, interleaved: false)
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat,
+                                                   frameCapacity: AVAudioFrameCount(frames)))
+        buffer.frameLength = AVAudioFrameCount(frames)
+        let planes = try #require(buffer.floatChannelData)
+        for i in 0..<frames {
+            let v = sample(i)
+            planes[0][i] = v
+            planes[1][i] = v
+        }
+        try file.write(from: buffer)
+    }
+
+    // MARK: - BUG-129 — the peak check had no upper guard
+
+    @Test("A loud master that touches full scale once stays clean, and reports the evidence")
+    func limitedMasterAtFullScaleIsClean() throws {
+        let dir = try makeDir("bug129_limited")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // The measured shape of the three sessions that prompted BUG-129: a loud programme
+        // with exactly ONE sample at the rail out of millions.
+        try writeRawTap(to: dir, frames: 48_000) { i in
+            i == 24_000 ? -1.0 : 0.9 * sinf(Float(i) * 0.05)
+        }
+        let health = ChainAnalyzer.analyze(sessionDir: dir)
+        #expect(health.peakDBFS == 0, "a true full-scale sample must report 0 dBFS, not nil")
+        #expect(health.maxFullScaleRun == 1, "the evidence that 0 dBFS was MEASURED, not defaulted")
+        #expect(health.verdict == .clean, "an ordinary limited master is not a degraded chain")
+        #expect(health.reasons.isEmpty)
+    }
+
+    @Test("A genuinely clipped capture does NOT grade clean")
+    func flatToppedCaptureIsNotClean() throws {
+        let dir = try makeDir("bug129_clipped")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // Flat tops: the signal is driven past the rail and pinned there for whole stretches.
+        try writeRawTap(to: dir, frames: 48_000) { i in
+            max(-1.0, min(1.0, 1.6 * sinf(Float(i) * 0.05)))
+        }
+        let health = ChainAnalyzer.analyze(sessionDir: dir)
+        #expect((health.maxFullScaleRun ?? 0) >= ChainAnalyzer.clippingRunSamples)
+        #expect(health.verdict == .degraded, "flat-topping is a compromised capture")
+        #expect(health.reasons.contains { $0.hasPrefix("clipped(") },
+                "reasons must name why: \(health.reasons)")
+    }
+
+    @Test("A capture above full scale is flagged — float can exceed the rail, mastering cannot")
+    func overFullScaleIsFlagged() throws {
+        let dir = try makeDir("bug129_over")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeRawTap(to: dir, frames: 4_800) { i in i == 2_400 ? 1.5 : 0.5 }
+        let health = ChainAnalyzer.analyze(sessionDir: dir)
+        #expect(health.verdict != .clean)
+        #expect(health.reasons.contains { $0.hasPrefix("over_full_scale(") },
+                "reasons must name why: \(health.reasons)")
+    }
+
+    @Test("A quiet capture still reports its run evidence alongside the low-peak reason")
+    func quietCaptureReportsRunZero() throws {
+        let dir = try makeDir("bug129_quiet")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeRawTap(to: dir, frames: 4_800) { i in 0.05 * sinf(Float(i) * 0.05) }
+        let health = ChainAnalyzer.analyze(sessionDir: dir)
+        #expect(health.maxFullScaleRun == 0)
+        #expect(health.verdict != .clean)
     }
 
     // MARK: - Verdict paths

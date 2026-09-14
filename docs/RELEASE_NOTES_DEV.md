@@ -10,6 +10,45 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-13-000500] BUG129.1 — the peak was right, and that was the finding
+
+BUG-129 was filed on a reasonable suspicion: `chain_health.json` reporting `peakDBFS` exactly 0 with
+a `clean` verdict, on three consecutive sessions, where an earlier one read −6.03. Both hypotheses
+in the entry said the number was untrustworthy — either unmeasured and defaulting, or measured and
+un-checked.
+
+★ **Read straight out of the float WAVs, the number is correct.** The peak really is
+`1.00000000` — reached by **exactly one sample out of 2,880,000**, sitting among neighbours of
+−0.74/−0.79/−0.93, with the programme's second-highest sample at −0.24 dBFS. An ordinary heavily
+limited master. `dbfs(peak: 1.0)` is exactly 0, so `peakDBFS: 0` was the truth all along.
+
+**And it appeared exactly when the tap went.** The earlier ≈ −6 dBFS readings were *tap* captures;
+BUG087.5 retired the tap on the local-file path the same day, so from `19:58:15Z` onward
+`raw_tap.wav` is the decoded file at unity gain — the master's own level. Nothing broke; the capture
+stopped being attenuated. Two same-day changes, one of which looked like a defect caused by the
+other.
+
+**The real defect was the missing half of the check.** `analyze` tested `critical_peak` and
+`low_peak` — both floors — and nothing at the ceiling, so no capture could ever be graded on being
+too hot. Now `clipped(run=N,samples=M)` and `over_full_scale(…)`.
+
+★ **One verification criterion had to be reinterpreted, and it is worth saying why.** "A session
+whose `raw_tap.wav` is genuinely full-scale must NOT grade `clean`" was written believing full scale
+implied clipping. These captures are genuinely full-scale and healthy, so obeying it literally would
+mark every loud track `degraded` and hollow out the verdict exactly where D-184 needs it to mean
+something. The guard is gated on **flat-topping** instead — 4 consecutive samples at the rail, which
+a clipped chain produces and a limiter's output does not.
+
+**The part that actually closes the complaint is a reported field, not a check.** `maxFullScaleRun`
+now ships on every capture, including when it is 0 or 1 — because `peakDBFS: 0` is indistinguishable
+from an unset default *by eye*, and that ambiguity is what cost an M7 closeout its confidence. The
+three sessions now read `peakDBFS 0, maxFullScaleRun 1`: measured, one sample at the rail.
+
+All four regraded verdicts are unchanged and now defensible. VL.2's and WL.11's `clean` citations
+were sound; their caveats can be read as resolved.
+
+---
+
 ### [dev-2026-09-12-203000] BUG130.1 M7 PASSED — and silence turns out not to be one look
 
 Matt, on the canonical build from `a376f875`: *"silence pauses correctly now."* Session

@@ -1396,6 +1396,25 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG129.1 — the chain-health peak had no ceiling, and the 0 dBFS it reported was correct ✅ (2026-09-13)
+
+`chain_health.json` read `peakDBFS: 0` with a `clean` verdict on three consecutive sessions. Read
+straight out of the float WAVs, that is the truth: peak `1.00000000`, reached by **one sample out of
+2,880,000**, second-highest at −0.24 dBFS — a limited master, not a broken capture. The ≈ −6 dBFS
+readings before it were *tap* captures; BUG087.5 retired the tap the same day, so `raw_tap.wav`
+became the decoded file at unity gain.
+
+★ **The defect was the missing half of the check** — `critical_peak` and `low_peak` are both floors,
+and nothing existed at the ceiling. Added `clipped(run=N,samples=M)` and `over_full_scale(…)`, gated
+on FLAT-TOPPING (4 consecutive samples at the rail) rather than on the peak, because gating on the
+peak would grade every loud master `degraded` and hollow out D-184. That reinterprets one of the
+bug's own verification criteria; the reasoning is recorded in the KNOWN_ISSUES entry.
+
+New reported field `maxFullScaleRun`, present even when 0 or 1 — `peakDBFS: 0` is indistinguishable
+from an unset default by eye, and that ambiguity is the whole complaint. Four new
+`ChainAnalyzerTests`; all four sessions regraded with verdicts unchanged. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
+
 ### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ M7 PASSED, BUG-130 RESOLVED (2026-09-12, Matt: *"silence pauses correctly now"*)
 
 `PlayheadAnalysisClock.tick()` delivers a tick's worth of zeros when the playhead is not moving —
