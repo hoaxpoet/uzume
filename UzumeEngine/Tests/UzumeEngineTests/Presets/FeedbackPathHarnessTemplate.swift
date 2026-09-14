@@ -38,7 +38,7 @@ struct FeedbackPathHarnessTemplate {
 
     /// Golden dHash of the steady-state accumulator on the last silence frame. 0 ⇒
     /// bootstrap. Hardware-specific (D-039): Apple Silicon, macOS 14+.
-    private static let goldenAccumulatorHash: UInt64 = 0x4D3B03030303CF27
+    private static let goldenAccumulatorHash: UInt64 = 0x32E3A918C1646939
 
     @Test("feedback dispatch (warp → composite → swap) holds a bounded non-black accumulator")
     func feedbackPath_boundedAccumulator() throws {

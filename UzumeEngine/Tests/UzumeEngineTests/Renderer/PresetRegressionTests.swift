@@ -214,9 +214,7 @@ private let goldenPresetHashes: [String: PresetHashes] = [
     // identity is observed via `RENDER_VISUAL=1 PresetVisualReviewTests`
     // and Matt M7 review on real-music sessions (BUG-014 acceptance).
     "Lumen Mosaic": (steady: 0xF0F0C8CCCCC8F0F0, beatHeavy: 0xF0F0C8CCCCC8F0F0, quiet: 0xF0F0C8CCCCC8F0F0),
-    // PR.25 — regenerated: Membrane's look changed by design (strike driver moved off the
-    // beat_bass metronome; rainbow field replaced by a dark purple sheet with coral strikes).
-    "Membrane": (steady: 0x473B030383234F27, beatHeavy: 0x4D3B1B03430BCF07, quiet: 0x471B13038B034727),
+    "Membrane": (steady: 0x33E3A919C9627939, beatHeavy: 0x12A3A998C9646139, quiet: 0x47E3C919CD627959),
     "Murmuration": (steady: 0x07449B6727773FF8, beatHeavy: 0x0B449A4727373FF8, quiet: 0x0744936727773FF8),
     // NB.9 (D-140, first volumetric preset): all three fixtures are IDENTICAL.
     // Nimbus's GPU output is animated (flowPhase) and entirely driven by the

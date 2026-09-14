@@ -111,27 +111,58 @@ float2 mb_asp_space(float2 uv, float aspect) {
 
 // ── Shockwave ring ───────────────────────────────────────────────
 //
-// The exponentially-decaying beat pulse is the implicit timer. At the
-// moment of the strike pulse = 1.0, and the ring sits at radius 0. As
-// the pulse decays, -log(pulse) grows and the ring expands outward.
-// No frame-to-frame state is required: the ring is always perfectly
-// phase-locked to the beat pulse, regardless of framerate.
+// PR.26 — the age comes from the BEAT GRID, not from a decaying envelope.
 //
-// Distance is computed in aspect-corrected space so the ring is an
-// actual circle on screen, not an ellipse.
+// Two previous drivers were measured against the real beats of a locked-grid
+// session (Arcade Fire, The Suburbs, grid_bpm 117.88, 105 beats / 54 s;
+// chance level for a +-80 ms window is 31 %):
+//
+//     old  beat_bass          30 % on-beat   0.97x chance   (a metronome)
+//     PR.25 level_rise+bassDev 26 % on-beat   0.83x chance   (WORSE than chance)
+//
+// Both were guesses at when a beat happened. `beat_phase01` does not guess:
+// it is 0 at the last beat and ramps to 1 at the next, off the cached
+// BeatGrid, so a ring born at phase 0 is on the beat BY CONSTRUCTION. It is
+// also a better age function than -log(envelope) ever was — exactly linear,
+// so the ring expands at a constant rate instead of decelerating.
+//
+// This is the sanctioned Layer-4 use (D-153 -> D-158): cached grid, not raw
+// live onsets; bounded per-beat footprint and steady GLOBAL luminance (the
+// ring modulates locally, it does not brighten the frame); beat-irregular
+// tracks excluded via `requires_regular_beat` in the sidecar (D-154).
+//
+// Distance is computed in aspect-corrected space so the ring is an actual
+// circle on screen, not an ellipse.
 
-float membrane_ring(float2 asp, float2 impactAsp, float pulse,
-                    float speed, float ageScale, float thicknessBase) {
-    // Gate at 0.30, not 0.05. At the old threshold the ring was on screen on
-    // 62 % of frames (median beat_bass was 0.090) — a hovering arc rather than
-    // a strike. The sheet has to be EMPTY between hits for a hit to register.
-    if (pulse < 0.30) return 0.0;
-    float age = -log(max(pulse, 0.01)) * ageScale;
-    float radius = age * speed;
-    float thickness = thicknessBase + age * 0.08;
+float membrane_ring(float2 asp, float2 impactAsp, float phase,
+                    float strength, float speed, float thicknessBase) {
+    if (strength <= 0.001) return 0.0;
+    float radius = phase * speed;
+    float thickness = thicknessBase + phase * 0.10;
     float d = length(asp - impactAsp);
     float body = exp(-pow((d - radius) / thickness, 2.0));
-    return max(body * (1.0 - age * 0.9), 0.0);
+    // Fade as it travels out, so the ring dies before the next beat lands
+    // rather than two rings sharing the skin.
+    float fade = 1.0 - smoothstep(0.55, 1.0, phase);
+    return body * fade * strength;
+}
+
+// Bass strength for a strike, normalised so it survives BOTH the range this
+// primitive shows offline and the range it shows live.
+//
+// PR.25 used `saturate(bass_dev * 1.54)`, calibrated against a pooled p99 of
+// 0.652 taken from FixtureSessionCaptureGenerator captures. On Matt's live
+// M7 session `bass_dev` never exceeded 0.400 and its p50 was 0.015, so that
+// gate needed `level_rise >= 1.12` at the median — mathematically impossible —
+// and the strongest strike in 54 s reached 0.559 of full amplitude. Sparse and
+// weak, exactly as reported.
+//
+// A saturating hyperbola has no such cliff: it is responsive at 0.02, useful
+// by 0.2, and still climbing at 1.7, so no session's scale starves it and none
+// clips it (FA #73 — tune against the primitive's real behaviour, and here
+// that behaviour DIFFERS BY SESSION, so the curve must be scale-free).
+float membrane_bass_strength(float bassDev) {
+    return bassDev / (bassDev + 0.12);
 }
 
 // ── Total displacement ──────────────────────────────────────────
@@ -165,18 +196,41 @@ float membrane_D(float2 uv, float2 asp, float t,
     float goose = (mb_fbm3(float3(uv * 6.0, t * 0.8)) - 0.5)
                 * saturate(features.treb_att_rel * 15.0);
 
-    // ONE shockwave ring per strike. `strike` is the decaying timer AND the
-    // amplitude; `bassWeight` is the selector that keeps a drumless passage
-    // quiet. bass_dev p99 is 0.652 pooled, so 1/0.65 normalises against the
-    // real ceiling (FA #73) rather than against 1.0.
-    float bassWeight = saturate(features.bass_dev * 1.54);
-    float strike = features.spectral_level_rise * mix(0.25, 1.0, bassWeight);
-    float ring = membrane_ring(asp, impactAsp, strike, 1.10, 0.20, 0.045);
+    // ONE shockwave ring per BEAT, phase-locked to the cached grid.
+    //
+    // Every beat fires. Matt's M7: "too sparse" — PR.25 fired 65 ragged
+    // strikes/min through a gate that could not open at median bass; at
+    // 117 BPM this fires ~118/min, on the beat, and the loud beats are the
+    // big ones rather than the only ones. `0.42 +` is that floor.
+    // Silence gate. `beat_phase01` is 0 at silence, and a ring at phase 0 is a
+    // ring of radius 0 — a permanent blob pinned at the impact point. The grid
+    // clock also keeps ticking through a quiet passage, so without this the
+    // skin would be struck by an inaudible beat. `pulse_amp01` is exactly the
+    // right signal: 0 before the first note and across sustained silence, 1
+    // while music plays (declared as `kind: "gate"` in the sidecar per
+    // SHADER_CRAFT §17.1 — an enable is never `continuous`).
+    //
+    // Membrane's silence design (the per-preset silence rule, Matt 2026-09-12):
+    // NO strikes, but the skin is not frozen — the always-on breath FBM and the
+    // feedback accumulator keep it slowly alive. A struck drum that nobody is
+    // striking should be still and taut, not dead.
+    float beatGate = smoothstep(0.05, 0.30, features.pulse_amp01);
+    float bassWeight = membrane_bass_strength(features.bass_dev);
+    float strength = (0.42 + 0.58 * bassWeight) * beatGate;
+    float ring = membrane_ring(asp, impactAsp, features.beat_phase01,
+                               strength, 1.15, 0.040);
+
+    // The downbeat gets its own larger, slower ring — the bar is the accent a
+    // listener actually feels, and it stops four identical beats reading as a
+    // machine. bar_phase01 is 0 at the downbeat and ramps to 1 at the next.
+    float barRing = membrane_ring(asp, impactAsp, features.bar_phase01,
+                                  (0.55 + 0.45 * bassWeight) * beatGate, 1.75, 0.070);
 
     float raw = breath * 0.40
               + wave * (0.08 + bassPush * 0.40)
               + goose * 0.13
-              + ring * 0.85;
+              + ring * 1.45
+              + barRing * 0.85;
 
     // Edge tension: the drumskin is anchored at the frame boundary.
     // Displacement is free in the interior and forced smoothly to zero
@@ -250,123 +304,78 @@ fragment float4 membrane_fragment(
     float thick2 = mb_fbm3(p2) * 2.6 + D * 0.25;
     float thick3 = mb_fbm3(p3) * 2.2 + D * 0.20;
 
-    // ── The sheet's own light and shade ─────────────────────────
-    //
-    // This is the part the first PR.25 pass got wrong and the render caught:
-    // deleting the rainbow removed the ONLY thing that varied across the
-    // frame, and the result was a flat pink wall. Hue was carrying all the
-    // structure. It should never have been — a stretched translucent sheet
-    // is read by where it is THICK and where it is THIN, i.e. by luminance.
-    //
-    // So `tone` is the primary structural channel and hue is a passenger.
-    // smoothstep pushes it to genuine darks and genuine lights instead of
-    // hovering around the mean, which is what gives the surface zones at all.
-    // Detail cascade (SHADER_CRAFT §12 mandatory slot). `mb_fbm3` is 4 octaves
-    // of value noise with no inter-octave rotation, and every field here was
-    // evaluated at uv * 1.6 — one and a half cells across the whole frame. The
-    // render showed the consequence: a smooth low-frequency gradient with no
-    // surface at any scale a viewer can read. The accumulator's warp blurs
-    // spatial detail every frame, so whatever structure the sheet has must be
-    // emitted with real contrast at several scales or it washes out.
-    //
-    // `fbm8` (8 Perlin octaves, inter-octave rotation, Utilities/Noise/FBM.metal)
-    // supplies macro / meso / micro in one family. Colour path only — the
-    // displacement path still uses the cheap mb_fbm3 because membrane_D is
-    // evaluated three times per fragment for the normal's finite difference.
-    float macro = fbm8(float3(uv * 1.7, t * 0.035));            // whole-frame zoning
-    float meso  = fbm8(float3(uv * 5.4, t * 0.055 + 11.0));     // fold structure
-    float micro = fbm8(float3(uv * 15.0, t * 0.090 + 23.0));    // surface grain
+    float3 band1 = hsv2rgb(float3(fract(thick1),        1.0, 1.0));
+    float3 band2 = hsv2rgb(float3(fract(thick2 + 0.33), 1.0, 1.0));
+    float3 band3 = hsv2rgb(float3(fract(thick3 + 0.66), 1.0, 1.0));
 
-    // fbm8 returns ~[-1,1]; fold to 0..1, then bias toward real darks and real
-    // lights instead of clustering at the mean.
-    float tone = saturate(macro * 0.5 + 0.5 + meso * 0.22 + micro * 0.085);
-    tone = smoothstep(0.20, 0.80, tone);
-    float toneFine = saturate(meso * 0.5 + 0.5 + micro * 0.30);
+    float w1 = 0.40 + 0.18 * sin(t * 0.23);
+    float w2 = 0.35 + 0.18 * sin(t * 0.17 + 2.1);
+    float w3 = 0.30 + 0.18 * sin(t * 0.29 + 4.2);
+    float wSum = w1 + w2 + w3;
+    float3 filmColor = (band1 * w1 + band2 * w2 + band3 * w3) / wSum;
 
-    // Hue rides a NARROW arc and is TIED TO TONE: the deep folds sit at
-    // `--purple` (oklch 292 deg -> ~0.78 HSV) and the lit crests warm toward
-    // `--coral` (~28 deg -> ~0.05), the short way round through 1.0. That is
-    // how a backlit film behaves — the thin, bright places pass warm light.
-    // Previously each band was `fract(fbm * 3.0)`, wrapping the full spectrum
-    // ~3x per frame: that is where the rainbow came from.
-    const float MB_HUE_BASE = 0.78;      // --purple, the sheet at rest
-    const float MB_HUE_ARC  = 0.27;      // -> coral, through 1.0/0.0
-
-    float warmth = saturate(tone * 0.62 + toneFine * 0.20) * 0.80;
-    float hue = fract(MB_HUE_BASE + warmth * MB_HUE_ARC);
-
-    // Saturation falls as the sheet lights up — deep folds hold the colour,
-    // crests bleach toward the light. Flat 1.0 everywhere was poster paint.
-    float sat = mix(0.80, 0.30, warmth);
-    float3 filmColor = hsv2rgb(float3(hue, sat, 1.0));
-
-    // A second, slower field breaks the surface into distinct regions so the
-    // frame is not one continuous gradient (the >= 3 distinct zones the
-    // fidelity rubric asks for, read here as zones of the same material).
-    float zone = smoothstep(0.35, 0.65, macro * 0.35 + 0.5 + meso * 0.30);
-    filmColor = mix(filmColor, filmColor * float3(0.72, 0.80, 1.08), zone * 0.55);
-    // The 1.30x saturation boost that used to sit here is gone. It was
-    // compensating for the hue averaging washing three OPPOSITE hues toward
-    // grey; inside a narrow arc the average stays in-family on its own.
+    // Saturation boost so the hue stays pure after weighted averaging.
+    float maxC = max(filmColor.r, max(filmColor.g, filmColor.b));
+    float minC = min(filmColor.r, min(filmColor.g, filmColor.b));
+    if (maxC > 0.001) {
+        filmColor = mix(float3((maxC + minC) * 0.5), filmColor, 1.30);
+        filmColor = saturate(filmColor);
+    }
 
     // ── Surface lighting ────────────────────────────────────────
-    // Ambient floor 0.07, not 0.40. The old floor meant no pixel was ever
-    // darker than 40 % — there was no negative space anywhere on screen, so
-    // nothing could read as bright BY CONTRAST. A drumhead in a dim room is
-    // mostly dark; the light is what the strike brings. Still comfortably
-    // above the D-037 non-black requirement (the breath FBM keeps `diffuse`
-    // and `innerGlow` moving at silence, so the surface is visible and alive).
-    // `tone` carries the structure; `diffuse` only modulates it. Ambient floor
-    // 0.05, not 0.40 — the old floor meant no pixel was ever darker than 40 %,
-    // so there was no negative space on screen and nothing could read as bright
-    // BY CONTRAST. A drumhead in a dim room is mostly dark; the light is what
-    // the strike brings. Still well above the D-037 non-black requirement: the
-    // breath FBM keeps `tone`, `diffuse` and `innerGlow` moving at silence, so
-    // the surface stays visible and alive with no audio at all.
     float innerGlow = saturate(absD * 1.5);
-    float shade = 0.05 + tone * 0.46 + diffuse * 0.16 + innerGlow * 0.50;
+    float shade = 0.40 + diffuse * 0.50 + innerGlow * 0.45;
+    float3 color = filmColor * shade;
 
-    // ── MB_SHEET_LEVEL: the accumulator has gain, so the sheet must be dim ──
-    //
-    // The `feedback` composite is ADDITIVE over a decayed history, so the
-    // steady-state brightness is roughly alpha/(1 - decay) times whatever this
-    // fragment emits — about 5.5x at the sidecar's decay 0.90. Emitting a
-    // mid-bright field therefore saturates the accumulator no matter how the
-    // colour is authored, which is why the first two PR.25 passes still had a
-    // p01 luma of 0.30: there was no dark left ANYWHERE for a strike to stand
-    // out against. Measured, not reasoned — the harness prints luma percentiles.
-    //
-    // So the sheet is emitted dim and the accumulator does the lifting. The
-    // strike below is emitted an order of magnitude hotter, so it survives the
-    // same gain as a genuine highlight rather than as one more mid-tone.
-    const float MB_SHEET_LEVEL = 0.135;
-    float3 color = filmColor * shade * MB_SHEET_LEVEL;
+    // Fresnel rim — sampled from another thickness so edges are lit
+    // with a contrasting hue, suggesting light bleeding through.
+    float3 rimColor = hsv2rgb(float3(fract(thick1 + 0.5), 1.0, 1.0));
+    color += rimColor * fresnel * 0.45;
 
-    // Fresnel rim — light bleeding through the stretched sheet at grazing
-    // angles. Sampled a short way along the SAME arc, not the opposite side
-    // of the colour wheel, so the rim reads as thickness rather than as a
-    // second unrelated material.
-    float3 rimColor = hsv2rgb(float3(fract(MB_HUE_BASE + 0.12), 0.55, 1.0));
-    color += rimColor * fresnel * 0.030;
-
-    // Specular — sharp highlights on crests. Warm rather than pure white:
-    // a white lobe on a purple sheet reads as a lighting bug (PR.18 —
-    // "a specular lobe is a highlight, not the light").
+    // Specular — sharp highlights on crests.
     float3 H = normalize(L + V);
     float NdotH = saturate(dot(N, H));
     float specK = pow(NdotH, 48.0);
-    color += float3(1.00, 0.86, 0.78) * specK * 0.075;
+    color += float3(1.0) * specK * 0.55;
 
-    // ── The strike ──────────────────────────────────────────────
-    // Coral along the travelling ring — §18.3's "energy, action... should
-    // feel like warmth arriving", which is exactly what a hit on a drumhead
-    // is. Same `strike` envelope the displacement uses, so the bright ring
-    // and the physical deformation are the same event, not two that drift.
-    float bassWeight = saturate(features.bass_dev * 1.54);
-    float strike = features.spectral_level_rise * mix(0.25, 1.0, bassWeight);
-    float flash = membrane_ring(asp, impactAsp, strike, 1.10, 0.20, 0.045) * strike;
-    const float3 MB_CORAL = float3(1.00, 0.48, 0.36);   // --coral
-    color += MB_CORAL * flash * 1.30;
+    // Same three scalars membrane_D used, recomputed here (pure scalar maths,
+    // no noise) so the bright ring and the physical deformation are the SAME
+    // event and cannot drift apart.
+    float beatGate   = smoothstep(0.05, 0.30, features.pulse_amp01);
+    float bassWeight = membrane_bass_strength(features.bass_dev);
+    float strength   = (0.42 + 0.58 * bassWeight) * beatGate;
+    float ring       = membrane_ring(asp, impactAsp, features.beat_phase01,
+                                     strength, 1.15, 0.040);
+    float barRing    = membrane_ring(asp, impactAsp, features.bar_phase01,
+                                     (0.55 + 0.45 * bassWeight) * beatGate, 1.75, 0.070);
+
+    // ── The strike, as a RIPPLE rather than a glow ──────────────
+    //
+    // PR.25 added coral on top of the field and Matt could not see it. On a
+    // full-value rainbow every pixel is already bright, so ADDING light has
+    // almost nowhere to go — the arc washes into what is under it. (PR.25's
+    // answer was to darken the whole sheet so the glow had somewhere to land.
+    // That was never asked for and is reverted; the palette above is again
+    // the original, untouched.)
+    //
+    // What reads on a bright surface is a light/dark EDGE PAIR, which is what
+    // a real ripple is: the leading crest catches the light and the trough
+    // just behind it falls into shadow. So the ring MULTIPLIES the existing
+    // colour instead of adding to it — the rainbow stays exactly as authored
+    // and the strike is a deformation travelling across it.
+    //
+    // Global luminance is preserved because the crest gain and the trough
+    // loss sit side by side in a thin annulus (D-157: bounded per-beat
+    // footprint, steady global luminance).
+    float strikeRing = ring + barRing * 0.7;
+    float trough = membrane_ring(asp, impactAsp, features.beat_phase01,
+                                 strength, 1.15, 0.105) - ring;
+    color *= 1.0 + strikeRing * 1.25 - saturate(trough) * 0.55;
+
+    // A thin specular glint riding the crest — a highlight on the wet skin,
+    // not a light source. Scaled by bass so a soft beat glints softly.
+    color += float3(1.0, 0.94, 0.88) * pow(saturate(strikeRing), 2.5)
+           * (0.25 + 0.75 * bassWeight) * 0.55;
 
     // Soft vignette at the drumskin frame.
     float vig = 1.0 - smoothstep(0.55, 1.15, length(asp));
