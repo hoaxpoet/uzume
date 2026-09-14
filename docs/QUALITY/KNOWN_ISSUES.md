@@ -46,6 +46,8 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
+| BUG-132 | **P1** · new 2026-09-14 | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
+| BUG-133 | P2 · new 2026-09-14 (Matt, PREP.2 validation) | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -310,6 +312,105 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+---
+
+### BUG-132 — a plan rebuild installs the wrong track's BeatGrid over the playing track (2026-09-14)
+
+**Severity:** P1 · **Domain tag:** `orchestrator` / `pipeline-wiring` · **Failure class:** `pipeline-wiring`
+**Found:** in PREP.2's live validation session, by reading the log — **not** visible to the listener who ran it.
+
+#### Expected
+
+While a track plays, the installed `BeatGrid` is that track's grid. A plan rebuild behind a playing
+session changes what will play NEXT; it does not touch the live pipeline.
+
+#### Actual
+
+Every `_buildPlan` rebuild ends `aboutToPreFire=true` and pre-fires **the plan's first track** —
+`resetStemPipeline caller=preFire` → `StemCache.loadForPlayback` → `BeatGrid installed` — regardless
+of what is playing. Session `2026-09-14T13-49-57Z` (13 local FLACs, early start):
+
+| rebuild | grid installed | actually playing | |
+|---|---|---|---|
+| 13:52:34 / :48, 13:55:12, 13:56:47 | 01 Monkey (164.4) | 01 Monkey | ok |
+| 13:58:40 | 01 Monkey (164.4) | **02 California (118.6)** | ⚠ |
+| 14:00:30, 14:02:15 | 01 Monkey (164.4) | **03 Everybody's Song (175.0)** | ⚠ |
+| 14:04:43, 14:08:10 | 01 Monkey (164.4) | **04 Silver Rider (108.0, meter 3/X)** | ⚠ |
+
+**5 of 9 pre-fires installed the wrong grid**, and the primary observable agrees — `grid_bpm` in
+`features.csv` reverts to 164.421 and *stays there until the next track change*: **13,190 frames**
+inside track 3 and **13,928 frames** inside track 4, i.e. essentially the whole of both. Track 4 is
+in 3, driven on a 4/X grid at 164 BPM against its true 108.
+
+The stem series is clobbered with it — the same pre-fire logs
+`STEM_SOURCE: series frames=11192 covers=259.9s` for Monkey while California plays.
+
+#### Why nobody saw it
+
+Matt reviewed this session for the PREP.2 criteria — playback starts, no stutter — and reported
+*"no noticeable disruption to the music or visuals"*, which was true of everything he was asked to
+watch. A wrong tempo grid does not stutter; it puts beat-locked motion on the wrong clock, and most
+of the presets this session selected are continuous-energy driven (D-004), where it barely shows.
+**A felt review cannot be expected to catch a defect nobody asked it to look for.**
+
+#### Relationship to PREP.2
+
+Not created by PREP.2 — the pre-fire-on-rebuild behaviour predates it — but **PREP.2 turned it from
+rare into routine**: the plan now rebuilds once per prepared track (its item ④), so a 13-track walk
+behind a playing session fires it nine times. PREP.2 anticipated exactly this shape on the
+neighbouring path — *"a walk finishing behind a playing session must not drag it back to `.ready`"* —
+and guarded readiness. The plan-rebuild path has no such guard.
+
+#### Suspected fix, not yet attempted
+
+The pre-fire is correct when the plan is built for a session that has not started. It is wrong when
+a track is already playing: the rebuild should pre-fire nothing, or pre-fire the CURRENT track.
+Evidence for the shape of the guard is in the log — `Orchestrator: wire active (planIdx=N)` tracks
+the playing index correctly throughout, so the information needed is present at the call site.
+
+#### Verification criteria (written before any fix)
+
+- Automated: a plan rebuild while a session is playing leaves the installed grid untouched — a
+  regression test in the `LocalFileEarlyStartTests` family, which already has the harness.
+- Automated: `grid_bpm` in a replayed multi-track local session changes only at track boundaries.
+- Manual: one local-folder session with an early start on tracks of visibly different tempo, watching
+  a beat-locked preset — the felt check the automated ones cannot make.
+
+---
+
+### BUG-133 — preset selection cycles a short fixed list instead of drawing on the roster (2026-09-14)
+
+**Severity:** P2 · **Domain tag:** `orchestrator` / selection · **Reported by Matt** during PREP.2's
+live validation: *"the same presets are being selected and cycled through for the tracks I played -
+Uzume did not take advantage of all the certified presets."*
+
+#### Measured on `2026-09-14T13-49-57Z`
+
+- **50 selections, 13 distinct.** Cytokinesis took **11 of 50** (22 %).
+- **14 of the 24 certified presets never appeared**: Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana,
+  Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph,
+  Witchlight.
+- Three **uncertified** presets did appear — Membrane (7), Plasma, Waveform — so the pool is not
+  gated on `certified`.
+- Within track 4 an eight-preset sequence repeats **verbatim, twice**: Cytokinesis → Glaze → Fractal
+  Tree → Stave → Cytokinesis → Cymatic Resonance → Membrane → Ricercar. Selections change every
+  ~17–24 s.
+
+#### Not the same defect as BUG-132
+
+The cycle repeats inside a single track with no plan rebuild between the two passes, so it is not the
+rebuild resetting the plan. They were found in the same session and must not be conflated.
+
+#### No root cause asserted (BUG-061 rule)
+
+Candidates worth measuring, not assuming: whether the eligible pool is being narrowed before scoring
+(frame-budget tiers exclude Volumetric Lithograph by design — 24 ms against a 16.6 ms budget — which
+may not be the only exclusion); whether scoring is near-deterministic on this material so the same
+ranking recurs; and whether the ~17 s selection interval is intended at all. ⚠ **The fix is not a
+repetition penalty** — Matt's standing call is that the planner picks the best SET per song, and
+same-concept / back-to-back penalties are explicitly not wanted. The question is why the pool is
+small, not how to punish reuse.
 
 ---
 

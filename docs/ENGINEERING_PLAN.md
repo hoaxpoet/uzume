@@ -155,7 +155,7 @@ to beat sync** — `computeBeatGrids` is timed and nothing else.
 **Done-when:** ✅ the figure is reproduced, ✅ every stage is timed (stages sum to 100.0 % of
 per-track wall clock), ⏸ **Matt has the report and picks a direction** — the hard stop.
 
-### Increment PREP.2 — Release, an early start, and a paced walk ✅ code-complete (2026-09-04), pending live validation
+### Increment PREP.2 — Release, an early start, and a paced walk ✅ **LIVE-VALIDATED 2026-09-14** (Matt: *"Looks good overall - no noticeable disruption to the music or visuals"*)
 
 **Matt's pick from PREP.1's options: *"do 1 and 4, pace the walk."*** [D-242] amended accordingly
 (§Amendment — two budgets, and Release is the configuration they are measured in). Option 2 (the
@@ -202,12 +202,26 @@ the whole walk; a real downgrade with an early start. Now driven by a new
 **Done-when:** ✅ engine + app green, lint 0, doc gates green; ✅ `LocalFileEarlyStartTests` (6)
 pins readiness advancing mid-walk, the plan carrying resolved identities mid-walk, a late walk not
 resetting a playing session, pacing off before playback and on after it — three of them fail on the
-pre-PREP.2 code. ⏸ **Live validation outstanding:** one local folder session, started early from the
-Start-now control, confirming the music starts, the first tracks carry their cached grids, and the
-visuals hold while the walk continues behind. That session is also the frame-time measurement §5b
-could not make.
+pre-PREP.2 code. ✅ **Live validation PASSED 2026-09-14** on session `2026-09-14T13-49-57Z` — 13
+local FLACs, cold cache, Release build from `9e0a6041`:
 
-**PREP.3 candidates:** tune `pacingRate` against the live number; the unexplained 23–45 GB at four
+| criterion | result |
+|---|---|
+| Start-now appears on a local session | ✅ **~50 s** to the control (Matt); `startSession→ready (startNow) cacheTrackCount=3` — the three-track threshold, on a path where the control had **never appeared at all** before this increment |
+| music starts and keeps playing | ✅ six tracks played through, `advanceLocalFileQueue EXIT ok=true` at every boundary |
+| early tracks carry their cached grids | ✅ every install `source=preparedCache`, and `STEM_SOURCE: series frames=11192` — the `local:sha256:` identity resolves, so the LFSTEM.1 series is found |
+| visuals hold while the walk runs behind | ✅ **105 `DRAWABLE_LIFECYCLE` heartbeats, `failures=0 unpresented=0` throughout**, and Matt saw no disruption — this is the §5b frame-time measurement PREP.1 could not make offline |
+| plan grows with the walk | ✅ nine rebuilds at `trackCount=13`, `planIdx` advancing 0→5 with the tracks |
+
+⚠ **The same session exposed BUG-132 (P1), which the criteria above could not catch.** Each of those
+nine plan rebuilds pre-fires the plan's FIRST track into the live pipeline: five of them installed
+track 1's 164.4 BPM grid over a different playing track, and `grid_bpm` stayed wrong for ~13,000
+frames at a time — essentially the whole of tracks 3 and 4. Not created by PREP.2 (the pre-fire
+predates it) but **made routine by it**, since the plan now rebuilds once per prepared track. PREP.2
+guarded the neighbouring readiness path against exactly this shape and not this one. A wrong tempo
+grid does not stutter, so a review asked to watch for stutter cannot see it.
+
+**PREP.3 candidates:** **BUG-132 first — it is a P1 this increment made routine.** Then: tune `pacingRate` against the live number; the unexplained 23–45 GB at four
 concurrent workers (PREP.1 §5); and Option 2 if Matt wants *fully prepared* inside 300 s.
 
 **Superseded planning note.** PREP.2 was originally "whichever option Matt picks", with concurrency
