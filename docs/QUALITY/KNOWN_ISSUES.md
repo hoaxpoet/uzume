@@ -55,7 +55,7 @@ reads" are not reads — see the entry.)*
 | DEAD-001 | P3 · recorded not fixed (DS.2, 2026-09-01) | app.viewmodel / dead-code | **`ConnectorPickerViewModel.localFolderEnabled` is dead, and the comment above it claims a v1 gate the shipped build does not have.** Three hits, no reader: the declaration, the comment, and the test asserting its `false`. The view has enabled the local-folder tile unconditionally since GAP A (2026-05-28), and `ENABLE_LOCAL_FOLDER_CONNECTOR` — which the comment blames — gates a different thing entirely (the v2 playlist-connector scaffold in `UzumeEngine`, set in no xcconfig, not on the local-source path that ships). Left in place deliberately: deleting a property whose `false` a test asserts is a behaviour change wearing a cleanup costume, and it belongs with the connector-capability work, not a presentation increment. Pairs with the still-open **CA.3-FU-2**. Detail below |
 | BUG-106 | P2 · **FIXED + LIVE-CONFIRMED 2026-08-26 (BUG106.1)** — `ml_forced=0` across a 25 ms/frame 4K session; only the felt half (Matt's eye on stem timing / new stutter) is outstanding | ml.dispatch / calibration | **`MLDispatchScheduler`'s budget is a hardcoded 14/16 ms with no resolution term, so at 4K the gate can never open.** `recentMaxFrameMs` is the WORST frame of the window and 4K's median was 17.6 ms in BUG-100's own session, so every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires — against a 2.0 s stem period. Jank avoidance never happens and stems run ~a period late at 4K. ⚠ **Not** BUG-100's mechanism: the PERF.15 VL session was flat across 172 s at 4K while permanently over the same budget. Needs Matt's call between "stems on time" and "jank-free" at 4K. |
 | BUG-131 | **P1** · **FOUND + FIXED 2026-09-11, same session it was introduced** | audio.playback / concurrency | **The playhead analysis clock killed the process when a tick raced session teardown.** `PlayheadAnalysisClock.stop()` called `DispatchSourceTimer.cancel()`, which prevents FUTURE handlers but does NOT wait for one already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose engine had just been released and threw `com.apple.coreaudio.avfaudio: 'required condition is false: _engine != nil'`, an Objective-C exception no Swift `catch` can intercept. **Every track change and every session stop is a teardown**, so this was live on the local-file path from BUG087.4 onward. Introduced by me at BUG087.4 and shipped: the full suite was green on the BUG087.4, BUG087.5 and PR.24 runs, because it is a race. Detail below |
-| BUG-129 | P3 · new 2026-09-11 | diagnostics / measurement | **`chain_health.json` reports `peakDBFS` exactly 0 on two consecutive sessions, and the verdict is still `clean`.** Measured: `2026-09-11T19-12-34Z` → −6.03, then `2026-09-11T19-58-15Z` → **0**, `2026-09-11T20-19-03Z` → **0**. An exact 0 is full scale, which would be clipping — yet `reasons` and `notes` are both empty and the verdict is `clean`, so either the peak is not being measured and defaults to 0, or it is measured and the clipping check does not fire on it. **Why it matters beyond tidiness:** the preset-session rule is that a fidelity/M7 closeout must cite the session's chain-health verdict, and D-184 makes a `clean` verdict the precondition for judging fidelity at all. A peak field that silently reads 0 weakens every such citation — including two M7s closed today (VL.2 and WL.11), both of which cite `clean` over a 0 peak and are flagged as such in their entries. Not diagnosed; found while checking a session before quoting its verdict. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is being read at all. |
+| BUG-129 | P3 · **RESOLVED 2026-09-12 (BUG129.1)** — the peak was RIGHT; the missing thing was an upper guard | diagnostics / measurement | **`chain_health.json` reports `peakDBFS` exactly 0 on two consecutive sessions, and the verdict is still `clean`.** Measured: `2026-09-11T19-12-34Z` → −6.03, then `2026-09-11T19-58-15Z` → **0**, `2026-09-11T20-19-03Z` → **0**. An exact 0 is full scale, which would be clipping — yet `reasons` and `notes` are both empty and the verdict is `clean`, so either the peak is not being measured and defaults to 0, or it is measured and the clipping check does not fire on it. **Why it matters beyond tidiness:** the preset-session rule is that a fidelity/M7 closeout must cite the session's chain-health verdict, and D-184 makes a `clean` verdict the precondition for judging fidelity at all. A peak field that silently reads 0 weakens every such citation — including two M7s closed today (VL.2 and WL.11), both of which cite `clean` over a 0 peak and are flagged as such in their entries. Not diagnosed; found while checking a session before quoting its verdict. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is being read at all. |
 | BUG-103 | P2 · open; intermittently kills the whole parallel engine suite (the regression gate) | audio.playback / test-infrastructure | **The parallel engine suite dies with an uncaught NSException from `-[AVAudioPlayerNode play]` — console: `com.apple.coreaudio.avfaudio: 'player did not see an IO cycle'` — thrown inside `LocalFilePlaybackProvider._startLocked()` on a racing-start test thread.** `play()` reports this state as an Objective-C exception, not a Swift error; the crashing tests drive `provider.start()` from raw `Thread.detachNewThread` threads (`try?` cannot catch an NSException), so the exception unwinds off the thread and aborts the entire test process — SIGABRT, no failing test line, same suite-level presentation as BUG-078. **Fourteen `.ips` on 2026-08-25 alone (11:19–17:05), every one the identical stack:** `_startLocked()` → `-[AVAudioPlayerNode play]` → `AVAudioPlayerNodeImpl::StartImpl` → `NSException`; throwers span `LocalFilePlaybackStartRaceTests.rescheduleRacingTeardown…` (11), `SessionLifecycleChurnTests.concurrentDoubleStart…` (2), and `SessionLifecycleChurnTests.completionCallbackVsStop…` (1). **Passes in isolation** (`swift test --filter SessionLifecycleChurn`), fires only under full-suite parallel load — and it is **pre-existing, baseline-verified at merge `8cbf936a` twice** (RECON.14's check, plus a first-hand clean-worktree run at that commit while filing; found at RECON.14 while running closeout evidence). NOT the BUG-078 trap: that was `StopImpl`/dealloc `dispatch_sync` on `CommandQueue` (SIGTRAP); this is `StartImpl` at play-time (SIGABRT). Same family — AVAudioPlayerNode lifecycle under parallel scheduler load. The throw site is the SHIPPED local-file start path (and `resume()` carries a second, unproven `play()` site), so the app-facing form would be a hard crash — P2 by BUG-078's rationale. Detail below |
 | BUG-091 | **P1** · instrumentation landed 2026-08-17; awaiting one reproduction | app.session / pipeline-wiring | **A single local file is selected, preparation succeeds, and NO PLAYBACK EVER STARTS — the session runs with every audio field exactly 0.0.** Matt, 2026-08-17. Measured on `2026-08-17T17-19-19Z`: 1262 frames over 84 s of render clock, and `playback_time_s` / `track_elapsed_s` / `accumulatedAudioTime` / `bass` / `mid` / `treble` / `pulse_amp01` / `beatPhase01` each hold **exactly one distinct value, 0.0**, for the whole session. Preparation is healthy — stem-cache hit, BeatGrid installed (94.1 BPM, 47 beats), plan built. **The discriminator is a diff against the working local-file session 1.5 h earlier (`16-19-13Z`, same file, same OS build):** the working run logs `WIRING: provider.start INSTANCE` and an AVAudioEngine node tap (`TAP_BUFFER: requested=1024 delivered=4410 → 10 Hz`) and NO process tap; the failed run has an identical preparation sequence with `provider.start` **absent**, an unexplained 8 s gap, and then `TAP: startCapture → createProcessTap` — the SYSTEM-AUDIO path — installed twice. `resetStemPipeline caller=other` has exactly one call site (`handleLocalFileReady`), so that function ran and cleared all three of its guards, then never reached the router start. **Root cause NOT asserted** (BUG-061's rule): the strongest candidate is the `catch` around `audioRouter.start(mode:.localFilePlayback)`, which logs to `os_log` only and calls `endSession()` → `currentSource = nil` → `startAudio()`'s LF.4 guard misses → the tap is installed and `stopInternal()` tears the provider down. **Unconfirmable from the artifacts: the app's `lfLogger` output is not retained** (`log show --predicate 'subsystem == "com.phosphene.app"'` over the window returns zero lines), which is itself the reason an 84 s silent session left no trace of its cause. Instrumentation for exactly that is now in (see below). Detail below |
 | BUG-085 | P1 · HANG.1–2 complete 2026-08-05; remains open | renderer / app.hang | **App intermittently hangs hard in `CAMetalLayer.nextDrawable`; window unresponsive, force-quit required.** The live stack proves a main-thread drawable request blocked at 0 % CPU after healthy frames, but the cause remains unknown; direct render-path leakage, the capture hook, preset-swap skip, inflight semaphore, GPU completion, display sleep, and occlusion have been ruled out. **HANG.1 instrumentation is merged to `main` via PR #37 (`c54a2e7c`)**. HANG.2 completed a full-track control plus a 10 min 36 s Witchlight soak with 34,811/34,811 drawables balanced and no stalls or imbalances, refuting a deterministic per-frame leak but not identifying the intermittent owner. **THE INSTRUMENTED CAPTURE NOW EXISTS (2026-08-05, session `2026-08-05T21-21-03Z`, Fractal Tree / Cherub Rock)** — and every lifecycle counter is BALANCED at the moment of the hang: `drawable=12045/12045`, `unique_presented=6012/6012`, `command_completed=6012/6012`, `failures=0`, `unpresented=0`, one request outstanding (`pending=frame:6013,site:mesh.descriptor`). The app held ZERO drawables and CoreAnimation still would not vend one, which independently confirms HANG.2's soak: there is no app-side leak, and the owner is outside the app. Two captures 98 s apart are byte-identical on those counters — a PERMANENT block, not a long stall. See the detail section. |
@@ -1414,6 +1414,67 @@ place, which makes an A/B against the −6.03 session cheap.
   or produce a non-`clean` verdict with a reason naming why.
 - Automated: a session whose `raw_tap.wav` is genuinely full-scale must NOT grade `clean`.
 - No manual check required — this is a measurement defect, not a felt one.
+
+#### Diagnosis — ★ the filed hypothesis was wrong, and the measurement was right all along
+
+Both candidate causes in this entry said the peak was untrustworthy. Measured independently of the
+app, by reading the float WAVs directly:
+
+| session | true peak | samples at full scale | 2nd-highest sample |
+|---|---|---|---|
+| `2026-09-11T19-12-34Z` | 0.49935913 (−6.03 dBFS) | 0 | — |
+| `2026-09-11T19-58-15Z` | **1.00000000 (0.00 dBFS)** | **1 of 2,880,000** | −0.24 dBFS |
+| `2026-09-11T20-19-03Z` | **1.00000000** | **1 of 2,880,000** | −0.24 dBFS |
+| `2026-09-12T20-19-59Z` | **1.00000000** | **1 of 2,880,000** | −0.24 dBFS |
+
+`ChainAnalyzer.peakDBFS` reads `raw_tap.wav`, takes `max(abs(sample))` and converts —
+`dbfs(peak: 1.0)` is exactly 0. **`peakDBFS: 0` was the truth**: a single sample sitting at
+`-1.00000000`, in context among neighbours of −0.74/−0.79/−0.93, with the whole programme's
+second-highest sample at −0.24 dBFS. That is an ordinary heavily-limited master, not a broken
+capture and not an unmeasured default.
+
+**Why it appeared exactly when it did.** The three earlier sessions read ≈ −6 dBFS because they were
+*tap* captures. BUG087.5 (same day, 2026-09-11) retired the tap on the local-file path, so from
+`19:58:15Z` onward `raw_tap.wav` is the DECODED FILE at unity gain — the master's own level, which
+for modern music touches full scale. Nothing broke; the capture stopped being attenuated.
+
+#### The actual defect, and the one criterion I had to reinterpret
+
+`analyze` checked `critical_peak` (too low) and `low_peak` (too low) and **nothing at the top end** —
+so no capture could ever be graded on being too hot, which is what made a 0 dBFS reading look like a
+silent failure rather than a fact.
+
+★ **Taken literally, criterion 2 would flag every loud track.** "A session whose `raw_tap.wav` is
+genuinely full-scale must NOT grade `clean`" was written believing full scale implied clipping. The
+evidence says otherwise: these captures ARE genuinely full-scale and are healthy. Gating on the peak
+would mark ordinary limited masters `degraded` and hollow out the verdict exactly where D-184 needs
+it to carry weight. So the guard is gated on **flat-topping** — `clippingRunSamples = 4` consecutive
+samples pinned at the rail, which a clipped chain produces and a limiter's output does not — plus a
+separate `over_full_scale` reason, since a float capture above 1.0 cannot be a mastering choice.
+Criterion 2 is met in substance: a genuinely clipped capture does not grade `clean`.
+
+#### Fix (BUG129.1)
+
+- `peakScan` replaces the peak-only loop: one pass yields the peak, the full-scale sample count, and
+  the longest run of consecutive full-scale samples (counted per channel, so concatenation cannot
+  invent a run across the seam).
+- New reasons `clipped(run=N,samples=M)` and `over_full_scale(…)`.
+- **New reported field `maxFullScaleRun`, present on every capture including when it is 0 or 1.**
+  This is the part that closes the original complaint: `peakDBFS: 0` is indistinguishable from an
+  unset default *by eye*, and a companion field that says "one sample at the rail" makes it
+  self-evidencing. The three sessions now read `peakDBFS 0, maxFullScaleRun 1`.
+
+**Regraded** (`Scripts/analyze_session_chain.sh`): `19-12-34Z` → peak −6.03, run 0, `clean`;
+`19-58-15Z` / `20-19-03Z` / `2026-09-12T20-19-59Z` → peak 0, **run 1**, `clean`. All four verdicts
+are unchanged and now defensible — the loud ones say why they are loud.
+
+**Gate.** Four tests in `ChainAnalyzerTests`: a limited master at full scale stays `clean` and
+reports run 1; a flat-topped capture grades `degraded` with a `clipped(` reason; an above-full-scale
+capture is flagged; a quiet capture reports run 0.
+
+**The M7 citations this bug undermined are sound.** VL.2 and WL.11 cited `clean` over a 0 peak; that
+verdict was correct, and the captures were loud rather than broken. The caveats in their plan
+entries can be read as resolved.
 
 ### BUG-087 — Local-file playback analyses at 10 Hz where streaming analyses at 51 Hz (AVAudioEngine ignores the tap `bufferSize`) (2026-08-11)
 
