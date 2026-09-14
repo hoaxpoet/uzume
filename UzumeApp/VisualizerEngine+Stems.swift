@@ -704,9 +704,10 @@ extension VisualizerEngine {
             // everywhere else keeps the fixed band. Deliberately survives the
             // `mirPipeline.reset()` that `handleLocalFileReady` runs after this call.
             mirPipeline.setLoudnessProfile(cached.loudnessProfile)
+            let installGrid = octaveCorrectedGrid(cached.beatGrid, title: identity.title)
             // BUG-007.8: pass per-track grid-vs-onset offset as initial drift bias.
             mirPipeline.setBeatGrid(
-                cached.beatGrid.offsetBy(0),
+                installGrid.offsetBy(0),
                 initialDriftMs: cached.gridOnsetOffsetMs
             )
             logCachedInstall(cached: cached, title: identity.title, replacedExisting: replacedExisting)
@@ -792,6 +793,37 @@ extension VisualizerEngine {
         let full = "\(installed), firstBeat=\(firstBeat)s\(replaceNote)\(loudness)"
         logger.info("BEAT_GRID_INSTALL: \(full, privacy: .public)")
         sessionRecorder?.log("BeatGrid installed: \(installed)\(loudness)")
+    }
+
+    /// BUG-134 — restore beats the model dropped, before the grid goes live.
+    ///
+    /// A cached grid can contain isolated 2x gaps: one beat missing between two the
+    /// model kept. A preset locked to that grid fires that strike twice as late, which
+    /// is what Matt reported as "it's actually out of phase" (M7 2026-09-14). Measured
+    /// over the 50 grids in the local stem cache: 32 carry at least one, 201 beats are
+    /// recoverable, 18 grids are untouched.
+    ///
+    /// Env-gated for one increment so the A/B is a flag rather than a rebuild (beat-sync
+    /// program house rule). `UZUME_GRID_OCTAVE_FIX=0` disables.
+    ///
+    /// Contiguous half-time runs are NOT rewritten — telling a model dropout from a
+    /// genuine half-time section needs the audio, not the beat list. Those are reported
+    /// by `octaveProfile()` and tracked in BUG-134.
+    private func octaveCorrectedGrid(_ raw: BeatGrid, title: String) -> BeatGrid {
+        let enabled = ProcessInfo.processInfo.environment["UZUME_GRID_OCTAVE_FIX"] != "0"
+        let out = enabled ? raw.octaveUnified() : raw
+        let profile = raw.octaveProfile()
+        if out.beats.count != raw.beats.count || profile.isBimodal {
+            let note = "GRID_OCTAVE: track='\(title)' "
+                + "beats \(raw.beats.count)→\(out.beats.count), "
+                + "filled=\(profile.isolatedGapCount), "
+                + "clusteredLong=\(profile.clusteredLongCount), "
+                + "bimodal=\(profile.isBimodal), "
+                + String(format: "dominant=%.1f bpm, summary=%.1f bpm", profile.dominantBPM, raw.bpm)
+            logger.info("\(note, privacy: .public)")
+            sessionRecorder?.log(note)
+        }
+        return out
     }
 
     /// LM.4.7 per-track palette refresh — extracted into a helper to keep

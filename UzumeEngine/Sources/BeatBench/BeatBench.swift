@@ -247,7 +247,8 @@ struct BeatBenchCommand: ParsableCommand {
                 continue
             }
             let (samples, rate) = try AudioDecode.monoFloat32(url: url)
-            let grid = analyzer.analyzeBeatGrid(samples: samples, sampleRate: rate)
+            let grid = Self.scoredGrid(          // BUG-134 A/B arm; see +OctaveArm
+                analyzer.analyzeBeatGrid(samples: samples, sampleRate: rate))
 
             // Ground truth may extend past the analyzer's window; score only where both
             // exist, otherwise the grid is penalised for beats it was never shown.

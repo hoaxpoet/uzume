@@ -56,7 +56,7 @@ reads" are not reads — see the entry.)*
 | DEAD-003 | P3 · recorded, and the code deleted (DS.3, 2026-09-01) | app.view / dead-affordance | **`FullScreenErrorView` was written as a reusable §9.1/§9.2 blocking surface and never acquired a consumer.** Zero construction sites anywhere in `UzumeApp`; the only non-doc references were its own declaration and its path in `DynamicTypeRegressionTests.viewFiles`. It duplicated `PreparationFailureView` almost verbatim — same body, icon, text block, actions, headline, and the same two severity switches — so for its whole life the app carried two copies of a blocking-failure layout and shipped one. **Deleted at DS.3** as part of the `RecoveryScreen` consolidation, which is why this is recorded as history rather than as open work: there was no behaviour to preserve because there was never any behaviour. Detail below |
 | DEAD-001 | P3 · recorded not fixed (DS.2, 2026-09-01) | app.viewmodel / dead-code | **`ConnectorPickerViewModel.localFolderEnabled` is dead, and the comment above it claims a v1 gate the shipped build does not have.** Three hits, no reader: the declaration, the comment, and the test asserting its `false`. The view has enabled the local-folder tile unconditionally since GAP A (2026-05-28), and `ENABLE_LOCAL_FOLDER_CONNECTOR` — which the comment blames — gates a different thing entirely (the v2 playlist-connector scaffold in `UzumeEngine`, set in no xcconfig, not on the local-source path that ships). Left in place deliberately: deleting a property whose `false` a test asserts is a behaviour change wearing a cleanup costume, and it belongs with the connector-capability work, not a presentation increment. Pairs with the still-open **CA.3-FU-2**. Detail below |
 | BUG-106 | P2 · **FIXED + LIVE-CONFIRMED 2026-08-26 (BUG106.1)** — `ml_forced=0` across a 25 ms/frame 4K session; only the felt half (Matt's eye on stem timing / new stutter) is outstanding | ml.dispatch / calibration | **`MLDispatchScheduler`'s budget is a hardcoded 14/16 ms with no resolution term, so at 4K the gate can never open.** `recentMaxFrameMs` is the WORST frame of the window and 4K's median was 17.6 ms in BUG-100's own session, so every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires — against a 2.0 s stem period. Jank avoidance never happens and stems run ~a period late at 4K. ⚠ **Not** BUG-100's mechanism: the PERF.15 VL session was flat across 172 s at 4K while permanently over the same budget. Needs Matt's call between "stems on time" and "jank-free" at 4K. |
-| BUG-134 | P2 · OPEN, not scheduled | dsp.beat | **`beatPhase01` advances faster than its own installed grid tempo on some tracks.** Measured from the phase SLOPE on `2026-09-14T17-28-08Z` (verdict clean): *Ready to Start* runs at 163.3 BPM against an installed grid of 154.311 (**+5.8 %**, over 109 s / 300 wraps / one backward yank — a sustained divergence, not a correction transient), so anything locked to that phase walks steadily out of time. A second, different fault on *Modern Man*: the rate is correct to 0.1 % but real onsets show no phase relationship to the grid beats (R = 0.19 vs The Suburbs' 0.57) — right tempo, wrong place. **Not a preset defect** — Membrane (PR.26/PR.27) consumes the phase correctly and Matt passed its M7 on the two tracks whose grids measure correct. BeatGrid/drift-tracker work, parked under D-206; the rate-vs-own-grid divergence may be the *changed grid premise* D-206 asks for, but reopening is Matt's call. Detail below |
+| BUG-134 | P2 · **partly fixed at BUG134.1**, contiguous case OPEN | dsp.beat | **Cached BeatGrids carry two tempo octaves inside one track, and `computeBPM` averages them into a BPM describing neither.** Reopened by Matt on the rate-divergence premise; investigating **falsified that framing** — `beatPhase01` faithfully tracks the grid's real local interval and is innocent. The defect is the grid: *Ready to Start* has 402 intervals at 314 ms (191 BPM) and 198 at 637 ms (94 BPM), ratio 2.03x, and a preset locked to it fires every third strike twice as late. Two faults hide each other — `computeBPM`'s inlier window is a FULL OCTAVE wide so both clusters are admitted (verified: mean = 154.31, the exact cached value), and `halvingOctaveCorrected()` gates on that summary, so the bad number suppresses the correction for the bad grid. 50 cached grids: 8 bimodal, 32 with dropped beats, 201 recoverable, `grid.bpm` error up to +53.7 %. **Fixed:** isolated dropped beats filled (BUG134.1). **Open:** contiguous half-time runs, which are indistinguishable in the beat list from a genuine half-time section — needs AUDIO-referenced verification, a changed premise requiring sign-off per the beat-sync two-strikes rule. Detail below |
 | BUG-135 | P3 · OPEN — **left alone on Matt's call 2026-09-14** | dsp.beat | **The grid's bar position cannot be confirmed to be the true musical downbeat.** Attempted on `2026-09-14T18-14-07Z` (verdict clean): `bassDev` is the only signal with real separation (bar-position 2, 1.33× lead) and it cannot distinguish beat 1 from beat 3, since a kick commonly plays both; `harmonic_flux`, `spectral_surge` and `spectralFlux` each pick a *different* position and spread only ~2 %, i.e. no bar-position discrimination at all. The recorded feature set cannot answer the question. Deliberately not chased: automated cold-start downbeat-phase derivation was falsified across six iterations and retired at Matt's Choice A (2026-05-25), marked *do not iterate*. Consequence is bounded — Membrane's 1.00/0.22/0.52/0.22 accent means a half-bar error swaps the strong and secondary beats, leaving a hard strike every four with a medium between, displaced but intact. Matt, shown the measurement: *leave it*. Detail below |
 | BUG-131 | **P1** · **FOUND + FIXED 2026-09-11, same session it was introduced** | audio.playback / concurrency | **The playhead analysis clock killed the process when a tick raced session teardown.** `PlayheadAnalysisClock.stop()` called `DispatchSourceTimer.cancel()`, which prevents FUTURE handlers but does NOT wait for one already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose engine had just been released and threw `com.apple.coreaudio.avfaudio: 'required condition is false: _engine != nil'`, an Objective-C exception no Swift `catch` can intercept. **Every track change and every session stop is a teardown**, so this was live on the local-file path from BUG087.4 onward. Introduced by me at BUG087.4 and shipped: the full suite was green on the BUG087.4, BUG087.5 and PR.24 runs, because it is a race. Detail below |
 | BUG-129 | P3 · **RESOLVED 2026-09-12 (BUG129.1)** — the peak was RIGHT; the missing thing was an upper guard | diagnostics / measurement | **`chain_health.json` reports `peakDBFS` exactly 0 on two consecutive sessions, and the verdict is still `clean`.** Measured: `2026-09-11T19-12-34Z` → −6.03, then `2026-09-11T19-58-15Z` → **0**, `2026-09-11T20-19-03Z` → **0**. An exact 0 is full scale, which would be clipping — yet `reasons` and `notes` are both empty and the verdict is `clean`, so either the peak is not being measured and defaults to 0, or it is measured and the clipping check does not fire on it. **Why it matters beyond tidiness:** the preset-session rule is that a fidelity/M7 closeout must cite the session's chain-health verdict, and D-184 makes a `clean` verdict the precondition for judging fidelity at all. A peak field that silently reads 0 weakens every such citation — including two M7s closed today (VL.2 and WL.11), both of which cite `clean` over a 0 peak and are flagged as such in their entries. Not diagnosed; found while checking a session before quoting its verdict. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is being read at all. |
@@ -317,56 +317,58 @@ future consumers and is independently regression-tested.
 
 ---
 
-### BUG-134 — `beatPhase01` advances faster than its own installed grid tempo on some tracks (2026-09-14)
+### BUG-134 — cached BeatGrids carry two tempo octaves; `computeBPM` averages them (2026-09-14)
 
-**Severity:** P2 · **Domain:** `dsp.beat` · **Failure class:** phase/rate drift · **Related:** BUG-065 (parked at D-206), BUG-132
+**Severity:** P2 · **Domain:** `dsp.beat` · **Failure class:** grid octave inconsistency · **Related:** BUG-132 (ruled out, below), D-079, D-206
+**Reopened by Matt 2026-09-14:** *"reopen BUG-134 — the rate divergence is a changed premise."* Investigating it **falsified the original framing and found a different, larger defect.** Both are recorded; the original title is kept in git history.
 
-**Not BUG-132.** A parallel session filed BUG-132 — *a plan rebuild installs the wrong track's
-BeatGrid over the playing track* — the same day, and it is the obvious candidate for this symptom.
-**Checked and ruled out for this session:** `grid_bpm` in `features.csv` is correct and constant
-within every track (The Suburbs 117.882 ×3232 frames, Ready to Start 154.311 ×6552, Modern Man
-122.669 ×1011, Rococo 82.906 ×3519 — no reversion to the first track's value), and the log carries
-exactly one pre-fire, at session start, for the correct first track. The grid installed here was the
-RIGHT one; the phase still advanced at the wrong rate. Two different defects that both put
-beat-locked motion on the wrong clock.
+#### The original framing was wrong
 
-**Observed:** Matt, M7 on Membrane (PR.26), 2026-09-14: *"Sync on The Suburbs' first track was
-synced with the beat closely, but Ready to Start (the second track) is looser — it's actually out
-of phase. Same for Modern Man."*
+BUG-134 was first filed as *"`beatPhase01` advances faster than its own installed grid tempo"* — 163.3 BPM measured against an installed grid of 154.311 on *Ready to Start*. **`beatPhase01` is innocent.** `LiveBeatDriftTracker.computePhase` computes `(time − beats[idx]) / timing.period`, and `BeatGrid.localTiming` returns `beats[idx+1] − beats[idx]` — the grid's REAL local inter-beat interval. The phase faithfully tracks whatever spacing the grid has. The comparison was against `grid.bpm`, a **summary field**, and the summary is what is wrong.
 
-**Measured** from session `2026-09-14T17-28-08Z` (Arcade Fire, *The Suburbs*, local-file path,
-`chain_health.json` verdict **clean**, peak −0.07 dBFS). Per track, the implied tempo taken from the
-*slope* of `beatPhase01` (summed forward phase per summed elapsed time, so wrap-detection artefacts
-cannot contribute) against the BPM the BeatGrid logged at install:
+Also ruled out rather than assumed: **this is not BUG-132** (*a plan rebuild installs the wrong track's BeatGrid*), filed the same day and the obvious candidate. In session `2026-09-14T17-28-08Z` `grid_bpm` is correct and constant within every track (117.882 ×3232 frames, 154.311 ×6552, 122.669 ×1011, 82.906 ×3519 — no reversion to the first track's value) and the log carries exactly one pre-fire, for the correct track. The RIGHT grid was installed.
 
-| track | phase slope | installed grid BPM | error | onset-phase concentration R |
+#### What is actually wrong
+
+**A cached BeatGrid can contain two tempo octaves inside one track.** *Ready to Start*'s inter-beat intervals form two clean clusters:
+
+```
+320 ms (187 BPM) x249      640 ms ( 94 BPM) x 80
+300 ms (200 BPM) x135      620 ms ( 97 BPM) x 73
+short cluster: 402 intervals, mean 314 ms = 191 BPM
+long  cluster: 198 intervals, mean 637 ms =  94 BPM      ratio 2.03x
+```
+
+A preset locked to that grid fires every third strike twice as late. **That is the symptom Matt reported**, on that track and no other:
+
+| track | Matt's M7 verdict | grid.bpm | its own beats | octave-mixed |
 |---|---|---|---|---|
-| The Suburbs | 117.5 | 117.882 | −0.3 % | 0.57 (offset +75 ms) |
-| **Ready to Start** | **163.3** | **154.311** | **+5.8 %** | 0.03 — none |
-| Modern Man | 122.8 | 122.669 | +0.1 % | 0.19 — none |
-| Rococo | 83.0 | 82.906 | +0.1 % | 0.40 |
+| The Suburbs | *"synced closely"* | 117.9 | 118.1 | no |
+| **Ready to Start** | ***"actually out of phase"*** | 154.3 | **142.9** | **YES — 33 %** |
+| Modern Man | *"looser"* | 122.7 | 122.9 | no |
+| Rococo | (measured clean) | 82.9 | 83.2 | no |
 
-Two distinct faults, not one:
+**Two faults hide each other.**
 
-1. **Rate error (Ready to Start).** The phase advances at 163.3 BPM while the grid installed for that
-   track says 154.311. Over 109 s and 300 wraps with a single backward yank, so this is a sustained
-   rate divergence, not a correction transient. A consumer locked to this phase walks steadily out of
-   time — exactly the reported symptom.
-2. **Offset error (Modern Man).** The rate is correct to 0.1 %, but real audio onsets show no phase
-   relationship to the grid beats (R = 0.19, where The Suburbs reaches 0.57). The grid is the right
-   tempo in the wrong place.
+1. **`BeatGridResolver.computeBPM` averages ACROSS octaves.** Its inlier window is `[median*0.5, median*2.0]` — a full octave wide. Verified on the real artifact: median 320 ms → window [160, 640] ms, the 637 ms cluster squeaks **inside** the 640 ms ceiling, 126 slow intervals are admitted, and the mean returns **154.31 — matching the cached `grid.bpm` to the decimal.** Matt already ruled on this class at PR.12 (*"you should not be averaging BPM / tempo"*); the meter computation was fixed then and this one was not.
+2. **`halvingOctaveCorrected()` gates on `bpm > 175`.** Ready to Start's summary is 154.31, so the gate never opens — while two thirds of its beats run at 191 BPM, exactly what that gate exists to catch. **The bad summary suppresses the correction for the bad grid.** Its doc comment also asserts the offline path "does not need this because longer context produces reliable beat-level detection"; the corpus contradicts that.
 
-**Not a preset defect.** Membrane (PR.26/PR.27) consumes `beat_phase01` correctly — where the phase is
-right the strikes are right, confirmed by Matt on The Suburbs and Rococo at the 2026-09-14T18-14-07Z
-M7: *"The downbeats on The Suburbs and Rococo read as real impacts... Music sync feels tighter
-overall."* Any preset driven from `beat_phase01` inherits this on the affected tracks.
+**Corpus prevalence** (50 cached grids, local stem cache): **8 genuinely bimodal; 32 carry at least one isolated dropped beat; 201 beats recoverable; 18 untouched.** `grid.bpm` error reaches **+53.7 %** (Sprawl I: 169.3 claimed, 110.1 actual).
 
-**Status: OPEN, not scheduled.** This is BeatGrid/drift-tracker work, and the tracker is parked under
-D-206 (*"don't reopen without a changed GRID premise"*). Recorded here so the next session diagnosing
-"this preset drifts" finds the measurement instead of re-deriving it against a preset that is
-behaving correctly. A rate divergence between phase and its own installed grid BPM may be the
-changed premise D-206 asks for — it is a narrower, more checkable claim than the drift ramp that
-defeated the earlier attempts — but that is Matt's call to make, not a fix to start.
+#### Fixed at BUG134.1 — the unambiguous half only
+
+`BeatGrid+OctaveConsistency.octaveUnified()` fills **isolated** 2× gaps: one beat missing between two the model kept, restored at the midpoint. Wired at the prepared-cache install seam behind `UZUME_GRID_OCTAVE_FIX` (default ON). 201 beats restored across 32 grids; 18 grids byte-identical.
+
+#### STILL OPEN — and it needs a different kind of evidence
+
+**Contiguous half-time runs are NOT corrected, deliberately.** An earlier version of the fix expressed a still-bimodal grid at its slow octave when the fast cluster exceeded the D-079 threshold. Measured over the corpus it fired **zero times**, and making it fire requires deciding, from the beat list alone, whether a long run of 2× intervals is
+
+- (a) the model losing the fast pulse and tracking half-time — an error, or
+- (b) the track genuinely playing a half-time section — correct.
+
+**Those are identical in the grid.** Telling them apart needs the AUDIO. Guessing would rewrite real tempo changes on every track with a half-time bridge. *Ready to Start*'s residual irregularity after gap-filling is **29.8 %** (from 33.0 %) and is entirely this case. Reopening on a **changed premise — audio-referenced octave verification** — is the next step, and per the beat-sync two-strikes rule it needs Matt's sign-off before a third attempt.
+
+**A gap in the benchmark, worth its own note:** BeatBench's five suites are near-neutral on this change (see BUG134.1's closeout table) because its ground-truthed fixtures are mostly healthy grids. **The failure mode is not represented in the suite.** An octave-mixed fixture would be a worthwhile ground-truth addition.
 
 ---
 
