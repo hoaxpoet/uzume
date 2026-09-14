@@ -79,7 +79,7 @@ struct ReplayHarnessRouteCoverageTests {
         // routed off it; kept as generic harness capability after Rosette's retirement
         // (D-224) for whichever future ray-march preset routes off it next
         "tonalPhaseFifths", "tonalPhaseThirds", "tonalConsonance", "tonalTension",
-        "harmonicFlux", "midAttRel",
+        "harmonicFlux", "midAttRel", "trebAttRel",
         // StemFeatures — energies, beats, deviations, spectral shape
         "drumsEnergy", "bassEnergy", "vocalsEnergy", "otherEnergy",
         "drumsBeat", "bassBeat", "vocalsBeat", "otherBeat",

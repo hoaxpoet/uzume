@@ -2,7 +2,7 @@
   "name": "Membrane",
   "family": "reaction",
   "duration": 35,
-  "description": "A luminous drumskin stretched across the screen — bass displaces the surface, spectrum sculpts topology, beats strike it with shockwaves, feedback loop is its memory",
+  "description": "A luminous drumskin stretched across the screen — every beat strikes it and the ripple travels outward, the downbeat hitting hardest, feedback loop is its memory",
   "author": "Matt",
   "passes": ["feedback"],
   "beat_zoom": 0.02,
@@ -19,5 +19,16 @@
   "transition_affordances": ["crossfade"],
   "section_suitability": ["buildup", "peak"],
   "complexity_cost": { "tier1": 0.8, "tier2": 0.4 },
+  "requires_regular_beat": true,
+  "audio_routes": [
+    { "route": "beat_strike_ring",      "primitive": "beatPhase01",  "kind": "accent" },
+    { "route": "downbeat_strike_ring",  "primitive": "barPhase01",   "kind": "accent" },
+    { "route": "strike_strength",       "primitive": "bassDev",      "kind": "continuous" },
+    { "route": "strike_enable",         "primitive": "pulseAmp01",   "kind": "gate" },
+    { "route": "bass_hand_undulation",  "primitive": "bassAttRel",   "kind": "continuous" },
+    { "route": "hihat_surface_stipple", "primitive": "trebAttRel",   "kind": "continuous" },
+    { "route": "impact_point_drift_h",  "primitive": "arousal",      "kind": "continuous" },
+    { "route": "impact_point_drift_v",  "primitive": "valence",      "kind": "continuous" }
+  ],
   "certified": false
 }

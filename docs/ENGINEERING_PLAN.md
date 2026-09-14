@@ -316,7 +316,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 |---|---|---|
 | **Gossamer** | *"Tuning for sync with music, has potential."*; then 2026-09-09 *"it looks very childlike in construction"* | ✅ **PR.18 — CERTIFIED 2026-09-09, the 22nd.** Matt: *"looks great. looks ready to certify."* Sync half addressed (14 routes, BUG-124); fidelity half built (silk material, strand irregularity, node glints, atmosphere, wave displacement, catenary scallop). Rubric 4/15 → 8/15; cost 6.6 → ~9.8 ms, inside budget. Reference set recurated (12 images). Open items listed under PR.18 step 4. |
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
-| **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ⏳ **open.** Two asks — visual and motion. Routes unverified: check declaration and firing before diagnosing. |
+| **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ✅ **M7 PASSED 2026-09-14 (PR.25 → PR.27)** — Matt: *"Looks much better. The downbeats on The Suburbs and Rococo read as real impacts... Music sync feels tighter overall."* Strike moved to the cached beat grid (26 % on-beat → 100 %); metric accent gave it a 19.7× dynamic range; the X-seam `min()` crease fixed. **Not yet certified** — reference images are gone (D-211) so the D-181 check cannot run. Residual sync on two tracks is **BUG-134**, engine-side and parked. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ✅ **CERTIFIED 2026-09-11, the 24th** (PR.24; the reviewed build carried PR.19/.20/.21, so their review is given). Five measured mechanisms fixed at PR.19: linear-bin→angle (2 % of the circle carried 27 % of the energy), a band pinned at its floor, 0.60× spatial noise, level-dependence, zero declared routes. Nine routes now declared. No cost increase. ⚠ Reference set is still an unfilled template — the one open item. |
 | **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
 | **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
@@ -342,6 +342,186 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Spectral Cartograph** | *"Opportunities to clean up eventually"* | ⏸ deferred; it is `is_diagnostic`, so it never auto-installs. |
 | **Staged Sandbox** | *"Get rid of it."* — refined by Matt at PR.0 to *"I want to hide Staged Sandbox, the other diagnostic presets can still remain in the list"* | ✅ **CLOSED.** Hidden from the cycle at PR.0; Matt confirmed 2026-09-09: *"No need to get rid of Staged Sandbox. Hiding it was the right call, and this work has already occurred."* It remains the subject of the staged harness template (D-246), which is a legitimate use of a diagnostic fixture. |
 | **Arachne** | *not in the review* | ✅ removed 2026-09-09 (D-246) on Matt's separate call. |
+
+### PR.27 — Membrane: metric accent, X-seam ✅ M7 PASSED (2026-09-14, Matt: *"Looks much better"*)
+
+### PR.26 — Membrane: strike on the beat grid; palette restored (2026-09-14)
+
+Two M7 rounds after PR.25, both on Arcade Fire *The Suburbs* (local files, chain verdict **clean**).
+
+**PR.25 failed M7 outright.** Matt: *"Total failure. Strikes do not read as strikes... strikes do not
+align with the beat... too sparse. Also, why did you eliminate the rainbow background and replace it
+with a drab-colored one?"*
+
+**The palette change was never authorised and is the headline lesson.** Matt's roster note asked for
+sync and the pulse. PR.25 replaced the colour field on its own authority, reasoning from an
+anti-reference annotation and the brand spec, and justified it internally as *enabling* the strike fix.
+That is the seat substituting its own judgement for the product lead's on the most visible property of
+the preset. Reverted at PR.26: the three-FBM-band field, the 1.30× saturation boost, the 0.40
+luminance floor and the fresnel rim are **byte-identical to 9e0a6041**, verified block-by-block. The
+`PresetAcceptanceTests` exemption PR.25 argued for went with it — it existed only to accommodate the
+dark sheet, and the check passes on merit again.
+
+**PR.25's sync claim was measured against the wrong question.** Its evidence was a 6× cross-track
+*discrimination* in frame-to-frame motion. Re-measured against the 105 real grid beats of Matt's
+session (chance = 31 % for a ±80 ms window):
+
+| strike driver | strikes/min | on-beat | vs chance |
+|---|---|---|---|
+| pre-PR.25 `beat_bass` | 144 | 30 % | 0.97× |
+| **PR.25** `level_rise × bassDev` | 64 | 26 % | **0.83×** |
+| **PR.26** `beat_phase01` (cached grid) | 116 | **100 %** | **3.23×** |
+
+PR.25 made it *worse than the metronome it replaced*. Discrimination across tracks and alignment
+within a track are different questions; one was used as evidence for the other.
+
+**PR.25's gate was also arithmetically starved.** `bassDev × 1.54` was calibrated against a pooled p99
+of 0.652 from `FixtureSessionCaptureGenerator` captures; on the live session `bassDev` peaked at 0.400
+with p50 0.015, so at median bass the gate needed `level_rise ≥ 1.12` — impossible — and the strongest
+strike in 54 s reached 0.559. Replaced with a scale-free saturating hyperbola `bassDev/(bassDev+0.12)`,
+so no session's scale starves or clips it. **A p99 measured on one capture set is not a constant.**
+
+**PR.27 answered the second M7.** Matt: *"Every strike is the same intensity, which makes the preset
+feel much too active... why are there seam lines forming an X?"*
+
+- **Intensity.** PR.26's 0.42 floor gave a 2.1× range at ring birth. Replaced with a metric hierarchy
+  — downbeat 1.00, mid-bar 0.52, off-beats 0.22 — times that beat's bass, no floor, with the ring's
+  travel speed scaling to the accent so a bar reads as one large slow wave with small ripples inside.
+  Measured at birth: p10 0.040, p50 0.094, p90 0.308, max 0.779 = **19.7×**.
+- **The X seams.** A real bug and an old one, predating all Membrane work this phase. Edge tension was
+  `saturate(min(edgeDist.x, edgeDist.y) * 3.0)`, and `min()` of two smooth fields has a **gradient
+  discontinuity along the locus where they are equal** — for a centred rectangle, exactly the two
+  diagonals. `membrane_D` is finite-differenced and multiplied by 28 to build the normal, so each
+  crease became a hard line and the pair crossed as an X. PR.26 raised the ring's displacement weight
+  and made a latent crease visible. Now the **product** of the two per-axis falloffs, C1-continuous
+  everywhere. Verified gone in the render.
+
+**Silence is provably untouched:** with the `pulse_amp01` gate closed the render is pixel-identical to
+the original — all three `PresetRegression` goldens and the `FeedbackPathHarnessTemplate` golden pass
+at their **unchanged pre-PR.25 values**. The visible change exists only where there is a real beat.
+
+**Escalated, not fixed: BUG-134.** `beat_phase01` advances at 163.3 BPM against an installed grid of
+154.311 on *Ready to Start* (+5.8 %), and on *Modern Man* the rate is right but the phase shows no
+lock to the audio. Engine-side, BeatGrid/drift-tracker, parked under D-206. Membrane consumes whatever
+phase it is handed correctly.
+
+**Left alone on Matt's call: BUG-135.** Whether the grid's bar position is the true musical downbeat
+cannot be determined from the recorded features — `bassDev` is the only signal with separation and it
+cannot tell beat 1 from beat 3; `harmonic_flux`, `spectral_surge` and `spectralFlux` disagree with it
+and each other across a ~2 % spread. Automated cold-start downbeat derivation is retired (Matt's
+Choice A, 2026-05-25, *do not iterate*). Matt, shown the measurement: **leave it.**
+
+**Done-when:** ✅ M7 passed; ✅ engine suite green (1959 tests, 1 known issue); ✅ lint 0 / 548;
+✅ 236 routes across 25 presets, 0 red; ✅ 8 routes declared incl. `pulseAmp01` as `kind: "gate"`;
+✅ `requires_regular_beat: true` (D-154). ⏸ **Not certified** — reference images absent (D-211), so the
+D-181 perception check cannot run; recuration is the prerequisite and the next increment.
+
+### PR.25 — Membrane deep dive ❌ M7 FAILED — superseded by PR.26/PR.27 (kept for the negative results) (2026-09-14, Matt: *"improve and hopefully, ultimately, certify Membrane"*)
+
+**Step 1 — Definition.** Matt's observation, quoted from
+[`PRESET_ROSTER_REVIEW_2026-09-04.md`](PRESET_ROSTER_REVIEW_2026-09-04.md) §Membrane:
+*"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."*
+
+**A concept conflict had to go to Matt before any code.** Membrane carried two incompatible
+definitions: the sidecar + shader (his own, 2026-04-09) said *"a luminous drumskin... beats strike
+it with shockwaves"*, while `docs/VISUAL_REFERENCES/membrane/README.md` (curated 2026-05-01, not by
+him) specified a **fluid marbling** target with a `feedback` → `mv_warp` migration and **no ring at
+all**. Building the folder's contract would have deleted the "puddle pulse" his note asks to
+improve. Put to him with a render of the then-current state, **he chose the drumskin.** The
+README now carries a superseded-in-part banner; this is the D-188 / KSRETIRE.1 hazard exactly —
+a curated artifact quietly renaming his stated direction into another concept.
+
+**Musical role:** *the surface is the drumhead — a bass-heavy strike lands at a point and travels
+outward as an expanding coral ring, so the listener sees each hit land and move; between hits the
+sheet is dark and quiet enough that the next strike reads as an event.*
+
+**Step 2 — Diagnosis, measured.** Routes were **undeclared** (no `audio_routes` key) and the strike
+driver was a metronome. Measured over five `FixtureSessionCaptureGenerator` captures (real audio
+through the production analysis chain, FA #27):
+
+| primitive | Speed Of Life | Sound And Vision | Weeping Wall (drumless) | Love Rehab | Seven Nation Army | spread |
+|---|---|---|---|---|---|---|
+| `beatBass` rising edges/min | 134 | 134 | **138** | 135 | 132 | **1.05x** |
+| `bassDev` crossings/min | 14 | 36 | **2** | 28 | **76** | **38x** |
+
+`beatBass` on Weeping Wall repeats the cycle `1.000 → 0.201 → 0.040` forever. It is a clock, not a
+detector — `RayMarchPipeline.swift` already recorded the same finding ("~97 % of frames... a
+near-constant jitter") and nothing had connected it to Membrane. **Rendered consequence**, measured
+on the production feedback path: frame-to-frame motion was *identical* on a rock track and a
+drumless ambient one — p99 `0.02029` and max `0.08032` on both, to the digit.
+
+**The visual half had a second, independent cause, and only a render exposed it.** The colour field
+was `hsv2rgb(fract(fbm * 3.0), 1.0, 1.0)` — full saturation, hue sweeping the whole circle ~3x per
+frame — plus a 1.30x saturation boost and a **0.40 luminance floor**. That is an edge-to-edge
+pastel rainbow with no dark anywhere: Membrane's own anti-reference
+`anti_02_oversaturated_specular`, and the §18.2 prohibition on glow aesthetics. It is *why* the
+pulse was invisible — a thin bright arc over a field that is already bright has nothing to contrast
+against. The ring was also on screen **62 %** of frames (gate `pulse > 0.05`, median `beat_bass`
+0.090): a hovering arc, not a strike.
+
+**Step 3 — Implementation.**
+- Strike timing + amplitude → `spectralLevelRise` (instant attack, ~0.2 s release, so `-log(env)`
+  still yields a clean expanding age), selected by `bassDev` soft-saturated at its **measured pooled
+  p99 of 0.652**, never against 1.0 (FA #73). Ring gate raised 0.05 → 0.30.
+- All absolute reads retired (FA #31 / D-026): `bass_att` → `bass_att_rel` x2.6 (p99 0.379),
+  `treb_att` → `treb_att_rel` x15.
+- Palette: narrow purple→coral arc tied to tone, saturation 0.30–0.80, ambient floor 0.40 → **0.05**,
+  strikes in `--coral` (§18.3 "energy... warmth arriving"). `fbm8` (8 octaves, inter-octave rotation)
+  replaces the local 4-octave value noise in the colour path for the detail cascade.
+- Treble stipple detuned (scale 10 → 6, gain 45 → 15): it feeds displacement, and the normal is a
+  finite difference amplified 28x, so it was rendering as compression-dirt speckle.
+- Six `audio_routes` declared; `RouteCoverageTests` green (234 routes / 25 presets, 0 red).
+
+**Result, same measurement, same tracks:**
+
+| | Speed Of Life | Weeping Wall | Seven Nation Army |
+|---|---|---|---|
+| mean frame-to-frame motion | 0.00166 | **0.00063** | **0.00383** |
+| event spikes (>4x p50) | 229 | **80** | **256** |
+| strike luma p99 | 0.269 | **0.221** | **0.499** |
+| ring on-screen | 10.2 % | **3.0 %** | **31.4 %** |
+
+A **6x** spread in motion between the drumless track and hard rock, where the baseline was identical
+to three decimals. The sheet is dark between hits (luma p50 0.194, p01 0.146) and strikes reach
+p99 0.488.
+
+**Negative results, recorded so the next session does not re-derive them.**
+1. **Lowering `decay` does not recover spatial detail.** Tested at 0.80 and 0.70. The compose blend
+   is `src * srcAlpha + dst * 1` over a decayed history, so **this frame's share of the output is
+   `(1 - decay)` regardless of alpha** — raising alpha scales brightness, not sharpness (tested,
+   0.55 → 0.90, no structural change). Lowering decay does raise the share, but decay is precisely
+   what carries the ring's expanding echo, and at 0.70 the strike degraded from crisp concentric
+   rings to a smudge. **Trails were chosen over static surface detail deliberately.** Measured
+   ceiling: the fragment emits ~12x fold-to-crest luminance contrast and the accumulator delivers
+   1.4x. Fine persistent surface detail on this preset wants `mv_warp`, not a tuning pass.
+2. **`PresetAcceptanceTests.test_readableForm_atSteadyEnergy` cannot measure a `feedback` preset.**
+   It renders `preset.pipelineState` single-pass; Membrane's fragment is authored dim on purpose to
+   feed a ~5.5x accumulator gain, so every pixel lands in one 32-wide luma bin and scores
+   formComplexity 1. Membrane joins the existing exemption list (Dragon Bloom, Fata Morgana, Nacre,
+   Floret, Filigree, Glaze — same rationale, six precedents), with production coverage cited:
+   `FeedbackPathHarnessTemplate` + the new `MembraneRealAudioMotionHarness`. **The gate was not
+   tuned:** satisfying it by lowering decay was tried, measured, and rejected because it regressed
+   the product.
+
+**Instrument built:** `MembraneRealAudioMotionHarness` — copy-adapt of the D-182 `feedback` template
+driving the production `runWarpPass` → compose → swap seam, fed a recorded `features.csv` row per
+frame (**every** column mapped — an unmapped field reads ZERO on the GPU and a live route then looks
+dead), dumping PNGs and printing frame-to-frame motion + luma percentiles. Env-gated
+(`MEMBRANE_MOTION=1`), out of the default run.
+
+**Step 4 — M7 owed.** Matt watches it live on *Low*. **Blocking certification, and not fixable in
+this increment:** Membrane's reference images no longer exist on this machine (untracked at the LFS
+cutover, D-211 — only the README survives, in the worktree and the primary both). So
+`Scripts/compare_render.sh` could not run and the **D-181 verdict table has no reference column** —
+the render evidence here is self-judged against the concept and the anti-references, not against
+curated imagery. Recurating the folder against the drumskin concept is the next increment.
+
+**Done-when:** ✅ engine suite green (1959 tests; the two residual failures — Gossamer's 61.5 ms
+frame budget and BeatThis inference at 0.77 s — are pre-existing, untouchable by this diff, and
+**pass in isolation**: load flakes from parallel runs); ✅ lint 0 violations / 548 files; ✅ 6 routes
+declared and green; ✅ silence healthy (accumulator meanLuma 0.196, non-black, non-constant,
+bounded); ✅ motion gate read as a sequence, not stills. ⏸ M7 outstanding. ⏸ reference recuration
+outstanding.
 
 ### PR.18 — Gossamer deep dive 🔨 OPEN (2026-09-09, Matt: *"open it as Gossamer's deep dive"*)
 

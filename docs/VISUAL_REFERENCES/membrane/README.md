@@ -1,6 +1,60 @@
 # Membrane — Visual References
 
-**Family:** `fluid` &nbsp;·&nbsp; **Passes (current):** `feedback` &nbsp;·&nbsp; **Passes (uplift target):** `mv_warp` &nbsp;·&nbsp; **Rubric:** full (per D-064(a))
+> ## ⚠ SUPERSEDED IN PART — read this box before anything below it (PR.25, 2026-09-14)
+>
+> **The uplift contract below describes a preset Matt did not ask for, and it must not be
+> built.** This folder was curated on 2026-05-01 as a *fluid marbling* target — wet edges,
+> coral-on-navy cell networks, a `feedback` → `mv_warp` migration, and **no shockwave ring at
+> all**. Membrane's own sidecar and shader, authored by Matt, describe something else: *"a
+> luminous drumskin... beats strike it with shockwaves."*
+>
+> Put to Matt directly at PR.25 with a render of the then-current state, he chose **the
+> drumskin / puddle**, consistent with his roster-review note — *"Sync with music is weak,
+> **puddle pulse** could be improved visually and with respect to motion"* — and with his
+> Meniscus note, *"puddle ripple looks good."* This is the D-188 / KSRETIRE.1 hazard in its
+> purest form: a curated folder quietly renaming Matt's stated direction into another
+> concept. **The musical role is the concept; a reference folder is not a mandate.**
+>
+> What still stands below: the reference-image annotations and anti-references (the
+> anti-references especially — `anti_02_oversaturated_specular` described Membrane's actual
+> shipped failure exactly, and nobody checked). What does NOT stand: the "Recommended uplift
+> path" section, the marbling palette target, and the audio-routing table, which routes
+> through primitives PR.25 measured and rejected.
+>
+> **The images themselves are gone.** Reference imagery became untracked at the LFS cutover
+> (D-211) and only this README survives, on this machine and in the primary checkout both.
+> So the perception check that `Scripts/compare_render.sh` mechanizes **could not be run for
+> PR.25** — the verdict table that D-181 requires has no reference column. Recurating this
+> folder against the drumskin concept is the prerequisite for any Membrane certification
+> attempt, and is the next increment for this preset.
+>
+> **M7 PASSED 2026-09-14 (PR.27).** Matt: *"Looks much better. The downbeats on The Suburbs and
+> Rococo read as real impacts; I think they land on the actual downbeat, but if not they land on the
+> beat. Music sync feels tighter overall."* **Still NOT certified** — the missing images below are the
+> blocker, not the preset.
+>
+> **PR.25's palette change was reverted at PR.26 and must not be reattempted without Matt asking.**
+> He never requested it; the colour field, the 1.30x saturation boost, the 0.40 luminance floor and
+> the fresnel rim are byte-identical to 9e0a6041. The anti-reference `anti_02_oversaturated_specular`
+> below describes a failure mode, not a licence to redesign the palette — it was read as one, and the
+> result was *"why did you eliminate the rainbow background and replace it with a drab-colored one?"*
+>
+> **Known-open, both engine-side, neither a preset defect:** BUG-134 (`beatPhase01` running +5.8 %
+> fast against its own installed grid on some tracks) and BUG-135 (bar position cannot be confirmed
+> to be the true downbeat; Matt's call is to leave it).
+>
+> **Current musical role (PR.25, unchanged through PR.27):** *the surface is the drumhead — a bass-heavy strike lands
+> at a point and travels outward as an expanding coral ring, so the listener sees each hit
+> land and move; between hits the sheet is dark and quiet enough that the next strike reads
+> as an event.*
+>
+> **Current silence design (per-preset silence rule, Matt 2026-09-12):** no strikes —
+> the strike is gated on `pulse_amp01`, so no rings are born. The sheet keeps breathing on
+> its always-on FBM and the accumulator keeps advecting. Membrane **coasts**; it does not
+> freeze. Measured at silence over the production path: accumulator meanLuma 0.196,
+> non-black, non-constant, bounded.
+
+**Family:** `reaction` (sidecar; D-123 records this as Matt's call — the `fluid` label below is stale) &nbsp;·&nbsp; **Passes (current):** `feedback` &nbsp;·&nbsp; **Passes (uplift target):** `mv_warp` &nbsp;·&nbsp; **Rubric:** full (per D-064(a))
 **Last curated:** 2026-05-01
 **Curation role:** Uplift contract. Membrane is currently a production preset on the legacy thin-feedback path; this folder defines the fidelity target for a future uplift session that raises Membrane to V.6 certification.
 
@@ -14,7 +68,12 @@ The aesthetic target is an organic, breathing, painterly fluid surface — medit
 
 ---
 
-## Recommended uplift path: migrate from `feedback` to `mv_warp`
+## ~~Recommended uplift path: migrate from `feedback` to `mv_warp`~~ — RETIRED (PR.25)
+
+*Kept for the record only. Matt chose the drumskin, which the `feedback` path serves: the long
+decay is what gives a strike its expanding concentric echo. PR.25 measured the trade — lowering
+decay to satisfy a single-pass gate degraded the ring to a smudge. Everything in this section
+assumes the marbling concept and is not a work order.*
 
 The reference target this folder describes — wet, in-progress, full-bleed evolution with regional flow differentiation — cannot be reached on the thin-feedback path. Single global zoom+rot warps every pixel identically; the references show different regions of the frame moving in different directions. Achieving that requires per-vertex feedback (`mv_warp`, MV-2, D-027), which warps each grid vertex independently from preset-authored `mvWarpPerFrame()` and `mvWarpPerVertex()` Metal functions.
 
@@ -88,7 +147,14 @@ Per D-065(c), each annotation states (1) the failure mode, (2) why it's tempting
 
 ---
 
-## Audio routing — uplift target
+## ~~Audio routing — uplift target~~ — SUPERSEDED (PR.25)
+
+*The shipped routes are the `audio_routes` manifest in `Membrane.json`, green in `RouteCoverageTests`.
+The table below predates the PR.25 measurements and routes the strike through `f.beat_bass`, which
+was measured firing 132–138/min on all five test tracks including a drumless ambient one — a
+metronome, not a detector. Do not restore it.*
+
+### Historical (marbling-target) routing
 
 All routings below assume D-026 compliance from the first commit of the uplift session. The current production code's grandfathered `features.mid_att` use is retired in the uplift — there is no migration window where mixed routing is acceptable.
 
