@@ -47,7 +47,7 @@ reads" are not reads — see the entry.)*
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
 | BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
-| BUG-133 | P2 · **DIAGNOSED 2026-09-14**, awaiting Matt's product call | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
+| BUG-133 | P2 · **RESOLVED 2026-09-14 (BUG133.1)** — pending live check | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
 | COPY-001 | P2 · **RESOLVED 2026-09-01** | app.copy / product-claim | **The source picker's footer tells the user Uzume never controls playback, directly above a tile for which that is false.** `connector.picker.footer` = *"Uzume reads what's playing. It doesn't control playback."* renders on `ConnectorPickerView`, which offers Apple Music, Spotify **and Local files**. On the local path Uzume owns the audio and ships a full transport — stop / previous / play-pause / next in `LocalFileTransportBar` (`uzume.playback.lfTransport`). `EXPERIENCE_MODEL.md` states the correct rule: *"Local playback owns transport; streaming handoff listens for external audio and must not promise transport control."* The claim is right for two of three sources and wrong for the third. Matt spotted it on the DS.2 M7 page. **Not fixed here** — DS.2 may not edit `connector.picker.*` copy; the wording is a product call (scope the sentence to streaming, or move it onto the two streaming tiles). |
@@ -472,7 +472,39 @@ the slot every time it is. Low risk + sole family winner is the whole of it.
 ⚠ **The fix is not a stronger repetition penalty** — Matt's standing call is best SET per song, no
 same-concept / back-to-back penalties. Note the irony this diagnosis turns up: the *existing*
 family-scoped penalty is what suppresses variety, because it treats nine distinct certified presets
-as one thing. **Product decision needed before any code** — see the options recorded with it.
+as one thing.
+
+#### Fix (BUG133.1) — Matt's call: *"cool down the preset, not the family"*
+
+`fatigueMultiplier` matches `recentHistory` on `presetID` instead of `family`. One line of behaviour;
+`PresetHistoryEntry` already carried `presetID`, so nothing upstream changed.
+
+**Adjacency is still handled, deliberately by a different lever.** `familyRepeatMultiplier` (0.2×
+against the CURRENT preset's family) is untouched, so two similar looks still do not land back to
+back — while the rest of the family becomes reachable one segment later instead of never. Splitting
+the two was the point: back-to-back similarity is a real visual concern; a shared multi-minute
+cooldown was a same-concept penalty in all but name.
+
+**Cooldown windows unchanged** (`low` 60 / `medium` 120 / `high` 300 s). They were calibrated against
+family scope, so the same numbers now gate a narrower thing — conservative (a preset waits at least
+as long as it did), but worth re-checking live rather than assuming still right.
+
+★ **The adversarial A/B reproduces Matt's complaint in a unit test.** Four consecutive picks from a
+six-member family, scored against identical material: on the shipped code `Set(chosen).count == 1`
+— the *same preset four times*, which is Cytokinesis in miniature. On the fix, four different
+presets. Four tests in `FatigueCooldownScopeTests`; two of them fail on the pre-fix code, and the
+two that pass on both are there to pin what must NOT change (the preset itself is still cooled, and
+its window still expires on schedule).
+
+**Nothing in the existing suite caught the change** — 45 scorer/planner tests passed against both
+scopings, which is why the old behaviour survived to a live session. That absence is the reason
+these tests are written against the family/preset distinction specifically.
+
+**Live check owed:** one multi-track local session, counting distinct presets. The pre-fix baseline
+is 10 distinct in 59 selections with Cytokinesis ×14 (`2026-09-14T14-34-41Z`) and 13 in 50
+(`2026-09-14T13-49-57Z`). A pass looks like most of the 24 certified presets appearing across a long
+session, and Nebula / Witchlight / Murmuration / Mitosis / Filigree — the five hidden particles
+presets — appearing at all.
 
 ---
 

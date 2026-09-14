@@ -10,6 +10,43 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-14-220000] BUG133.1 — the cooldown was rationing the roster by family size
+
+Matt, on a second session in a row: *"still seeing many of the same presets across tracks (getting
+REALLY tired of cytokinesis)."* 59 selections, **10 distinct**, Cytokinesis ×14.
+
+★ **`PresetScorer` had two levers against repetition and neither was per-preset.** Both keyed on the
+family, so a family behaved as ONE rotation slot and its highest-scoring member held that slot
+permanently — its siblings were not competing with the catalog, they were competing with each other
+for a single turn, and losing it every time. The per-family data is unambiguous: the six-member
+`particles` family produced exactly **one** preset across 59 selections (Cytokinesis ×14 — Nebula,
+Witchlight, Murmuration, Mitosis and Filigree never appeared at all), the nine-member `hypnotic`
+family produced three of nine, and the SINGLETON families produced their one member 7–8 times each.
+**A singleton was a guaranteed private slot; a nine-member family hid eight presets.** Selection
+frequency was set by family size, not by fit — which is how Alfvén, certified four days earlier, had
+never once been chosen.
+
+Cytokinesis specifically because `fatigue_risk: low` is a 60 s window against ~20 s segments:
+eligible again after ~3 segments, and as the particles argmax it took the slot every time.
+
+Matt's call — *"cool down the preset, not the family"* — so `fatigueMultiplier` now matches
+`recentHistory` on `presetID`. `familyRepeatMultiplier` is untouched and still stops two similar
+looks landing back to back; the rest of the family becomes reachable a segment later instead of
+never. Splitting the two was the point, and it is the opposite of adding a repetition penalty: the
+*existing* same-concept penalty was the thing suppressing variety, by treating nine distinct
+certified presets as one.
+
+★ **The A/B reproduces the complaint in a unit test.** Four consecutive picks from a six-member
+family, identical material: shipped code returns `Set(chosen).count == 1` — the same preset four
+times. The fix returns four. And **nothing in the existing 45 scorer/planner tests could tell the
+two scopings apart**, which is exactly how the behaviour survived to a live session.
+
+Budget was never involved: only Volumetric Lithograph exceeds the 16.6 ms tier budget.
+
+Live check owed — the baseline to beat is 10 distinct in 59.
+
+---
+
 ### [dev-2026-09-14-200000] BUG132.1 — a plan rebuild no longer clobbers the playing track's grid
 
 Found in PREP.2's own validation session by reading the log, not by watching it. Every `_buildPlan`

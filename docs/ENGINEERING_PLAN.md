@@ -1410,6 +1410,21 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG133.1 — preset fatigue cools the preset, not the family ✅ (2026-09-14, Matt: *"cool down the preset, not the family"*, live check owed)
+
+Both of `PresetScorer`'s anti-repetition levers keyed on the family, so a family was one rotation
+slot held permanently by its argmax. Measured over 59 selections: `particles` (6 members) produced
+one preset (Cytokinesis ×14), `hypnotic` (9) produced three, and singleton families produced their
+member 7–8 times each — frequency set by family size, not fit. `fatigueMultiplier` now matches on
+`presetID`; `familyRepeatMultiplier` is untouched, so back-to-back similarity is still handled while
+the rest of a family becomes reachable one segment later.
+
+★ The A/B reproduces the complaint as a unit test — four consecutive picks from a six-member family
+return ONE distinct preset on the shipped code and four on the fix — and **none of the existing 45
+scorer/planner tests could distinguish the two scopings**, which is how it survived to a live
+session. Cooldown windows unchanged and flagged for re-check rather than silently re-tuned. No
+renderer, preset or `FeatureVector` change; the render capability registry is unchanged.
+
 ### BUG132.1 — a plan rebuild no longer pre-fires over the playing track ✅ (2026-09-14, live re-check owed)
 
 `_buildPlan` pre-fired the plan's FIRST track into the live pipeline on every rebuild. Five of nine
