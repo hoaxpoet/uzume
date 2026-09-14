@@ -140,7 +140,22 @@ float membrane_ring(float2 asp, float2 impactAsp, float phase,
     float radius = phase * speed;
     float thickness = thicknessBase + phase * 0.10;
     float d = length(asp - impactAsp);
-    float body = exp(-pow((d - radius) / thickness, 2.0));
+
+    // PR.28 — a WAVE TRAIN, not one annulus.
+    //
+    // The first perception check against the recurated folder failed this trait:
+    // `02_meso_single_strike_anatomy.jpg` shows a struck liquid surface producing a
+    // SEQUENCE of concentric crests, each trailing the leading one and each weaker,
+    // and the render emitted a single Gaussian ring. One arc does not read as an
+    // impact — it reads as a sweep. Three crests at decreasing amplitude, trailing
+    // the leading edge inward, is the minimum that reads as a strike travelling.
+    //
+    // Physically this is the dispersive wake behind the lead wavefront; visually it
+    // is the difference between "a line moved" and "something was hit here".
+    float body = 0.0;
+    body += exp(-pow((d - radius) / thickness, 2.0));
+    body += 0.55 * exp(-pow((d - radius * 0.72) / (thickness * 1.15), 2.0));
+    body += 0.28 * exp(-pow((d - radius * 0.48) / (thickness * 1.35), 2.0));
     // Fade as it travels out, so the ring dies before the next beat lands
     // rather than two rings sharing the skin.
     float fade = 1.0 - smoothstep(0.55, 1.0, phase);

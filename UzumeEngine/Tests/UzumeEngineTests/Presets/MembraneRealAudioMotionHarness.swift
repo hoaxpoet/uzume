@@ -34,8 +34,8 @@ import UniformTypeIdentifiers
 @Suite("MembraneRealAudioMotion", .serialized)
 struct MembraneRealAudioMotionHarness {
 
-    private static let width = 640
-    private static let height = 400
+    private static var width: Int { Int(ProcessInfo.processInfo.environment["MEMBRANE_W"] ?? "640") ?? 640 }
+    private static var height: Int { Int(ProcessInfo.processInfo.environment["MEMBRANE_H"] ?? "400") ?? 400 }
     private static let subjectName = "Membrane"
 
     // MARK: - CSV → FeatureVector
