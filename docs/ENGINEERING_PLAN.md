@@ -1410,7 +1410,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
-### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ (2026-09-14, Matt: *"do the near-tie sampling"*, live check owed)
+### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ **LIVE-MEASURED 2026-09-14** — 10 → 16 distinct presets on an identical window (Matt's felt verdict outstanding)
 
 BUG133.1 (per-preset fatigue) was necessary and failed its live check — Matt saw the same presets.
 Measured with the production scorer on his own cached profiles, the eligible catalog spans
@@ -1421,6 +1421,12 @@ samples uniformly within 0.05 of the best. First pick over 12 seeds: **4 distinc
 Deterministic on `(seed, trackIndex, elapsedSessionTime)` so PREP.2's plan extension stays
 byte-identical; `seed == 0` remains argmax so the unseeded goldens still pin the scorer; and it is a
 band, not a lottery — 0.15 below the best still never plays.
+
+**Live result** (`2026-09-14T15-52-43Z`, same folder, same first 59 selections as the pre-fix
+baseline): distinct **10 → 16**, Cytokinesis **14 → 7**, top-3 share **51 % → 33 %**; Alfvén appeared
+for the first time since certification. Eleven presets still never appear — they score 0.459–0.532
+against a band floor of 0.562, so that is the band as specified, and the next question is the
+scorer's discrimination rather than the sampling.
 
 ★ The first regression test passed with the fix removed (fixture inside the ±0.02 noise); rebuilt
 around a preset measured ~0.04 below the best. Twice this session a pre-existing source of variety
