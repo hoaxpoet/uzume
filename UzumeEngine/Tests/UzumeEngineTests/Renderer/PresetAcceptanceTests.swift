@@ -254,6 +254,26 @@ struct PresetAcceptanceTests {
         // (drawWithGlaze); the standalone `glaze_fragment` is intentionally black. Production
         // coverage: GlazeMVWarpAccumulationTest.
         guard preset.descriptor.name != "Glaze" else { return }
+        // Membrane (PR.25): same class, reached from the other direction. Membrane is
+        // `passes: ["feedback"]` and the compose blend is `src * srcAlpha + dst * 1`
+        // over a history scaled by decay 0.90 — a steady-state gain of
+        // alpha/(1 - decay) ~ 5.5x. The fragment is authored DIM on purpose so the
+        // accumulator lands on a dark sheet, which puts the whole standalone render
+        // inside one 32-wide luma bin and scores formComplexity 1.
+        //
+        // Raising decay until this gate is satisfied was tried and MEASURED at PR.25
+        // (decay 0.70, sheet level 0.38): the gate passes and the product regresses —
+        // the strike degrades from crisp travelling concentric rings to a faint
+        // smudge, because decay is precisely what carries the ring's echo, and the
+        // echo is the "puddle pulse... with respect to motion" this increment exists
+        // to fix. The shipped image is the accumulator's, not this fragment's.
+        //
+        // Production coverage that measures the real thing: FeedbackPathHarnessTemplate
+        // (D-182 — production warp -> compose -> swap at silence, bounded non-black
+        // accumulator + dHash golden) and MembraneRealAudioMotionHarness (the same
+        // production path driven by recorded real-audio sessions, with frame-to-frame
+        // motion and luma percentiles printed).
+        guard preset.descriptor.name != "Membrane" else { return }
         // Skein (D-143): its readable content (the test stamp; later the poured line) is
         // the marks-on-top overlay (skein_geometry_*) composited onto the held canvas in
         // the mv_warp path. This fragment-only harness renders the flat cream GROUND only
