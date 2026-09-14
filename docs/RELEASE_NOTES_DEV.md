@@ -10,6 +10,138 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-15-010000] BUG133.2 — near-tie sampling: the ranking's precision exceeded its accuracy
+
+Matt, after BUG133.1 failed its live check: *"do the near-tie sampling."*
+
+The planner took `max(by:)` over scores whose whole eligible catalog spans **0.612 → 0.459**, with
+the **top twelve inside 0.05**. A 0.003 gap between Cytokinesis (0.612) and Dragon Bloom (0.611) was
+deciding every segment. `selectPreset` now samples **uniformly among presets within 0.05 of the
+best** — uniform on purpose, because inside that band the differences are precisely what is being
+called noise, and weighting by them would re-import the precision being discarded.
+
+**Measured on Matt's own cached profile** (*The Suburbs*, production scorer): planner first pick over
+12 seeds, **4 distinct → 10 distinct**. Cytokinesis 5/12 → 3/12.
+
+Three properties keep it safe rather than merely different: it is **deterministic** on
+`(seed, trackIndex, elapsedSessionTime)` so plan extension stays byte-identical (PREP.2 extends live
+plans and `PartialPlanTests` pins it); **`seed == 0` stays pure argmax** so the unseeded goldens
+still pin the scorer; and it is **a band, not a lottery** — a preset 0.15 below the best still never
+plays, because that gap is a real preference.
+
+★ **The first regression test passed with the fix removed.** Its fixture presets sat within 0.016 of
+each other — inside the scorer's own ±0.02 seeded noise — so the noise already shuffled them and the
+test proved nothing. The fixture now carries `MidBand`, placed ~0.04 below the best from *measured*
+scores: outside the noise, inside the band. 0 of 24 seeds without sampling, reliably with it.
+
+**That is twice in one session that an existing source of variety made a new gate look green** —
+BUG132.1's wire test matched its own declaration, and this one matched noise. The check that caught
+both is the same and costs one minute: remove the fix, re-run, confirm red.
+
+`SessionPlanner+Selection.swift` split out (400-line budget); Module Map row added.
+
+Live check owed. Baselines: 10 distinct in 59 selections, 13 in 50.
+
+---
+
+### [dev-2026-09-14-233000] BUG133.1 correction — a filtered test run is not evidence about the suite
+
+The BUG133.1 entry below claims *"nothing in the existing suite caught the change — 45
+scorer/planner tests passed against both scopings."* **That is wrong.** It was measured with
+`--filter "PresetScorer|SessionPlanner"`, and the suite that catches the change is named
+`GoldenSessionFixtures` — the filter never ran it. The full closeout run failed on
+`GoldenSessionTests` "Session A: preset IDs match golden sequence", which pins the planner's output
+sequence exactly.
+
+★ **And that golden contained BUG-133, described accurately, four months before it was filed.** Its
+expectation was `[VL, Membrane, Membrane, Membrane, Membrane]`, and the comment above it (2026-05-13)
+reads: *"Membrane is the only `reaction` preset in the catalog, so once selected it has no
+family-repeat competitor and gets picked across remaining slots… This reveals a real catalog
+clustering symptom… the orchestrator's behavior is correct given the inputs."* Someone saw the
+mechanism, wrote it down, called the behaviour correct, and froze it as the expected output. Matt
+found the same thing from the other end by getting tired of Cytokinesis.
+
+Regenerated to `[VL, VL, Fractal Tree, Fractal Tree, Ferrofluid Ocean]` — 3 distinct, the
+four-in-a-row monopoly gone — with the justification trace the file demands. Sessions B, C and D
+unchanged.
+
+The general lesson is the cheaper one: **run the full suite before asserting what the suite does or
+does not cover.** The filtered run cost nothing and bought a false claim in three documents.
+
+---
+
+### [dev-2026-09-14-220000] BUG133.1 — the cooldown was rationing the roster by family size
+
+Matt, on a second session in a row: *"still seeing many of the same presets across tracks (getting
+REALLY tired of cytokinesis)."* 59 selections, **10 distinct**, Cytokinesis ×14.
+
+★ **`PresetScorer` had two levers against repetition and neither was per-preset.** Both keyed on the
+family, so a family behaved as ONE rotation slot and its highest-scoring member held that slot
+permanently — its siblings were not competing with the catalog, they were competing with each other
+for a single turn, and losing it every time. The per-family data is unambiguous: the six-member
+`particles` family produced exactly **one** preset across 59 selections (Cytokinesis ×14 — Nebula,
+Witchlight, Murmuration, Mitosis and Filigree never appeared at all), the nine-member `hypnotic`
+family produced three of nine, and the SINGLETON families produced their one member 7–8 times each.
+**A singleton was a guaranteed private slot; a nine-member family hid eight presets.** Selection
+frequency was set by family size, not by fit — which is how Alfvén, certified four days earlier, had
+never once been chosen.
+
+Cytokinesis specifically because `fatigue_risk: low` is a 60 s window against ~20 s segments:
+eligible again after ~3 segments, and as the particles argmax it took the slot every time.
+
+Matt's call — *"cool down the preset, not the family"* — so `fatigueMultiplier` now matches
+`recentHistory` on `presetID`. `familyRepeatMultiplier` is untouched and still stops two similar
+looks landing back to back; the rest of the family becomes reachable a segment later instead of
+never. Splitting the two was the point, and it is the opposite of adding a repetition penalty: the
+*existing* same-concept penalty was the thing suppressing variety, by treating nine distinct
+certified presets as one.
+
+★ **The A/B reproduces the complaint in a unit test.** Four consecutive picks from a six-member
+family, identical material: shipped code returns `Set(chosen).count == 1` — the same preset four
+times. The fix returns four. And **nothing in the existing 45 scorer/planner tests could tell the
+two scopings apart**, which is exactly how the behaviour survived to a live session.
+
+Budget was never involved: only Volumetric Lithograph exceeds the 16.6 ms tier budget.
+
+Live check owed — the baseline to beat is 10 distinct in 59.
+
+---
+
+### [dev-2026-09-14-200000] BUG132.1 — a plan rebuild no longer clobbers the playing track's grid
+
+Found in PREP.2's own validation session by reading the log, not by watching it. Every `_buildPlan`
+rebuild ends by pre-firing **the plan's first track** into the live pipeline — `resetStemPipeline` →
+`StemCache.loadForPlayback` → `BeatGrid installed`. On `2026-09-14T13-49-57Z`, **five of nine
+rebuilds installed track 1's 164.4 BPM grid over a different playing track**, and `grid_bpm` stayed
+wrong until the next track change: 13,190 frames inside a 175.0 BPM track and 13,928 inside a
+108.0 BPM track **in 3/4**. Essentially both whole tracks ran beat-locked motion on the wrong clock,
+with track 1's stem series loaded alongside.
+
+The pre-fire is right before a session starts — it is how Spectral Cartograph shows
+"PLANNED · UNLOCKED" straight after plan-build (DSP.3.2). It is wrong once one is playing, because a
+rebuild decides what plays NEXT. `shouldPreFirePlan(sessionState:)` is now `!= .playing`; every
+other state still primes.
+
+★ **PREP.2 did not create this, but it is why it matters now.** The pre-fire has behaved this way
+for as long as the plan has existed; the plan was built once, so it fired once, before playback.
+PREP.2 rebuilds it once per PREPARED track, which turned a latent race into every local session with
+an early start. PREP.2 anticipated this exact shape one path over — *"a walk finishing behind a
+playing session must not drag it back to `.ready`"* — and guarded readiness, not this.
+
+★ **The regression test passed against the reverted guard on its first attempt**, because it
+searched for `shouldPreFirePlan(sessionState:` and the `static func` declaration satisfies that by
+itself: a green gate over dead code, which is BUG-015's shape exactly. It only surfaced because the
+fix was reverted and the suite re-run. The assertion now matches the CALL over comment-stripped
+source, and the A/B is on the record — red on the exact pre-fix code, green on the fix. **A
+source-presence gate that has not been run against the bug is not yet a gate.**
+
+Also worth stating: Matt reviewed this session against the criteria he was given — playback starts,
+nothing stutters — and reported them accurately. A wrong tempo grid does not stutter, and most of
+the presets that session selected are continuous-energy driven. The defect was invisible to the
+check he was asked to make, which is a fact about the check.
+
+---
+
 ### [dev-2026-09-13-000500] BUG129.1 — the peak was right, and that was the finding
 
 BUG-129 was filed on a reasonable suspicion: `chain_health.json` reporting `peakDBFS` exactly 0 with

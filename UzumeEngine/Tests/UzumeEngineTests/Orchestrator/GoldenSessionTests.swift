@@ -77,8 +77,31 @@ struct GoldenSessionTests {
         // quarter is gated out when no section data exists, and presets with no declared
         // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
         // sole-family repeats below are the same catalog symptom the comments above describe.
-#expect(ids == [
-            "Volumetric Lithograph", "Membrane", "Membrane", "Membrane", "Membrane",
+        //
+        // ★ BUG133.1 (2026-09-14): regenerated because fatigue now cools the PRESET, not the
+        // family (Matt: "cool down the preset, not the family"). The previous expectation was
+        // `[VL, Membrane, Membrane, Membrane, Membrane]` — 2 distinct presets across 5 tracks —
+        // and the comment above it already diagnosed why, in May: *"Membrane is the only
+        // `reaction` preset in the catalog, so once selected it has no family-repeat competitor
+        // and gets picked across remaining slots… This reveals a real catalog clustering
+        // symptom."* That was BUG-133 described four months before it was filed, recorded here
+        // as *"the orchestrator's behavior is correct given the inputs"* and left. It was the
+        // inputs that were wrong: a family-scoped cooldown makes a family one rotation slot.
+        //
+        // Why this sequence is right, not merely different: **3 distinct presets, and the
+        // four-in-a-row monopoly is gone.** Sessions B, C and D are unchanged (including
+        // "Session C: genre diversity produces ≥3 distinct preset families"), so the change is
+        // narrow to the case the old comment flagged.
+        //
+        // ⚠ Adjacent repeats persist at TRACK granularity (VL, VL / FT, FT) and that is not the
+        // same defect. These are track-FIRST segments 180 s apart, while the cooldown windows are
+        // 60/120/300 s — so a preset legitimately recovers inside one track. The windows were
+        // calibrated when they were family-scoped and are deliberately unchanged here; if track
+        // firsts want more spread, that is a window-tuning question with Matt's eye on it, not a
+        // scoping one.
+        #expect(ids == [
+            "Volumetric Lithograph", "Volumetric Lithograph", "Fractal Tree", "Fractal Tree",
+            "Ferrofluid Ocean",
         ])
     }
 
