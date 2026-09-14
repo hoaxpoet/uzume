@@ -547,9 +547,39 @@ Bloom, Cymatic Resonance, Stave, Floret} — precisely the set Matt keeps seeing
 histogram agrees: over 12 seeds the planner's first pick is only ever one of four presets.
 
 **So the roster is not being rationed by fatigue. It is being ranked by half a scorer, and the
-bottom fourteen are unreachable at any cooldown setting.** The fix for that is a product decision
-about how presets should be matched to music, not a tuning change — recorded for Matt rather than
-chosen here.
+bottom fourteen are unreachable at any cooldown setting.**
+
+#### ★ And declaring the missing `stem_affinity` cannot fix it — checked before writing any
+
+Matt chose "give the 19 presets real stem affinities". Derived from each preset's own `audio_routes`
+manifest (the artifact that records which primitives it actually reads), rather than from an
+impression of what each preset feels like:
+
+| what the routes say | presets |
+|---|---|
+| reads **all four** stems into ONE route (`division_pace`, `energy_env`, `energy_swell`, `stem_mix_gate`, …) | Cytokinesis, Mitosis, Murmuration, Nacre, Nimbus, Skein, Floret, Filigree, Glaze |
+| reads **no stem primitive at all** — band/spectral driven | Alfvén, Aurora Veil, Ferrofluid Ocean, Fractal Tree, Meniscus, Nebula, Ricercar, Stave, Witchlight |
+| reads a **single** stem | Cymatic Resonance (drums → `beat_burst`) |
+
+**Declaring all four stems scores identically to declaring none** — `stemAffinitySubScore` averages
+the declared stems' deviations, and the undeclared default already averages all four. So a truthful
+declaration for nine of them is a no-op, a truthful declaration for nine more is *no declaration*,
+and only Cymatic Resonance would move. Making this dimension discriminate would mean declaring
+couplings the shaders do not have, which fabricates the QG.1 manifest and builds to an invented
+metaphor (the KSRETIRE.1 / D-188 failure).
+
+★ **The roster is not stem-selective, and that is D-004 working as designed.** Continuous energy is
+the mandated primary driver, so presets are band-driven; where they do read stems they sum all four
+into one envelope. A scorer that spends **25 % of its weight** on stem selectivity is measuring a
+dimension the catalog deliberately does not vary on. Not a metadata gap — a mismatch between the
+scorer's model and the audio doctrine.
+
+**Remaining measurement for whatever comes next:** the seeded noise is **±0.02**
+(`SessionPlanner.seededNoise`) against a top-twelve spread of 0.05 and a full-catalog spread of
+0.153 — which is why the 12-seed first-pick histogram only ever yields four distinct presets. The
+ranking's precision (three decimal places) far exceeds its accuracy; a 0.003 gap between Cytokinesis
+and Dragon Bloom is not a musical preference. **Awaiting Matt's direction** — recorded rather than
+chosen.
 
 ---
 
