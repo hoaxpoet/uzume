@@ -2,7 +2,7 @@
   "name": "Membrane",
   "family": "reaction",
   "duration": 35,
-  "description": "A luminous drumskin stretched across the screen — bass displaces the surface, spectrum sculpts topology, beats strike it with shockwaves, feedback loop is its memory",
+  "description": "A dark drumskin stretched across the screen — bass-heavy strikes land at a point and travel outward as expanding coral rings, the sheet breathing between hits",
   "author": "Matt",
   "passes": ["feedback"],
   "beat_zoom": 0.02,
@@ -19,5 +19,13 @@
   "transition_affordances": ["crossfade"],
   "section_suitability": ["buildup", "peak"],
   "complexity_cost": { "tier1": 0.8, "tier2": 0.4 },
+  "audio_routes": [
+    { "route": "strike_ring_expand",    "primitive": "spectralLevelRise", "kind": "accent" },
+    { "route": "strike_ring_strength",  "primitive": "bassDev",           "kind": "continuous" },
+    { "route": "bass_hand_undulation",  "primitive": "bassAttRel",        "kind": "continuous" },
+    { "route": "hihat_surface_stipple", "primitive": "trebAttRel",        "kind": "continuous" },
+    { "route": "impact_point_drift_h",  "primitive": "arousal",           "kind": "continuous" },
+    { "route": "impact_point_drift_v",  "primitive": "valence",           "kind": "continuous" }
+  ],
   "certified": false
 }
