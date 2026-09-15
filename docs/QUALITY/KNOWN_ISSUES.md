@@ -361,7 +361,7 @@ A preset locked to that grid fires every third strike twice as late. **That is t
 
 #### BUG134.2 — the contiguous case, fixed with the audio (2026-09-15)
 
-**Matt's M7, 2026-09-15** (session `2026-09-15T13-03-13Z`, chain verdict `clean` — ⚠ its `chain_health.json` reports `peakDBFS` exactly 0 while the tap's real peak is **−0.89 dBFS with zero full-scale samples**, i.e. BUG-129's signature has recurred; the audio is clean so the fidelity judgment stands, but the reported peak does not): *"appeared synced in the beginning but quickly drifted out of sync. still too loose."*
+**Matt's M7, 2026-09-15** (session `2026-09-15T13-03-13Z`, chain verdict `clean`): *"appeared synced in the beginning but quickly drifted out of sync. still too loose."*
 
 Confirmed as the real test — the install logged `bimodal=true, filled=15, clusteredLong=26, dominant=191.1 bpm, summary=154.3 bpm`.
 
@@ -388,6 +388,8 @@ Confirmed as the real test — the install logged `bimodal=true, filled=15, clus
 **Fixed:** `BeatGrid+AudioOctave.audioOctaveCorrected` asks the audio per ~3 s window and subdivides a half-time gap **only** where the fast pulse is present. Validated on this session's real tap against the real cached grid: verdicts `slow` for 0–9 s (intro preserved) and `fast` for 9–30 s, **irregularity 20.5 % → 14.6 %, +4 beats, intro untouched.**
 
 ⚠ **The rule is a FLOOR, not a ratio, and the first version got this wrong.** If a fast pulse is present the SLOW lag correlates too — every other fast beat lands on it — so autocorrelation at 2× a real pulse is always high and "fast beats slow by N×" is never true. The discriminator is whether the fast lag correlates **at all**: 0.02–0.18 vs 0.56–0.61, with the 0.30 floor sitting in the empty space between the two populations rather than fitted to either edge.
+
+**Retracted claim, recorded because it was briefly in this file.** An earlier revision of this entry stated that BUG-129 had recurred here — that `peakDBFS: 0` was wrong because the tap's real peak was −0.89 dBFS with no full-scale samples. **That was my measurement error, not a defect.** `ChainAnalyzer.peakScan` scans each channel separately; I had measured the MONO DOWNMIX, which averaged a genuine full-scale sample on the left channel (1.000000, exactly one sample) against a right-channel peak of 0.896 down to 0.903. The reported `peakDBFS: 0` and `maxFullScaleRun: 1` are both **correct**, and `clean` is the right verdict — one isolated sample touching full scale is not clipping, which is exactly the distinction BUG129.1 added. Nothing to fix. The lesson is the same one BUG129.1 recorded: check the per-channel data before calling a chain-health number wrong.
 
 ⚠ **Runs at PREP time** (it needs the samples), so **existing cached grids do not benefit until re-prepared** — clear the local-file cache for an album to re-analyse it. BUG134.1's gap-fill runs at install and does apply to the existing cache.
 
