@@ -5,6 +5,80 @@ Completed-increment narratives moved out of `ENGINEERING_PLAN.md` at RB.3 (2026-
 
 ## Recently Completed
 
+### Increment RN.5 — on-disk output paths become Uzume ✅ (2026-08-31, D-230)
+
+**Done-when (met):** no active code path writes or reads a `phosphene_*` location; the 6.7 GB of existing captures moved with the rename rather than being orphaned; recorded fixture data and external paths untouched.
+
+**Code and disk moved together** — the coupling is the whole point, since renaming one without the other orphans the data from the tools that read it. `~/Documents/phosphene_sessions/` → `uzume_sessions/` (5.7 GB, 16 captures), `~/phosphene_beatbench_fixtures/` → `uzume_beatbench_fixtures/` (946 MB, 21 fixtures), `~/Documents/phosphene_soak/`, `~/phosphene_features.csv`, `~/phosphene_diag.log`, `/tmp/phosphene_visual/`, plus the ephemeral test-temp prefixes (`phosphene_recorder_tests_`, `phosphene_hang_`, `phosphene_hooks`, `phosphene_replay`, `phosphene_census`).
+
+**Deliberately NOT renamed, each for a reason:** `phosphene_grid_bpm` — a key **inside recorded BeatBench ground-truth fixtures**; renaming it edits recorded evidence. `~/phosphene-ml-env` — Matt's Python venv, an external artifact this repo does not own. `/Volumes/Extreme SSD/phosphene_corpus_manifest.csv` — external drive, same reason. `~/phosphene_section_lab/` and `~/phosphene_session_mining/` — external workspaces from removed or deliberately-uncommitted work, cited only in historical rationale.
+
+**Evidence:** post-move inventory verified (16 sessions / 5.7 GB, 21 fixtures / 946 MB, all present at the new paths); full closeout gate green.
+
+**Phase RN is complete.** The last two surfaces — the persisted `UserDefaults` key scheme and the `.metal`/preset-`.json` brand prose — closed at **RN.6** (D-231).
+
+---
+
+
+### Increment RN.3 — cross-repository brand and documentation reconciliation ✅ (2026-08-31, D-228)
+
+**Done-when (met):** both repositories agree on identity, terminology, assets, links, contributor commands and source-of-truth boundaries; the installed app icon is traceable to the approved source asset; no public copy overstates release readiness.
+
+**Source-of-truth boundary written in both repos.** `uzume-site` owns brand, design system, identity assets, naming research and public copy; this repo owns product behaviour, engineering decisions, contributor commands, and whether a claim is true of the shipped build. This repo's `docs/planning/` is now a **frozen RN.0 snapshot** with a header pointing at the live copies.
+
+**Icon traceability proven.** All ten PNGs in `UzumeApp/Assets.xcassets/AppIcon.appiconset/` are byte-identical (SHA-256) to `uzume-site`'s `brand/icon/Uzume.iconset/`. Recorded in `docs/CREDITS.md` §App icon with the re-verification command; digests in the site's `ARTIFACTS.md`.
+
+**Five false claims corrected.** Site-ward: the site's planning docs carried the pre-2026-08-12 domain call (uzume.app "available and canonical"; bundle ID `app.uzume.mac`) against registrar ground truth (uzume.app parked, **uzume.io** canonical, shipped `io.uzume.mac`); "certified presets are measured at **0 flashes per second**" has no basis here — the gate is D-157 steady luminance — and was published in four places; "free, open-source **public beta**" overstates an unpublished repo with no signed build. App-ward: the README's name sentence still glossed the **phosphene phenomenon** under the name Uzume (an RN.2 semantic orphan — no `Phosphene` token in it, so no lexical scan could catch it); and the **"AI orchestrator"** framing the site retired survived in README + CLAUDE.md though the planner is deterministic.
+
+**Two stale contributor instructions fixed.** The README's `git-lfs`-before-cloning prerequisite has been wrong since D-211 (`git lfs ls-files` → zero), and `PUBLISHING.md` still claimed "LFS keeps reference media only."
+
+**Divergence, not staleness.** The duplicated planning docs had drifted in *opposite* directions — this repo held the corrected domains, the site held the newer retirement of the AI framing — so RN.3 merged and then designated a single owner, rather than declaring one copy authoritative wholesale.
+
+**Deliberately not done:** no website architecture was invented (no Astro app, marketing pages, or OG/manifest surface exists). The design system's "Download the beta" specimens stay — they are component placeholders, and `catalogue.js` already models the honest unavailable state.
+
+**Evidence:** app — `Scripts/closeout_evidence.sh` ALL GREEN; site — JS syntax, catalogue-reference gate (7 pages), contrast gate (60 pairings), and the SwiftUI package suite all pass.
+
+**Docs:** `DECISIONS.md` D-228, `README.md`, `CLAUDE.md`, `docs/CREDITS.md`, `docs/PUBLISHING.md`, `docs/planning/*` (snapshot headers), `RELEASE_NOTES_DEV.md`. Site: `README.md`, `PRODUCT.md`, `BRAND.md`, `ARTIFACTS.md`, `docs/planning/*`, and the living design-system pages.
+
+**Follow-up — RN.4:** the public-copy wording decisions from the RN.3 closeout (since resolved). The on-disk `phosphene_*` paths were closed by **RN.5** (D-230); the persisted `UserDefaults` keys and the shader/sidecar comment batch remain open.
+
+---
+
+
+### Increment RN.2 — internal Xcode and Swift rename ✅ (2026-08-31, D-227)
+
+**Done-when (met):** a new contributor meets Uzume in repository paths, Xcode project/target/scheme names, build products, Swift packages and products, test bundle and host, setup/build/test/diagnostic commands, CI, and living documentation — with every residual `Phosphene` occurrence classified rather than merely surviving.
+
+**Structural map:** `PhospheneApp/`→`UzumeApp/`, `PhospheneAppTests/`→`UzumeAppTests/`, `PhospheneEngine/`→`UzumeEngine/`, `PhospheneTools/`→`UzumeTools/`, `PhospheneApp.xcodeproj`→`UzumeApp.xcodeproj`, `Phosphene.xcconfig`→`Uzume.xcconfig` (+`.local.`), `PhospheneApp.swift`→`UzumeApp.swift`, `PhospheneApp.entitlements`→`UzumeApp.entitlements`, `PhospheneToast.swift`→`UzumeToast.swift`, `PhospheneApp.xcscheme`→`UzumeApp.xcscheme`, `Tests/PhospheneEngineTests/`→`Tests/UzumeEngineTests/`. Generic modules (`Audio`, `DSP`, `ML`, `Renderer`, `Presets`, `Orchestrator`, `Session`, `Shared`, `Diagnostics`) unchanged. Commit 1 is a pure `git mv` (1107 files, zero content change) so `git log --follow` survives.
+
+**Two user-visible strings RN.1 missed**, caught by this sweep: the About-box version line (`Phosphene <version>`) and the multi-display toast (`"Move Phosphene there"`).
+
+**Evidence:** `Scripts/closeout_evidence.sh` ALL GREEN @ `8c35740c` — engine 1873 tests / 291 suites, app 426 tests / 74 suites, SwiftLint 0 violations in 518 files, doc gates 13/13, `check_user_strings.sh` + `check_sample_rate_literals.sh` pass. Clean-export verification (`git archive` of the tracked tree): `xcodebuild -list` → targets `UzumeApp`/`UzumeAppTests`, schemes `UzumeApp`/`UzumeEngine`; both packages resolve and build; products are `Uzume.app` / `Uzume` / `UzumeAppTests.xctest` / `UzumeApp.swiftmodule`; all `PBXFileReference` paths resolve.
+
+**Three defects the sweep introduced and the gates caught** (recorded because each is a reusable trap): (1) the app suite went red because the test-side persisted-key literals were renamed while production kept them — the same defect landed **silently** in RUNBOOK as a `defaults write io.uzume.mac uzume.cache.localFile.maxBytes` that would have no-opped; (2) `docs/planning/` — RN.0's preserved naming evidence — was flattened into nonsense including a corrupted third-party URL, and five verbatim quotations were rewritten, two attributed to Matt by name; (3) a RUNBOOK warning about stale pre-rename incantations **inverted its own meaning** when the sweep renamed the stale names it was warning about. All reverted; see D-227 §The falsification hazard.
+
+**Docs:** `DECISIONS.md` D-227, `ENGINEERING_PLAN.md` (this row + §Phase RN), `RELEASE_NOTES_DEV.md`, `RUNBOOK.md` §After the Uzume rename (RN.2 section), plus the tree-wide living-doc sweep. `docs/prompts/`, `docs/diagnostics/`, `docs/planning/`, `archive/`, `prompts/`, `*_HISTORY.md` and the dated `RELEASE_NOTES_DEV_2026-*.md` are untouched by design — dated records.
+
+**Follow-up:** the on-disk `phosphene_*` output paths were renamed at **RN.5** (D-230, Matt's go). The persisted `UserDefaults` key scheme and the `.metal` / preset-`.json` brand-prose batch (needs the `preset-session` skill) remain open.
+
+---
+
+
+### Increment BUG111.1 — first-run permission card requests access ✅ (landed 2026-08-31; pending Matt's live first-run walk)
+
+**Surfaced by RN.1.** The bundle-ID change (`com.phosphene.app` → `io.uzume.mac`) orphaned the existing TCC grant and put the app into the never-granted state for the first time since U.2 — which exposed a first-run deadlock that had been latent since 2026-04-22. macOS lists an app in Privacy & Security → Screen & System Audio Recording only after that app calls `CGRequestScreenCaptureAccess()`; the sole call site was `startAudio()`, and `ContentView`'s permission gate sits above the session-state switch, so the card's "Open System Settings" deep link pointed at a pane the app was absent from and nothing could reach the code that would register it. Same failure on a fresh install and after `tccutil reset ScreenCapture`.
+
+**Fix:** primary CTA "Allow Access" → `CGRequestScreenCaptureAccess()`; the deep link survives as a secondary link for the already-denied case (dialog suppressed, app listed). Stateless by design — both controls always present, no "have we asked" flag. `SystemScreenCapturePermissionProvider` unchanged, still never prompts.
+
+**Evidence:** app build green; app suite 421/421 in 73 suites; `swiftlint --strict` 0 in 516 files; `Scripts/check_user_strings.sh` PASS. **Manual gate outstanding (Matt):** `tccutil reset ScreenCapture <bundle id>` → relaunch → Allow Access → dialog appears → app listed → toggle on → card auto-advances without relaunch. BUG-111 stays open until that walk. The instrumentation/diagnosis increments were collapsed into the fix (root cause established from source + his live observation) — **Matt approved the collapse in chat, 2026-08-31**.
+
+**Docs:** `KNOWN_ISSUES.md` BUG-111 (open + detail), `RELEASE_NOTES_DEV.md`, `UX_SPEC.md` §3.2, `DECISIONS.md` D-226, §U.2 Key decisions struck through. No registry change (permission-gate UX, not a renderer/harness/preset capability).
+
+**Known-red gate — CLEARED (RN.2, 2026-08-31).** While this branch was unmerged, `DocIntegrityTests.decisionsIntegrity` failed twice on a deliberate D-225/D-226 split with RN.1 (both sessions filed a D-225 off `dbf48694`; this branch ceded the number so the merge would be clean rather than a duplicate-header conflict — DOC.8's parallel-numbering tax). RN.1 landed as #176 and the hole closed: the gate is green at RN.2's tip, 13/13. Kept as the worked example of ceding a D-number rather than renumbering inside a merge conflict.
+
+---
+
+
 ### Increment FT.4.1 — the estimator alone wins; the tiler was the whole regression ✅ (2026-08-27)
 
 Matt's call after FT.4: isolate the two halves. The flag splits into
