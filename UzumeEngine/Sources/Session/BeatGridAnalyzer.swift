@@ -155,11 +155,29 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
                 activations = try model.predict(spectrogram: spec, frameCount: frameCount)
             }
 
-            let grid = BeatGridResolver.resolve(
+            let resolved = BeatGridResolver.resolve(
                 beatProbs: activations.beats,
                 downbeatProbs: activations.downbeats,
                 frameRate: Self.frameRate
             )
+            // BUG134.2 — ask the AUDIO which octave each section carries.
+            //
+            // The model can drop to half-time under a song that stays fast; the beat
+            // list alone cannot distinguish that from a genuine half-time section, so
+            // BUG134.1 left it. Here the samples are in hand, so per ~3 s window the
+            // onset envelope is autocorrelated at the grid's own fast period and at
+            // twice it, and a half-time gap is subdivided ONLY where the audio says the
+            // fast pulse is actually present. Slow-dominant and ambiguous windows are
+            // left exactly as the model produced them — Ready to Start's intro genuinely
+            // IS half-time (fast 0.02-0.18 vs slow 0.61-0.68) and must survive.
+            //
+            // `UZUME_AUDIO_OCTAVE=0` disables (beat-sync program house rule: new runtime
+            // behaviour ships behind a flag with a one-increment A/B path).
+            let grid = Self.audioOctaveEnabled(environment: env)
+                ? resolved.audioOctaveCorrected(
+                    envelope: OnsetEnvelope.compute(samples: samples, sampleRate: sampleRate),
+                    envelopeRate: OnsetEnvelope.rate)
+                : resolved
             if barLineLocal, fullTrack {
                 return Self.applyWindowedBarLine(
                     to: grid,
@@ -177,6 +195,11 @@ public final class DefaultBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendab
             logger.error("BeatGrid: model.predict failed: \(error.localizedDescription)")
             return .empty
         }
+    }
+
+    /// BUG134.2 audio-referenced octave correction; default ON, `=0` disables.
+    static func audioOctaveEnabled(environment: [String: String]) -> Bool {
+        environment["UZUME_AUDIO_OCTAVE"] != "0"
     }
 
     // MARK: - FT.4 bar-line override
