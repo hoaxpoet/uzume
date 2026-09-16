@@ -1590,6 +1590,42 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment REC.1 — capture-grade session video: every frame, ProRes ✅ **LIVE-MEASURED 2026-09-16**
+
+**Done-when:** `UZUME_RECORD_VIDEO=capture` writes every rendered frame as ProRes 422 `.mov` — live
+≥ 99.5 % written, one-frame intervals, 0 duplicates, render fps within 0.2 of baseline — and `=1`
+delivers ≈ 30 fps H.264. Prerequisite for the site repo's W.3a footage capture.
+
+**Delivered.** BUG-136 filed and fixed (half-frame tolerance on the diagnostic keep decision; tests red
+on the old comparison). Capture mode (ProRes 422, `.mov`, no keep decision). Per-frame IOSurface
+`CVPixelBuffer`s shared with Metal through `CVMetalTextureCache`, replacing the shared capture
+texture + `getBytes`. BUG-022 fragments and every BUG-039 log path kept; `PresetSessionReplay` finds
+`video.mov`.
+
+**Live evidence** (LG 1920×1080, local file, Cymatic Resonance, Release build of the branch):
+
+| Session | Render fps | Written ÷ rendered | Intervals (sixtieths) | Dups |
+|---|---|---|---|---|
+| `15-02-55Z` baseline, off | 59.99 (91.7 s window) | — | — | — |
+| `16-04-13Z` capture | 59.99 (109.2 s) | 6,550 / 6,552 = 99.97 % | {0: 2, 1: 6,544, 2: 1, 3: 2} | 0 |
+| `15-09-56Z` diagnostic | 60.00 (150.3 s) | 4,509 / 9,017 = 50.01 % → 30.00 fps | {1: 3, 2: 4,503, 3: 2} | 0 |
+
+Capture's two unwritten frames are the encoder's start-up (`video input not ready`, logged 0.2 s
+after lock); every other odd interval matches a late or catch-up render row. ProRes 422 at 1080p on
+Cymatic Resonance: **≈ 1.1 GB/min** (2.07 GB / 109 s) — W.3a should still budget the ≈ 294 Mbps
+(2.2 GB/min) codec ceiling for denser material. The earlier capture run `15-05-41Z` (keep decision
+still applied) skipped two catch-up frames after a late render; Matt chose every-frame capture.
+
+**CPU.** Offline probe (Debug `swift test`, 1080p blits at 60 Hz, `getrusage`): process CPU per frame
+off 0.78 ms, diagnostic 1.54 ms, capture 2.22 ms → **ProRes ≈ +1.4 ms/frame vs BUG-050's ≈ 7 ms**;
+render-thread cost 0.15 ms flat over 3,000 frames. Not counted: any out-of-process VideoToolbox work.
+
+**Measurement learnings (durable).** (1) `frame_cpu_ms` / `renderframe_cpu_ms` include the drawable
+wait: they ramp 0 → ~8.7 ms and wrap with recording OFF (`2026-09-14T17-28-08Z`, `15-02-55Z`), so
+they cannot attribute recorder cost. (2) `.mov`/`.mp4` sample durations round to the 1/600 track
+timescale and accumulate, so packet pts cannot be matched to `wallclock_s` absolutely — align by
+walking intervals, anchored where the pattern is unique.
+
 ### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ **LIVE-MEASURED 2026-09-14** — 10 → 16 distinct presets on an identical window (Matt's felt verdict outstanding)
 
 BUG133.1 (per-preset fatigue) was necessary and failed its live check — Matt saw the same presets.
