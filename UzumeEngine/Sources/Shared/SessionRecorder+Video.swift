@@ -188,7 +188,7 @@ extension SessionRecorder {
         videoInput = nil
         pixelAdaptor = nil
         videoStartTime = nil
-        lastVideoFrameTime = 0
+        lastVideoFrameTime = nil
         try? FileManager.default.removeItem(at: currentVideoURL)
     }
 
@@ -245,15 +245,23 @@ extension SessionRecorder {
 
     // MARK: - Frame-keep decision (BUG-136)
 
+    /// Half a 60 Hz render frame: how early a frame may arrive and still count as due.
+    // ponytail: assumes a 60 Hz render loop (MTKView default); a 120 Hz loop would need half of
+    // ITS frame, passed in, or capture at target 60 would keep ~half the 120 Hz frames.
+    static let videoKeepTolerance: CFAbsoluteTime = 0.5 / 60.0
+
     /// Whether a rendered frame at `time` is written, given the last written frame's time and
-    /// the target video rate.
+    /// the target video rate. The frame is due at `lastKept + 1/targetFPS` and is kept when it
+    /// arrives no more than half a render frame before that. The old strict comparison had no
+    /// tolerance, so at 60 Hz a two-frame gap (≈ 33.4 ms) jittered under 1/30 about half the
+    /// time and became three frames — 23.4 fps from a "30 fps" recorder (BUG-136).
     static func shouldKeepVideoFrame(
         at time: CFAbsoluteTime,
         lastKept: CFAbsoluteTime?,
         targetFPS: Double
     ) -> Bool {
         guard let lastKept else { return true }
-        return !((time - lastKept) < 1.0 / targetFPS)
+        return time >= lastKept + 1.0 / targetFPS - videoKeepTolerance
     }
 
     // MARK: - BUG-039 invariant (CLEAN.3.6)

@@ -94,10 +94,11 @@ public final class SessionRecorder: @unchecked Sendable {
     var videoInput: AVAssetWriterInput?
     var pixelAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     var videoStartTime: CMTime?
-    var lastVideoFrameTime: CFAbsoluteTime = 0
+    /// Wallclock of the last frame handed to the writer; nil before the first. Serial `queue` only.
+    var lastVideoFrameTime: CFAbsoluteTime?
     /// Cap video to ~30 fps regardless of the render loop rate (reduces file size;
-    /// diagnostic motion is readable at 30 fps).
-    private let minVideoInterval: CFAbsoluteTime = 1.0 / 30.0
+    /// diagnostic motion is readable at 30 fps). Applied by `shouldKeepVideoFrame` (BUG-136).
+    let videoTargetFPS: Double = 30
 
     /// BUG-050: gate for the per-frame video capture. The drawable blit →
     /// `tex.getBytes` → AVAssetWriter append costs ~7 ms/frame, additive to
@@ -381,7 +382,6 @@ public final class SessionRecorder: @unchecked Sendable {
     /// Safe to call from the command buffer completion handler.
     public func recordFrame(features: FeatureVector, stems: StemFeatures, beatSync: BeatSyncSnapshot) {
         let now = CFAbsoluteTimeGetCurrent()
-        let throttled = (now - lastVideoFrameTime) < minVideoInterval
         queue.async { [weak self] in
             guard let self = self, !self.recordingHalted else { return }
             let idx = self.frameIndex
@@ -419,7 +419,9 @@ public final class SessionRecorder: @unchecked Sendable {
             self.safeWrite(fRow.data(using: .utf8) ?? Data(), to: featuresHandle)
             let sRow = SessionRecorder.csvRow(stems: stems, frame: idx, wallclock: now)
             self.safeWrite(sRow.data(using: .utf8) ?? Data(), to: stemsHandle)
-            guard !throttled, let tex = self.captureTexture else { return }
+            guard let tex = self.captureTexture,
+                  Self.shouldKeepVideoFrame(at: now, lastKept: self.lastVideoFrameTime,
+                                            targetFPS: self.videoTargetFPS) else { return }
             self.lastVideoFrameTime = now
             self.appendVideoFrame(from: tex, wallclock: now)
         }
