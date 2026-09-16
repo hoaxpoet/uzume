@@ -335,6 +335,15 @@ Consumer fan-out: App (`VisualizerEngine+Stems.swift` calls after each separatio
 
 Verdict: **production-active**.
 
+#### [`SessionRecorder+VideoPacing.swift`](../../UzumeEngine/Sources/Shared/SessionRecorder+VideoPacing.swift) (131 LoC)
+
+Which rendered frames reach the video writer, and when (BUG-136, BUG-137).
+- `static func shouldKeepVideoFrame(at:lastKept:targetFPS:)` — diagnostic keep decision, half-frame tolerance.
+- `func admitVideoFrame(_:) -> VideoFrame?` / `func releaseVideoBacklog(_:)` — capture backlog against `captureBacklogByteBudget` (512 MB default); render thread / queue, guarded by `videoRenderLock`.
+- `func captureAdaptorWhenReady(_:_:)` — waits up to `captureReadyTimeout` (1 s) for a not-ready writer; queue.
+- `func recordCaptureDrop(_:)` — counts and logs every lost capture frame.
+- Pure: `captureBacklogAdmits(pendingBytes:frameBytes:budget:)`, `waitUntil(timeout:poll:sleep:_:)`.
+
 #### [`SessionRecorder+Video.swift`](../../UzumeEngine/Sources/Shared/SessionRecorder+Video.swift) (151 LoC)
 
 Internal API:

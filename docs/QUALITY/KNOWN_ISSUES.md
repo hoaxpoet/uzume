@@ -48,6 +48,7 @@ reads" are not reads — see the entry.)*
 |---|---|---|---|
 | BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
 | BUG-136 | P3 · **RESOLVED 2026-09-16 (REC.1, `7919e9f6`) — live 30.00 fps, histogram all two-frame** | diagnostics / algorithm | **The diagnostic video recorder documents ≈ 30 fps and delivers ≈ 23.4.** `video.mp4` from `2026-09-16T14-27-56Z` (renderer at 59.97 fps) holds 23.38 fps; interval histogram in sixtieths of a second **{1: 1, 2: 684, 3: 892, 4: 1}** — more three-frame gaps than two. The throttle `(now − lastVideoFrameTime) < 1/30` compares a two-frame gap (≈ 33.4 ms) against a 33.3 ms threshold, so render-loop jitter drops about half of them one frame late. Detail below |
+| BUG-137 | P3 · **RESOLVED 2026-09-16 (`8a896e4a`) — live under full CPU load: capture dropped 0** | diagnostics / resource-management | **Capture mode dropped frames when the Mac was busy: the ProRes writer input reported not ready and the frame was discarded.** `SessionRecorderTests.test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels` failed 14 of 20 runs under full CPU load, every lost frame (13–38 per run) a writer-not-ready rejection. Capture now waits up to 1 s for the writer within a 512 MB backlog and logs every frame it still loses; loaded runs 20/20, 19/20 (one failure of unknown cause), 30/30. Detail below |
 | BUG-133 | P2 · **RESOLVED + LIVE-MEASURED 2026-09-14 (BUG133.2)** — 10 → 16 distinct on the same window; Matt's felt verdict outstanding | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
@@ -315,6 +316,168 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+---
+
+### BUG-137 — the capture-mode recorder test fails intermittently under load (2026-09-16)
+
+**Severity:** P3 · **Domain:** `diagnostics` · **Failure class:** `resource-management` (diagnosed 2026-09-16) · **Related:** BUG-136, REC.1, BUG-039
+
+#### Expected
+
+`SessionRecorderTests.test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels` passes
+deterministically, whatever else the machine is doing. It feeds 100 frames paced at 60 Hz; the
+first 30 go to the writer's size-stability lock, and at least 60 of the remaining 70 must be written.
+
+#### Actual
+
+Intermittent. Two observations, both at or near REC.1:
+
+1. **2026-09-16, `682175ad`, Matt's M2 Pro.** `swift test --package-path UzumeEngine --filter
+   SessionRecorder`, run immediately after an `xcodebuild -scheme UzumeApp` build: 38 tests,
+   1 failure.
+
+   ```
+   SessionRecorderTests.swift:1026: error: -[UzumeEngineTests.SessionRecorderTests
+   test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels] : XCTAssertGreaterThanOrEqual
+   failed: ("48") is less than ("60") - capture keeps every 60 Hz frame after lock
+   ```
+
+   Only the **count** assertion failed. The strict-increase assertion on grey levels passed, so
+   no written frame carried another frame's pixels — REC.1's integrity fix held. The same test
+   then **passed 5 of 5** runs on its own.
+
+2. **REC.1 closeout.** One run of the recorder tests failed while `swiftlint` ran concurrently,
+   was not reproduced in six further runs, and did not record which test failed. Very likely
+   this one.
+
+**Not seen outside the test.** Three live `UZUME_RECORD_VIDEO=capture` sessions at `682175ad`
+on an idle Mac (the W.3a website masters, 2026-09-16) wrote every frame after the lock:
+`SessionRecorder finished` reports 6,645 frames / 6,616 appended, 9,507 / 9,477 and
+10,916 / 10,886 — rendered minus the ~30 lock frames each time. The one-frame-late gaps in those
+videos match late frames in `features.csv` (`wallclock_s` intervals > 25 ms: 8, 14 and 5), so
+they are the renderer's, not the recorder's.
+
+#### Reproduction
+
+Run the filtered suite under CPU contention, repeatedly:
+
+```
+for i in $(seq 1 20); do
+  swift test --package-path UzumeEngine \
+    --filter "SessionRecorderTests/test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels" \
+    2>&1 | grep -E "Executed 1 test|is less than"
+done
+```
+
+with a concurrent CPU load — an `xcodebuild` of `UzumeApp`, `swiftlint lint`, or one busy
+process per core. Alone, it passes.
+
+**Minimum reproducer:** not yet established; that is the first diagnosis step.
+
+#### Suspected cause
+
+Two readings fit, and they point to different fixes:
+
+- **The test is timing-dependent (`test-isolation`).** It paces frames with
+  `Thread.sleep(forTimeInterval: 1.0 / 60.0)` against the wall clock and waits on real Metal
+  command-buffer completion handlers. Under contention those arrive late or bunched, and the
+  assertion encodes a real-time expectation the harness cannot guarantee.
+- **The recorder drops frames under load (`concurrency` / `resource-management`).** Capture mode
+  writes ProRes through an `AVAssetWriterInput` with `expectsMediaDataInRealTime`; if the input is
+  not ready when a frame arrives, that frame may be skipped. That would be a real limit of capture
+  mode on a busy Mac, not a test artifact — and it would matter to anyone recording while the
+  machine is working.
+
+The live evidence above rules out neither: those captures ran on an idle machine.
+
+#### Diagnosis (2026-09-16) — the recorder, not the test
+
+The test's failure message now names the path that lost each frame, from the recorder's own
+counters (`videoFramesAppended`, `videoNotReadyCount`, `videoAppendFailCount`,
+`videoPoolFailCount`, and frames `makeVideoFrame` returned no buffer for). Run 20 times with one
+busy process per core (10 on the M2 Pro):
+
+| | Result |
+|---|---|
+| Runs | **14 fail / 6 pass** (alone: 6 of 6 pass) |
+| Frames lost per failing run | 13–38 of 70 after the lock |
+| **Writer not ready** | **every lost frame** |
+| Append failed / pool failed / no buffer | 0 / 0 / 0 |
+| Frames read back from the `.mov` | equal to frames appended, every run |
+
+Every frame the writer took is in the file with the right pixels; the ones it refused are gone.
+`AVAssetWriterInput.isReadyForMoreMediaData` goes false while the ProRes encoder is behind, and
+`healthyVideoAdaptor` discards the frame — logging only every 120th, so a burst of 20–30 drops
+leaves at most one line in `session.log`. That is the second reading above, confirmed: capture mode
+is lossy on a busy Mac. It is not a flaw in the test, which is doing its job.
+
+Consequence beyond the test: a `UZUME_RECORD_VIDEO=capture` recording made while anything
+CPU-heavy runs — a build, an export, another app — silently loses frames, and nothing in the
+session artifacts says so. The W.3a masters were recorded on an idle Mac and lost none.
+
+**Reproduction under load.** Start the load, run the loop from §Reproduction, then clear it:
+
+```
+for c in $(seq 1 $(sysctl -n hw.ncpu)); do yes > /dev/null & done
+# … the test loop …
+pkill -x yes
+```
+
+Clear it with `pkill` — killing the recorded PIDs left all ten processes running once.
+
+#### Verification criteria (written before any fix)
+
+- **Diagnosis first:** when a run writes fewer than 60 frames, establish which reading holds —
+  whether each missing frame was rejected by the writer (not ready / append failed; the BUG-039
+  log paths) or never reached `recordFrame` in time.
+- Automated: the test passes **20 of 20** runs under a concurrent CPU load, using the loop above.
+- If the recorder is the cause: capture mode logs every frame it fails to write, with the reason,
+  so a live capture can be audited from `session.log` alone.
+- Live: a `UZUME_RECORD_VIDEO=capture` session recorded **while the machine is under load** writes
+  every frame after the lock (appended = rendered − lock frames).
+
+#### Resolution — `8a896e4a` + `c2b047ea` (2026-09-16)
+
+Capture mode only; diagnostic mode keeps its drop-and-throttled-log behaviour.
+
+- **Wait instead of drop.** `captureAdaptorWhenReady` polls `isReadyForMoreMediaData` every 2 ms for
+  up to 1 s, stopping early if the writer leaves `.writing`.
+- **Bounded.** `recordFrame` admits each frame against a 512 MB backlog budget on the render thread
+  (≈ 1 s of 1080p60; a lone frame is always admitted) and releases it once the queue is done, so a
+  stalled encoder cannot hold frames without limit.
+- **Audited.** Every lost capture frame is logged with its reason — backlog full, writer not ready
+  after the wait, append failed, pixel-buffer or pool failure — and the session summary carries
+  `capture dropped N`.
+- Pacing code (this and BUG-136's keep decision) moved to `SessionRecorder+VideoPacing.swift`;
+  `SessionRecorder+Video.swift` had been exactly at `file_length`'s 400.
+
+**Verification criteria:**
+
+- [x] Diagnosis first — every lost frame was a writer-not-ready rejection (`11bc5908`).
+- [x] Under load (one busy process per core, M2 Pro): **6/20 before; after, 20/20** — then, on the
+  final refactored code, **19/20 and 30/30**. The single failure did not print the frame-count
+  assertion and its output was not kept; its cause is **unknown**, and it is not counted as a pass.
+- [x] Every lost frame logged with its reason — `test_captureMode_backlogFull_dropIsCountedAndLogged`.
+  Pure gates: `test_captureBacklogAdmits_withinBudget_andAlwaysOneFrame`,
+  `test_waitUntil_returnsOnReady_andGivesUpAtTimeout`. `SessionRecorder` filter: 41 tests, 0 failures.
+- [x] **Live under load, `2026-09-16T21-40-11Z`** — Debug build of the branch, LG 1920×1080, local file
+  (*Delinquent Frequencies*), planner running, **10 busy processes from writer lock to quit**:
+
+  | | |
+  |---|---|
+  | `SessionRecorder finished` | 12,642 frames; **12,613 appended; capture dropped 0** |
+  | Written after lock | 12,642 − 29 lock frames = **12,613 — every frame** |
+  | Render after lock | 59.97 fps, 2 intervals > 25 ms |
+  | Packet intervals (sixtieths) | {1: 12,610, 2: 1, 6: 1} — the two odd ones are those two late renders |
+  | `check_capture.py` (site repo) | ACCEPT; ProRes 422, 1.41 GB/min |
+
+**Open observation, not this bug.** The loaded capture holds 38 identical consecutive frames, at
+one-frame intervals: ten singles during Waveform (49.5–68.5 s, at half-second marks) and a 28-frame
+run at 190.54–190.99 s while Mitosis was on screen. The recorder cannot produce them — each frame is
+blitted into its own buffer before it is queued, the wait only delays the write, and the capture
+test's pixel-integrity assertion held in every loaded run — so they are the renderer's output. Not
+investigated.
 
 ---
 

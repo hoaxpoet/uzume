@@ -1590,6 +1590,24 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
+
+**Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after
+the writer lock; the capture-mode test passes 20/20 under load; every lost capture frame is logged
+with its reason.
+
+**Delivered.** Diagnosis before fix (`11bc5908`): every frame lost under load was
+`isReadyForMoreMediaData == false`, discarded with a one-in-120 log. Fix (`8a896e4a`): capture waits up
+to 1 s for the writer, admits frames against a 512 MB backlog budget, and logs every loss; tests
+(`c2b047ea`). Pacing code moved to `SessionRecorder+VideoPacing.swift`.
+
+**Evidence.** Loaded test runs 6/20 → 20/20, 19/20 (one failure of unknown cause), 30/30. Live
+`2026-09-16T21-40-11Z`, 10 busy processes, 3½ min: 12,642 rendered, 29 lock, **12,613 appended,
+capture dropped 0**, render 59.97 fps.
+
+**Learning (durable).** Run CPU load for reproduction with `yes > /dev/null &` per core and clear it
+with `pkill -x yes`: killing the recorded PIDs once left all ten running.
+
 ### Increment REC.1 — capture-grade session video: every frame, ProRes ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** `UZUME_RECORD_VIDEO=capture` writes every rendered frame as ProRes 422 `.mov` — live
