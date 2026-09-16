@@ -47,6 +47,7 @@ reads" are not reads — see the entry.)*
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
 | BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
+| BUG-136 | P3 · OPEN — fix in REC.1 | diagnostics / algorithm | **The diagnostic video recorder documents ≈ 30 fps and delivers ≈ 23.4.** `video.mp4` from `2026-09-16T14-27-56Z` (renderer at 59.97 fps) holds 23.38 fps; interval histogram in sixtieths of a second **{1: 1, 2: 684, 3: 892, 4: 1}** — more three-frame gaps than two. The throttle `(now − lastVideoFrameTime) < 1/30` compares a two-frame gap (≈ 33.4 ms) against a 33.3 ms threshold, so render-loop jitter drops about half of them one frame late. Detail below |
 | BUG-133 | P2 · **RESOLVED + LIVE-MEASURED 2026-09-14 (BUG133.2)** — 10 → 16 distinct on the same window; Matt's felt verdict outstanding | orchestrator / selection | **Preset selection cycles a short fixed list in a repeating order instead of drawing on the roster.** Matt: *"the same presets are being selected and cycled through for the tracks I played - Uzume did not take advantage of all the certified presets."* Measured on `2026-09-14T13-49-57Z`: 50 selections, **13 distinct**, and **14 of the 24 certified presets never appeared** (Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana, Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph, Witchlight). Within track 4 an 8-preset sequence repeats **verbatim twice** — Cytokinesis, Glaze, Fractal Tree, Stave, Cytokinesis, Cymatic Resonance, Membrane, Ricercar. Cytokinesis alone took 11 of 50. **No root cause asserted.** Not the same cause as BUG-132: the cycle repeats within one track with no rebuild between. |
 | OBS-DS6-1 | P3 · observed 2026-09-03 (DS.6 M7, Spotify session), recorded not chased | preset.fidelity / Ferrofluid Ocean | **Ferrofluid Ocean went black for a stretch mid-track.** Matt: *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this work."* Session `~/Documents/uzume_sessions/2026-09-03T20-04-45Z`; frames were presented throughout (no drawable failures), and the tap saw ~3 s of near-silence (RMS 0.001) right after the preset began — whether the black is the preset's honest response to no energy or a defect is unverified. Needs a reproduction with a timestamp. |
 | OBS-DS4-1 | P3 · observed 2026-09-02 (DS.4 live run), recorded not fixed | dsp.mir / mood | **The detailed preparation view makes the analysis legible for the first time, and what it shows on a real 40-track playlist is suspiciously uniform: the first ten heard tracks read 132–138 BPM and nine of ten read "bright".** Tunes Club TC 29 spans ambient, techno and downtempo; a genuine spread would show it. The view reports faithfully (`TrackProfile.bpm` / `.mood` straight from `SessionPreparer+Analysis`), so this is a finding about the readout's *input*, not about DS.4 — it is the same 30 s-preview MIR the Orchestrator has always planned from, now visible. **No root cause asserted** (BUG-061 rule). Candidates worth measuring, not assuming: the mood scaler's valence bias (DYN.6.2 narrowed valence spread; BUG-066), and the preview-window tempo instability BUG-076 records. Evidence: `docs/reviews/DS.4/after/live-mid-detailed.png`. Worth its own increment before the detailed view ships to beta listeners as "what Uzume heard". |
@@ -314,6 +315,46 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+---
+
+### BUG-136 — the diagnostic video recorder delivers ≈ 23 fps, not 30 (2026-09-16)
+
+**Severity:** P3 · **Domain:** `diagnostics` · **Failure class:** `algorithm` · **Related:** BUG-050 (why video is opt-in)
+
+#### Expected
+
+With `UZUME_RECORD_VIDEO=1` and the renderer holding 60 fps, `video.mp4` carries every second
+rendered frame: ≈ 30 fps, every packet interval two sixtieths of a second.
+
+#### Actual
+
+Session `2026-09-16T14-27-56Z` (Matt's M2 Pro, local file, Cymatic Resonance). `features.csv`:
+59.97 fps, 3 late frames in 67 s. `video.mp4`: 1579 packets, **23.38 fps**. Packet-interval histogram
+in sixtieths of a second:
+
+| interval | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| count | 1 | 684 | 892 | 1 |
+
+#### Reproduction
+
+Record any session with `UZUME_RECORD_VIDEO=1`, then:
+`ffprobe -v error -select_streams v:0 -show_entries packet=pts_time -of csv=p=0 video.mp4 | sort -g | awk 'NR>1{h[int(($1-p)*60+0.5)]++}{p=$1}END{for(k in h)print k" frames: "h[k]}'`
+
+#### Cause
+
+`SessionRecorder.recordFrame` skipped a frame when `(now − lastVideoFrameTime) < 1.0 / 30.0`. At 60 Hz
+a two-frame gap is ≈ 33.4 ms, straddling the 33.3 ms threshold; completion-handler jitter pushes
+roughly half of them under it, and the gap becomes three frames. The throttle has no tolerance for
+render jitter.
+
+#### Verification criteria (written before the fix)
+
+- Automated: a pure keep-decision function; 60 Hz frames with ±2 ms jitter at target 30 keep exactly
+  every second frame, at target 60 keep every frame, and a late frame is kept on arrival. The tests
+  fail against the old comparison.
+- Live: a short `UZUME_RECORD_VIDEO=1` session whose interval histogram is all two-frame, ≈ 30 fps.
 
 ---
 
