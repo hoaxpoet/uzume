@@ -31,18 +31,19 @@ extension VisualizerEngine {
             let canBlit = !drawableTex.isFramebufferOnly
                 && drawableTex.width > 0
                 && drawableTex.height > 0
+            // REC.1: each kept frame blits into its own encoder buffer (no shared texture to race).
+            var videoFrame: VideoFrame?
+            let tex = drawableTex
             if canBlit,
-               let captureTex = recorder.ensureCaptureTexture(
-                    device: device,
-                    width: drawableTex.width,
-                    height: drawableTex.height,
-                    pixelFormat: drawableTex.pixelFormat),
+               let frame = recorder.makeVideoFrame(
+                    device: device, width: tex.width, height: tex.height, pixelFormat: tex.pixelFormat),
                let blit = commandBuffer.makeBlitCommandEncoder() {
-                blit.copy(from: drawableTex, to: captureTex)
+                blit.copy(from: drawableTex, to: frame.texture)
                 blit.endEncoding()
+                videoFrame = frame
             }
-            commandBuffer.addCompletedHandler { [weak recorder] _ in
-                recorder?.recordFrame(features: features, stems: stems, beatSync: beatSync)
+            commandBuffer.addCompletedHandler { [weak recorder, videoFrame] _ in
+                recorder?.recordFrame(features: features, stems: stems, beatSync: beatSync, videoFrame: videoFrame)
             }
         }
         // Feed full-pipeline timing into features.csv frame_cpu_ms /

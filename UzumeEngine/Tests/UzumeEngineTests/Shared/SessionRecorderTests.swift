@@ -290,6 +290,40 @@ final class SessionRecorderTests: XCTestCase {
         }
     }
 
+    // MARK: - Video test helpers
+
+    /// A video frame filled on the CPU with one BGRA colour — stands in for the render loop's
+    /// blit. Nil when the recorder declines the frame (not due / video off).
+    private func solidVideoFrame(
+        _ recorder: SessionRecorder, device: MTLDevice, width: Int, height: Int, bgra: [UInt8]
+    ) -> VideoFrame? {
+        guard let frame = recorder.makeVideoFrame(
+            device: device, width: width, height: height, pixelFormat: .bgra8Unorm_srgb) else { return nil }
+        let buffer = frame.pixelBuffer
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        let base = CVPixelBufferGetBaseAddress(buffer)!.assumingMemoryBound(to: UInt8.self)
+        let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
+        for y in 0..<height {
+            for x in 0..<width {
+                for c in 0..<4 { base[y * rowBytes + x * 4 + c] = bgra[c] }
+            }
+        }
+        return frame
+    }
+
+    private func recordSolidFrames(
+        _ recorder: SessionRecorder, device: MTLDevice, count: Int,
+        width: Int, height: Int, bgra: [UInt8], spacing: TimeInterval
+    ) {
+        for _ in 0..<count {
+            let frame = solidVideoFrame(recorder, device: device, width: width, height: height, bgra: bgra)
+            recorder.recordFrame(features: FeatureVector.zero, stems: StemFeatures.zero,
+                                 beatSync: .zero, videoFrame: frame)
+            Thread.sleep(forTimeInterval: spacing)
+        }
+    }
+
     // MARK: - BUG-039 — video writer death → segment-rolling recovery
 
     /// The live death certificate (session `2026-06-10T17-50-56Z`): the writer
@@ -303,20 +337,13 @@ final class SessionRecorderTests: XCTestCase {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("No Metal device")
         }
-        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoEnabled: true))
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .diagnostic))
         let width = 128, height = 72
-        let captureTex = try XCTUnwrap(recorder.ensureCaptureTexture(
-            device: device, width: width, height: height,
-            pixelFormat: .bgra8Unorm_srgb))
-        var pixels = [UInt8](repeating: 128, count: width * height * 4)
-        captureTex.replace(region: MTLRegionMake2D(0, 0, width, height),
-                           mipmapLevel: 0, withBytes: &pixels, bytesPerRow: width * 4)
+        let grey: [UInt8] = [128, 128, 128, 255]
 
         // Phase 1: enough frames to lock + write segment 1.
-        for _ in 0..<45 {
-            recorder.recordFrame(features: FeatureVector.zero, stems: StemFeatures.zero)
-            Thread.sleep(forTimeInterval: 0.04)
-        }
+        recordSolidFrames(recorder, device: device, count: 45, width: width, height: height,
+                          bgra: grey, spacing: 0.04)
         // Kill the writer so status leaves .writing WITH the partial retained —
         // matching the field failure (a .failed writer leaves its file; note
         // cancelWriting() would DELETE it, which is why it isn't used here).
@@ -329,10 +356,8 @@ final class SessionRecorderTests: XCTestCase {
         }
 
         // Phase 2: more frames — recovery must roll to video_2.mp4 and resume.
-        for _ in 0..<45 {
-            recorder.recordFrame(features: FeatureVector.zero, stems: StemFeatures.zero)
-            Thread.sleep(forTimeInterval: 0.04)
-        }
+        recordSolidFrames(recorder, device: device, count: 45, width: width, height: height,
+                          bgra: grey, spacing: 0.04)
         recorder.finish()
 
         let seg1 = recorder.sessionDir.appendingPathComponent("video.mp4")
@@ -836,15 +861,15 @@ final class SessionRecorderTests: XCTestCase {
 
     // MARK: - BUG-050 — video gated off by default; CSV always records
 
-    func test_videoDisabled_noCaptureTexture_csvStillRecords() throws {
-        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoEnabled: false))
+    func test_videoDisabled_noVideoFrame_csvStillRecords() throws {
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .off))
 
-        // The gate: ensureCaptureTexture returns nil even with a valid device, so
-        // the caller skips the blit and recordFrame skips the ~7 ms encode (BUG-050).
+        // The gate: makeVideoFrame returns nil even with a valid device, so
+        // the caller skips the blit and recordFrame skips the encode (BUG-050).
         if let device = MTLCreateSystemDefaultDevice() {
             XCTAssertNil(
-                recorder.ensureCaptureTexture(device: device, width: 64, height: 64, pixelFormat: .bgra8Unorm),
-                "video disabled → no capture texture (blit + encode gated off)")
+                recorder.makeVideoFrame(device: device, width: 64, height: 64, pixelFormat: .bgra8Unorm),
+                "video disabled → no video frame (blit + encode gated off)")
         }
 
         // CSV recording is unaffected — that's where the diagnostic value lives.
@@ -861,15 +886,30 @@ final class SessionRecorderTests: XCTestCase {
             "no video.mp4 when video is disabled")
     }
 
-    func test_videoEnabled_allocatesCaptureTexture() throws {
+    func test_videoEnabled_allocatesVideoFrame() throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("No Metal device available")
         }
-        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoEnabled: true))
-        XCTAssertNotNil(
-            recorder.ensureCaptureTexture(device: device, width: 64, height: 64, pixelFormat: .bgra8Unorm),
-            "video enabled → capture texture allocates")
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .diagnostic))
+        let frame = try XCTUnwrap(
+            recorder.makeVideoFrame(device: device, width: 64, height: 64, pixelFormat: .bgra8Unorm),
+            "video enabled → video frame allocates")
+        XCTAssertEqual(frame.texture.width, 64)
+        XCTAssertEqual(frame.texture.pixelFormat, .bgra8Unorm, "blit destination matches the drawable format")
+        XCTAssertNil(
+            recorder.makeVideoFrame(device: device, width: 64, height: 64, pixelFormat: .bgra8Unorm),
+            "an immediate second frame is not due at 30 fps")
+        XCTAssertNil(
+            recorder.makeVideoFrame(device: device, width: 64, height: 64, pixelFormat: .rgba16Float),
+            "non-BGRA8 drawables are declined")
         recorder.finish()
+    }
+
+    func test_videoMode_parsesEnvironmentValue() {
+        XCTAssertEqual(VideoRecordingMode(environmentValue: nil), .off)
+        XCTAssertEqual(VideoRecordingMode(environmentValue: "0"), .off)
+        XCTAssertEqual(VideoRecordingMode(environmentValue: "1"), .diagnostic)
+        XCTAssertEqual(VideoRecordingMode(environmentValue: "capture"), .capture)
     }
 
     // MARK: - Video file is created and readable
@@ -878,35 +918,16 @@ final class SessionRecorderTests: XCTestCase {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("No Metal device available")
         }
-        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoEnabled: true))
-
-        // Allocate a known capture texture and fill with a solid color pattern.
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .diagnostic))
         let width = 128
         let height = 72
-        let captureTex = try XCTUnwrap(recorder.ensureCaptureTexture(
-            device: device, width: width, height: height,
-            pixelFormat: .bgra8Unorm_srgb))
-        // Fill with solid blue (BGRA=255,0,0,255).
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        for i in 0..<(width * height) {
-            pixels[i * 4 + 0] = 255   // B
-            pixels[i * 4 + 1] = 0     // G
-            pixels[i * 4 + 2] = 0     // R
-            pixels[i * 4 + 3] = 255   // A
-        }
-        captureTex.replace(region: MTLRegionMake2D(0, 0, width, height),
-                           mipmapLevel: 0,
-                           withBytes: &pixels,
-                           bytesPerRow: width * 4)
 
-        // Write 50 frames with 50 ms spacing. The recorder defers video writer
+        // Write 50 solid-blue frames with 50 ms spacing. The recorder defers video writer
         // initialization until 30 consecutive same-size frames have arrived
         // (to avoid locking the writer to a transient launch-time drawable
         // size); 50 frames clears that threshold with margin to spare.
-        for _ in 0..<50 {
-            recorder.recordFrame(features: FeatureVector.zero, stems: StemFeatures.zero)
-            Thread.sleep(forTimeInterval: 0.05)
-        }
+        recordSolidFrames(recorder, device: device, count: 50, width: width, height: height,
+                          bgra: [255, 0, 0, 255], spacing: 0.05)
         recorder.finish()
 
         let videoURL = recorder.sessionDir.appendingPathComponent("video.mp4")
@@ -927,6 +948,74 @@ final class SessionRecorderTests: XCTestCase {
         }
     }
 
+    // MARK: - REC.1 — capture mode: ProRes .mov, every frame, each buffer its own frame
+
+    /// Production's path end to end: the GPU blits a distinct grey level per frame into each
+    /// frame's buffer inside a command buffer, and the completion handler records it, at 60 Hz
+    /// spacing. The written stream must be ProRes in `.mov` with grey levels strictly
+    /// increasing — a duplicate or reorder means a buffer carried another frame's pixels.
+    func test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels() throws {
+        guard let device = MTLCreateSystemDefaultDevice(),
+              let commandQueue = device.makeCommandQueue() else {
+            throw XCTSkip("No Metal device available")
+        }
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .capture))
+        let width = 64, height = 36
+        let sourceDesc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        let source = try XCTUnwrap(device.makeTexture(descriptor: sourceDesc))
+        let frameCount = 100
+        for i in 0..<frameCount {
+            let level = UInt8(16 + i * 2)
+            var pixels = [UInt8](repeating: level, count: width * height * 4)
+            for p in 0..<(width * height) { pixels[p * 4 + 3] = 255 }
+            source.replace(region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+                           withBytes: &pixels, bytesPerRow: width * 4)
+            let commandBuffer = try XCTUnwrap(commandQueue.makeCommandBuffer())
+            let frame = recorder.makeVideoFrame(device: device, width: width, height: height,
+                                                pixelFormat: .bgra8Unorm)
+            if let frame, let blit = commandBuffer.makeBlitCommandEncoder() {
+                blit.copy(from: source, to: frame.texture)
+                blit.endEncoding()
+            }
+            commandBuffer.addCompletedHandler { [frame] _ in
+                recorder.recordFrame(features: .zero, stems: .zero, beatSync: .zero, videoFrame: frame)
+            }
+            commandBuffer.commit()
+            // Overwrite the source before the recorder's queue gets to the frame: under a
+            // shared capture texture this is what made a buffer carry the wrong frame.
+            Thread.sleep(forTimeInterval: 1.0 / 60.0)
+        }
+        recorder.finish()
+
+        let videoURL = recorder.sessionDir.appendingPathComponent("video.mov")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: videoURL.path), "capture mode writes video.mov")
+        let asset = AVURLAsset(url: videoURL)
+        let track = try XCTUnwrap(asset.tracks(withMediaType: .video).first)
+        let format = try XCTUnwrap(track.formatDescriptions.first.map { $0 as! CMFormatDescription })
+        XCTAssertEqual(CMFormatDescriptionGetMediaSubType(format), kCMVideoCodecType_AppleProRes422)
+
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ])
+        reader.add(output)
+        XCTAssertTrue(reader.startReading())
+        var levels: [Int] = []
+        while let sample = output.copyNextSampleBuffer(), let image = CMSampleBufferGetImageBuffer(sample) {
+            CVPixelBufferLockBaseAddress(image, .readOnly)
+            let base = CVPixelBufferGetBaseAddress(image)!.assumingMemoryBound(to: UInt8.self)
+            let row = CVPixelBufferGetBytesPerRow(image) * (height / 2)
+            levels.append(Int(base[row + (width / 2) * 4 + 1]))   // centre pixel, green
+            CVPixelBufferUnlockBaseAddress(image, .readOnly)
+        }
+        // 30 frames go to the writer's size-stability lock; the rest are written.
+        XCTAssertGreaterThanOrEqual(levels.count, 60, "capture keeps every 60 Hz frame after lock")
+        for (a, b) in zip(levels, levels.dropFirst()) {
+            XCTAssertGreaterThan(b, a, "grey levels must strictly increase — got \(levels)")
+        }
+    }
+
     // MARK: - Relock on drawable size change after bad initial lock
     //
     // Simulates the Tea Lights session (2026-04-16T20-09-44Z) where the
@@ -940,46 +1029,22 @@ final class SessionRecorderTests: XCTestCase {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("No Metal device available")
         }
-        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoEnabled: true))
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .diagnostic))
 
-        // Phase 1: 35 frames at the "transient" Retina-native size.
+        // Phase 1: 35 red frames at the "transient" Retina-native size.
         // Passes the 30-frame stability threshold → writer locks here.
         let badW = 256
         let badH = 144
-        let badTex = try XCTUnwrap(recorder.ensureCaptureTexture(
-            device: device, width: badW, height: badH,
-            pixelFormat: .bgra8Unorm_srgb))
-        var badPixels = [UInt8](repeating: 0, count: badW * badH * 4)
-        for i in 0..<(badW * badH) {
-            badPixels[i * 4 + 2] = 255; badPixels[i * 4 + 3] = 255   // red
-        }
-        badTex.replace(region: MTLRegionMake2D(0, 0, badW, badH),
-                       mipmapLevel: 0, withBytes: &badPixels,
-                       bytesPerRow: badW * 4)
-        for _ in 0..<35 {
-            recorder.recordFrame(features: FeatureVector.zero, stems: StemFeatures.zero)
-            Thread.sleep(forTimeInterval: 0.04)
-        }
+        recordSolidFrames(recorder, device: device, count: 35, width: badW, height: badH,
+                          bgra: [0, 0, 255, 255], spacing: 0.04)
 
         // Phase 2: 120 frames at the logical-point "good" size (clears the
         // 90-frame relock threshold). The recorder should throw away the
         // bad lock, recreate the writer at goodW×goodH, and start writing.
         let goodW = 128
         let goodH = 72
-        let goodTex = try XCTUnwrap(recorder.ensureCaptureTexture(
-            device: device, width: goodW, height: goodH,
-            pixelFormat: .bgra8Unorm_srgb))
-        var goodPixels = [UInt8](repeating: 0, count: goodW * goodH * 4)
-        for i in 0..<(goodW * goodH) {
-            goodPixels[i * 4 + 0] = 255; goodPixels[i * 4 + 3] = 255  // blue
-        }
-        goodTex.replace(region: MTLRegionMake2D(0, 0, goodW, goodH),
-                        mipmapLevel: 0, withBytes: &goodPixels,
-                        bytesPerRow: goodW * 4)
-        for _ in 0..<120 {
-            recorder.recordFrame(features: FeatureVector.zero, stems: StemFeatures.zero)
-            Thread.sleep(forTimeInterval: 0.04)
-        }
+        recordSolidFrames(recorder, device: device, count: 120, width: goodW, height: goodH,
+                          bgra: [255, 0, 0, 255], spacing: 0.04)
         recorder.finish()
 
         // Log must document the relock.
