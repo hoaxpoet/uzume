@@ -243,6 +243,19 @@ extension SessionRecorder {
         }
     }
 
+    // MARK: - Frame-keep decision (BUG-136)
+
+    /// Whether a rendered frame at `time` is written, given the last written frame's time and
+    /// the target video rate.
+    static func shouldKeepVideoFrame(
+        at time: CFAbsoluteTime,
+        lastKept: CFAbsoluteTime?,
+        targetFPS: Double
+    ) -> Bool {
+        guard let lastKept else { return true }
+        return !((time - lastKept) < 1.0 / targetFPS)
+    }
+
     // MARK: - BUG-039 invariant (CLEAN.3.6)
 
     /// At `finish()` (on the queue): flag a silent video stop loudly and return the

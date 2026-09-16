@@ -794,6 +794,46 @@ final class SessionRecorderTests: XCTestCase {
         }
     }
 
+    // MARK: - BUG-136 — frame-keep decision tolerates render jitter
+
+    /// 60 Hz frame times with a deterministic ±2 ms jitter pattern.
+    private func jittered60HzTimes(count: Int) -> [CFAbsoluteTime] {
+        let jitter: [Double] = [0.002, -0.002, 0.0015, -0.0005, -0.002, 0.001, 0.002, -0.0015]
+        return (0..<count).map { 1000.0 + Double($0) / 60.0 + jitter[$0 % jitter.count] }
+    }
+
+    private func keptIndices(_ times: [CFAbsoluteTime], targetFPS: Double) -> [Int] {
+        var lastKept: CFAbsoluteTime?
+        var kept: [Int] = []
+        for (i, t) in times.enumerated()
+        where SessionRecorder.shouldKeepVideoFrame(at: t, lastKept: lastKept, targetFPS: targetFPS) {
+            kept.append(i)
+            lastKept = t
+        }
+        return kept
+    }
+
+    func test_keepDecision_target30_keepsEverySecondJitteredFrame() {
+        let kept = keptIndices(jittered60HzTimes(count: 240), targetFPS: 30)
+        XCTAssertEqual(kept, Array(stride(from: 0, to: 240, by: 2)),
+                       "60 Hz ±2 ms at target 30 must keep exactly every second frame")
+    }
+
+    func test_keepDecision_target60_keepsEveryJitteredFrame() {
+        let kept = keptIndices(jittered60HzTimes(count: 240), targetFPS: 60)
+        XCTAssertEqual(kept, Array(0..<240), "60 Hz ±2 ms at target 60 must keep every frame")
+    }
+
+    func test_keepDecision_lateFrame_keptOnArrival() {
+        // Kept at frame 0, frame 1 skipped at target 30, then the renderer stalls: the next
+        // frame arrives 2.5 frames late and must be written, not pushed to the one after.
+        var times = [1000.0, 1000.0 + 1.0 / 60.0, 1000.0 + 4.5 / 60.0, 1000.0 + 5.5 / 60.0]
+        XCTAssertEqual(keptIndices(times, targetFPS: 30), [0, 2])
+        // Target 60: a late frame after a kept one is written too.
+        times = [1000.0, 1000.0 + 2.6 / 60.0]
+        XCTAssertEqual(keptIndices(times, targetFPS: 60), [0, 1])
+    }
+
     // MARK: - BUG-050 — video gated off by default; CSV always records
 
     func test_videoDisabled_noCaptureTexture_csvStillRecords() throws {
