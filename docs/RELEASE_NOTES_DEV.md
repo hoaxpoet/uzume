@@ -10,6 +10,22 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-16-215311] BUG-137 — capture mode waits for a busy encoder instead of dropping frames
+
+A capture recording made while the Mac was busy silently lost frames. Under CPU load the ProRes
+writer input reports not ready in bursts, and capture mode discarded the frame there — logging one in
+120. Found through the capture-mode recorder test, which failed 14 of 20 runs under full load.
+
+**Now:** capture waits up to 1 s for the writer, within a 512 MB backlog (≈ 1 s of 1080p60), and logs
+**every** frame it still loses with the reason; the session summary ends `capture dropped N`.
+Diagnostic mode is unchanged.
+
+**Verified.** Loaded test runs: 6/20 → 20/20, then 19/20 (one failure of unknown cause) and 30/30.
+Live under full CPU load (`2026-09-16T21-40-11Z`, 3½ min): **12,613 of 12,613 frames after the lock
+written, capture dropped 0**, render 59.97 fps.
+
+---
+
 ### [dev-2026-09-16-170000] REC.1 — capture-grade session video: every frame, ProRes
 
 `UZUME_RECORD_VIDEO=capture` writes every rendered frame as ProRes 422 in `video.mov`, for the
