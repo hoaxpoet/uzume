@@ -905,6 +905,19 @@ final class SessionRecorderTests: XCTestCase {
         recorder.finish()
     }
 
+    func test_captureMode_allocatesEveryFrame_noThrottle() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("No Metal device available")
+        }
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .capture))
+        for i in 0..<3 {
+            XCTAssertNotNil(
+                recorder.makeVideoFrame(device: device, width: 64, height: 64, pixelFormat: .bgra8Unorm),
+                "capture keeps every rendered frame, even back-to-back (frame \(i))")
+        }
+        recorder.finish()
+    }
+
     func test_videoMode_parsesEnvironmentValue() {
         XCTAssertEqual(VideoRecordingMode(environmentValue: nil), .off)
         XCTAssertEqual(VideoRecordingMode(environmentValue: "0"), .off)

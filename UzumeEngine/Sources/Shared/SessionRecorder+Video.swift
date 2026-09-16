@@ -15,7 +15,7 @@ public enum VideoRecordingMode: Sendable, Equatable {
     case off
     /// `UZUME_RECORD_VIDEO=1` — H.264 `.mp4` at ≈ 30 fps, 4 Mbps: small files for diagnosis.
     case diagnostic
-    /// `UZUME_RECORD_VIDEO=capture` — ProRes 422 `.mov`, every rendered frame up to 60 fps:
+    /// `UZUME_RECORD_VIDEO=capture` — ProRes 422 `.mov`, every rendered frame, unthrottled:
     /// masters for footage (REC.1).
     case capture
 
@@ -28,15 +28,16 @@ public enum VideoRecordingMode: Sendable, Equatable {
         }
     }
 
-    /// Target written-frame rate for `shouldKeepVideoFrame`.
-    var targetFPS: Double { self == .capture ? 60 : 30 }
+    /// Target rate for `shouldKeepVideoFrame`; nil = every rendered frame. Capture is unthrottled: a
+    /// tolerance still skipped catch-up frames after a late render (2 of 5,817, 15-05-41Z).
+    var targetFPS: Double? { self == .diagnostic ? 30 : nil }
     var fileExtension: String { self == .capture ? "mov" : "mp4" }
     var fileType: AVFileType { self == .capture ? .mov : .mp4 }
     var logDescription: String {
         switch self {
         case .off: return "off"
         case .diagnostic: return "mode=diagnostic codec=H.264 container=mp4 target_fps=30"
-        case .capture: return "mode=capture codec=ProRes422 container=mov target_fps=60 (every rendered frame)"
+        case .capture: return "mode=capture codec=ProRes422 container=mov target_fps=every rendered frame"
         }
     }
 }
@@ -59,10 +60,9 @@ extension SessionRecorder {
 
     // MARK: - Render-thread frame allocation
 
-    /// A buffer for this render frame to blit the drawable into, or nil when video is off,
-    /// the frame is not due (`shouldKeepVideoFrame`), or the format is unsupported. Call once
-    /// per rendered frame from the render loop, and pass the result to `recordFrame` from the
-    /// same command buffer's completion handler.
+    /// A buffer for this render frame to blit the drawable into, or nil when video is off, the frame
+    /// is not due (`shouldKeepVideoFrame`), or the format is unsupported. Call once per rendered
+    /// frame; pass the result to `recordFrame` from the same command buffer's completion handler.
     public func makeVideoFrame(
         device: MTLDevice,
         width: Int,
@@ -80,8 +80,8 @@ extension SessionRecorder {
                 return nil
             }
             let now = CFAbsoluteTimeGetCurrent()
-            let targetFPS = videoMode.targetFPS
-            guard Self.shouldKeepVideoFrame(at: now, lastKept: lastVideoFrameTime, targetFPS: targetFPS) else {
+            if let targetFPS = videoMode.targetFPS,
+               !Self.shouldKeepVideoFrame(at: now, lastKept: lastVideoFrameTime, targetFPS: targetFPS) {
                 return nil
             }
             guard let pool = videoPixelBufferPool(device: device, width: width, height: height),
@@ -338,8 +338,8 @@ extension SessionRecorder {
     // MARK: - Frame-keep decision (BUG-136)
 
     // Half a 60 Hz render frame: how early a frame may arrive and still count as due.
-    // ponytail: assumes a 60 Hz render loop (MTKView default); a 120 Hz loop would need half of
-    // ITS frame, passed in, or capture at target 60 would keep ~half the 120 Hz frames.
+    // ponytail: assumes a 60 Hz render loop (MTKView default); on a 120 Hz loop the diagnostic
+    // 30 fps target would need half of ITS frame passed in. Capture mode never consults it.
     static let videoKeepTolerance: CFAbsoluteTime = 0.5 / 60.0
 
     /// Whether a rendered frame at `time` is written, given the last written frame's time and
