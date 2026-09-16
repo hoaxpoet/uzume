@@ -1037,6 +1037,63 @@ final class SessionRecorderTests: XCTestCase {
         }
     }
 
+    // MARK: - BUG-137: capture waits for a busy encoder, within a bounded backlog
+
+    func test_captureBacklogAdmits_withinBudget_andAlwaysOneFrame() {
+        let frame = 1920 * 1080 * 4
+        let budget = SessionRecorder.defaultCaptureBacklogByteBudget
+        XCTAssertTrue(SessionRecorder.captureBacklogAdmits(pendingBytes: 0, frameBytes: budget * 2, budget: budget),
+                      "with nothing waiting, any single frame is admitted, however large")
+        XCTAssertTrue(SessionRecorder.captureBacklogAdmits(pendingBytes: budget - frame, frameBytes: frame, budget: budget),
+                      "a frame that exactly fills the budget is admitted")
+        XCTAssertFalse(SessionRecorder.captureBacklogAdmits(pendingBytes: budget - frame + 1, frameBytes: frame,
+                                                            budget: budget),
+                       "one byte over the budget is refused")
+        XCTAssertEqual(budget / frame, 64, "the default holds about a second of 1080p60")
+    }
+
+    func test_waitUntil_returnsOnReady_andGivesUpAtTimeout() {
+        var sleeps = 0
+        XCTAssertTrue(SessionRecorder.waitUntil(timeout: 1, poll: 0.25, sleep: { _ in sleeps += 1 }) { true })
+        XCTAssertEqual(sleeps, 0, "ready at once: no waiting")
+
+        var polls = 0
+        sleeps = 0
+        XCTAssertTrue(SessionRecorder.waitUntil(timeout: 1, poll: 0.25, sleep: { _ in sleeps += 1 }) {
+            polls += 1
+            return polls == 3
+        })
+        XCTAssertEqual(sleeps, 2, "ready on the third check: two waits")
+
+        sleeps = 0
+        XCTAssertFalse(SessionRecorder.waitUntil(timeout: 1, poll: 0.25, sleep: { _ in sleeps += 1 }) { false })
+        XCTAssertEqual(sleeps, 4, "never ready: gives up after timeout / poll waits")
+    }
+
+    func test_captureMode_backlogFull_dropIsCountedAndLogged() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("No Metal device available")
+        }
+        let recorder = try XCTUnwrap(SessionRecorder(baseDir: tempDir, videoMode: .capture))
+        let frame = try XCTUnwrap(recorder.makeVideoFrame(device: device, width: 64, height: 36,
+                                                          pixelFormat: .bgra8Unorm))
+        // A backlog already at its budget cannot hold another frame.
+        recorder.videoRenderLock.withLock {
+            recorder.captureBacklogBytes = 1
+            recorder.captureBacklogByteBudget = 1
+        }
+        XCTAssertNil(recorder.admitVideoFrame(frame), "a full backlog refuses the frame")
+        recorder.videoRenderLock.withLock { recorder.captureBacklogBytes = 0 }
+        recorder.finish()
+
+        XCTAssertEqual(recorder.videoRenderLock.withLock { recorder.captureDropCount }, 1)
+        let log = try String(contentsOf: recorder.sessionDir.appendingPathComponent("session.log"),
+                             encoding: .utf8)
+        XCTAssertTrue(log.contains("capture frame dropped: encoder backlog full"),
+                      "every lost capture frame is logged — got:\n\(log)")
+        XCTAssertTrue(log.contains("capture dropped 1"), "the session summary carries the capture drop count")
+    }
+
     // MARK: - Relock on drawable size change after bad initial lock
     //
     // Simulates the Tea Lights session (2026-04-16T20-09-44Z) where the
