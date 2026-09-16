@@ -978,6 +978,7 @@ final class SessionRecorderTests: XCTestCase {
             pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
         let source = try XCTUnwrap(device.makeTexture(descriptor: sourceDesc))
         let frameCount = 100
+        var framesWithoutBuffer = 0   // BUG-137 instrumentation
         for i in 0..<frameCount {
             let level = UInt8(16 + i * 2)
             var pixels = [UInt8](repeating: level, count: width * height * 4)
@@ -987,6 +988,7 @@ final class SessionRecorderTests: XCTestCase {
             let commandBuffer = try XCTUnwrap(commandQueue.makeCommandBuffer())
             let frame = recorder.makeVideoFrame(device: device, width: width, height: height,
                                                 pixelFormat: .bgra8Unorm)
+            if frame == nil { framesWithoutBuffer += 1 }
             if let frame, let blit = commandBuffer.makeBlitCommandEncoder() {
                 blit.copy(from: source, to: frame.texture)
                 blit.endEncoding()
@@ -1023,7 +1025,13 @@ final class SessionRecorderTests: XCTestCase {
             CVPixelBufferUnlockBaseAddress(image, .readOnly)
         }
         // 30 frames go to the writer's size-stability lock; the rest are written.
-        XCTAssertGreaterThanOrEqual(levels.count, 60, "capture keeps every 60 Hz frame after lock")
+        // BUG-137: on failure, say which path lost each frame — the recorder's own drop counters.
+        XCTAssertGreaterThanOrEqual(
+            levels.count, 60,
+            "capture keeps every 60 Hz frame after lock — read back \(levels.count), "
+                + "appended \(recorder.videoFramesAppended), writer not ready \(recorder.videoNotReadyCount), "
+                + "append failed \(recorder.videoAppendFailCount), pool failed \(recorder.videoPoolFailCount), "
+                + "no buffer \(framesWithoutBuffer)")
         for (a, b) in zip(levels, levels.dropFirst()) {
             XCTAssertGreaterThan(b, a, "grey levels must strictly increase — got \(levels)")
         }
