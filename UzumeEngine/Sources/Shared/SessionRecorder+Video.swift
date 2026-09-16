@@ -16,7 +16,8 @@ public enum VideoRecordingMode: Sendable, Equatable {
     /// `UZUME_RECORD_VIDEO=1` — H.264 `.mp4` at ≈ 30 fps, 4 Mbps: small files for diagnosis.
     case diagnostic
     /// `UZUME_RECORD_VIDEO=capture` — ProRes 422 `.mov`, every rendered frame, unthrottled:
-    /// masters for footage (REC.1).
+    /// masters for footage (REC.1). Waits for a busy encoder rather than dropping, within a
+    /// bounded backlog, and logs every frame it still loses (BUG-137).
     case capture
 
     /// Parses the `UZUME_RECORD_VIDEO` value; anything unrecognised is `.off`.
@@ -96,7 +97,12 @@ extension SessionRecorder {
             guard status == kCVReturnSuccess, let buffer = maybeBuffer,
                   let cvTex = maybeCVTex, let texture = CVMetalTextureGetTexture(cvTex) else {
                 videoPoolFailCount += 1
-                if videoPoolFailCount % 120 == 1 {
+                if videoMode == .capture {
+                    // BUG-137: a master logs every lost frame. `videoRenderLock` is held here.
+                    captureDropCount += 1
+                    log("capture frame dropped: pixel-buffer create failed (CVReturn \(status); "
+                        + "dropped \(captureDropCount); BUG-137)")
+                } else if videoPoolFailCount % 120 == 1 {
                     log("video pixel-buffer create failed (CVReturn \(status), "
                         + "count \(videoPoolFailCount); BUG-039 instrumentation)")
                 }
@@ -126,7 +132,11 @@ extension SessionRecorder {
         videoPoolDims = pool == nil ? nil : (width, height)
         if pool == nil {
             videoPoolFailCount += 1
-            if videoPoolFailCount % 120 == 1 {
+            if videoMode == .capture {
+                // BUG-137: every lost capture frame is logged. `videoRenderLock` is held here.
+                captureDropCount += 1
+                log("capture frame dropped: pixel-buffer pool unavailable (dropped \(captureDropCount); BUG-137)")
+            } else if videoPoolFailCount % 120 == 1 {
                 log("video pixel-buffer pool unavailable "
                     + "(count \(videoPoolFailCount); BUG-039 instrumentation)")
             }
@@ -175,7 +185,10 @@ extension SessionRecorder {
             videoAppendFailCount += 1
             let err = videoWriter?.error.map { String(describing: $0) } ?? "nil"
             let statusRaw = videoWriter?.status.rawValue ?? -1
-            if videoAppendFailCount % 30 == 1 {
+            if videoMode == .capture {
+                recordCaptureDrop("append failed at pts \(String(format: "%.3f", wallclock)) "
+                    + "(status=\(statusRaw), error=\(err))")
+            } else if videoAppendFailCount % 30 == 1 {
                 writeLogLine("video append FAILED at pts \(String(format: "%.3f", wallclock)) "
                     + "(status=\(statusRaw), error=\(err), "
                     + "count \(videoAppendFailCount); BUG-039 instrumentation)")
@@ -216,6 +229,7 @@ extension SessionRecorder {
             return nil
         }
         guard let adaptor = pixelAdaptor, let videoInput = videoInput else { return nil }
+        if videoMode == .capture { return captureAdaptorWhenReady(adaptor, videoInput) }   // BUG-137
         guard videoInput.isReadyForMoreMediaData else {
             videoNotReadyCount += 1
             if videoNotReadyCount % 120 == 1 {
@@ -335,27 +349,6 @@ extension SessionRecorder {
         }
     }
 
-    // MARK: - Frame-keep decision (BUG-136)
-
-    // Half a 60 Hz render frame: how early a frame may arrive and still count as due.
-    // ponytail: assumes a 60 Hz render loop (MTKView default); on a 120 Hz loop the diagnostic
-    // 30 fps target would need half of ITS frame passed in. Capture mode never consults it.
-    static let videoKeepTolerance: CFAbsoluteTime = 0.5 / 60.0
-
-    /// Whether a rendered frame at `time` is written, given the last written frame's time and
-    /// the target video rate. The frame is due at `lastKept + 1/targetFPS` and is kept when it
-    /// arrives no more than half a render frame before that. The old strict comparison had no
-    /// tolerance, so at 60 Hz a two-frame gap (≈ 33.4 ms) jittered under 1/30 about half the
-    /// time and became three frames — 23.4 fps from a "30 fps" recorder (BUG-136).
-    static func shouldKeepVideoFrame(
-        at time: CFAbsoluteTime,
-        lastKept: CFAbsoluteTime?,
-        targetFPS: Double
-    ) -> Bool {
-        guard let lastKept else { return true }
-        return time >= lastKept + 1.0 / targetFPS - videoKeepTolerance
-    }
-
     // MARK: - BUG-039 invariant (CLEAN.3.6)
 
     /// At `finish()` (on the queue): flag a silent video stop loudly and return the
@@ -375,8 +368,10 @@ extension SessionRecorder {
                 + "(\(videoFramesAppended) appended) with no writer death/restart and "
                 + "video not disabled — silent stop")
         }
+        let captureDrops = videoMode == .capture
+            ? " / capture dropped \(videoRenderLock.withLock { captureDropCount })" : ""
         return "video \(videoFramesAppended) appended / \(videoSegmentIndex) segment(s) / "
-            + "\(videoWriterRestartCount) restart(s) / disabled=\(videoFailureLogged)"
+            + "\(videoWriterRestartCount) restart(s) / disabled=\(videoFailureLogged)" + captureDrops
     }
 
     /// BUG-039 invariant predicate: true when the writer locked and appended frames, then

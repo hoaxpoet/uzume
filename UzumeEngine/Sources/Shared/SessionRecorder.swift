@@ -117,6 +117,12 @@ public final class SessionRecorder: @unchecked Sendable {
     var videoTextureCache: CVMetalTextureCache?
     var lastVideoFrameTime: CFAbsoluteTime?
     var videoFormatUnsupportedLogged = false
+    /// BUG-137: capture frames admitted but not yet appended (bytes), the ceiling on that, and
+    /// capture frames lost for any reason. Capture waits for a busy encoder instead of dropping;
+    /// the budget bounds what the wait may hold. All guarded by `videoRenderLock`.
+    var captureBacklogBytes = 0
+    var captureBacklogByteBudget = SessionRecorder.defaultCaptureBacklogByteBudget
+    var captureDropCount = 0
 
     // Drawable-size stability tracking.
     var lastObservedDims: (width: Int, height: Int)?
@@ -369,8 +375,13 @@ public final class SessionRecorder: @unchecked Sendable {
         videoFrame: VideoFrame?
     ) {
         let now = CFAbsoluteTimeGetCurrent()
+        // BUG-137: capture admits the frame against a bounded backlog here, on the render thread,
+        // so a stalled encoder cannot hold frames without limit.
+        let admittedFrame = admitVideoFrame(videoFrame)
         queue.async { [weak self] in
-            guard let self = self, !self.recordingHalted else { return }
+            guard let self = self else { return }
+            defer { if let admittedFrame { self.releaseVideoBacklog(admittedFrame) } }
+            guard !self.recordingHalted else { return }
             let idx = self.frameIndex
             self.frameIndex += 1
             let cpuMs = self.latestFrameCPUms
@@ -406,8 +417,8 @@ public final class SessionRecorder: @unchecked Sendable {
             self.safeWrite(fRow.data(using: .utf8) ?? Data(), to: featuresHandle)
             let sRow = SessionRecorder.csvRow(stems: stems, frame: idx, wallclock: now)
             self.safeWrite(sRow.data(using: .utf8) ?? Data(), to: stemsHandle)
-            guard let videoFrame else { return }
-            self.appendVideoFrame(videoFrame.pixelBuffer, wallclock: now)
+            guard let admittedFrame else { return }
+            self.appendVideoFrame(admittedFrame.pixelBuffer, wallclock: now)
         }
     }
 
