@@ -7,13 +7,138 @@ import os.log
 
 private let videoLogger = Logger(subsystem: "io.uzume", category: "SessionRecorder")
 
+// MARK: - VideoRecordingMode
+
+/// What the session recorder writes as video (BUG-050: off unless asked for).
+public enum VideoRecordingMode: Sendable, Equatable {
+    /// No video. The default.
+    case off
+    /// `UZUME_RECORD_VIDEO=1` — H.264 `.mp4` at ≈ 30 fps, 4 Mbps: small files for diagnosis.
+    case diagnostic
+    /// `UZUME_RECORD_VIDEO=capture` — ProRes 422 `.mov`, every rendered frame, unthrottled:
+    /// masters for footage (REC.1).
+    case capture
+
+    /// Parses the `UZUME_RECORD_VIDEO` value; anything unrecognised is `.off`.
+    public init(environmentValue: String?) {
+        switch environmentValue {
+        case "1": self = .diagnostic
+        case "capture": self = .capture
+        default: self = .off
+        }
+    }
+
+    /// Target rate for `shouldKeepVideoFrame`; nil = every rendered frame. Capture is unthrottled: a
+    /// tolerance still skipped catch-up frames after a late render (2 of 5,817, 15-05-41Z).
+    var targetFPS: Double? { self == .diagnostic ? 30 : nil }
+    var fileExtension: String { self == .capture ? "mov" : "mp4" }
+    var fileType: AVFileType { self == .capture ? .mov : .mp4 }
+    var logDescription: String {
+        switch self {
+        case .off: return "off"
+        case .diagnostic: return "mode=diagnostic codec=H.264 container=mp4 target_fps=30"
+        case .capture: return "mode=capture codec=ProRes422 container=mov target_fps=every rendered frame"
+        }
+    }
+}
+
+// MARK: - VideoFrame
+
+/// One rendered frame's video buffer: an IOSurface-backed `CVPixelBuffer` and a Metal texture
+/// aliasing the same memory. The render loop blits the drawable into `texture`; the recorder
+/// appends `pixelBuffer` once the command buffer completes. Each frame owns its buffer, so a
+/// later frame can never overwrite the pixels under an earlier frame's timestamp (REC.1).
+public struct VideoFrame: @unchecked Sendable {
+    /// Blit destination — same pixel format and size as the drawable it was made for.
+    public let texture: MTLTexture
+    let pixelBuffer: CVPixelBuffer
+    /// Holds the texture↔buffer binding alive until the append.
+    let metalTexture: CVMetalTexture
+}
+
 extension SessionRecorder {
+
+    // MARK: - Render-thread frame allocation
+
+    /// A buffer for this render frame to blit the drawable into, or nil when video is off, the frame
+    /// is not due (`shouldKeepVideoFrame`), or the format is unsupported. Call once per rendered
+    /// frame; pass the result to `recordFrame` from the same command buffer's completion handler.
+    public func makeVideoFrame(
+        device: MTLDevice,
+        width: Int,
+        height: Int,
+        pixelFormat: MTLPixelFormat
+    ) -> VideoFrame? {
+        guard videoMode != .off, width > 0, height > 0 else { return nil }
+        return videoRenderLock.withLock {
+            // The encoder takes 32BGRA; the blit needs the drawable's exact format.
+            guard pixelFormat == .bgra8Unorm || pixelFormat == .bgra8Unorm_srgb else {
+                if !videoFormatUnsupportedLogged {
+                    videoFormatUnsupportedLogged = true
+                    log("video disabled: drawable pixel format \(pixelFormat.rawValue) is not BGRA8")
+                }
+                return nil
+            }
+            let now = CFAbsoluteTimeGetCurrent()
+            if let targetFPS = videoMode.targetFPS,
+               !Self.shouldKeepVideoFrame(at: now, lastKept: lastVideoFrameTime, targetFPS: targetFPS) {
+                return nil
+            }
+            guard let pool = videoPixelBufferPool(device: device, width: width, height: height),
+                  let cache = videoTextureCache else { return nil }
+            var maybeBuffer: CVPixelBuffer?
+            let status = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &maybeBuffer)
+            var maybeCVTex: CVMetalTexture?
+            if let buffer = maybeBuffer {
+                CVMetalTextureCacheCreateTextureFromImage(
+                    nil, cache, buffer, nil, pixelFormat, width, height, 0, &maybeCVTex)
+            }
+            guard status == kCVReturnSuccess, let buffer = maybeBuffer,
+                  let cvTex = maybeCVTex, let texture = CVMetalTextureGetTexture(cvTex) else {
+                videoPoolFailCount += 1
+                if videoPoolFailCount % 120 == 1 {
+                    log("video pixel-buffer create failed (CVReturn \(status), "
+                        + "count \(videoPoolFailCount); BUG-039 instrumentation)")
+                }
+                return nil
+            }
+            lastVideoFrameTime = now
+            return VideoFrame(texture: texture, pixelBuffer: buffer, metalTexture: cvTex)
+        }
+    }
+
+    /// The pool for `width`×`height`, rebuilt on a size change. `videoRenderLock` held.
+    private func videoPixelBufferPool(device: MTLDevice, width: Int, height: Int) -> CVPixelBufferPool? {
+        if let pool = videoPool, videoPoolDims?.width == width, videoPoolDims?.height == height { return pool }
+        if videoTextureCache == nil {
+            CVMetalTextureCacheCreate(nil, nil, device, nil, &videoTextureCache)
+        }
+        let attributes: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any]()
+        ]
+        var pool: CVPixelBufferPool?
+        CVPixelBufferPoolCreate(nil, nil, attributes as CFDictionary, &pool)
+        videoPool = pool
+        videoPoolDims = pool == nil ? nil : (width, height)
+        if pool == nil {
+            videoPoolFailCount += 1
+            if videoPoolFailCount % 120 == 1 {
+                log("video pixel-buffer pool unavailable "
+                    + "(count \(videoPoolFailCount); BUG-039 instrumentation)")
+            }
+        }
+        return pool
+    }
 
     // MARK: - Video encoding
 
-    func appendVideoFrame(from tex: MTLTexture, wallclock: CFAbsoluteTime) {
-        let width = tex.width
-        let height = tex.height
+    func appendVideoFrame(_ pixelBuffer: CVPixelBuffer, wallclock: CFAbsoluteTime) {
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
 
         guard initializeVideoWriterIfNeeded(width: width, height: height) else { return }
 
@@ -35,13 +160,6 @@ extension SessionRecorder {
         // loudly with its error, and left alone WITHOUT deleting the partial file (the BUG-022
         // fragmented MP4 keeps everything up to the last 5 s fragment playable).
         guard let adaptor = healthyVideoAdaptor() else { return }
-        guard let pixelBuffer = makeVideoPixelBuffer(adaptor: adaptor) else { return }
-
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
-        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return }
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        tex.getBytes(base, bytesPerRow: bytesPerRow, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
 
         if videoStartTime == nil {
             let startTime = CMTime(value: CMTimeValue(wallclock * 1_000_000), timescale: 1_000_000)
@@ -82,7 +200,7 @@ extension SessionRecorder {
                 videoWriterRestartCount += 1
                 videoSegmentIndex += 1
                 writeLogLine("video writer DIED (status=\(writer.status.rawValue), error=\(err)) "
-                    + "— partial retained; restarting into video_\(videoSegmentIndex).mp4 "
+                    + "— partial retained; restarting into \(currentVideoURL.lastPathComponent) "
                     + "(restart \(videoWriterRestartCount)/\(Self.maxVideoWriterRestarts); BUG-039 recovery)")
                 tearDownVideoWriter()
                 videoStartTime = nil
@@ -107,31 +225,6 @@ extension SessionRecorder {
             return nil
         }
         return adaptor
-    }
-
-    /// A pool pixel buffer, or nil with a throttled log (pool unavailable / create failure).
-    private func makeVideoPixelBuffer(
-        adaptor: AVAssetWriterInputPixelBufferAdaptor
-    ) -> CVPixelBuffer? {
-        guard let pool = adaptor.pixelBufferPool else {
-            videoPoolFailCount += 1
-            if videoPoolFailCount % 120 == 1 {
-                writeLogLine("video pixel-buffer pool unavailable "
-                    + "(count \(videoPoolFailCount); BUG-039 instrumentation)")
-            }
-            return nil
-        }
-        var maybeBuffer: CVPixelBuffer?
-        let status = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &maybeBuffer)
-        guard status == kCVReturnSuccess, let pixelBuffer = maybeBuffer else {
-            videoPoolFailCount += 1
-            if videoPoolFailCount % 120 == 1 {
-                writeLogLine("video pixel-buffer create failed (CVReturn \(status), "
-                    + "count \(videoPoolFailCount); BUG-039 instrumentation)")
-            }
-            return nil
-        }
-        return pixelBuffer
     }
 
     private func initializeVideoWriterIfNeeded(width: Int, height: Int) -> Bool {
@@ -188,14 +281,13 @@ extension SessionRecorder {
         videoInput = nil
         pixelAdaptor = nil
         videoStartTime = nil
-        lastVideoFrameTime = 0
         try? FileManager.default.removeItem(at: currentVideoURL)
     }
 
     private func setupVideoWriter(width: Int, height: Int) -> Bool {
         do {
             guard materializeIfNeeded() else { return false }
-            let writer = try AVAssetWriter(outputURL: currentVideoURL, fileType: .mp4)
+            let writer = try AVAssetWriter(outputURL: currentVideoURL, fileType: videoMode.fileType)
             // BUG-022 — write a fragmented MP4 so the file remains playable
             // even if the process exits without calling `finishWriting`
             // (force-quit, crash, signal kill). Default AVAssetWriter only
@@ -207,25 +299,25 @@ extension SessionRecorder {
             // Clean Cmd+Q still hits `finishWriting` via the willTerminate
             // observer and produces a full final moov as before.
             writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 1)
-            let settings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.h264,
+            var settings: [String: Any] = [
                 AVVideoWidthKey: width,
-                AVVideoHeightKey: height,
-                AVVideoCompressionPropertiesKey: [
+                AVVideoHeightKey: height
+            ]
+            if videoMode == .capture {
+                // REC.1: ProRes 422, not HQ — visually lossless for masters at ~2/3 the size.
+                settings[AVVideoCodecKey] = AVVideoCodecType.proRes422
+            } else {
+                settings[AVVideoCodecKey] = AVVideoCodecType.h264
+                settings[AVVideoCompressionPropertiesKey] = [
                     AVVideoAverageBitRateKey: 4_000_000,
                     AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
                 ]
-            ]
+            }
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
             input.expectsMediaDataInRealTime = true
-            let pbAttributes: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: width,
-                kCVPixelBufferHeightKey as String: height
-            ]
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(
                 assetWriterInput: input,
-                sourcePixelBufferAttributes: pbAttributes
+                sourcePixelBufferAttributes: nil
             )
             guard writer.canAdd(input) else { return false }
             writer.add(input)
@@ -241,6 +333,27 @@ extension SessionRecorder {
             videoLogger.error("AVAssetWriter init failed: \(error.localizedDescription)")
             return false
         }
+    }
+
+    // MARK: - Frame-keep decision (BUG-136)
+
+    // Half a 60 Hz render frame: how early a frame may arrive and still count as due.
+    // ponytail: assumes a 60 Hz render loop (MTKView default); on a 120 Hz loop the diagnostic
+    // 30 fps target would need half of ITS frame passed in. Capture mode never consults it.
+    static let videoKeepTolerance: CFAbsoluteTime = 0.5 / 60.0
+
+    /// Whether a rendered frame at `time` is written, given the last written frame's time and
+    /// the target video rate. The frame is due at `lastKept + 1/targetFPS` and is kept when it
+    /// arrives no more than half a render frame before that. The old strict comparison had no
+    /// tolerance, so at 60 Hz a two-frame gap (≈ 33.4 ms) jittered under 1/30 about half the
+    /// time and became three frames — 23.4 fps from a "30 fps" recorder (BUG-136).
+    static func shouldKeepVideoFrame(
+        at time: CFAbsoluteTime,
+        lastKept: CFAbsoluteTime?,
+        targetFPS: Double
+    ) -> Bool {
+        guard let lastKept else { return true }
+        return time >= lastKept + 1.0 / targetFPS - videoKeepTolerance
     }
 
     // MARK: - BUG-039 invariant (CLEAN.3.6)

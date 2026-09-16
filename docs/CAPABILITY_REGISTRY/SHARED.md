@@ -278,14 +278,14 @@ Verdict: **production-active**. This is the load-bearing diagnostic artifact for
 Public surface: 1 class + extension cluster.
 - `SessionRecorder` (public final class, @unchecked Sendable) — continuous diagnostic capture.
   - `public init?(baseDir:enabled:)` — returns nil if disabled or directory creation fails.
-  - `public func ensureCaptureTexture(device:width:height:pixelFormat:) -> MTLTexture?`
-  - `public func recordFrame(features:stems:)` + overload with BeatSyncSnapshot.
+  - `public func makeVideoFrame(device:width:height:pixelFormat:) -> VideoFrame?` — render thread; per-frame IOSurface buffer the drawable is blitted into (REC.1; replaced `ensureCaptureTexture`)
+  - `public func recordFrame(features:stems:)` + overloads with BeatSyncSnapshot and `videoFrame:`.
   - `public func recordFrameTiming(cpuMs:gpuMs:)`
   - `public func log(_:)`
   - `public func finish()` — idempotent; flushes all writers.
   - Public `sessionDir: URL`.
 
-Threading contract: all hot-path methods dispatch onto a private `queue: DispatchQueue` (label `io.uzume.recorder`, qos `.utility`). `finish()` uses `queue.sync` for blocking flush. CSV file handles are private; only the queue mutates them. Storage: `videoWriter`, `videoInput`, `pixelAdaptor`, `captureTexture`, frame counters, and raw-tap state are all internal/private — accessed only through `queue.async` blocks.
+Threading contract: all hot-path methods dispatch onto a private `queue: DispatchQueue` (label `io.uzume.recorder`, qos `.utility`). `finish()` uses `queue.sync` for blocking flush. CSV file handles are private; only the queue mutates them. Storage: `videoWriter`, `videoInput`, `pixelAdaptor`, frame counters, and raw-tap state are all internal/private — accessed only through `queue.async` blocks.
 
 CSV header invariants (lines 325-352):
 - features.csv: 37 columns (frame through frame_gpu_ms). DM.3a-aware (frame_cpu_ms + frame_gpu_ms appended at end per CSV-append-only-invariant comment at lines 321-324).

@@ -103,7 +103,10 @@ public enum SessionDataLoader {
     public static func load(directory: URL) throws -> SessionData {
         let featuresURL = directory.appendingPathComponent("features.csv")
         let stemsURL = directory.appendingPathComponent("stems.csv")
-        let videoURL = directory.appendingPathComponent("video.mp4")
+        let mp4URL = directory.appendingPathComponent("video.mp4")
+        // REC.1: capture mode writes ProRes `video.mov`.
+        let videoURL = FileManager.default.fileExists(atPath: mp4URL.path)
+            ? mp4URL : directory.appendingPathComponent("video.mov")
 
         guard FileManager.default.fileExists(atPath: featuresURL.path) else {
             throw SessionDataError.missingFile(featuresURL)

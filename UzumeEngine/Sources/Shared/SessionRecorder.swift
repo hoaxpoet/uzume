@@ -11,7 +11,9 @@
 // Writes to ~/Documents/uzume_sessions/<ISO-timestamp>/ while the app is
 // running, producing:
 //
-//   video.mp4             H.264 video of the rendered output (30 fps cap).
+//   video.mp4 / .mov      Opt-in video of the rendered output (BUG-050): UZUME_RECORD_VIDEO=1
+//                         is diagnostic H.264 .mp4 at 30 fps; =capture is ProRes 422 .mov,
+//                         every rendered frame (REC.1).
 //   features.csv          Per-frame FeatureVector (bass/mid/treble/bands/beats/accum).
 //   stems.csv             Per-frame StemFeatures: base energy/beat/band + MV-1 rel/dev
 //                         + MV-3a rich metadata (onsetRate/centroid/attackRatio/energySlope)
@@ -31,10 +33,11 @@
 // by real audio from the Core Audio tap (Apple Music / Spotify / any source
 // feeding the system tap), lands in the capture directory.
 //
-// Video capture works by blitting the drawable texture to a shared-storage
-// capture texture *inside* the render command buffer, then reading that
-// texture's bytes in the buffer's completion handler and feeding them to the
-// AVAssetWriter on a dedicated serial queue.
+// Video capture works by blitting the drawable texture, *inside* the render
+// command buffer, into a Metal texture that aliases an IOSurface-backed
+// CVPixelBuffer (`makeVideoFrame`), then handing that same buffer to the
+// AVAssetWriter from the completion handler on a dedicated serial queue. One
+// buffer per frame: no shared texture a later frame can overwrite, no CPU copy.
 
 import AVFoundation
 import CoreMedia
@@ -94,24 +97,26 @@ public final class SessionRecorder: @unchecked Sendable {
     var videoInput: AVAssetWriterInput?
     var pixelAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     var videoStartTime: CMTime?
-    var lastVideoFrameTime: CFAbsoluteTime = 0
-    /// Cap video to ~30 fps regardless of the render loop rate (reduces file size;
-    /// diagnostic motion is readable at 30 fps).
-    private let minVideoInterval: CFAbsoluteTime = 1.0 / 30.0
 
     /// BUG-050: gate for the per-frame video capture. The drawable blit →
-    /// `tex.getBytes` → AVAssetWriter append costs ~7 ms/frame, additive to
+    /// `tex.getBytes` → AVAssetWriter append cost ~7 ms/frame, additive to
     /// render, ≈ doubling the app's CPU for the entire session (sustained
     /// power/heat — no fps cost). It is **OFF by default**; the CSV / log /
     /// raw-tap / stem artifacts (nearly free, and where ~all the diagnostic
     /// value lives) always record. Enable per session with
-    /// `UZUME_RECORD_VIDEO=1` (e.g. to capture a quality reel). When off,
-    /// `ensureCaptureTexture` returns nil → the blit, the byte read, and the
-    /// encoder are all skipped.
-    let videoEnabled: Bool
+    /// `UZUME_RECORD_VIDEO=1` (diagnostic) or `=capture` (REC.1). When off,
+    /// `makeVideoFrame` returns nil → the blit and the encoder are skipped.
+    public let videoMode: VideoRecordingMode
 
-    // Capture texture (reused across frames; resized on view-size change).
-    var captureTexture: MTLTexture?
+    /// Render-thread video state (REC.1): the IOSurface pixel-buffer pool, its Metal texture
+    /// cache, and the keep decision's clock. Guarded by `videoRenderLock`, not the queue —
+    /// `makeVideoFrame` runs synchronously in the render loop.
+    let videoRenderLock = NSLock()
+    var videoPool: CVPixelBufferPool?
+    var videoPoolDims: (width: Int, height: Int)?
+    var videoTextureCache: CVMetalTextureCache?
+    var lastVideoFrameTime: CFAbsoluteTime?
+    var videoFormatUnsupportedLogged = false
 
     // Drawable-size stability tracking.
     var lastObservedDims: (width: Int, height: Int)?
@@ -187,7 +192,7 @@ public final class SessionRecorder: @unchecked Sendable {
         videoSegmentIndex <= 1
             ? videoURL
             : videoURL.deletingLastPathComponent()
-                .appendingPathComponent("video_\(videoSegmentIndex).mp4")
+                .appendingPathComponent("video_\(videoSegmentIndex).\(videoMode.fileExtension)")
     }
     var videoNotReadyCount = 0
     var videoPoolFailCount = 0
@@ -254,10 +259,10 @@ public final class SessionRecorder: @unchecked Sendable {
     /// Create a new session directory under ~/Documents/uzume_sessions/.
     /// Returns `nil` if disabled or if the directory could not be created.
     ///
-    /// - Parameter videoEnabled: gate the per-frame video capture (BUG-050).
+    /// - Parameter videoMode: gate the per-frame video capture (BUG-050).
     ///   `nil` (the production default) reads `UZUME_RECORD_VIDEO` from the
-    ///   environment → off unless set to `1`. Tests pass an explicit value.
-    public init?(baseDir: URL? = nil, enabled: Bool = true, videoEnabled: Bool? = nil) {
+    ///   environment → off unless `1` or `capture`. Tests pass an explicit value.
+    public init?(baseDir: URL? = nil, enabled: Bool = true, videoMode: VideoRecordingMode? = nil) {
         guard enabled else {
             logger.info("SessionRecorder: disabled by settings — no session directory created")
             return nil
@@ -277,14 +282,14 @@ public final class SessionRecorder: @unchecked Sendable {
         let dir = root.appendingPathComponent(stamp, isDirectory: true)
 
         self.sessionDir     = dir
-        self.videoURL       = dir.appendingPathComponent("video.mp4")
+        let videoMode       = videoMode
+            ?? VideoRecordingMode(environmentValue: ProcessInfo.processInfo.environment["UZUME_RECORD_VIDEO"])
+        self.videoMode      = videoMode
+        self.videoURL       = dir.appendingPathComponent("video.\(videoMode.fileExtension)")
         self.featuresCSVURL = dir.appendingPathComponent("features.csv")
         self.stemsCSVURL    = dir.appendingPathComponent("stems.csv")
         self.logURL         = dir.appendingPathComponent("session.log")
         self.rawTapURL      = dir.appendingPathComponent("raw_tap.wav")
-
-        self.videoEnabled   = videoEnabled
-            ?? (ProcessInfo.processInfo.environment["UZUME_RECORD_VIDEO"] == "1")
 
         // NOTHING is written here — see `materializeIfNeeded()`. Constructing a recorder is
         // free and leaves no trace on disk (BUG-083).
@@ -343,35 +348,6 @@ public final class SessionRecorder: @unchecked Sendable {
 
     // MARK: - Public API: Frame Capture
 
-    /// Ensure a shared-storage capture texture matching the drawable size.
-    public func ensureCaptureTexture(
-        device: MTLDevice,
-        width: Int,
-        height: Int,
-        pixelFormat: MTLPixelFormat
-    ) -> MTLTexture? {
-        // BUG-050: video off → no capture texture, so the caller skips the blit
-        // and `recordFrame`'s `captureTexture` guard skips the encode entirely.
-        guard videoEnabled else { return nil }
-        if let existing = captureTexture,
-           existing.width == width,
-           existing.height == height,
-           existing.pixelFormat == pixelFormat {
-            return existing
-        }
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: pixelFormat,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        desc.usage = [.shaderRead]
-        desc.storageMode = .shared
-        let tex = device.makeTexture(descriptor: desc)
-        captureTexture = tex
-        return tex
-    }
-
     /// Record one rendered frame. Safe to call from the command buffer completion handler.
     public func recordFrame(features: FeatureVector, stems: StemFeatures) {
         recordFrame(features: features, stems: stems, beatSync: .zero)
@@ -380,8 +356,19 @@ public final class SessionRecorder: @unchecked Sendable {
     /// Record one rendered frame with beat-sync diagnostic columns.
     /// Safe to call from the command buffer completion handler.
     public func recordFrame(features: FeatureVector, stems: StemFeatures, beatSync: BeatSyncSnapshot) {
+        recordFrame(features: features, stems: stems, beatSync: beatSync, videoFrame: nil)
+    }
+
+    /// Record one rendered frame, and append `videoFrame` — the buffer this frame's command
+    /// buffer rendered into via `makeVideoFrame` — to the video. Call from that command
+    /// buffer's completion handler, so the GPU has finished writing the buffer.
+    public func recordFrame(
+        features: FeatureVector,
+        stems: StemFeatures,
+        beatSync: BeatSyncSnapshot,
+        videoFrame: VideoFrame?
+    ) {
         let now = CFAbsoluteTimeGetCurrent()
-        let throttled = (now - lastVideoFrameTime) < minVideoInterval
         queue.async { [weak self] in
             guard let self = self, !self.recordingHalted else { return }
             let idx = self.frameIndex
@@ -419,9 +406,8 @@ public final class SessionRecorder: @unchecked Sendable {
             self.safeWrite(fRow.data(using: .utf8) ?? Data(), to: featuresHandle)
             let sRow = SessionRecorder.csvRow(stems: stems, frame: idx, wallclock: now)
             self.safeWrite(sRow.data(using: .utf8) ?? Data(), to: stemsHandle)
-            guard !throttled, let tex = self.captureTexture else { return }
-            self.lastVideoFrameTime = now
-            self.appendVideoFrame(from: tex, wallclock: now)
+            guard let videoFrame else { return }
+            self.appendVideoFrame(videoFrame.pixelBuffer, wallclock: now)
         }
     }
 
@@ -526,9 +512,10 @@ public final class SessionRecorder: @unchecked Sendable {
         // materialization.
         writeLogLine("SessionRecorder started schema=1 dir=\(dir.path)")
         writeLogLine("host macOS=\(osVersion) gpu=\(device) hostname=\(proc.hostName)")
-        let videoState = videoEnabled
-            ? "ENABLED"
-            : "OFF — CSV/log/stems only (BUG-050; set UZUME_RECORD_VIDEO=1 to capture video.mp4)"
+        let videoState = videoMode == .off
+            ? "OFF — CSV/log/stems only (BUG-050; set UZUME_RECORD_VIDEO=1 for diagnostic video.mp4, "
+                + "=capture for ProRes video.mov)"
+            : "ENABLED — \(videoMode.logDescription)"
         writeLogLine("video recording: \(videoState)")
     }
 }

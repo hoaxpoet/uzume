@@ -10,6 +10,29 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-16-170000] REC.1 — capture-grade session video: every frame, ProRes
+
+`UZUME_RECORD_VIDEO=capture` writes every rendered frame as ProRes 422 in `video.mov`, for the
+website's footage capture (W.3a). Screen recording drops 4–9 % and burns in the pointer; the built-in
+recorder was capped. `=1` stays the diagnostic H.264 recorder and now actually delivers 30 fps.
+
+**BUG-136 fixed.** The "30 fps" recorder delivered 23.4: its throttle compared a two-frame gap
+(≈ 33.4 ms) against 33.3 ms with no tolerance, so jitter turned half the gaps into three frames. The
+keep decision now allows half a render frame. Live: **30.00 fps**, histogram all two-frame.
+
+**Every buffer carries its own frame.** Frames used to blit into one shared texture read later on the
+recorder queue — at 60 fps the next blit could overwrite it first. Each frame now blits into its own
+IOSurface pixel buffer the encoder appends directly: no race, no CPU copy.
+
+**Live, capture `2026-09-16T16-04-13Z`** (LG 1080p, Cymatic Resonance, 109 s): 6,550 of 6,552 frames
+written (two dropped as the encoder started, logged), **0 duplicates**, render **59.99 fps** against
+a 59.99 baseline. ≈ 1.1 GB per minute.
+
+An earlier capture run (`15-05-41Z`) still applied the keep decision in capture mode and skipped two
+catch-up frames after a late render; capture now takes every frame the renderer hands it (Matt's call).
+
+---
+
 ### [dev-2026-09-15-010000] BUG133.2 — near-tie sampling: the ranking's precision exceeded its accuracy
 
 Matt, after BUG133.1 failed its live check: *"do the near-tie sampling."*
