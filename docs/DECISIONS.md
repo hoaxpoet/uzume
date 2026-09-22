@@ -130,6 +130,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-246 | Accepted | Arachne removed from the roster (PR.9); the segmented-session machinery it motivated stays |
 | D-247 | Accepted for uncertified review | **Root Choir keeps harmonic geometry on a compact stateful direct path** — five ordered Newton roots, CPU circular phase smoothing, stable root-colour identity (ROOTCHOIR.1, 2026-09-09) |
 | D-248 | Accepted for uncertified review | **Root Choir retires the failed Newton mechanism and becomes Liquid Script** — shader-only tapered local writing through bounded distributed feedback, with `bassDev` advection and `beatComposite` accents (ROOTCHOIR.3, 2026-09-10) |
+| D-250 | Accepted | **Vocabulary stops at the prose/code boundary: what a person reads says *scene*, code and data keep saying `preset`.** Option C (one word everywhere, code included) is NOT planned — pursued only if something forces it (VOCAB.1, Matt 2026-09-22) |
 | D-249 | Accepted — executed | **Retire Root Choir completely after the merged live build failed the selected Martin motion oracle**; retain only the generic sidecar-owned feedback-format capability (ROOTCHOIR-RETIRE.1 / BUG-128, 2026-09-11) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
@@ -5845,6 +5846,48 @@ The final 600-frame real-music replay stayed bounded and alive (mean saturation 
 0.083, zero clipped and near-white area). The motion gate found zero spikes and zero frozen
 transitions in its 20-frame review sequence. These gates qualify the replacement for one live M7;
 they do not certify its psychedelic character or musical legibility.
+
+## D-250: The scene/preset boundary is the destination, not a waypoint (VOCAB.1)
+
+**Status:** Accepted · 2026-09-22
+
+VOCAB.1 made everything a person reads say *scene* — this repo's guides, the app's displayed
+strings, matching uzume.io — while code identifiers, type names, file paths, module names and JSON
+keys keep saying `preset`. That split was originally framed as a temporary state on the way to
+"Option C": one word everywhere, code included.
+
+**Matt's call: Option C is not planned. It happens only if something forces it.**
+
+The scoping work in `docs/VOCABULARY.md` §5 is what changed the answer. Three findings made C a
+worse trade than the inconsistency it would remove:
+
+1. **`Scene` is already taken, and it means something else** — `SceneUniforms` / `SceneCamera` /
+   `SceneLight` are the 3D scene bound to every ray-march and mv_warp pass, `SceneUniforms` is part
+   of the documented GPU contract, six `scene_*` sidecar keys are in use, the documented dispatch
+   order is literally "scene → warp → compose → swap", and 336 bare uses of the word sit in
+   `*.swift`. `Preset` → `Scene` is a **collision**, not a rename. Resolving it means renaming the
+   3D meaning out of the way — itself a schema change — before a single mechanical edit.
+2. **Three of the surfaces are user data, not code names** — the `"preset_fragment"` default entry
+   point that already-written third-party scenes on disk bind to, the hot-reload directory
+   `~/Library/Application Support/Uzume/Presets`, and two persisted `UserDefaults` keys. Each needs
+   a compatibility shim or migration that has to be maintained afterwards.
+3. **It is a two-repo change in one window** — `uzume-site`'s `generate_presets.py` globs this
+   repo's sidecar directory and joins on the slugified `name` *value*. Renaming the directory
+   breaks the site build silently.
+
+Against that: the cost of the boundary is one glossary row and one note in `CONTRIBUTING.md`. A
+contributor reads *scene* and types `Preset`, once, at the point where they open a Swift file.
+
+**What this decision does not change.** The prose rule stands and is enforced by convention: new
+user-facing text says *scene*. `docs/VOCABULARY.md` remains the canonical statement of the
+boundary — its §5 is now a contingency plan rather than a roadmap, kept because if C ever becomes
+necessary, the scoping is already done and should not be rediscovered. The follow-on **prose**
+sweep of living maintainer references (VOCABULARY.md §1) is unaffected by this decision and remains
+available as ordinary doc work.
+
+**Reversal trigger.** Revisit only if something external forces it — a third-party API, a
+public-facing schema, or contributor confusion that shows up as real friction rather than as
+aesthetic inconsistency.
 
 ## D-249: Retire Root Choir; technical motion is not concept fidelity (ROOTCHOIR-RETIRE.1)
 

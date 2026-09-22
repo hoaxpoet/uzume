@@ -1,6 +1,6 @@
-# New preset — every file you will touch
+# New scene — every file you will touch
 
-Lifecycle-ordered checklist of the registration points a preset crosses from
+Lifecycle-ordered checklist of the registration points a scene crosses from
 first sketch to certification (PUB.7, from the ultra review's touch-point
 audit). The dual-entry test tables near the end are **deliberate fail-loud
 gates** — they are the mechanism, not friction to refactor away.
@@ -21,13 +21,13 @@ Jargon: [docs/GLOSSARY.md](../GLOSSARY.md). Authoring discipline (read first):
 - [ ] `UzumeEngine/Sources/Presets/Shaders/<Name>.metal`
 - [ ] `UzumeEngine/Sources/Presets/Shaders/<Name>.json` — schema:
       [SHADER_CRAFT §17](../SHADER_CRAFT.md#17-preset-metadata-format-json-sidecar).
-      `certified: false`; non-empty `audio_routes`; mv_warp presets need
-      `fragment_function`; Milkdrop-inspired presets need `inspired_by`.
+      `certified: false`; non-empty `audio_routes`; mv_warp scenes need
+      `fragment_function`; Milkdrop-inspired scenes need `inspired_by`.
 - [ ] `docs/VISUAL_REFERENCES/<name>/` — copy `_TEMPLATE`; reference imagery
       with provenance/licensing rows (real photography or in-engine capture;
       AI images only in the anti-reference slot per D-065).
 - [ ] Milkdrop-inspired only: a row in `docs/CREDITS.md` §Milkdrop-inspired
-      preset attribution. **Never commit a `.milk` file.**
+      scene attribution. **Never commit a `.milk` file.**
 
 ## 3. Make the automated gates green (no new files — they discover you)
 
@@ -35,26 +35,26 @@ Jargon: [docs/GLOSSARY.md](../GLOSSARY.md). Authoring discipline (read first):
       real-music fixtures. A red route is the gate working: fix the route or
       the declaration, never the floor.
 - [ ] `FidelityRubricTests.expectedAutomatedGate` — the completeness assertion
-      FAILS your PR with the value to paste until you add your preset's row
+      FAILS your PR with the value to paste until you add your scene's row
       (at its measured value, with a comment if `false`).
 - [ ] `PresetLoaderCompileFailureTest` / full engine suite green;
       `swiftlint lint --strict` (`.metal` files are exempt from file-length).
 
-## 4. Certification (maintainer-gated — see RUNBOOK §Certifying a preset)
+## 4. Certification (maintainer-gated — see RUNBOOK §Certifying a scene)
 
 - [ ] Maintainer's live M7 review on real music — the load-bearing gate.
 - [ ] `certified: true` in the sidecar.
 - [ ] `FidelityRubricTests.certifiedPresets` membership.
 - [ ] `PhotosensitivityCertificationTests.multiPassMeasured` + a render
       function in `MultiPassFlashHarnessTests` for multi-pass/follower-state
-      presets — measured 0.00 flashes/s (the static-render guard fails loud
+      scenes — measured 0.00 flashes/s (the static-render guard fails loud
       if you skip this).
-- [ ] `OrchestratorCertifiedFilterTests` green — the preset now enters
+- [ ] `OrchestratorCertifiedFilterTests` green — the scene now enters
       planning.
 
-## 5. Stateful presets only (CPU-side simulation / particles)
+## 5. Stateful scenes only (CPU-side simulation / particles)
 
-A compute/particle preset additionally registers its geometry in the D-097
+A compute/particle scene additionally registers its geometry in the D-097
 registry (`ParticleGeometryRegistry` — see how `Murmuration` / `Mitosis` /
 `RicercarFlow` do it) and, today, touches up to three name-keyed sites in
 `VisualizerEngine+Presets.swift` (`applyPreset`). Collapsing those into the

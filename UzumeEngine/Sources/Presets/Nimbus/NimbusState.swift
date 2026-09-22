@@ -22,9 +22,12 @@
 //   • bloom      — slow overall size/brightness swell ← mean of the four stem
 //                  ENERGIES (robust; never floored by a dead band). FV bass
 //                  proxy during the ~10 s stem warmup (D-019 blend).
-//   • kickPunch  — whole-body inflate + brightness pop ← the onset pulse
-//                  `max(beatBass, beatComposite)` (zero-delay, frame 1),
-//                  refined toward the drums-stem deviation as it converges. The
+//   • kickPunch  — whole-body inflate + brightness pop ← whichever is larger
+//                  (NB.8) of the anticipatory cached-grid ramp over the last
+//                  ~18 % of each beat, peaking ON the beat, and the zero-delay
+//                  onset pulse `max(beatBass, beatComposite)` — the fallback
+//                  when the grid isn't locked. No stem term: both inputs are
+//                  live from frame 1, so the kick needs no warmup gate. The
 //                  hero beat moment; the kick is the spine of the beat.
 //   • bassLobe   — heaves the body DOWN  ← bass-stem energy deviation (D-026).
 //   • vocalsLobe — flares the body UP    ← lead/"vocals"-stem deviation.

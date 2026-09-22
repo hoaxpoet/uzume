@@ -1590,6 +1590,83 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment VOCAB.2 — the maintainer-doc prose sweep, and where it stops ✅ (2026-09-22)
+
+**Done-when:** the living maintainer references named in VOCABULARY.md §1 say *scene* in prose, or
+the file is excluded with a recorded reason.
+
+**Delivered — four of eight swept, four excluded permanently.**
+
+Swept: `CLAUDE.md`, `docs/RUNBOOK.md` (including its §Certifying a scene heading and the one
+cross-reference to it in `NEW_PRESET_CHECKLIST.md`), `docs/PUBLISHING.md`,
+`docs/QUALITY/KNOWN_ISSUES.md`.
+
+**Excluded, and this is the increment's finding.** `docs/SHADER_CRAFT.md` (31 pre-existing uses of
+"scene"), `docs/ARCHITECTURE.md` (20), `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` (20) and
+`docs/CAPABILITY_REGISTRY/PRESETS.md` (3) document the renderer, where **`scene` already means the
+3D scene** — and the two meanings share sentences. ARCHITECTURE's mv_warp paragraph reads
+"alpha-blend current *scene* onto composeTexture … rendered directly by the *preset's* fragment
+shader". SHADER_CRAFT §17 says "Preferred *scene* duration" two rows above "ray-march *scene*
+setup" and the `scene_*` keys. The mechanical pass also produced "The **Scenes** module" for an SPM
+target literally named `Presets`. **Sweeping these makes them wrong, not clearer** — so the sweep
+was reverted on all four and the reason recorded in VOCABULARY.md §1.
+
+This is the D-250 collision (VOCABULARY §5.3) surfacing in prose rather than in identifiers, and it
+is a second, independent reason not to pursue Option C: the documentation cannot adopt one word
+while the renderer holds the other.
+
+**Three restorations after the mechanical pass**, each a name rather than prose: PUBLISHING's
+verbatim quote of the D-111/D-113 wording; KNOWN_ISSUES' 8 defect-taxonomy cells
+(`preset.fidelity` / `.routing` / `.render` are controlled vocabulary in `DEFECT_TAXONOMY.md`); and
+SHADER_CRAFT §17's heading, so `#17-preset-metadata-format-json-sidecar` stays valid in all three
+citing docs.
+
+**Gates:** doc gates 16/16 (CLAUDE.md 3,453 est. tokens against the 7,000 cap); full evidence block
+in the closeout. Docs-only — no code, no data, no sidecar touched.
+
+### Increment VOCAB.1 — presets become scenes (prose + what the app displays) ✅ (2026-09-22)
+
+**Done-when:** a contributor reads the same word on uzume.io, in this repo's guides, and on screen
+in the app; code identifiers, type names, file paths and data keys still say `preset`; the boundary
+and the map to Option C are written down; the website's generator still runs clean.
+
+**Delivered.** Scope was Option B, as specified — prose and displayed strings only.
+
+- **Group (a), the contributor path:** `CONTRIBUTING.md` (the destination of uzume.io's "Write a
+  scene" button) rewritten end to end, plus `README.md`, `docs/GLOSSARY.md` (new **Scene** row
+  naming the boundary outright), `docs/CREDITS.md`, `docs/PRESET_SESSION_CHECKLIST.md`,
+  `docs/presets/YOUR_FIRST_PRESET.md`, `docs/presets/NEW_PRESET_CHECKLIST.md`.
+- **Group (b), displayed strings:** 9 values in `Localizable.strings` (every *key* unchanged, so no
+  lookup moved) + the DEBUG cycle toast. `docs/UX_SPEC.md` rewritten outside backticks so
+  identifiers survived. Verified in the built bundle, not just the source.
+- **Task 4:** `NimbusState.swift` kickPunch comment claimed a drums-stem refinement that `_tick`
+  never had; it now describes `max(anticipatory beatPhase01 ramp, max(beatBass, beatComposite))`.
+- **`docs/VOCABULARY.md` (new)** — the rule, the group (c)/(d) inventory with paths, and the
+  Option C scope/break map.
+
+**Three prompt premises corrected against the tree.** (1) There is no "Preset Eligibility Picker";
+the surface is the family blocklist — UX_SPEC's "Preset family blocklist", shipped as "Hidden preset
+families" via `PresetCategoryBlocklistPicker`. Both strings renamed. (2) Sidecars carry **no `slug`
+key**; `generate_presets.py` slugifies the `name` *value*, so `name` — not a slug field — is the
+cross-repo join key. (3) **No sidecar key contains "preset" at all**, so the data-side Option C
+exposure is the directory and the `name` value, not key names.
+
+**The finding that decides Option C:** `Scene` is already taken — `SceneUniforms` / `SceneCamera` /
+`SceneLight`, the `scene_*` sidecar keys, the documented "scene → warp → compose → swap" dispatch
+order, 336 uses in `*.swift`. `Preset` → `Scene` is a collision, not a rename, and resolving it is
+upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3 — and on the strength of that scoping Matt **declined Option C** (D-250): the boundary is the destination, not a waypoint, and §5 is now a contingency plan rather than queued work.
+
+**Deliberately not done:** living maintainer references still say `preset` in prose
+(ARCHITECTURE 374, RENDER_CAPABILITY_REGISTRY 312, SHADER_CRAFT 231, KNOWN_ISSUES 200,
+CAPABILITY_REGISTRY/PRESETS 188, RUNBOOK 30, CLAUDE.md 27, PUBLISHING 5) — a follow-on prose sweep,
+listed in VOCABULARY.md §1. Append-only records (DECISIONS, ENGINEERING_PLAN, release notes,
+prompts/, archive/) are frozen by design: rewriting them would falsify the record.
+
+**Gates:** swiftlint `--strict` 0 violations / 555 files; `check_user_strings.sh` clean; app build
+SUCCEEDED; engine suite 1980 tests green apart from the time-based DOC.6 rotation gate, rotated in
+its own `[DOC.6]` commit. `generate_presets.py --check` exits 0 / 8 entries, unchanged before and
+after; zero sidecars touched.
+
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after
@@ -2462,217 +2539,9 @@ still an unfilled template, and QG.1 has **no primitive for the spectrum itself*
 shape — the preset's whole subject — cannot be expressed as a declared route.
 
 ### Increment DS.6 — the playback chrome, retokenized in place ✅ (2026-09-03, D-241, M7 passed)
-
-**Done-when:** the chrome the Curator sees over a running show is drawn entirely from the design
-system and reorganized as the `PerformanceChrome` component — same composition, same files; no
-colour outside the tokens, no `DashboardTokens` outside `Views/Dashboard/`, nothing on screen
-that tells the listener what comes next; after a brief inactivity the chrome is gone completely
-and comes back on mouse, tap, key or track change (Matt's call, overriding the design system's
-"cannot become undiscoverable"). **Status: ✅ M7 passed live 2026-09-03** — Matt, on a
-Spotify session (`~/Documents/uzume_sessions/2026-09-03T20-04-45Z`, 12 tracks prepared): *"Looks
-good."* He also noted *"the Ferrofluid Ocean preset blacked out at one point, unrelated to this
-work"* — filed as OBS-DS6-1 in KNOWN_ISSUES, not chased here.
-
-**Before anything changed:** `ReviewCaptureHarness+Chrome.swift` — the shipped
-`PlaybackChromeView` driven through the real view model by scripted publishers, twelve settled
-states over the performed-light gradient, the declared VoiceOver rows and every
-`uzume.playback.*` identifier — rendered `docs/reviews/DS.6/before/` at `main`, and the
-increment gates produced the 19-row off-token inventory in `CAPTURES.md`.
-
-**Built, in order.** (1) `uzume.settings.visuals.showTrackInformation` — default shown,
-persisted, in Settings beside the preparation-view preference, `SettingsStoreTests` pins it.
-(2) `UzumeAppMotion` (120 / 240 / 480 ms, exponential ease-out; reduced motion crossfades) and
-`UzumeAppShadow.raised` — app-side, the vendored tokens carry neither. (3) `LocalFileTransportBar`
-finished: surface, border, glyph and hover fills from `UzumeAppColor`, the purple glow replaced by
-`--shadow-raised`, the `.impeccable.md` header rewritten to "violet is the interaction accent".
-(4) Dots, badge and toast region on the 240 ms state change; the toast slide becomes a crossfade
-under reduced motion. (5) `TrackInfoCardView` loses the Planned/Reactive pill and its
-`.green`/`.orange`; `OrchestratorDisplayState` deleted; hidden means the card, artwork and the
-track-change announcement are out of the tree. (6) `PlaybackControlsCluster` carries Show/Hide
-track info (`uzume.playback.toggleTrackInfo`, the DS.4a words), Settings and End session
-(`uzume.playback.endSession`), each with a label and a hint; "Still preparing" is a
-`StatusTone.info` placement. (7) `PlaybackChromeViewModel` keeps its two-state
-`overlayVisible`, the first timer offset by `ArrivalTransitionView.totalDuration`; a local
-mouseDown/keyDown monitor and the track sink make tap, key press and track change activity —
-UX_SPEC §7.2 had promised key and track change and nothing had wired them. The prompt's default
-(End session left alone as a quiet edge control) was built and captured first, then replaced the
-same session when Matt's answer arrived: the chrome disappears completely. (8) **BUG-113**, found by the harness and confirmed
-live: every toast rendered as a full-window panel over the cluster because its `Color` accent
-bar accepted the whole proposed height; `.fixedSize(vertical:)` and `PerformanceToastLayoutTests`.
-(9) `Localizable.strings`' fourteen lowercase `\uXXXX` escapes — which `.strings` renders
-literally ("weu2019ll") — replaced by the characters.
-
-**Evidence.** Increment gates: `DashboardTokens` outside the dashboard — none; colour / radius /
-`.impeccable` literals in `Views/Playback` — none; `system(size:)` — none; every pre-existing
-identifier resolves plus the two additions; `git diff main` on `PresetContrastCertificationTests`
-— empty (the backdrop numbers did not move). `PlaybackChromeViewModelTests` covers the hide, the
-toggle, the restore, the track-change restore and the first-show timing;
-`PlaybackChromeReducedMotionTests` renders the cluster and badge twice under reduced motion and
-asserts identical pixels. Harness after/ renders and eight window-only live captures of a
-local-file session (full after the arrival, gone after 3 s, restored by mouse, by tap, by key,
-hidden by Space, track info shown / hidden, and the BUG-113 toast before its fix): `docs/reviews/DS.6/CAPTURES.md`.
-
-**Decisions, for Matt's M7:** inactivity → the chrome disappears completely (Matt's own call,
-relayed mid-session through the updated prompt; D-241 §3–4); the pill is removed and track
-information is shown by default and persisted (the prompt's defaults). Kept as-is and flagged:
-toasts still fade with the chrome (a toast while hidden is unseen until the next input); the local-file
-card reads the filename as title and "local file" as artist and shows no preset line (pre-existing,
-not chrome).
-
-**Not captured:** a real streaming session — needs Spotify playing; Matt runs that as the M7,
-as at DS.5. Streaming states are evidenced by the harness renders.
-
-**Transferable.** (1) A synthetic `keyDown` / `mouseMoved` posted with `CGEvent` reaches an app
-only when it is the active app — activate it first (`NSRunningApplication.activate`), or every
-"the chrome did not restore" is a false negative. (2) A capture that toggles a persisted
-preference changes the user's real defaults — read the value before and restore it after.
-(3) `.strings` supports `\UXXXX`, not `\uXXXX`; the lowercase form renders as literal text and
-no gate catches it — the harness's declared-label rows did.
-
-**References.** [D-241]; `docs/reviews/DS.6/{CAPTURES.md,UPSTREAM-FINDINGS.md}`;
-`docs/UX_SPEC.md` §7.2–7.3 (rewritten); BUG-113.
-
 ### Increment DS.5 — Ready becomes the arrival ✅ (2026-09-03, D-240, M7 passed)
-
-**Done-when:** reaching `.ready` is the aperture opening all the way and the camera moving into
-it; a local-file session never asks the listener to press play in an app that does not exist; the
-plan preview is gone. **Status: ✅ M7 passed live 2026-09-03** — Matt, after the two same-day
-fixes from his first pass (BUG-112 + the scrim): *"Ready waited for Spotify this time, copy reads
-fine. Push it."*
-
-**Design pass first** (`docs/reviews/DS.5/DESIGN.md`, 2026-09-02), then a browser prototype of the
-one piece with no precedent — the camera push — which Matt rejected twice before approving:
-a redrawn approximation of the aperture (*"I literally just want you to go from the last frame of
-the preparing graphic and move the camera forward"*), then a uniform zoom on the real frame (*"It
-looks like the aperture is coming out, not the camera moving into it"*). The fix both times was
-the same lesson: use the real production math, and model the perception (a flat scale has no
-parallax; streaks racing past a fixed vanishing point do). *"Looks right, build it for real."*
-
-**Built, in order.** (1) `ApertureColor.swift` — the aperture's colour math extracted so the push
-shares it rather than a driftable copy; `ApertureScene.RGB`/`.Palette` become typealiases, no
-behaviour change. (2) `ArrivalPushScene` + `ArrivalTransitionView` — the real `ApertureScene`
-under a 100-streak radial burst, whiteout, 0.52 s hold, 0.6 s fade uncovering the already-live
-`MetalView`; reduced motion holds still then fades. (3) `PlaybackArrivalOverlay` as `PlaybackView`
-Layer 7, one line at the call site. (4) `OpenAperture` — the cave at openness 1 behind both ready
-screens. (5) `ReadyView` rebuilt for streaming: source-named copy, "Begin now" (bordered, same
-weight as End session), detector and timeout unchanged, `ReadyViewModel` now takes `SessionOrigin?`
-so it knows local from streaming. (6) `LocalFileCountdownView` — 3-2-1 over the open cave, each
-beat announced; `ContentView` routes on `currentSource?.isLocalFile`. (7) The engine's `.ready`
-observer no longer starts local audio: `LocalFileCountdownView` calls `handleLocalFileReady()` at
-zero, so the count runs over silence — and `ContentView`'s LF.4 shortcut routing local `.ready`
-straight to `PlaybackView` is removed, which the design doc's code reading had missed entirely
-(see Transferable (5)). **(9) From Matt's M7, same day (session `2026-09-03T15-58-14Z`):** Ready
-self-advanced with `tap RMS 0.000` — the tap had only ever been installed after `.playing`, so the
-first-audio detector had always watched the surface's default `.active` (BUG-112). The engine's
-`.ready` sink now calls `startListeningForFirstAudio()` (reset to `.silent`, preflight, tap up)
-and `startAudio()` leaves a running tap alone. And `ApertureScrim` under the copy on both ready
-screens, replacing the text halo Matt flagged for contrast. (8) Plan preview deleted — four views/VM, the `PlaybackView`
-sheet, the `P` shortcut, `onShowPlanPreview` through the router and registry, every `plan_preview.*`
-string, two test files; `ReadyPulsingBorder` retired with it. `PlaybackView` came back under the
-400-line ceiling, so the lint directive the camera-push commit had added is gone again.
-
-**Evidence.** `ArrivalPushSceneTests` — progress 0 matches the bare aperture; progress 1 is light
-(luma > 0.85); flash across the full push maxΔ/frame **0.0174** (gate < 0.05, D-157). Live capture
-of the real build: `docs/reviews/DS.5/after/arrival-*.png` (push → streak burst → whiteout).
-`ReadyViewModelTests` gains the local-origin and "Begin now" cases. Suite green (see the closeout
-block); the two `SpotifyConnectionViewModel` retry-backoff tests flake under full-suite load and
-pass in isolation — pre-existing, filed as a separate task.
-
-**Corrected in the design doc.** Its forecast that a literal camera move would need a GPU pass
-"closer to how the real preset renderer works" was wrong; the streak burst over the live 2D scene
-sells the move at zero cost to the preset pipeline. The doc now says what was built.
-
-**Transferable.** (1) Two prototype rejections in one afternoon, both fixed by re-deriving from the
-real artifact rather than tuning an approximation — the prototype must render the production
-math, not a lookalike. (2) A blind full-display `screencapture` loop caught the listener's own
-unrelated screen when the secondary display switched Spaces mid-loop; capture the window, or poll
-the accessibility tree for the element you are waiting on, never the display. (3) A `private`
-member is file-scoped even from an extension of the same type — cross-file helpers take the value
-as a parameter. (4) A scaled `.largeTitle` rasterises blurry — the harness capture showed a pixelated "3";
-a display-sized numeral is laid out at its real size (NSFont from the frame's short side),
-which is what `DynamicTypeRegressionTests`' `.system(size:)` ban is not about. (5) **Read the
-router, not just the view.** The design pass said a local-file session "shows 'Press play in your
-music app'"; it never reached `ReadyView` — `ContentView` sent local `.ready` straight to
-`PlaybackView`. The first live run of the built countdown showed it: no count, the push at
-`.ready`, a flat line for 95 s because nothing called `handleLocalFileReady()`. Twelve unit tests
-and a harness render were green the whole time; only running the build found it. (6) **A screen
-nobody looks at hides its own bugs.** U.5's "press play and it starts" autodetect never listened
-— no tap existed during Ready — and it took Ready becoming a screen worth watching for anyone to
-see it self-advance. When a state becomes visible for the first time, re-verify what it claims to
-do, not just what it now looks like.
-
-**Follow-ups.** `uzume-site` branch
-`claude/ds5-streaming-handoff-camera-push` (COMPONENTS.md: the handoff is a camera move, not a
-cut) is committed locally, not pushed. `handleLocalFileReady` keeps its name though it is now
-"start local playback" — rename when the LF file is next touched.
-
-**References.** [D-240]; `docs/reviews/DS.5/DESIGN.md`; `docs/UX_SPEC.md` §6 (rewritten).
-
 ### Increment DS.4a — the preparation-view toggle gets a reachable, symmetric control ✅ (2026-09-02, D-239)
-
-**Done-when:** the listener can switch between mysterious and detailed at any point during
-`.preparing`, in both directions, without needing Settings. **Status: ✅ merged.**
-
-**The gap.** DS.4's M7 review surfaced, in conversation, that Settings is not reachable while
-`.preparing` — its gear lives in the playback chrome, which doesn't exist until a session is
-playing — so the only way to change the preference in that state was the failure-count line's
-one-way, failure-gated tap into the detailed view. Nothing to switch back, and nothing at all when
-no track had failed.
-
-**Three label shapes tried and rejected for a segmented control**, in the same conversation:
-`Mysterious`/`Detailed` (undecodable without the Settings hint sentence that normally explains
-them), `Simple`/`Detailed` (still one bare word carrying a whole mode), `Ambient`/`Tracks` (still
-metaphor-adjacent — most listeners don't know the Ama-no-Iwato brand story, so `Cave` fails the
-same way `Mysterious` did). The shared cause: a segmented control has to name both states at once,
-and these two views aren't opposite settings of one axis.
-
-**The fix.** A single bottom-bar button between Cancel and Start now, labeled for the
-*destination* rather than the current mode — "Show track info" while the cave is showing, "Hide
-track info" while the list is showing (`preparation.toggle_track_info.show`/`.hide`,
-`uzume.preparing.toggleTrackInfo`). It only ever has to describe the one thing tapping it does.
-
-**References.** [D-239]; `docs/UX_SPEC.md` §5.2 (corrected and extended in the same commit — it
-had claimed Settings was reachable "at any time, including mid-preparation," which was untrue).
-
 ### Increment DS.4 — the preparation screen becomes the overture ✅ (2026-09-02, D-238)
-
-**Done-when:** waiting for a session to prepare is something you watch rather than endure, and the
-listener chooses how; both views ship behind a preference; the header and progress bar are gone;
-per-row failures stay reachable; the aperture is flash-safe by measurement; preparation is not
-slower; Matt's M7 against his own words — *"i want people to feel entertained and excited during
-preparation"*. **Status: ✅ merged as [#190](https://github.com/hoaxpoet/uzume/pull/190)
-(`6de5b58e`), M7 approved.**
-
-**What shipped.** `SessionPreparer` publishes `trackProfiles` beside `trackStatuses` (the
-prerequisite — the App layer could not know what Uzume heard). `uzume.settings.visuals.preparationView`,
-default mysterious. `PreparationAperture` + `ApertureScene` in `Views/Components/`: the cave, shut until
-the first track is heard, opening through the engine's four readiness stops, the full prism spilling in
-every direction as two conic-gradient fans (seamless, a handful of fills per frame), the playlist changing
-how the light behaves and never its hue. `PreparationTrackRow` + `PreparationStatusIndicator` (from
-`TrackPreparationRow` / `TrackPreparationStatusIcon`): the detailed row reports discoveries once a track is
-heard. `PreparationProgressView` rebuilt in place around the preference; banner slot, buttons, recovery
-wiring and cancel dialog untouched. DEAD-002 decided: the banner's dismiss affordance deleted.
-
-**Measured.** Flash (D-157, Mitosis idiom): maxΔ/frame **0.0100**, luma 0.066–0.511, gate < 0.05.
-Preparation wall time on a real 40-track Spotify playlist, cold cache, baseline vs each view:
-`docs/reviews/DS.4/TIMING.md`. Reduced motion renders and widens without animating (tested). VoiceOver:
-the cave is one element carrying every fact the light conveys; no identifier changed.
-
-**Evidence.** `docs/reviews/DS.4/index.html` (before / mysterious / detailed per state, the timing
-table, the flash numbers, the VoiceOver rows, and the recording of a full mysterious preparation);
-`CAPTURES.md` (reachability per state); `TIMING.md`.
-
-**Learned.** (1) `ImageRenderer` does not lay out a `LazyVStack` inside a `ScrollView`; the capture
-harness renders through an offscreen `NSHostingView`. (2) Sixty-odd overlapping additive wedges leave
-antialiasing seams that read as spokes; one conic gradient under a radial mask is seamless and cheaper.
-(3) A prism swept 1.15 loops around a circle has a visible seam at 0°; exactly one loop meets itself.
-(4) A test that renders on the main actor for 35 s starves parallel main-actor suites — yield between
-frames. (5) `log` is a zsh builtin; the unified-log CLI is `/usr/bin/log`, and `xcodebuild` forwards only
-`TEST_RUNNER_`-prefixed environment variables to the test host.
-
-**Resolved at DS.5 (D-240).** Reaching ready is the moment it opens all the way, and the camera
-moves into it.
-
 ### Increment DS.3b — the banner's three errors do not share a severity ✅ (2026-09-01, D-237)
 ### Increment DS.3a — sustained silence is fatal ✅ (2026-09-01, D-236)
 ### Increment DS.3 — one severity vocabulary, four interruption levels ✅ (2026-09-01, D-234/D-235)

@@ -1,10 +1,10 @@
-# Publishing runbook — opening the repo to preset contributors
+# Publishing runbook — opening the repo to scene contributors
 
 **Decisions CONFIRMED by Matt, 2026-07-12:** (1) the history rewrite RUNS
 before first publish (§2 below is no longer optional); (2) weights ship as a
 Release asset (§1) — and since D-211/LFS.2 the reference media left git too,
 so **nothing is LFS-tracked any more**; (3) `prompts/` ships with
-its framing README (done at PUB.1); (4) preset hot-reload gets wired with
+its framing README (done at PUB.1); (4) scene hot-reload gets wired with
 compile errors surfaced on the toast surface (queued — review Phase 2).
 
 The PUB.1 increment (2026-07-11) made the tree publication-ready. This
@@ -160,7 +160,7 @@ SHA; PR refs keep pre-rewrite objects alive — closing/locking old PRs helps.
 
 - Branch protection on `main`: require the CI fast gate; no force pushes
   (re-enable AFTER the rewrite push if step 2 runs).
-- Enable Issues; add the preset-contribution issue template if wanted.
+- Enable Issues; add the scene-contribution issue template if wanted.
 - LFS: after step 1 the remaining LFS payload is reference media
   (~90 MB); watch the bandwidth meter the first weeks — mitigation is
   moving reference media to a release asset the same way as the weights.
@@ -172,7 +172,7 @@ SHA; PR refs keep pre-rewrite objects alive — closing/locking old PRs helps.
 D-111/D-113 retired the Milkdrop author pre-release **notification
 protocol** "until Uzume opens preset development to community
 contributors" — publication IS that trigger. Options: (a) reinstate
-notification for future Milkdrop-inspired ports (a per-preset checklist
+notification for future Milkdrop-inspired ports (a per-scene checklist
 item in CONTRIBUTING), (b) explicitly re-retire it with a D-number
 recording the rationale, or (c) narrow it (notify only when an author is
 contactable via the pack metadata). **Needs Matt's pick + a DECISIONS.md
