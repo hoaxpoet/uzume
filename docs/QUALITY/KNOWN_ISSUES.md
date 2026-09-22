@@ -46,7 +46,7 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
-| BUG-138 | P2 · OPEN — found 2026-09-22 (AUDIO.1) | docs / documentation-drift | **Two repo documents assert render-time audio behaviour the engine does not have, and one of them is the likely source of a published marketing claim.** (a) `FerrofluidOcean.json`'s `description` says *"bass_energy_dev → spike height"*; that route was removed from the shader at **D-153** (2026-06-09) and replaced by the grid-anchored four-beat pulse scaled by `total_energy_smoothed`. Bass survives only as `cached_bass_proportion`, a per-track constant measured at **+3 % height on Get Lucky, +1 % on Superstition**. The same sidecar's machine-checked `audio_routes` block is correct and lists no bass primitive — so the two halves of one file disagree, and only one half is gated. The site caption *"Bass raises the spikes"* almost certainly descends from the prose half. (b) `ARCHITECTURE.md` §Buffer Binding Layout and `Common.metal:11` both state `FeatureVector` is *"48 floats / 192 bytes"*; it is **56 floats / 224 bytes**. `CommonLayoutTest` gates the layout, not the prose describing it. Detail below |
+| BUG-138 | P2 · **(a) RESOLVED 2026-09-22 (BUG138.1)**; (b) + the gate still OPEN | docs / documentation-drift | **Two repo documents assert render-time audio behaviour the engine does not have, and one of them is the likely source of a published marketing claim.** (a) `FerrofluidOcean.json`'s `description` says *"bass_energy_dev → spike height"*; that route was removed from the shader at **D-153** (2026-06-09) and replaced by the grid-anchored four-beat pulse scaled by `total_energy_smoothed`. Bass survives only as `cached_bass_proportion`, a per-track constant measured at **+3 % height on Get Lucky, +1 % on Superstition**. The same sidecar's machine-checked `audio_routes` block is correct and lists no bass primitive — so the two halves of one file disagree, and only one half is gated. The site caption *"Bass raises the spikes"* almost certainly descends from the prose half. (b) `ARCHITECTURE.md` §Buffer Binding Layout and `Common.metal:11` both state `FeatureVector` is *"48 floats / 192 bytes"*; it is **56 floats / 224 bytes**. `CommonLayoutTest` gates the layout, not the prose describing it. Detail below |
 | BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
 | BUG-136 | P3 · **RESOLVED 2026-09-16 (REC.1, `7919e9f6`) — live 30.00 fps, histogram all two-frame** | diagnostics / algorithm | **The diagnostic video recorder documents ≈ 30 fps and delivers ≈ 23.4.** `video.mp4` from `2026-09-16T14-27-56Z` (renderer at 59.97 fps) holds 23.38 fps; interval histogram in sixtieths of a second **{1: 1, 2: 684, 3: 892, 4: 1}** — more three-frame gaps than two. The throttle `(now − lastVideoFrameTime) < 1/30` compares a two-frame gap (≈ 33.4 ms) against a 33.3 ms threshold, so render-loop jitter drops about half of them one frame late. Detail below |
 | BUG-137 | P3 · **RESOLVED 2026-09-16 (`8a896e4a`) — live under full CPU load: capture dropped 0** | diagnostics / resource-management | **Capture mode dropped frames when the Mac was busy: the ProRes writer input reported not ready and the frame was discarded.** `SessionRecorderTests.test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels` failed 14 of 20 runs under full CPU load, every lost frame (13–38 per run) a writer-not-ready rejection. Capture now waits up to 1 s for the writer within a 512 MB backlog and logs every frame it still loses; loaded runs 20/20, 19/20 (one failure of unknown cause), 30/30. Detail below |
@@ -324,6 +324,28 @@ future consumers and is independently regression-tested.
 
 **Severity:** P2 · **Domain:** `docs` · **Failure class:** `documentation-drift` · **Related:** D-153, D-154, QG.1, `docs/AUDIO_CONTRACT.md`
 
+#### Resolution status
+
+| Part | State |
+|---|---|
+| **(a)** `FerrofluidOcean.json` description | ✅ **RESOLVED 2026-09-22 (BUG138.1)** — rewritten to describe the look and defer to `audio_routes` + the shader header, with a tombstone. It is no longer a routing table, so it cannot drift as one again. |
+| **(b)** `48 floats / 192 bytes` in `ARCHITECTURE.md` + `Common.metal:11` | ⏳ **OPEN** — it is 56 / 224. |
+| **Gate** (verification criterion 1) | ⏳ **OPEN — and blocked in its naive form**, see below. |
+
+**Investigating the fix found a third, different defect — recorded, not fixed.**
+`VolumetricLithograph.json`'s description names `drums_beat` and `drums_attack_ratio`; its shader
+genuinely reads both ([VolumetricLithograph.metal](../../UzumeEngine/Sources/Presets/Shaders/VolumetricLithograph.metal));
+its `audio_routes` declares **neither** (it declares `bass`, `bassEnergy`, `drumsEnergy`,
+`otherEnergy`, `pulsePhase01`, `vocalsEnergy`). That is the *opposite* drift from (a) — the prose is
+right and the gated declarations are incomplete — and it means the obvious gate *"a primitive named in
+a description must appear in `audio_routes`"* would go red on VL the day it landed. Fixing VL is a
+route-declaration change with QG.1 route-coverage consequences and needs its own evidence; shipping a
+gate that needs an exemption immediately is worse than shipping none. **A better rule to build against:
+a primitive named in a description must appear in that preset's own shader read-set (comments
+stripped) or in `audio_routes`** — FFO's `bass_energy_dev` appeared in neither, VL's two appear in the
+read-set, so that form passes VL and still catches (a). Only three of 27 sidecars name a primitive in
+prose at all (FFO, Nacre, VL), so the surface is small.
+
 **Why P2 and not P3.** This is not tidiness. Instance (a) is the most plausible origin of a
 **live claim on uzume.io** — *"Bass raises the spikes"* — which `docs/AUDIO_CONTRACT.md` §4.1
 adjudicates as false. A stale sentence inside a preset's own sidecar is where anyone writing
@@ -393,7 +415,7 @@ the prose sitting beside them, which no gate reads.
 3. **Manual.** None required — nothing here affects musical feel or visual fidelity. Ferrofluid
    Ocean's behaviour is unchanged and remains certified; only the sentence describing it is wrong.
 
-#### Not fixed at AUDIO.1
+#### Why (a) was not fixed at AUDIO.1
 
 AUDIO.1 was scoped read-only by its prompt (*"Do not change engine behaviour, shader code, or
 sidecars"*), and instance (a) is a sidecar. Both are recorded here and in

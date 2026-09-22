@@ -1590,6 +1590,32 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG138.1 — the Ferrofluid Ocean sidecar stops being a routing table ✅ (2026-09-22)
+
+**Done-when:** `FerrofluidOcean.json`'s `description` no longer asserts audio routing the shader does
+not have; the sidecar still parses, the preset still renders identically and stays certified; BUG-138
+records what is fixed and what is not.
+
+**Delivered.** The description named **three** retired mechanisms, not the one AUDIO.1 found:
+`bass_energy_dev → spike height` (removed D-153), the `accumulated_audio_time × arousal` aurora-drift
+product (removed BUG-047 — it retroactively rescaled history), and the raw `vocals_pitch_hz` palette
+read (replaced D-158 — it strobed). Rewritten to describe the LOOK and defer to `audio_routes` and the
+`FerrofluidOcean.metal` header for primitives, with a tombstone saying why. **The point is not the
+refreshed wording — it is that the field is no longer a second, ungated copy of a gated surface**, so
+the next retired route cannot strand a sentence there. One line changed; no engine, shader or route
+change.
+
+**Found while fixing, recorded not fixed.** `VolumetricLithograph.json` has the *opposite* drift: its
+description correctly names `drums_beat` and `drums_attack_ratio`, its shader reads both, and its
+`audio_routes` declares neither. So the obvious gate — *a primitive named in prose must be declared in
+`audio_routes`* — **would go red on VL the day it landed**. A gate that needs an exemption immediately
+is worse than no gate; the rule to build instead is *named in prose ⇒ present in the shader's own read
+set (comments stripped) or in `audio_routes`*, which passes VL and still catches FFO. Only 3 of 27
+sidecars name a primitive in prose at all, so the surface is small.
+
+**Still open on BUG-138:** the `48 floats / 192 bytes` claim in `ARCHITECTURE.md` + `Common.metal:11`
+(it is 56 / 224), and that gate.
+
 ### Increment AUDIO.1 — what the shaders actually receive ✅ (2026-09-22)
 
 **Done-when:** `docs/` holds a document naming the exact fields a shader receives at render time,

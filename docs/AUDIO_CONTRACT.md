@@ -432,12 +432,22 @@ Investigating task 4 surfaced documentation in *this* repo asserting engine beha
 does not exist. Filed as **BUG-138** (`documentation-drift`, P2) in
 [docs/QUALITY/KNOWN_ISSUES.md](QUALITY/KNOWN_ISSUES.md). Two instances:
 
-1. **`FerrofluidOcean.json` `description`** claims *"bass_energy_dev → spike height"*. Removed
+1. ✅ **RESOLVED 2026-09-22 (BUG138.1).** **`FerrofluidOcean.json` `description`** claimed
+   *"bass_energy_dev → spike height"*. It also carried two further retired mechanisms found while
+   fixing it: the `accumulated_audio_time × arousal` aurora-drift product (removed at BUG-047) and
+   the raw `vocals_pitch_hz` palette read (replaced at D-158). The field is now a description of the
+   LOOK that defers to `audio_routes` and the shader header, so it is no longer a second routing
+   table. Original finding: removed
    from the shader at D-153 (2026-06-09). The same sidecar's `audio_routes` block — the
    machine-checked one — is correct, so the two halves of one file disagree. This is very
    likely the origin of the published caption.
-2. **`ARCHITECTURE.md` §Buffer Binding Layout** and **`Common.metal:11`** both state
+2. ⏳ **STILL OPEN.** **`ARCHITECTURE.md` §Buffer Binding Layout** and **`Common.metal:11`** both state
    `FeatureVector` is *"48 floats / 192 bytes"*. It is **56 floats / 224 bytes** (verified by
    parsing the struct). `CommonLayoutTest` gates the *layout*, not the prose describing it.
 
-Neither was fixed in this increment — AUDIO.1 is read-only by design.
+AUDIO.1 itself was read-only by design and fixed neither; **(1) was fixed the same day at
+BUG138.1** on Matt's instruction. (2) and the gate that would stop this class recurring remain open —
+and the obvious form of that gate is blocked: `VolumetricLithograph.json`'s description correctly
+names `drums_beat` and `drums_attack_ratio` while its `audio_routes` declares neither, so a
+*"named in prose ⇒ declared in routes"* rule would go red on VL immediately. See the BUG-138 entry
+for the read-set-based rule that passes VL and still catches (1).

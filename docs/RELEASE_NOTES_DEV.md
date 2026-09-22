@@ -10,6 +10,35 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-22-231122] BUG138.1 — Ferrofluid Ocean's sidecar stops being a second routing table
+
+`FerrofluidOcean.json`'s `description` had been asserting audio routes the shader does not have. It
+named `bass_energy_dev → spike height`, removed at **D-153** three months earlier because AGC-levelled
+bass barely moved the spikes (motion std 0.09 — Matt's "frozen"); the `accumulated_audio_time × arousal`
+aurora-drift product, which **BUG-047** removed for retroactively rescaling history; and a raw
+`vocals_pitch_hz` palette read that **D-158** replaced with the CPU-smoothed composite after the raw
+one strobed. Three retired mechanisms, stated as current.
+
+The same file's `audio_routes` block was correct the whole time. That is the actual defect: **one file
+described the same shader twice, and only one half was gated** — `AudioRouteSchemaTests` and
+`RouteCoverageTests` read the declarations; nothing read the prose. It is the half a human reads first,
+and it is the most plausible origin of the live uzume.io caption *"Bass raises the spikes"*.
+
+**Now:** the description says what the preset LOOKS like and points at `audio_routes` and the
+`FerrofluidOcean.metal` header for the primitives, with a short tombstone recording why it is no longer
+a routing table. No engine, shader or route change — Ferrofluid Ocean renders identically and stays
+certified.
+
+**Still open (BUG-138).** The `48 floats / 192 bytes` claim in `ARCHITECTURE.md` §Buffer Binding Layout
+and `Common.metal:11` (it is **56 / 224**), and the gate that would stop this class recurring. The
+naive form of that gate — *a primitive named in a description must be declared in `audio_routes`* —
+would go red on `VolumetricLithograph.json` on day one, whose description correctly names
+`drums_beat` and `drums_attack_ratio` while its routes declare neither. That is route
+**under-declaration**, a different defect needing its own QG.1 evidence, and shipping a gate that needs
+an exemption the day it lands is worse than shipping none.
+
+---
+
 ### [dev-2026-09-16-215311] BUG-137 — capture mode waits for a busy encoder instead of dropping frames
 
 A capture recording made while the Mac was busy silently lost frames. Under CPU load the ProRes
