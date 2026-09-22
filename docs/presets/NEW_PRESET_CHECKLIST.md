@@ -40,7 +40,7 @@ Jargon: [docs/GLOSSARY.md](../GLOSSARY.md). Authoring discipline (read first):
 - [ ] `PresetLoaderCompileFailureTest` / full engine suite green;
       `swiftlint lint --strict` (`.metal` files are exempt from file-length).
 
-## 4. Certification (maintainer-gated — see RUNBOOK §Certifying a preset)
+## 4. Certification (maintainer-gated — see RUNBOOK §Certifying a scene)
 
 - [ ] Maintainer's live M7 review on real music — the load-bearing gate.
 - [ ] `certified: true` in the sidecar.

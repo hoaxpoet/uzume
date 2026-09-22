@@ -482,7 +482,7 @@ Every session that modifies Swift code must end with all four passing:
 - Sample rate
 - Current track
 - Preparation state
-- Current preset
+- Current scene
 - Frame time / dropped-frame warning
 
 ## Common Failure Modes
@@ -524,7 +524,7 @@ Spotify → coreaudiod → CATap → IO proc → AudioBuffer → FFT → StemSep
 
 To localize degradation:
 
-1. **Spectrum-check `raw_tap.wav`** — this is ground truth for what macOS hands us. If it looks clean here, the issue is in Uzume or the preset, not the source chain.
+1. **Spectrum-check `raw_tap.wav`** — this is ground truth for what macOS hands us. If it looks clean here, the issue is in Uzume or the scene, not the source chain.
 2. **If `raw_tap.wav` is degraded**, play a 20 Hz–20 kHz sine sweep through the same chain (YouTube: "20Hz to 20kHz sine sweep stereo"). A clean chain produces a flat spectrum across the sweep duration; any dip localizes the attenuated frequency range.
 3. **If the sweep is flat but specific content still looks wrong**, the issue is Spotify/source app — bypass it with a locally-owned FLAC/MP3 through QuickTime and re-capture.
 4. **Post-separation stem WAVs are unreliable for chain diagnostics** — they reflect the stem separator's per-instrument isolation, not the mix. A track with minimal drums will produce a narrow-spectrum `drums.wav` regardless of chain quality.
@@ -545,12 +545,12 @@ This procedure was established after session 2026-04-17T21-05-47Z, where earlier
 
 ### Jank / dropped frames
 
-Likely causes: preset too expensive, ML workload colliding with rendering, post-process or particle budget exceeded.
+Likely causes: scene too expensive, ML workload colliding with rendering, post-process or particle budget exceeded.
 
 Checks:
 - Inspect frame timing in debug overlay.
-- Test with simpler preset to isolate.
-- Ray march presets with SSGI are the most expensive (~8ms + 1ms overhead at 1080p).
+- Test with simpler scene to isolate.
+- Ray march scenes with SSGI are the most expensive (~8ms + 1ms overhead at 1080p).
 - MPSGraph stem separation runs on GPU — check for contention with heavy render passes. (Increment 6.3 mitigates this; check `ML: dispatch ...` log lines in `session.log` for force-dispatches, which indicate the 2s ceiling was hit under sustained jank.)
 
 ### Wrong or missing metadata
@@ -686,7 +686,7 @@ Every Uzume launch creates `~/Documents/uzume_sessions/<ISO-timestamp>/` and wri
 - `features.csv` — per-frame `FeatureVector` (60 rows/sec): bass/mid/treble, 6-band, beat onsets, spectral, valence/arousal, accumulatedAudioTime.
 - `stems.csv` — per-frame `StemFeatures`: drums/bass/vocals/other × {energy, beat, band0, band1}.
 - `stems/<NNNN>_<title>/{drums,bass,vocals,other}.wav` — listenable mono PCM dump per stem-separation cycle. Good for verifying separation quality on a real track.
-- `session.log` — startup banner, signal state transitions, track changes, preset changes, video writer state.
+- `session.log` — startup banner, signal state transitions, track changes, scene changes, video writer state.
 
 **Triage isolation rules** (when a session looks wrong):
 
@@ -720,13 +720,13 @@ cannot be recovered.
 - Never allocate in the real-time audio callback.
 - Never assume metadata is correct — cross-reference with MIR.
 - Never let beat pulses dominate motion.
-- Never ship a preset without a performance profile.
+- Never ship a scene without a performance profile.
 - Never use `print()` — use `os.Logger` via `Shared/Logging.swift`.
 - Never use `.storageModeManaged` buffers.
 - Never use `CATapDescription(stereoMixdownOfProcesses: [])` with an empty array (silence). Use `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`.
 - App sandbox is disabled (`com.apple.security.app-sandbox = false`).
-- Any preset that includes `mv_warp` in its `passes` array must implement `mvWarpPerFrame()` and `mvWarpPerVertex()` in its `.metal` file. Missing implementations cause a linker error at preset-library compile time. See `VolumetricLithograph.metal` for a reference implementation. (Note: Murmuration — formerly `Starburst.metal` — does **not** use mv_warp; it is `["feedback", "particles"]` per D-029.)
-- New ray-march presets should include `mv_warp` in their passes unless there is a deliberate reason not to. Without per-vertex feedback accumulation, ray-march presets show only instantaneous audio state regardless of how sophisticated the shader drivers are (MV-2, D-027).
+- Any scene that includes `mv_warp` in its `passes` array must implement `mvWarpPerFrame()` and `mvWarpPerVertex()` in its `.metal` file. Missing implementations cause a linker error at scene-library compile time. See `VolumetricLithograph.metal` for a reference implementation. (Note: Murmuration — formerly `Starburst.metal` — does **not** use mv_warp; it is `["feedback", "particles"]` per D-029.)
+- New ray-march scenes should include `mv_warp` in their passes unless there is a deliberate reason not to. Without per-vertex feedback accumulation, ray-march scenes show only instantaneous audio state regardless of how sophisticated the shader drivers are (MV-2, D-027).
 
 ## ThreadSanitizer concurrency validation (CLEAN.1.6 / GAP-7)
 
@@ -851,10 +851,10 @@ call `startSession(source: .spotify(...))` — the `.ready` state is never reach
 via the normal preparation pipeline. Instead, launch Uzume and invoke
 `startAdHocSession()` (the "Start listening now" CTA in IdleView), which advances
 directly to `.playing` (reactive mode). The AI Orchestrator has no pre-planned
-session; `DefaultReactiveOrchestrator` drives preset selection live. This is a
+session; `DefaultReactiveOrchestrator` drives scene selection live. This is a
 known degradation relative to a full Apple Music session — the Orchestrator has not
 pre-analyzed stems and cannot schedule transitions at structural boundaries. For
-V.6 fidelity evaluation, which is per-preset visual quality rather than plan
+V.6 fidelity evaluation, which is per-scene visual quality rather than plan
 quality, this is acceptable. See D-066.
 
 *Post-recording sanity checks:*
@@ -942,50 +942,50 @@ check's job.
 
 ## Reviewing rubric reports (Increment V.6)
 
-### Print the full rubric breakdown for all presets
+### Print the full rubric breakdown for all scenes
 
 ```bash
 swift test --package-path UzumeEngine --filter "FidelityRubricReportTests/rubricReport_allPresetsLoad" 2>&1 | grep -E "\[.\]|pass|FAIL|manual"
 ```
 
-Runs Suite 1 of `FidelityRubricTests` and prints each preset's per-item breakdown. No content assertions — this is a diagnostic readout only.
+Runs Suite 1 of `FidelityRubricTests` and prints each scene's per-item breakdown. No content assertions — this is a diagnostic readout only.
 
-### Locking in a newly passing preset (Suite 2 gate)
+### Locking in a newly passing scene (Suite 2 gate)
 
-After a fidelity uplift that flips a preset's `meetsAutomatedGate` from `false → true`:
+After a fidelity uplift that flips a scene's `meetsAutomatedGate` from `false → true`:
 
-1. Run the report above and confirm the preset shows `[✓]`.
+1. Run the report above and confirm the scene shows `[✓]`.
 2. Open `UzumeEngine/Tests/UzumeEngineTests/Renderer/FidelityRubricTests.swift`.
-3. In `expectedAutomatedGate` (Suite 2), change the preset's entry from `false` to `true`.
+3. In `expectedAutomatedGate` (Suite 2), change the scene's entry from `false` to `true`.
 4. Run `swift test --package-path UzumeEngine --filter FidelityRubricGateTests` to confirm no regressions.
-5. Commit the updated dictionary referencing the preset and D-067.
+5. Commit the updated dictionary referencing the scene and D-067.
 
-### Certifying a preset (setting `certified: true`)
+### Certifying a scene (setting `certified: true`)
 
 **Corrected at PUB.7 (ultra-review):** the previous steps here contradicted a
 dozen actual certifications — `meetsAutomatedGate == true` is NOT a
-prerequisite (most certified presets are `false`: CPU-side coupling is
+prerequisite (most certified scenes are `false`: CPU-side coupling is
 invisible to the MSL-source heuristic — the Skein/Lumen/Filigree precedent,
 each documented in `expectedAutomatedGate`), and the load-bearing gate is
 **Matt's live M7 review** (SHADER_CRAFT §12.1), not the report. The real
 procedure, as practiced from Skein through Cytokinesis:
 
 1. **Matt's live M7 sign-off on real music** — the non-waivable gate.
-2. Set `"certified": true` in the preset's sidecar.
+2. Set `"certified": true` in the scene's sidecar.
 3. Join the fail-loud certified test tables (cert ≠ just the flag flip — the
    flip is what makes the gates enforce, NACRE.4 lesson):
    - `FidelityRubricTests.certifiedPresets` + an `expectedAutomatedGate`
-     entry at the preset's MEASURED value (with a comment explaining a
+     entry at the scene's MEASURED value (with a comment explaining a
      `false` — e.g. CPU-side coupling);
    - `PhotosensitivityCertificationTests.multiPassMeasured` + a real render
      function in `MultiPassFlashHarnessTests` for multi-pass/follower-state
-     presets (the static-render guard fails loud if skipped) — measured
+     scenes (the static-render guard fails loud if skipped) — measured
      **0.00 flashes/s** required.
 4. Non-empty `audio_routes` in the sidecar, all green (`RouteCoverageTests`
    — QG.1 requires it for certification).
 5. Full battery: `swift test --package-path UzumeEngine --filter
    "FidelityRubric|Photosensitivity|MultiPassFlash|RouteCoverage"` +
-   `OrchestratorCertifiedFilterTests` (the preset now enters planning).
+   `OrchestratorCertifiedFilterTests` (the scene now enters planning).
 
 ### Debugging a failing rubric item
 

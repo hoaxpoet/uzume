@@ -26,29 +26,50 @@ Three standing exceptions, which are not drift:
    the distinction, not an oversight.
 2. **Verbatim quotes are never rewritten.** `PRESET_SESSION_CHECKLIST.md` §44
    quotes Matt saying "the preset's design"; it stays as said.
-3. **Names of things are not prose.** A heading cited by cross-reference
-   (RUNBOOK §Certifying a preset), a CLI placeholder (`compare_render.sh
-   <preset>`), a path, an identifier.
+3. **Names of things are not prose.** A CLI placeholder (`compare_render.sh
+   <preset>`), a path, an identifier, a localization key. A heading cited by
+   cross-reference may be renamed, but only together with every citation of it
+   — VOCAB.2 did exactly that for RUNBOOK §Certifying a scene and
+   SHADER_CRAFT §17.
 
 Adopted at VOCAB.1: `CONTRIBUTING.md`, `README.md`, `docs/GLOSSARY.md`,
 `docs/CREDITS.md`, `docs/UX_SPEC.md`, `docs/PRESET_SESSION_CHECKLIST.md`,
 `docs/presets/YOUR_FIRST_PRESET.md`, `docs/presets/NEW_PRESET_CHECKLIST.md`,
 and `UzumeApp/en.lproj/Localizable.strings`.
 
-**Not yet adopted** — living maintainer references that still say `preset` in
-prose. These are a follow-on prose sweep, independent of Option C, and are
-listed here so nobody rediscovers them (occurrence counts, `git grep -Ioi`):
+Adopted at VOCAB.2 (the maintainer-doc prose sweep): `CLAUDE.md`,
+`docs/RUNBOOK.md` (including its §Certifying a scene heading and the one
+cross-reference to it), `docs/PUBLISHING.md`, `docs/QUALITY/KNOWN_ISSUES.md`.
 
-| Doc | Occurrences |
-|---|---|
-| `docs/ARCHITECTURE.md` | 374 |
-| `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` | 312 |
-| `docs/SHADER_CRAFT.md` | 231 |
-| `docs/QUALITY/KNOWN_ISSUES.md` | 200 |
-| `docs/CAPABILITY_REGISTRY/PRESETS.md` | 188 |
-| `docs/RUNBOOK.md` | 30 |
-| `CLAUDE.md` | 27 |
-| `docs/PUBLISHING.md` | 5 |
+**Permanently NOT swept — the collision has a documentation half.** VOCAB.2
+started as a sweep of all eight remaining maintainer docs and stopped at four.
+The other four describe the renderer, where **`scene` already means the 3D
+scene**, and the two meanings share sentences:
+
+| Doc | Pre-existing uses of "scene" (3D) | Why it stays `preset` |
+|---|---|---|
+| `docs/SHADER_CRAFT.md` | 31 | §17 already says both — "Preferred **scene** duration" (the visualizer) two rows above "ray-march **scene** setup" and the `scene_*` keys |
+| `docs/ARCHITECTURE.md` | 20 | The mv_warp paragraph reads "alpha-blend current **scene** onto composeTexture … rendered directly by the **preset's** fragment shader" — one sentence, both meanings |
+| `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` | 20 | Same GPU-contract vocabulary throughout |
+| `docs/CAPABILITY_REGISTRY/PRESETS.md` | 3 | A per-file module registry: the sweep produced "The **Scenes** module", but the SPM target is literally named `Presets` |
+
+Sweeping these does not make them clearer; it makes them **wrong**, because they
+document code in which `Scene` is a different type. This is the same collision
+D-250 turns on (§5.3), showing up in prose rather than in identifiers — and it
+is a second, independent reason not to pursue Option C: even the documentation
+cannot adopt one word while the renderer holds the other.
+
+Two consequences worth stating:
+
+- **SHADER_CRAFT §17 keeps its heading**, so the anchor
+  `#17-preset-metadata-format-json-sidecar` stays valid in all three citing
+  docs. `CLAUDE.md`'s handbook row links to it with *scene* link text pointing
+  at a *preset* heading — correct under §1's rule 3: link text is prose, a
+  heading is a name.
+- **Defect-taxonomy categories are data, not prose.** `preset.fidelity`,
+  `preset.routing` and `preset.render` are the controlled vocabulary defined in
+  `docs/QUALITY/DEFECT_TAXONOMY.md`; VOCAB.2 swept KNOWN_ISSUES' narrative and
+  left all eight category cells alone.
 
 **Deliberately frozen, not a sweep target:** append-only records —
 `DECISIONS*.md`, `ENGINEERING_PLAN*.md`, `RELEASE_NOTES_DEV*.md`,
