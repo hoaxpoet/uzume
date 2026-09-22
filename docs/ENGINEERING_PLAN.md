@@ -1620,7 +1620,7 @@ exposure is the directory and the `name` value, not key names.
 **The finding that decides Option C:** `Scene` is already taken — `SceneUniforms` / `SceneCamera` /
 `SceneLight`, the `scene_*` sidecar keys, the documented "scene → warp → compose → swap" dispatch
 order, 336 uses in `*.swift`. `Preset` → `Scene` is a collision, not a rename, and resolving it is
-upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3.
+upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3 — and on the strength of that scoping Matt **declined Option C** (D-250): the boundary is the destination, not a waypoint, and §5 is now a contingency plan rather than queued work.
 
 **Deliberately not done:** living maintainer references still say `preset` in prose
 (ARCHITECTURE 374, RENDER_CAPABILITY_REGISTRY 312, SHADER_CRAFT 231, KNOWN_ISSUES 200,

@@ -1,8 +1,9 @@
 # Vocabulary — scene vs. preset
 
 Written at VOCAB.1. Two jobs: state the rule a contributor and a maintainer
-both work under today, and make the deeper rename (Option C) cheap to scope
-later without re-reading the engine.
+work under, and record the scoping of the deeper rename ("Option C") that was
+done here and then **declined** (D-250). The rule in §1 is the destination;
+§5 is a contingency plan, not a roadmap.
 
 ---
 
@@ -66,8 +67,8 @@ them would falsify the record.
 |---|---|---|---|
 | (a) | Prose a human reads — docs, comments | 13,156 in `*.md`; 2,326 Swift comment lines | Contributor path only (§1) |
 | (b) | Strings the app displays | 9 values in `Localizable.strings` + 1 DEBUG toast | ✅ all |
-| (c) | Code identifiers, type names, file paths | 6,678 in `*.swift`, 253 in `*.metal`, 128 in `*.sh`/`*.py`/`*.js`, 25 in `project.pbxproj`; 315 tracked paths | ❌ Option C |
-| (d) | Data — JSON keys, values, directory names | 31 sidecars; **0 keys** contain "preset" | ❌ Option C |
+| (c) | Code identifiers, type names, file paths | 6,678 in `*.swift`, 253 in `*.metal`, 128 in `*.sh`/`*.py`/`*.js`, 25 in `project.pbxproj`; 315 tracked paths | ❌ not renamed (D-250) |
+| (d) | Data — JSON keys, values, directory names | 31 sidecars; **0 keys** contain "preset" | ❌ not renamed (D-250) |
 
 ---
 
@@ -155,11 +156,22 @@ exits 0, 8 entries, no entry would change.
 
 ## 5. Option C — one word everywhere, code included
 
-Option C is the intended end state: `Preset` → `Scene` in code and data too,
-coordinated across both repos. It was deferred because it is large, it lands
-near the sidecar schema, and the website's generator depends on some of these
-names. **Do not do part of it opportunistically** — a half-finished identifier
-rename is worse than none.
+> **Not planned (D-250, Matt 2026-09-22).** Option C — `Preset` → `Scene` in
+> code and data too — was scoped here and then **declined**. The boundary in §1
+> is the destination, not a waypoint. What follows is kept as a **contingency
+> plan**: if something ever forces C, the scoping is done and should not be
+> rediscovered. Nobody should read this section as queued work.
+>
+> What changed the answer: §5.3's collision (`Scene` already means the 3D
+> scene), the three user-data surfaces in §5.2 that need permanent
+> compatibility shims, and the two-repo window in §4.1 — against a cost of one
+> glossary row and one note in `CONTRIBUTING.md`.
+>
+> The follow-on **prose** sweep in §1 is unaffected by D-250 and remains
+> ordinary doc work.
+
+If C is ever forced: **do not do part of it opportunistically** — a
+half-finished identifier rename is worse than none.
 
 ### 5.1 What it would touch
 
@@ -267,7 +279,7 @@ Other things a blind replace gets wrong:
   at once, and `Scripts/check_user_strings.sh` will not catch a mismatch (it
   bans hardcoded literals, it does not verify keys resolve).
 
-### 5.4 Suggested order, if C is scoped
+### 5.4 Suggested order, if C is ever forced
 
 1. Decide the `Scene` collision (§5.3). Nothing else can start first.
 2. Land the compatibility shims alone, ahead of any rename: dual-accept

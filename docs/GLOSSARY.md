@@ -6,7 +6,7 @@ is needed to *run* the project, only to read its history.
 
 | Term | Meaning |
 |---|---|
-| **Scene** (code: `preset`) | One visualizer — a `.metal` shader plus its `.json` sidecar. *Scene* is the word everything a person reads uses: this repo's guides, the app, uzume.io. The code and the data still say `preset` — `PresetLoader`, `UzumeEngine/Sources/Presets/`, the sidecar's own keys — and that is deliberate, not drift. The boundary is written down in [VOCABULARY.md](VOCABULARY.md). Milkdrop's *preset* is a different, third-party thing and keeps its name. |
+| **Scene** (code: `preset`) | One visualizer — a `.metal` shader plus its `.json` sidecar. *Scene* is the word everything a person reads uses: this repo's guides, the app, uzume.io. The code and the data still say `preset` — `PresetLoader`, `UzumeEngine/Sources/Presets/`, the sidecar's own keys — and that is deliberate, not drift — D-250 settled it as the destination, not a waypoint. The boundary is written down in [VOCABULARY.md](VOCABULARY.md). Milkdrop's *preset* is a different, third-party thing and keeps its name. |
 | **D-###** | A numbered engineering decision in [DECISIONS.md](DECISIONS.md) (older ones in DECISIONS_HISTORY.md). Docs cite decisions by number; the index at the top of DECISIONS.md resolves them. |
 | **Increment ID** (`LF.5`, `PUB.3`, `NACRE.4`…) | One unit of work in [ENGINEERING_PLAN.md](ENGINEERING_PLAN.md) — `<PHASE>.<n>`. Commit messages carry the ID in brackets: `[LF.5] Session: …`. |
 | **M7** | The maintainer's **live visual review with real music** — the load-bearing quality gate for scenes. Automated gates are the floor; M7 is the bar. "M7-passed" / "pending M7" in docs refers to this. |
