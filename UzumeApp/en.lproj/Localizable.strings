@@ -307,8 +307,8 @@
 "settings.visuals.quality_ceiling.balanced"    = "Balanced";
 "settings.visuals.quality_ceiling.ultra"       = "Ultra";
 
-// Visuals — presets
-"settings.visuals.presets.title"             = "Presets";
+// Visuals — scenes
+"settings.visuals.presets.title"             = "Scenes";
 "settings.visuals.reduced_motion.label"       = "Reduced motion";
 "settings.visuals.reduced_motion.match_system" = "Match system";
 "settings.visuals.reduced_motion.always_on"   = "Always on";
@@ -322,19 +322,19 @@
 "settings.visuals.preparation.hint"       = "Mysterious keeps the playlist unseen until the music starts. Detailed shows each track's tempo, key and mood as it is heard. You can change this while a session is preparing.";
 "settings.visuals.track_information.title" = "During a session";
 "settings.visuals.track_information.label" = "Show track information";
-"settings.visuals.track_information.hint"  = "Keeps the current track’s title, artist and artwork, and the preset now on screen, in a corner during the session. Off leaves nothing but the performance. Either way, what comes next stays unseen. You can change this during a session.";
+"settings.visuals.track_information.hint"  = "Keeps the current track’s title, artist and artwork, and the scene now on screen, in a corner during the session. Off leaves nothing but the performance. Either way, what comes next stays unseen. You can change this during a session.";
 
-"settings.visuals.blocklist.title" = "Hidden preset families";
+"settings.visuals.blocklist.title" = "Hidden scene families";
 
 // Visuals — toasts
 "settings.visuals.toasts.title"              = "Live adaptation";
 "settings.visuals.adaptation_toasts.label"   = "Show adaptation notifications";
 
 // Visuals — certification (V.6)
-"settings.visuals.certification.title"                    = "Preset quality";
-"settings.visuals.show_uncertified_presets.label"         = "Show uncertified presets";
-"settings.visuals.show_uncertified_presets.hint"          = "Off by default. Reveals presets that haven't passed quality review. Useful for testing work-in-progress presets.";
-"settings.visuals.show_uncertified_presets.accessibility" = "Show uncertified presets. Turn on to include presets pending quality review in sessions.";
+"settings.visuals.certification.title"                    = "Scene quality";
+"settings.visuals.show_uncertified_presets.label"         = "Show uncertified scenes";
+"settings.visuals.show_uncertified_presets.hint"          = "Off by default. Reveals scenes that haven't passed quality review. Useful for testing work-in-progress scenes.";
+"settings.visuals.show_uncertified_presets.accessibility" = "Show uncertified scenes. Turn on to include scenes pending quality review in sessions.";
 
 // Diagnostics — session recorder
 "settings.diagnostics.recorder.title"   = "Session recording";
@@ -381,8 +381,8 @@
 // Playback chrome controls (DS.6) — label = what it is, hint = what it does now
 "a11y.playback.settings.hint"              = "Opens Uzume’s settings over the performance";
 "a11y.playback.endSession.hint"            = "Asks before stopping the visualizer";
-"a11y.playback.toggleTrackInfo.hint.show"  = "Puts the current track and preset back in the corner";
-"a11y.playback.toggleTrackInfo.hint.hide"  = "Takes the current track and preset off the screen";
+"a11y.playback.toggleTrackInfo.hint.show"  = "Puts the current track and scene back in the corner";
+"a11y.playback.toggleTrackInfo.hint.hide"  = "Takes the current track and scene off the screen";
 
 "a11y.toast.severity.info"                  = "Info";
 "a11y.toast.severity.warning"               = "Warning";

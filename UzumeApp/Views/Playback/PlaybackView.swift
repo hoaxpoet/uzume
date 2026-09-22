@@ -281,16 +281,16 @@ struct PlaybackView: View {
     // swiftlint:disable:next function_body_length
     private func buildRegistry(router: DefaultPlaybackActionRouter) -> PlaybackShortcutRegistry {
         #if DEBUG
-        // Cmd+] / Cmd+[ — direct preset cycle that bypasses the orchestrator.
-        // Pure debug navigation for preset development (V.7.5 / V.7.6 etc.).
-        // Toast announces the new preset name so Matt knows where he landed.
+        // Cmd+] / Cmd+[ — direct scene cycle that bypasses the orchestrator.
+        // Pure debug navigation for scene development (V.7.5 / V.7.6 etc.).
+        // Toast announces the new scene name so Matt knows where he landed.
         let debugNext: (@MainActor () -> Void)? = { [weak engine = self.engine, weak tm = self.toastManager] in
             guard let engine else { return }
             engine.nextPreset()
             if let name = engine.presetLoader.currentPreset?.descriptor.name {
                 tm?.enqueue(UzumeToast(
                     severity: .info,
-                    copy: "Preset → \(name)",
+                    copy: "Scene → \(name)",
                     duration: 2,
                     conditionID: "debug.preset.cycle"
                 ))
@@ -302,7 +302,7 @@ struct PlaybackView: View {
             if let name = engine.presetLoader.currentPreset?.descriptor.name {
                 tm?.enqueue(UzumeToast(
                     severity: .info,
-                    copy: "Preset → \(name)",
+                    copy: "Scene → \(name)",
                     duration: 2,
                     conditionID: "debug.preset.cycle"
                 ))
