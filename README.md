@@ -97,6 +97,7 @@ reads says scene — see [docs/VOCABULARY.md](docs/VOCABULARY.md).)
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Numbered engineering decisions (D-###) |
 | [docs/CREDITS.md](docs/CREDITS.md) | ML weights + Milkdrop-inspired scene attribution |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | The internal shorthand decoded (D-###, M7, increment IDs, …) |
+| [docs/VOCABULARY.md](docs/VOCABULARY.md) | Why prose says *scene* and code says `preset` — and what it would take to unify them |
 | [docs/presets/YOUR_FIRST_PRESET.md](docs/presets/YOUR_FIRST_PRESET.md) | A complete working scene pair in ~60 lines (gate-verified to compile) |
 
 This project is developed by Matt (product/design) with Claude Code doing the
