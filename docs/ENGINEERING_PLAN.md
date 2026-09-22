@@ -1590,6 +1590,49 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment VOCAB.1 — presets become scenes (prose + what the app displays) ✅ (2026-09-22)
+
+**Done-when:** a contributor reads the same word on uzume.io, in this repo's guides, and on screen
+in the app; code identifiers, type names, file paths and data keys still say `preset`; the boundary
+and the map to Option C are written down; the website's generator still runs clean.
+
+**Delivered.** Scope was Option B, as specified — prose and displayed strings only.
+
+- **Group (a), the contributor path:** `CONTRIBUTING.md` (the destination of uzume.io's "Write a
+  scene" button) rewritten end to end, plus `README.md`, `docs/GLOSSARY.md` (new **Scene** row
+  naming the boundary outright), `docs/CREDITS.md`, `docs/PRESET_SESSION_CHECKLIST.md`,
+  `docs/presets/YOUR_FIRST_PRESET.md`, `docs/presets/NEW_PRESET_CHECKLIST.md`.
+- **Group (b), displayed strings:** 9 values in `Localizable.strings` (every *key* unchanged, so no
+  lookup moved) + the DEBUG cycle toast. `docs/UX_SPEC.md` rewritten outside backticks so
+  identifiers survived. Verified in the built bundle, not just the source.
+- **Task 4:** `NimbusState.swift` kickPunch comment claimed a drums-stem refinement that `_tick`
+  never had; it now describes `max(anticipatory beatPhase01 ramp, max(beatBass, beatComposite))`.
+- **`docs/VOCABULARY.md` (new)** — the rule, the group (c)/(d) inventory with paths, and the
+  Option C scope/break map.
+
+**Three prompt premises corrected against the tree.** (1) There is no "Preset Eligibility Picker";
+the surface is the family blocklist — UX_SPEC's "Preset family blocklist", shipped as "Hidden preset
+families" via `PresetCategoryBlocklistPicker`. Both strings renamed. (2) Sidecars carry **no `slug`
+key**; `generate_presets.py` slugifies the `name` *value*, so `name` — not a slug field — is the
+cross-repo join key. (3) **No sidecar key contains "preset" at all**, so the data-side Option C
+exposure is the directory and the `name` value, not key names.
+
+**The finding that decides Option C:** `Scene` is already taken — `SceneUniforms` / `SceneCamera` /
+`SceneLight`, the `scene_*` sidecar keys, the documented "scene → warp → compose → swap" dispatch
+order, 336 uses in `*.swift`. `Preset` → `Scene` is a collision, not a rename, and resolving it is
+upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3.
+
+**Deliberately not done:** living maintainer references still say `preset` in prose
+(ARCHITECTURE 374, RENDER_CAPABILITY_REGISTRY 312, SHADER_CRAFT 231, KNOWN_ISSUES 200,
+CAPABILITY_REGISTRY/PRESETS 188, RUNBOOK 30, CLAUDE.md 27, PUBLISHING 5) — a follow-on prose sweep,
+listed in VOCABULARY.md §1. Append-only records (DECISIONS, ENGINEERING_PLAN, release notes,
+prompts/, archive/) are frozen by design: rewriting them would falsify the record.
+
+**Gates:** swiftlint `--strict` 0 violations / 555 files; `check_user_strings.sh` clean; app build
+SUCCEEDED; engine suite 1980 tests green apart from the time-based DOC.6 rotation gate, rotated in
+its own `[DOC.6]` commit. `generate_presets.py --check` exits 0 / 8 entries, unchanged before and
+after; zero sidecars touched.
+
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after
