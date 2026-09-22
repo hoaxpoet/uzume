@@ -1625,6 +1625,21 @@ is gated. `audio_routes` is checked by `AudioRouteSchemaTests` / `RouteCoverageT
 `description` prose is checked by nothing, and it is the half a human reads first — which is how a
 route retired in June reached a published marketing caption in September.
 
+**Amendment, same day — the site had already moved.** The increment prompt described a homepage with
+its stem-separation claim removed; the live homepage instead claims it accurately, streaming caveat
+included. Nimbus's caption had already been corrected to *"the beat punches through it… bass, lead and
+the rest of the mix heave it down, up and sideways"* — both faults gone. Nacre is no longer published.
+Four captions the increment was never asked about were live and are now adjudicated (§4.7, all four
+supportable), as are the homepage's own four claims and the gallery's steady-luminance claim (§4.8, all
+accurate). **One recommendation survives: Ferrofluid Ocean's "Bass raises the spikes" is unchanged and
+still false.** One optional refinement: Nimbus assigns brightening to overall energy alone, but the
+beat's pop is `kNimbusKickBright = 0.72` on top of bloom — the larger of the two.
+
+**Correction to a stale memory, found here.** *"Aurora Veil's `other_energy_dev` route is load-bearing,
+never drop it"* is superseded: `AuroraVeil.metal:182` is `(void)stems; // unused`. AV.7's faithful
+nimitz port deleted every stem route and Matt signed off. Aurora Veil and Nacre are therefore the two
+published scenes whose behaviour is identical and zero-latency on streaming.
+
 **Not verified.** Whether the 2.5 s streaming stem lag is perceptible in these presets; real-world
 Open-Unmix separation quality; the live path's current stem update rate (12.8 Hz is from BUG-109 and
 predates LFSTEM.1e). Listed in §5 rather than guessed.

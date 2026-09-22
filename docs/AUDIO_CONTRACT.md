@@ -7,6 +7,13 @@ Written at increment AUDIO.1 (2026-09-22) as a *verification* pass: no engine be
 shader code, or preset sidecar was changed. Every claim below is cited to a file and line
 in this repository at commit `84a5f889`.
 
+**Amended 2026-09-22, same day**, after reading the live site rather than the increment prompt's
+description of it. The site had moved: the homepage now makes an accurate stem-separation claim
+(the prompt said it had been removed), the Nimbus caption had already been corrected, Nacre is no
+longer published, and four captions this document never adjudicated were live. §4 reflects
+**uzume.io as read on 2026-09-22**, not the prompt's snapshot. Verdicts against the code are
+unchanged.
+
 This document is the source of truth for audio claims made about Uzume anywhere — including
 the public site (`hoaxpoet/uzume-site`), which owns its own copy and wording. Where this
 document and a caption disagree, this document describes what the engine does.
@@ -266,10 +273,29 @@ not individual instruments. Everything outside those three named stems lands in 
 
 ### 4.3 Nimbus
 
+**The caption below is superseded.** The live gallery now reads:
+
+> "The beat punches through it, the music's overall energy brightens the whole body, and bass, lead
+> and the rest of the mix heave it down, up and sideways."
+
+**Verdict on the LIVE caption: supportable, with one residual mis-split.** Both faults identified
+below are fixed — it says *beat*, not drums, and it names three stems for three directions in the
+right order (bass→down, lead→up, the rest→sideways). The residual: it assigns brightening solely to
+overall energy, but the beat is the **larger** brightness event. The shader computes
+`bright = f(bloom) × (1.0 + kNimbusKickBright × kickPunch)` with `kNimbusKickBright = 0.72`
+([Nimbus.metal:194](../UzumeEngine/Sources/Presets/Shaders/Nimbus.metal#L194),
+[:391](../UzumeEngine/Sources/Presets/Shaders/Nimbus.metal#L391)) — a 72 % pop on top of the slow
+bloom swell, and the shader calls it *"the hero beat moment"*. Accurate wording would be *"The beat
+punches through it and pops its brightness, the music's overall energy blooms the whole body…"*.
+Minor; the current sentence under-claims rather than over-claims.
+
+**The superseded caption, and why it needed the change** (retained — it is the evidence trail for
+BUG-138's family of drift):
+
 > "Drums punch through it and brighten the whole body, bass and lead heave it up, down and
 > sideways."
 
-**Verdict: needs rewording** — clause 2 is close, clause 1 names the wrong signal.
+**Verdict: needed rewording** — clause 2 was close, clause 1 named the wrong signal.
 
 - **"Drums punch through it" — wrong cause.** `kickPunch` is
   `max(smoothstep(0.82, 1.0, beat_phase01), max(beat_bass, beat_composite))`
@@ -304,6 +330,11 @@ if the site wants precision, "the vocal line draws it tighter" is what happens.
 
 ### 4.5 Nacre
 
+**No longer published.** Nacre is absent from the gallery as read on 2026-09-22 — the eight scenes
+listed are Cymatic Resonance, Ferrofluid Ocean, Fractal Tree, Skein, Nimbus, Nebula, Aurora Veil and
+Murmuration. The verdict is retained because the caption is accurate and the preset is certified, so
+it can be published as-is if Nacre returns to the page.
+
 > "the hue is positioned on the circle of fifths, so it holds through a vamp and drifts on a
 > modulation."
 
@@ -319,15 +350,53 @@ This route is **full-mix**, not stem-derived
 is one of the few per-moment musical claims on the site that is **identical and
 zero-latency on both paths** — no separator, no warmup, no 2.5 s lag.
 
+### 4.7 The four captions this increment was not asked about
+
+Live on the gallery on 2026-09-22, checked against each sidecar's `audio_routes` and its shader.
+**All four are supportable as written.** Recorded so the site has a verdict on every published
+audio claim rather than on five of nine.
+
+| Scene | Claim | Backed by |
+|---|---|---|
+| **Cymatic Resonance** | *"Loudness drives how hard the plate vibrates, a beat makes the sand jump, and a shift in brightness selects a new figure — so the grains scatter and re-form on it."* | `vibration_energy ← bass, mid`; `beat_burst ← bassDev, drumsEnergyDev`; `mode_select ← spectralCentroid`. Exact. The caption *omits* a real route — `palette_hue ← tonalPhaseFifths` — which is an omission, not an error |
+| **Fractal Tree** | *"It bounces on every beat and sways across the bar… Underneath it holds one size and steps to a new one when a sound lands — small in a sparse passage, full in a dense one."* | `dance_bounce ← beatPhase01`; `dance_sway ← barPhase01`; `growth_commit ← spectralLevelRise`; `growth_tier ← spectralSectionRatio`. The most precisely-worded caption on the page: *"when a sound lands"* is exactly what `spectral_level_rise` is for, and *"sparse / dense"* is exactly the density ratio |
+| **Nebula** | *"The ring tightens and blooms wide as the music fills out, and the spokes flare where the frequencies land."* | `ring_reach ← bassDev, midDev, trebDev`; `core_glow ← bass, mid, treble`; `sparkle_gain ← trebDev`. ⚠ This would **not** have been supportable before PR.19, which fixed a linear bin→angle map that put **27 % of the energy in 2 % of the circle** — the spokes did not flare where the frequencies landed. Certified 2026-09-11 |
+| **Aurora Veil** | *"The stars keep the beat on the downbeat, while the veil breathes with the music's intensity and its color warms with the mood."* | `star_beat_twinkle ← barPhase01 + pulseAmp01` (barPhase01 *is* the downbeat); `veil_breathe ← arousal + bassAttRel`; `mood_colour ← valence`. Reads **no stems at all** — `AuroraVeil.metal:182` is `(void)stems; // unused` — so like Nacre it is identical and zero-latency on streaming |
+
+### 4.8 The homepage's own audio claims
+
+Also checked, since they are the broadest claims the site makes:
+
+- *"It pulls the music apart — drums, bass, voice, everything else — and follows each one separately,
+  along with where the beats fall and how the harmony moves."* — **accurate**, and the four names
+  match Open-Unmix's four stems exactly.
+- *"On a local file that starts immediately; from a streaming app it takes ten or fifteen seconds,
+  and works from the mix until then."* — **accurate and well-calibrated.** Live separation's timer
+  first fires at +10 s and needs 10 s buffered; Nimbus's `stemMix` ramps to full over ~9–13 s; FFO's
+  cold-start crossfade runs 0.5 → 14 s. *"works from the mix until then"* is exactly what the
+  warmup fallbacks do (`bassAttRel` proxies, the D-019 blend).
+- *"With local files, Uzume hears the whole playlist before it plays a note."* — **accurate**; the
+  local path decodes and analyses the whole file, which is what makes the zero-latency series
+  possible.
+- Gallery: *"Every scene here is tested for steady luminance: a bounded change in brightness from
+  frame to frame, with beat-locked motion confined to parts of the frame rather than thrown across
+  all of it."* — **accurate, and carefully worded.** All eight published scenes are in
+  `FidelityRubricTests.certifiedPresets`, and every certified preset is driven against a worst-case
+  beat train and measured to the Harding / WCAG 2.3.1 limit by `PhotosensitivityCertificationTests`
+  plus `MultiPassFlashHarnessTests`; the gate **fails loud** if a newly certified preset renders
+  static rather than silently passing. The second clause is D-157, which is the real regional
+  constraint — the one blind spot the gate documents (full-frame mean only, so a sub-region flash
+  under 10 % of the mean passes) is what that clause speaks to.
+
 ### 4.6 Summary
 
 | Caption | Verdict | Stem-dependent? | Same on streaming? |
 |---|---|---|---|
 | Ferrofluid Ocean | **Needs rewording** (bass clause false) | Partly (aurora hue, total energy) | Yes, +2.5 s on the stem legs |
 | Skein | **Supportable** | Fully | Yes, +2.5 s |
-| Nimbus | **Needs rewording** (drums clause wrong signal) | Partly (the three lobes) | Yes, +2.5 s, and absent for the first ~10 s |
+| Nimbus (live wording) | **Supportable**; residual — the beat also brightens (+72 %) | Partly (the three lobes) | Yes, +2.5 s, and absent for the first ~10 s |
 | Murmuration | **Supportable** (nuance: it tightens) | Yes | Yes, +2.5 s |
-| Nacre | **Supportable** | No — full-mix | **Yes, identically** |
+| Nacre (*not currently published*) | **Supportable** | No — full-mix | **Yes, identically** |
 
 ---
 
