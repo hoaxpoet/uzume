@@ -2,7 +2,7 @@
   "name": "Volumetric Lithograph",
   "family": "geometric",
   "duration": 35,
-  "description": "Psychedelic linocut terrain — forward-dollying flight over an infinite audio-reactive landscape. v9.4 routing: continuous terrain depth driven by stems.vocals_energy (AGC stem) only; peak lift fires on drum-stem kicks + snap/snare transients via drums_beat and drums_attack_ratio (MIR-invariant); camera dolly scales with features.bass continuously. Palette hue tracks energy-weighted stem composition; peak polish reads onset density. CSP.4 audit (2026-05-28) confirmed structurally clean of the FFO antipatterns BUG-019 fixed. No atmospheric fog (printmaking has no aerial perspective).",
+  "description": "Psychedelic linocut terrain — forward-dollying flight over an infinite audio-reactive landscape. Terrain depth follows the lead/vocal stem; the camera dolly scales with bass; peaks are placed and lifted on the grid-anchored beat pulse, with their polish coming from per-stem onset density; the palette hue tracks the energy-weighted stem composition. No atmospheric fog (printmaking has no aerial perspective). CSP.4 audit (2026-05-28) confirmed it structurally clean of the FFO antipatterns BUG-019 fixed. Routing primitives are declared in `audio_routes` below and explained in the VolumetricLithograph.metal header — this field describes the LOOK, not the routing. It carried a \"v9.4 routing:\" table until BUG-138, crediting the peak lift to a drum-stem beat/attack pair that appears only in this shader's COMMENTS and in no executable line of it.",
   "author": "Matt",
   "passes": [
     "ray_march",

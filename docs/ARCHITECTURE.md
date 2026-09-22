@@ -688,7 +688,7 @@ UzumeEngine/
     Presets.swift           → Module marker (imports only).
     PresetLoader            → Auto-discover, compile standard + additive + mesh + ray march pipelines, skip utility files.
     RayMarchPipeline+AudioModulation.swift → Option-A preset-agnostic audio modulation (`applyAudioModulation`: per-frame fog, light intensity, valence tint, FLY.9 fold drive, FLY.10/11 framing) on `RayMarchPipeline` so the offline replay harness runs the SAME code production does (FLY.6 parity-by-construction, BUG-071 round 6). Formerly `RayMarchPipeline+MetalFX`; the MFX.1 surface around it was deleted at D-213/RECON.14.
-    PresetLoader+Preamble   → Shared preamble: FeatureVector struct → V.1 Noise utility tree → V.1 PBR utility tree → ShaderUtilities → noise samplers → preset code. Forwards `sceneSDF(p, FeatureVector& f, SceneUniforms& s, StemFeatures& stems)` and `sceneMaterial(p, matID, f, s, stems, albedo, roughness, metallic)` so ray-march presets can do per-stem routing (Milkdrop-style) directly in sceneSDF/sceneMaterial. StemFeatures plumbed through G-buffer fragment call sites. Presets should apply the D-019 warmup fallback `smoothstep(0.02, 0.06, totalStemEnergy)` to mix between FeatureVector proxies and stem direct reads (see VolumetricLithograph for reference implementation). MSL preamble for FeatureVector (48 floats / 192 B) + StemFeatures (64 floats / 256 B) byte-identical to the Swift-side @frozen structs per D-099 / DM.2.
+    PresetLoader+Preamble   → Shared preamble: FeatureVector struct → V.1 Noise utility tree → V.1 PBR utility tree → ShaderUtilities → noise samplers → preset code. Forwards `sceneSDF(p, FeatureVector& f, SceneUniforms& s, StemFeatures& stems)` and `sceneMaterial(p, matID, f, s, stems, albedo, roughness, metallic)` so ray-march presets can do per-stem routing (Milkdrop-style) directly in sceneSDF/sceneMaterial. StemFeatures plumbed through G-buffer fragment call sites. Presets should apply the D-019 warmup fallback `smoothstep(0.02, 0.06, totalStemEnergy)` to mix between FeatureVector proxies and stem direct reads (see VolumetricLithograph for reference implementation). MSL preamble for FeatureVector (56 floats / 224 B) + StemFeatures (64 floats / 256 B) byte-identical to the Swift-side @frozen structs per D-099 / DM.2.
     PresetLoader+Mesh       → Mesh-shader pipeline compilation path: object/mesh/fragment shaders for M3+ + vertex fallback for M1/M2. Walks `meshPipelineState(for:device:library:)` per preset.
     PresetLoader+Utilities  → Discovery helper: identifies Shaders/Utilities/ files (V.1 / V.2 / V.3 / V.4 trees) that must be linked via preamble injection but NOT compiled as standalone presets. The "skip utility files" half of PresetLoader.
     PresetLoader+WarpPreamble → MV-2 mv_warp preamble injection (D-027): MVWarpPerFrame struct + WarpVertexOut + warpSampler + forward declarations for preset `mvWarpPerFrame`/`mvWarpPerVertex` + the 32×24 grid `mvWarp_vertex` shader + the shared `mvWarp_fragment` / `mvWarp_compose_fragment` / `mvWarp_blit_fragment`. The fragment carries the Dragon Bloom faithful-warp colour transfer (normalise + hue-zoom resample + R→G→B transfer) gated by `chromaticMix` (0 ⇒ identity; custom-warp path applies NO decay); the blit carries the faithful comp — video echo (orient-1 mirror) → ×gamma → invert + a beat-pulse pump — via the float4 `post` uniform ((0,0,1,0) ⇒ identity). Both gated so non-Dragon-Bloom mv_warp presets are byte-identical (D-138). SceneUniforms `#ifndef SCENE_UNIFORMS_DEFINED` guard so direct (non-ray-march) mv_warp presets compile correctly.
@@ -848,7 +848,7 @@ UzumeEngine/
     AudioResponseMetrics    → **QG.5 response-band seam.** One protocol: a preset runtime publishes named scalar response metrics via `responseMetric(_:)`, which `ResponseBandTests` reads after a fixture replay. Lives in `Shared` because `Renderer` (home of the preset runtimes) does not depend on `Presets`. Exists because QG.1 gates the INPUT (the declared primitive varies) and nothing gated the OUTPUT (the visual quantity it drives moves a useful amount) — the structural gap behind BUG-027/CR.1.1, AGC2, FA #73 and Witchlight's 6×-under-driven pen. Opt-in per route, exactly as `audio_routes` rolled out at QG.1.
     UMABuffer               → Generic .storageModeShared MTLBuffer + UMARingBuffer + UMABufferError.
     AudioFeatures           → Umbrella file for the AudioFeatures+ extensions (comment-only).
-    AudioFeatures+Analyzed  → FeatureVector (48 floats / 192 B, GPU buffer(2), D-099 / DM.2), FeedbackParams (8 floats / 32 B), EmotionalQuadrant enum, EmotionalState (valence + arousal + computed quadrant), StructuralPrediction.
+    AudioFeatures+Analyzed  → FeatureVector (56 floats / 224 B, GPU buffer(2), D-099 / DM.2), FeedbackParams (8 floats / 32 B), EmotionalQuadrant enum, EmotionalState (valence + arousal + computed quadrant), StructuralPrediction.
     AudioFeatures+Frame     → AudioFrame (PCM block metadata, 24 B), FFTResult (16 B), StemData (4× AudioFrame).
     AudioFeatures+Metadata  → MetadataSource enum (5 cases), TrackMetadata, PreFetchedTrackProfile. Authoritative location per CA.3 / CA-Audio / CA-Shared boundary closure.
     AudioFeatures+SceneUniforms → SceneUniforms GPU struct (8× SIMD4<Float> = 128 B, bound at buffer(4)).
@@ -1009,7 +1009,7 @@ Per-type contract reference for the Shared module's GPU-contract value types + c
 ```swift
 // === Shared/ — Swift-side GPU contract & cross-cutting value types ===
 
-struct FeatureVector          // 48 floats = 192 bytes (SIMD-aligned), @frozen. GPU buffer(2). D-099 / DM.2.
+struct FeatureVector          // 56 floats = 224 bytes (SIMD-aligned), @frozen. GPU buffer(2). D-099 / DM.2.
                               // Floats  1– 3: bass, mid, treble (instant energy)
                               // Floats  4– 6: bassAtt, midAtt, trebleAtt (smoothed)
                               // Floats  7–12: subBass, lowBass, lowMid, midHigh, highMid, high (6-band)
@@ -1181,7 +1181,7 @@ texture(20) = Staged-composition PERSISTENT / ITERATED stage previous state (ALF
 
 ### Buffer Binding Layout
 ```
-buffer(0) = FeatureVector (192 bytes, 48 floats)        ← all fragment encoders
+buffer(0) = FeatureVector (224 bytes, 56 floats)        ← all fragment encoders
 buffer(1) = FFT magnitudes (512 floats)
 buffer(2) = waveform samples (1024 floats)
 buffer(3) = StemFeatures (256 bytes, 64 floats)

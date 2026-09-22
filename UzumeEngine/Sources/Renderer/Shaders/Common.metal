@@ -8,7 +8,7 @@ using namespace metal;
 
 // MARK: - FeatureVector
 
-// Matches Swift FeatureVector layout (48 floats = 192 bytes, MV-1/MV-3b).
+// Matches Swift FeatureVector layout (56 floats = 224 bytes).
 // Field order is byte-identical to PresetLoader+Preamble.swift's `FeatureVector`
 // so the same MTLBuffer is consumed by engine-library shaders (Particles*.metal,
 // MVWarp.metal, feedback shaders) and preset shaders interchangeably. The first

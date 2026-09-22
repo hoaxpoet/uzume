@@ -46,7 +46,7 @@ reads" are not reads — see the entry.)*
 
 | ID | Sev | Domain | One-liner |
 |---|---|---|---|
-| BUG-138 | P2 · **(a) RESOLVED 2026-09-22 (BUG138.1)**; (b) + the gate still OPEN | docs / documentation-drift | **Two repo documents assert render-time audio behaviour the engine does not have, and one of them is the likely source of a published marketing claim.** (a) `FerrofluidOcean.json`'s `description` says *"bass_energy_dev → spike height"*; that route was removed from the shader at **D-153** (2026-06-09) and replaced by the grid-anchored four-beat pulse scaled by `total_energy_smoothed`. Bass survives only as `cached_bass_proportion`, a per-track constant measured at **+3 % height on Get Lucky, +1 % on Superstition**. The same sidecar's machine-checked `audio_routes` block is correct and lists no bass primitive — so the two halves of one file disagree, and only one half is gated. The site caption *"Bass raises the spikes"* almost certainly descends from the prose half. (b) `ARCHITECTURE.md` §Buffer Binding Layout and `Common.metal:11` both state `FeatureVector` is *"48 floats / 192 bytes"*; it is **56 floats / 224 bytes**. `CommonLayoutTest` gates the layout, not the prose describing it. Detail below |
+| BUG-138 | P2 · **RESOLVED 2026-09-22 (BUG138.1 + BUG138.2)** — all three instances fixed, both halves now gated | docs / documentation-drift | **Two repo documents assert render-time audio behaviour the engine does not have, and one of them is the likely source of a published marketing claim.** (a) `FerrofluidOcean.json`'s `description` says *"bass_energy_dev → spike height"*; that route was removed from the shader at **D-153** (2026-06-09) and replaced by the grid-anchored four-beat pulse scaled by `total_energy_smoothed`. Bass survives only as `cached_bass_proportion`, a per-track constant measured at **+3 % height on Get Lucky, +1 % on Superstition**. The same sidecar's machine-checked `audio_routes` block is correct and lists no bass primitive — so the two halves of one file disagree, and only one half is gated. The site caption *"Bass raises the spikes"* almost certainly descends from the prose half. (b) `ARCHITECTURE.md` §Buffer Binding Layout and `Common.metal:11` both state `FeatureVector` is *"48 floats / 192 bytes"*; it is **56 floats / 224 bytes**. `CommonLayoutTest` gates the layout, not the prose describing it. Detail below |
 | BUG-132 | **P1** · **RESOLVED + LIVE-CONFIRMED 2026-09-14 (BUG132.1)** | orchestrator / pipeline-wiring | **A plan rebuild pre-fires the plan's FIRST track into the live pipeline, so the playing track runs on another track's BeatGrid — and it stays wrong until the next track change.** Session `2026-09-14T13-49-57Z`: 5 of 9 plan-rebuild pre-fires installed track 1's grid (164.4 BPM, 4/X) over a different playing track. `grid_bpm` in `features.csv` reverts to 164.421 for **13,190 frames** during track 3 (true 175.0) and **13,928 frames** during track 4 (true 108.0, meter **3/X**) — essentially those whole tracks. Amplified by PREP.2, which rebuilds the plan once per prepared track; the guard PREP.2 added protects the readiness path, not this one. |
 | BUG-136 | P3 · **RESOLVED 2026-09-16 (REC.1, `7919e9f6`) — live 30.00 fps, histogram all two-frame** | diagnostics / algorithm | **The diagnostic video recorder documents ≈ 30 fps and delivers ≈ 23.4.** `video.mp4` from `2026-09-16T14-27-56Z` (renderer at 59.97 fps) holds 23.38 fps; interval histogram in sixtieths of a second **{1: 1, 2: 684, 3: 892, 4: 1}** — more three-frame gaps than two. The throttle `(now − lastVideoFrameTime) < 1/30` compares a two-frame gap (≈ 33.4 ms) against a 33.3 ms threshold, so render-loop jitter drops about half of them one frame late. Detail below |
 | BUG-137 | P3 · **RESOLVED 2026-09-16 (`8a896e4a`) — live under full CPU load: capture dropped 0** | diagnostics / resource-management | **Capture mode dropped frames when the Mac was busy: the ProRes writer input reported not ready and the frame was discarded.** `SessionRecorderTests.test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels` failed 14 of 20 runs under full CPU load, every lost frame (13–38 per run) a writer-not-ready rejection. Capture now waits up to 1 s for the writer within a 512 MB backlog and logs every frame it still loses; loaded runs 20/20, 19/20 (one failure of unknown cause), 30/30. Detail below |
@@ -328,23 +328,44 @@ future consumers and is independently regression-tested.
 
 | Part | State |
 |---|---|
-| **(a)** `FerrofluidOcean.json` description | ✅ **RESOLVED 2026-09-22 (BUG138.1)** — rewritten to describe the look and defer to `audio_routes` + the shader header, with a tombstone. It is no longer a routing table, so it cannot drift as one again. |
-| **(b)** `48 floats / 192 bytes` in `ARCHITECTURE.md` + `Common.metal:11` | ⏳ **OPEN** — it is 56 / 224. |
-| **Gate** (verification criterion 1) | ⏳ **OPEN — and blocked in its naive form**, see below. |
+| **(a)** `FerrofluidOcean.json` description | ✅ **RESOLVED (BUG138.1)** — describes the look, defers to `audio_routes` + the shader header. Carried **three** retired mechanisms, not one: the D-153 bass route, the BUG-047 `accumulated_audio_time × arousal` drift product, and the D-158 raw `vocals_pitch_hz` palette read. |
+| **(b)** the `48 floats / 192 bytes` claim | ✅ **RESOLVED (BUG138.2)** — it was in **eight** places, not two. Fixed in `Common.metal`, `AnalyzedFrame.swift`, `AudioFeatures+Analyzed.swift` (which said `52 / 208`), `SpectralCartograph.metal`, and four lines of `ARCHITECTURE.md`. |
+| **(c)** `VolumetricLithograph.json` description | ✅ **RESOLVED (BUG138.2)** — found while building the gate; see the correction below. |
+| **Gate 1** — prose size claims | ✅ **BUILT (BUG138.2)** — `CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout`. |
+| **Gate 2** — sidecar description read-set | ✅ **BUILT (BUG138.2)** — `SidecarDescriptionDriftTests`. |
 
-**Investigating the fix found a third, different defect — recorded, not fixed.**
-`VolumetricLithograph.json`'s description names `drums_beat` and `drums_attack_ratio`; its shader
-genuinely reads both ([VolumetricLithograph.metal](../../UzumeEngine/Sources/Presets/Shaders/VolumetricLithograph.metal));
-its `audio_routes` declares **neither** (it declares `bass`, `bassEnergy`, `drumsEnergy`,
-`otherEnergy`, `pulsePhase01`, `vocalsEnergy`). That is the *opposite* drift from (a) — the prose is
-right and the gated declarations are incomplete — and it means the obvious gate *"a primitive named in
-a description must appear in `audio_routes`"* would go red on VL the day it landed. Fixing VL is a
-route-declaration change with QG.1 route-coverage consequences and needs its own evidence; shipping a
-gate that needs an exemption immediately is worse than shipping none. **A better rule to build against:
-a primitive named in a description must appear in that preset's own shader read-set (comments
-stripped) or in `audio_routes`** — FFO's `bass_energy_dev` appeared in neither, VL's two appear in the
-read-set, so that form passes VL and still catches (a). Only three of 27 sidecars name a primitive in
-prose at all (FFO, Nacre, VL), so the surface is small.
+#### ⚠ Correction to this entry's first version
+
+It recorded that `VolumetricLithograph.json` had the *opposite* drift — prose correct, `audio_routes`
+incomplete — on the strength of a `grep` that found `stems.drums_beat` and
+`stems.drums_attack_ratio` in its shader. **That grep did not strip comments, and every one of those
+eight occurrences is a comment.** VL reads neither field in any executable line; its peaks ride
+`pulse_beat_index + pulse_phase01` with the four `*_onset_rate` stem fields doing the polish. So VL
+had the *same* drift as FFO, and its description was rewritten the same way.
+
+The lesson is the gate's design rule: **"references found" is no more evidence than "no references
+found"** unless comments are stripped first. Gate 2 strips them, and its negative control asserts
+that a commented-out read does not count — because that exact mistake survived the first pass of
+this investigation.
+
+VL's routes *are* also under-declared (it reads `bass_onset_rate`, `drums_onset_rate`,
+`other_onset_rate`, `vocals_onset_rate`, `mid_att_rel`, `mid_dev`, `pulse_beat_index` and `valence`
+without declaring them) — a **separate, still-open** route-coverage matter, not this defect.
+
+**Why the obvious gate was not the one built.** The first-stated criterion — *a primitive named in a
+description must be declared in `audio_routes`* — would have failed VolumetricLithograph for its
+route under-declaration rather than for its drift, and a gate that fails for the wrong reason gets
+exempted instead of fixed. The rule built instead: **a field named in a `description` must be
+declared in that preset's `audio_routes` OR read by its own `.metal` with comments stripped.** Only
+three of 27 sidecars name a field in prose at all, so the surface is small, and both shipped defects
+fail it.
+
+**Scope of Gate 2, recorded so it is not mistaken for a hole later.** Only identifier-shaped
+mentions are checked (snake_case with an underscore, or camelCase). Single-word fields — `bass`,
+`mid`, `treble`, `arousal`, `valence` — are ordinary English, and matching them would make a
+description unwritable. All eight stale claims used multi-word identifiers. Presets that route on the
+CPU (`NimbusState`, `SkeinState`, `RenderPipeline+Nacre`, the FFO aurora drivers) have reads the
+`.metal` scan cannot see; all of them declare those fields today and pass on the first branch.
 
 **Why P2 and not P3.** This is not tidiness. Instance (a) is the most plausible origin of a
 **live claim on uzume.io** — *"Bass raises the spikes"* — which `docs/AUDIO_CONTRACT.md` §4.1

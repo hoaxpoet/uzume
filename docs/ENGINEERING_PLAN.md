@@ -1590,6 +1590,38 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG138.2 — the prose that restates a gated fact is now gated ✅ (2026-09-22)
+
+**Done-when:** BUG-138(b) fixed everywhere it occurs; a gate exists for prose size claims and one for
+sidecar description drift; both proven red against the real shipped strings and green after; full
+suite and lint clean.
+
+**Delivered.** The `48 floats / 192 bytes` claim was in **eight** places, not the two AUDIO.1 found —
+`Common.metal`, `AnalyzedFrame.swift`, `SpectralCartograph.metal`, four `ARCHITECTURE.md` lines, and
+`FeatureVector`'s own doc comment carrying its own wrong number (`52 / 208`). **That last one is the
+whole argument for gating:** it is the comment that states FTR.6's finding — *"nothing caught it,
+because no gate reads prose"* — and FTR.6's remedy was to delete that copy rather than gate the
+pattern. It grew back in eight places, inside the lecture included.
+
+Two gates, each with negative controls, each verified red against the exact shipped strings:
+`CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout` (expected values **derived from
+`MemoryLayout`** so the gate cannot become the ninth stale copy; double-quoted numbers are citations,
+not claims, so the comments that correctly quote the old value stay legal) and
+`SidecarDescriptionDriftTests` (a field named in a `description` must be declared in `audio_routes`
+or read by the preset's own `.metal` **with comments stripped**).
+
+**★ The correction that shaped the gate.** BUG138.1 recorded VolumetricLithograph as having the
+*opposite* drift — prose right, routes incomplete — on a grep that found `stems.drums_beat` in its
+shader. **That grep did not strip comments, and all eight occurrences are comments.** VL reads
+neither field in any executable line; its peaks ride `pulse_beat_index + pulse_phase01` with the four
+`*_onset_rate` fields for polish. Same drift as FFO, fixed the same way. *"References found"* is no
+more evidence than *"no references found"* until comments are stripped — the gate does, and its
+negative control pins it, because that mistake survived a first pass of this investigation.
+
+**Recorded, not fixed:** VL reads eight fields it does not declare (a route-coverage matter); and two
+`ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)" when every encoder binds it at
+buffer(0) — seen while editing those lines, deliberately not widened into.
+
 ### Increment BUG138.1 — the Ferrofluid Ocean sidecar stops being a routing table ✅ (2026-09-22)
 
 **Done-when:** `FerrofluidOcean.json`'s `description` no longer asserts audio routing the shader does

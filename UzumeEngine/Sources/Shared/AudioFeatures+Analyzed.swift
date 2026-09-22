@@ -10,7 +10,7 @@ import Foundation
 /// Packed per-frame audio features for GPU uniform upload.
 ///
 /// This is the primary struct that shaders receive every frame, bound at `buffer(0)`.
-/// 52 floats = 208 bytes. Fields follow the
+/// 56 floats = 224 bytes. Fields follow the
 /// audio data hierarchy: continuous energy first, spectral features second, onset pulses
 /// third, deviation primitives fourth.
 ///

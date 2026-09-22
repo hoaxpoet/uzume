@@ -441,13 +441,25 @@ does not exist. Filed as **BUG-138** (`documentation-drift`, P2) in
    from the shader at D-153 (2026-06-09). The same sidecar's `audio_routes` block — the
    machine-checked one — is correct, so the two halves of one file disagree. This is very
    likely the origin of the published caption.
-2. ⏳ **STILL OPEN.** **`ARCHITECTURE.md` §Buffer Binding Layout** and **`Common.metal:11`** both state
+2. ✅ **RESOLVED 2026-09-22 (BUG138.2)**, and it was in **eight** places, not two — including `FeatureVector`'s own doc comment (as `52 / 208`), the one carrying FTR.6's lecture about this exact failure. **`ARCHITECTURE.md` §Buffer Binding Layout** and **`Common.metal:11`** both stated
    `FeatureVector` is *"48 floats / 192 bytes"*. It is **56 floats / 224 bytes** (verified by
    parsing the struct). `CommonLayoutTest` gates the *layout*, not the prose describing it.
 
-AUDIO.1 itself was read-only by design and fixed neither; **(1) was fixed the same day at
-BUG138.1** on Matt's instruction. (2) and the gate that would stop this class recurring remain open —
-and the obvious form of that gate is blocked: `VolumetricLithograph.json`'s description correctly
-names `drums_beat` and `drums_attack_ratio` while its `audio_routes` declares neither, so a
-*"named in prose ⇒ declared in routes"* rule would go red on VL immediately. See the BUG-138 entry
-for the read-set-based rule that passes VL and still catches (1).
+AUDIO.1 itself was read-only by design and fixed neither. Both were fixed the same day on Matt's
+instruction — (1) at **BUG138.1**, (2) plus a third instance in `VolumetricLithograph.json` at
+**BUG138.2** — and **both halves of the defect class are now gated**:
+
+- `CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout` — every prose `N floats / M bytes` claim
+  about `FeatureVector` / `StemFeatures` / `FeedbackParams` across `UzumeEngine/Sources/**` and
+  `ARCHITECTURE.md` is checked against `MemoryLayout`. Expected values are *derived*, so the gate
+  cannot itself go stale; quoted numbers count as citations, not claims.
+- `SidecarDescriptionDriftTests` — a field named in a sidecar `description` must be declared in that
+  preset's `audio_routes` or read by its own `.metal` **with comments stripped**.
+
+Both were verified red against the exact strings that shipped, then green after the fix.
+
+⚠ **A correction to this document's own §6.** Its first version said VolumetricLithograph had the
+*opposite* drift, prose correct and routes incomplete. That rested on a grep that did not strip
+comments: all eight `drums_beat` / `drums_attack_ratio` occurrences in that shader are comments, and
+VL reads neither in executable code. VL had the same drift as FFO. Its route under-declaration is
+real but separate and still open.

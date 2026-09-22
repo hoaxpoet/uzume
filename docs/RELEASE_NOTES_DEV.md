@@ -10,6 +10,45 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-22-234846] BUG138.2 — the prose that restates a gated fact is now itself gated
+
+BUG-138's second half, plus the two gates. The `48 floats / 192 bytes` claim about `FeatureVector`
+was not in two places, it was in **eight**: `Common.metal`, `AnalyzedFrame.swift`,
+`SpectralCartograph.metal`, four lines of `ARCHITECTURE.md`, and — with its own wrong number,
+`52 floats / 208 bytes` — the doc comment on `FeatureVector` itself. It is 56 / 224.
+
+**That doc comment is the point of this increment.** It carries FTR.6's lecture about exactly this
+failure: *"it had drifted to '48 floats = 192 bytes' … nothing caught it, because no gate reads
+prose."* FTR.6 diagnosed the class correctly and chose to DELETE that copy rather than gate the
+pattern. The prose grew back in eight places, including inside the lecture. Deleting one copy does
+not stop copies.
+
+**Two gates, both with negative controls, both proven red against the real shipped strings:**
+
+- `CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout` — scans `UzumeEngine/Sources/**` and
+  `ARCHITECTURE.md` for `N floats / M bytes` claims, attributes each to its nearest preceding struct
+  name, and checks it against `MemoryLayout`. **Expected values are derived, not written down**, so
+  the gate moves with the struct instead of becoming the ninth stale copy. Double-quoted numbers are
+  treated as citations, not claims, so the two comments that correctly *quote* the old wrong value
+  stay legal.
+- `SidecarDescriptionDriftTests` — a field named in a sidecar `description` must be declared in that
+  preset's `audio_routes` or read by its own `.metal` **with comments stripped**.
+
+**A correction this turned up.** The previous entry recorded that `VolumetricLithograph.json` had the
+*opposite* drift — prose right, routes incomplete — based on a grep that found `stems.drums_beat` in
+its shader. That grep did not strip comments, and all eight occurrences are comments. VL reads
+neither `drums_beat` nor `drums_attack_ratio` in any executable line; its peaks ride
+`pulse_beat_index + pulse_phase01` with per-stem onset rates for polish. Same drift as FFO, fixed the
+same way. The gate's comment-stripping exists because that mistake survived a first pass of this very
+investigation, and its negative control now asserts a commented-out read does not count.
+
+**Recorded, not fixed:** VL's routes *are* under-declared (eight read-but-undeclared fields), a
+separate route-coverage matter. And two `ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)"
+when every encoder binds it at buffer(0) — noticed while editing those lines for the size claim,
+deliberately left alone rather than silently widened.
+
+---
+
 ### [dev-2026-09-22-231122] BUG138.1 — Ferrofluid Ocean's sidecar stops being a second routing table
 
 `FerrofluidOcean.json`'s `description` had been asserting audio routes the shader does not have. It
