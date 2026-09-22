@@ -1590,6 +1590,40 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment VOCAB.2 — the maintainer-doc prose sweep, and where it stops ✅ (2026-09-22)
+
+**Done-when:** the living maintainer references named in VOCABULARY.md §1 say *scene* in prose, or
+the file is excluded with a recorded reason.
+
+**Delivered — four of eight swept, four excluded permanently.**
+
+Swept: `CLAUDE.md`, `docs/RUNBOOK.md` (including its §Certifying a scene heading and the one
+cross-reference to it in `NEW_PRESET_CHECKLIST.md`), `docs/PUBLISHING.md`,
+`docs/QUALITY/KNOWN_ISSUES.md`.
+
+**Excluded, and this is the increment's finding.** `docs/SHADER_CRAFT.md` (31 pre-existing uses of
+"scene"), `docs/ARCHITECTURE.md` (20), `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` (20) and
+`docs/CAPABILITY_REGISTRY/PRESETS.md` (3) document the renderer, where **`scene` already means the
+3D scene** — and the two meanings share sentences. ARCHITECTURE's mv_warp paragraph reads
+"alpha-blend current *scene* onto composeTexture … rendered directly by the *preset's* fragment
+shader". SHADER_CRAFT §17 says "Preferred *scene* duration" two rows above "ray-march *scene*
+setup" and the `scene_*` keys. The mechanical pass also produced "The **Scenes** module" for an SPM
+target literally named `Presets`. **Sweeping these makes them wrong, not clearer** — so the sweep
+was reverted on all four and the reason recorded in VOCABULARY.md §1.
+
+This is the D-250 collision (VOCABULARY §5.3) surfacing in prose rather than in identifiers, and it
+is a second, independent reason not to pursue Option C: the documentation cannot adopt one word
+while the renderer holds the other.
+
+**Three restorations after the mechanical pass**, each a name rather than prose: PUBLISHING's
+verbatim quote of the D-111/D-113 wording; KNOWN_ISSUES' 8 defect-taxonomy cells
+(`preset.fidelity` / `.routing` / `.render` are controlled vocabulary in `DEFECT_TAXONOMY.md`); and
+SHADER_CRAFT §17's heading, so `#17-preset-metadata-format-json-sidecar` stays valid in all three
+citing docs.
+
+**Gates:** doc gates 16/16 (CLAUDE.md 3,453 est. tokens against the 7,000 cap); full evidence block
+in the closeout. Docs-only — no code, no data, no sidecar touched.
+
 ### Increment VOCAB.1 — presets become scenes (prose + what the app displays) ✅ (2026-09-22)
 
 **Done-when:** a contributor reads the same word on uzume.io, in this repo's guides, and on screen
