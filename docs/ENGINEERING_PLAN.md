@@ -1590,6 +1590,45 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment AUDIO.1 — what the shaders actually receive ✅ (2026-09-22)
+
+**Done-when:** `docs/` holds a document naming the exact fields a shader receives at render time,
+where each comes from, which audio paths populate them, and a verdict on five published uzume.io
+captions. Read-only — no engine, shader or sidecar change.
+
+**Delivered.** [`docs/AUDIO_CONTRACT.md`](AUDIO_CONTRACT.md) (374 lines, every claim cited to
+file:line at `84a5f889`). Headline: **stem-separated features DO reach shader parameters at render
+time, on both audio paths** — `StemFeatures` is fragment `buffer(3)`, 64 floats, uploaded by every
+encoder. The paths differ in *when*, not *whether*: a local file plays against a pre-analysed
+`StemFeatureSeries` sampled at the playback second (**0 latency**, 43 Hz grid, LFSTEM.1), while the
+system-audio path runs Open-Unmix live on the tap every 2 s (**≈2.5 s latency**, structural —
+`chunk 10 − (chunk − period − margin) = period + margin`). `FeatureVector`'s 56 floats are **entirely
+full-mix**; `MIRPipeline` never sees a stem.
+
+**Caption verdicts** (§4): Skein, Murmuration, Nacre **supportable**; Ferrofluid Ocean and Nimbus
+**need rewording**. FFO's *"Bass raises the spikes"* is false — spike height is the D-153 four-beat
+grid pulse scaled by `total_energy_smoothed`, and bass survives only as a per-track constant worth
++3 %/+1 % on the two tracks measured. Nimbus's *"Drums punch"* is the beat clock
+(`max(antic(beat_phase01), max(beat_bass, beat_composite))`), not the drums stem, and its third
+direction belongs to `other`, not bass or lead. Nacre is the only one of the five that is identical
+and zero-latency on streaming, because its route is full-mix chroma.
+
+**Defect found.** **BUG-138** (P2, `documentation-drift`) — `FerrofluidOcean.json`'s `description`
+still claims the retired `bass_energy_dev → spike height` route while its own machine-checked
+`audio_routes` block correctly omits it; and `ARCHITECTURE.md` §Buffer Binding Layout plus
+`Common.metal:11` both state `FeatureVector` is 48 floats/192 bytes when it is **56/224**. Filed with
+verification criteria, not fixed (a sidecar edit is outside a read-only increment, and the fix should
+land with the gate that stops it recurring).
+
+**Learning (durable).** A preset sidecar has two descriptions of the same shader and only one of them
+is gated. `audio_routes` is checked by `AudioRouteSchemaTests` / `RouteCoverageTests`; the
+`description` prose is checked by nothing, and it is the half a human reads first — which is how a
+route retired in June reached a published marketing caption in September.
+
+**Not verified.** Whether the 2.5 s streaming stem lag is perceptible in these presets; real-world
+Open-Unmix separation quality; the live path's current stem update rate (12.8 Hz is from BUG-109 and
+predates LFSTEM.1e). Listed in §5 rather than guessed.
+
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after
