@@ -87,10 +87,10 @@ retraining or fine-tuning.
 
 ---
 
-## Milkdrop-inspired preset attribution
+## Milkdrop-inspired scene attribution
 
 **Status:** **Active — populated per D-111 (as amended by the D-113
-inspired-by reframe).** Eight presets are Milkdrop-inspired works; each
+inspired-by reframe).** Eight scenes are Milkdrop-inspired works; each
 declares its source in an `inspired_by` sidecar block. (`Meniscus` is the
 newest and is not yet certified — MEN.2a.)
 
@@ -117,7 +117,7 @@ No `.milk` file is redistributed in this repository (D-111 scope
 condition; Dragon Bloom's reference copy was removed at PUB.1 — its
 SHA-256 is retained in the sidecar as provenance).
 
-**Per-preset attribution (`inspired_by` sidecar block, D-111 as amended; schema
+**Per-scene attribution (`inspired_by` sidecar block, D-111 as amended; schema
 normalised across all seven sidecars at MD.0 / D-215 §13.3):**
 
 ```json
@@ -136,7 +136,7 @@ eight were authored against a **butterchurn built-in JSON** rendered as a live
 oracle through `tools/milkdrop-render/`; only Dragon Bloom read a `.milk`.
 Where no hash was taken at authoring, `sha256` is omitted rather than invented.
 
-| Uzume preset (`.metal` / `.json`) | Source preset | Original author (best-effort) | Source form | Certified |
+| Uzume scene (`.metal` / `.json`) | Source Milkdrop preset | Original author (best-effort) | Source form | Certified |
 |---|---|---|---|---|
 | `DragonBloom` | `$$$ Royal - Mashup (220)` | $$$ Royal mashup series (multiple component authors) | `.milk` (hashed; copy removed at PUB.1) | ✅ |
 | `FataMorgana` | `martin [shadow harlequins shape code] - fata morgana` | Martin | butterchurn built-in JSON (no hash taken) | ✅ |
@@ -199,7 +199,7 @@ MPSGraph init time, not at conversion.
 (vendored AudioSet 527-class audio-tagger weights). Uzume runs the
 tagger over the 30 s preview clip to derive per-family instrument
 activity (strings / brass / woodwinds / percussion) for orchestral
-presets (IFC / D-177).
+scenes (IFC / D-177).
 
 **Source:** Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu
 Wang, Mark D. Plumbley. *PANNs: Large-Scale Pretrained Audio Neural
