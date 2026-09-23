@@ -398,26 +398,76 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
     /// `_isCapturing` flag — the teardown half of `performReinstall`. `cleanup()`
     /// wraps this with monitor-stop + `_isCapturing = false`.
     private func teardownTapResources() {
-        stateLock.lock()
-        let agg = aggregateID
-        let tap = tapID
-        let proc = procID
+        // BUG-139: claim under the lock, destroy OUTSIDE it. This used to hold
+        // `stateLock` across `AudioDeviceStop`, which blocks until the IO proc
+        // drains — while the IO proc itself takes `stateLock` in
+        // `probeInstallRMS`. Teardown waited for the IO proc, the IO proc waited
+        // for the lock, and `AudioDeviceStop` never returned: the suite hung
+        // forever with no timeout, no failing test and no crash report.
+        //
+        // Same shape as BUG-021 ("no AVFoundation teardown under the provider
+        // lock"), one layer down. **Never call a blocking CoreAudio API with
+        // `stateLock` held.**
+        let claimed = claimTapResourcesForTeardown()
+        Self.destroyTapResources(claimed)
+    }
 
-        if agg != 0 {
-            AudioDeviceStop(agg, proc)
-            if let proc {
-                AudioDeviceDestroyIOProcID(agg, proc)
+    /// The tap/aggregate/IO-proc handles this instance owns, as handed to teardown.
+    struct TapResources: Equatable {
+        let aggregate: AudioDeviceID
+        let tap: AudioObjectID
+        let proc: AudioDeviceIOProcID?
+
+        static func == (lhs: TapResources, rhs: TapResources) -> Bool {
+            lhs.aggregate == rhs.aggregate && lhs.tap == rhs.tap
+        }
+
+        var isEmpty: Bool { aggregate == 0 && tap == 0 && proc == nil }
+    }
+
+    /// BUG-139: take the handles and zero the fields in one locked step, then get
+    /// out of the way. Returning before any destroy call is the property that
+    /// makes the deadlock impossible, and it is what `SystemAudioCaptureTeardownTests`
+    /// pins. Zeroing here also makes teardown idempotent: a second caller (a racing
+    /// `stopCapture()` and `deinit`, say) claims nothing and destroys nothing.
+    func claimTapResourcesForTeardown() -> TapResources {
+        stateLock.withLock {
+            let claimed = TapResources(aggregate: aggregateID, tap: tapID, proc: procID)
+            aggregateID = 0
+            tapID = 0
+            procID = nil
+            return claimed
+        }
+    }
+
+    #if DEBUG
+    /// BUG-139 gate support. The handles are only ever produced by real CoreAudio
+    /// calls that need hardware + Screen Recording, so without this the claim/clear
+    /// contract cannot be exercised at all and its gate would assert nothing.
+    /// Seeds handles ONLY — never destroy what this sets; `destroyTapResources`
+    /// on a fabricated aggregate id would call into the HAL with a bogus handle.
+    func seedTapResourcesForTesting(aggregate: AudioDeviceID, tap: AudioObjectID) {
+        stateLock.withLock {
+            aggregateID = aggregate
+            tapID = tap
+        }
+    }
+    #endif
+
+    /// Destroy claimed handles. MUST run with no lock held — every call here can
+    /// block on the HAL. `nonisolated static` so it cannot reach instance state
+    /// and silently reacquire the lock this exists to avoid.
+    nonisolated private static func destroyTapResources(_ refs: TapResources) {
+        if refs.aggregate != 0 {
+            AudioDeviceStop(refs.aggregate, refs.proc)
+            if let proc = refs.proc {
+                AudioDeviceDestroyIOProcID(refs.aggregate, proc)
             }
-            AudioHardwareDestroyAggregateDevice(agg)
+            AudioHardwareDestroyAggregateDevice(refs.aggregate)
         }
-        if tap != 0 {
-            AudioHardwareDestroyProcessTap(tap)
+        if refs.tap != 0 {
+            AudioHardwareDestroyProcessTap(refs.tap)
         }
-
-        aggregateID = 0
-        tapID = 0
-        procID = nil
-        stateLock.unlock()
     }
 
     // MARK: - BUG-057 Instrumentation

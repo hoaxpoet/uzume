@@ -63,7 +63,7 @@ reads" are not reads — see the entry.)*
 | BUG-135 | P3 · OPEN — **left alone on Matt's call 2026-09-14** | dsp.beat | **The grid's bar position cannot be confirmed to be the true musical downbeat.** Attempted on `2026-09-14T18-14-07Z` (verdict clean): `bassDev` is the only signal with real separation (bar-position 2, 1.33× lead) and it cannot distinguish beat 1 from beat 3, since a kick commonly plays both; `harmonic_flux`, `spectral_surge` and `spectralFlux` each pick a *different* position and spread only ~2 %, i.e. no bar-position discrimination at all. The recorded feature set cannot answer the question. Deliberately not chased: automated cold-start downbeat-phase derivation was falsified across six iterations and retired at Matt's Choice A (2026-05-25), marked *do not iterate*. Consequence is bounded — Membrane's 1.00/0.22/0.52/0.22 accent means a half-bar error swaps the strong and secondary beats, leaving a hard strike every four with a medium between, displaced but intact. Matt, shown the measurement: *leave it*. Detail below |
 | BUG-131 | **P1** · **FOUND + FIXED 2026-09-11, same session it was introduced** | audio.playback / concurrency | **The playhead analysis clock killed the process when a tick raced session teardown.** `PlayheadAnalysisClock.stop()` called `DispatchSourceTimer.cancel()`, which prevents FUTURE handlers but does NOT wait for one already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose engine had just been released and threw `com.apple.coreaudio.avfaudio: 'required condition is false: _engine != nil'`, an Objective-C exception no Swift `catch` can intercept. **Every track change and every session stop is a teardown**, so this was live on the local-file path from BUG087.4 onward. Introduced by me at BUG087.4 and shipped: the full suite was green on the BUG087.4, BUG087.5 and PR.24 runs, because it is a race. Detail below |
 | BUG-129 | P3 · **RESOLVED 2026-09-12 (BUG129.1)** — the peak was RIGHT; the missing thing was an upper guard | diagnostics / measurement | **`chain_health.json` reports `peakDBFS` exactly 0 on two consecutive sessions, and the verdict is still `clean`.** Measured: `2026-09-11T19-12-34Z` → −6.03, then `2026-09-11T19-58-15Z` → **0**, `2026-09-11T20-19-03Z` → **0**. An exact 0 is full scale, which would be clipping — yet `reasons` and `notes` are both empty and the verdict is `clean`, so either the peak is not being measured and defaults to 0, or it is measured and the clipping check does not fire on it. **Why it matters beyond tidiness:** the scene-session rule is that a fidelity/M7 closeout must cite the session's chain-health verdict, and D-184 makes a `clean` verdict the precondition for judging fidelity at all. A peak field that silently reads 0 weakens every such citation — including two M7s closed today (VL.2 and WL.11), both of which cite `clean` over a 0 peak and are flagged as such in their entries. Not diagnosed; found while checking a session before quoting its verdict. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is being read at all. |
-| BUG-139 | P2 · OPEN — observed 2026-09-23, full stack captured, NOT diagnosed | audio.capture / test-infrastructure | **`SystemAudioCapture.teardownTapResources()` deadlocks against its own Core Audio IO callback, hanging the engine suite indefinitely.** Seen on run 2 of a 5× full-suite streak; run 1 passed. Main thread: `FerrofluidLiveAudioTests.testLiveDSPPipeline` → `stopCapture()` → `cleanup()` → `teardownTapResources()` → `_pthread_mutex_firstfit_lock_wait`, while a tap IO-callback thread holds the mutex in `caulk::semaphore::timed_wait`. Same ABBA shape as BUG-021, different lock and different path. |
+| BUG-139 | P2 · **RESOLVED 2026-09-23 (BUG139.1, `bf7c73fe`)** — lock-held CoreAudio teardown split into claim-then-destroy; **manual streaming validation still outstanding** | audio.capture / test-infrastructure | **`SystemAudioCapture.teardownTapResources()` deadlocks against its own Core Audio IO callback, hanging the engine suite indefinitely.** Seen on run 2 of a 5× full-suite streak; run 1 passed. Main thread: `FerrofluidLiveAudioTests.testLiveDSPPipeline` → `stopCapture()` → `cleanup()` → `teardownTapResources()` → `_pthread_mutex_firstfit_lock_wait`, while a tap IO-callback thread holds the mutex in `caulk::semaphore::timed_wait`. Same ABBA shape as BUG-021, different lock and different path. |
 | BUG-103 | P2 · **RESOLVED 2026-09-23 (BUG103.1, `30e39b83`)** — the uncatchable raise is a Swift error now; the trigger itself stays unreproduced by design | audio.playback / test-infrastructure | **The parallel engine suite dies with an uncaught NSException from `-[AVAudioPlayerNode play]` — console: `com.apple.coreaudio.avfaudio: 'player did not see an IO cycle'` — thrown inside `LocalFilePlaybackProvider._startLocked()` on a racing-start test thread.** `play()` reports this state as an Objective-C exception, not a Swift error; the crashing tests drive `provider.start()` from raw `Thread.detachNewThread` threads (`try?` cannot catch an NSException), so the exception unwinds off the thread and aborts the entire test process — SIGABRT, no failing test line, same suite-level presentation as BUG-078. **Fourteen `.ips` on 2026-08-25 alone (11:19–17:05), every one the identical stack:** `_startLocked()` → `-[AVAudioPlayerNode play]` → `AVAudioPlayerNodeImpl::StartImpl` → `NSException`; throwers span `LocalFilePlaybackStartRaceTests.rescheduleRacingTeardown…` (11), `SessionLifecycleChurnTests.concurrentDoubleStart…` (2), and `SessionLifecycleChurnTests.completionCallbackVsStop…` (1). **Passes in isolation** (`swift test --filter SessionLifecycleChurn`), fires only under full-suite parallel load — and it is **pre-existing, baseline-verified at merge `8cbf936a` twice** (RECON.14's check, plus a first-hand clean-worktree run at that commit while filing; found at RECON.14 while running closeout evidence). NOT the BUG-078 trap: that was `StopImpl`/dealloc `dispatch_sync` on `CommandQueue` (SIGTRAP); this is `StartImpl` at play-time (SIGABRT). Same family — AVAudioPlayerNode lifecycle under parallel scheduler load. The throw site is the SHIPPED local-file start path (and `resume()` carries a second, unproven `play()` site), so the app-facing form would be a hard crash — P2 by BUG-078's rationale. Detail below |
 | BUG-091 | **P1** · instrumentation landed 2026-08-17; awaiting one reproduction | app.session / pipeline-wiring | **A single local file is selected, preparation succeeds, and NO PLAYBACK EVER STARTS — the session runs with every audio field exactly 0.0.** Matt, 2026-08-17. Measured on `2026-08-17T17-19-19Z`: 1262 frames over 84 s of render clock, and `playback_time_s` / `track_elapsed_s` / `accumulatedAudioTime` / `bass` / `mid` / `treble` / `pulse_amp01` / `beatPhase01` each hold **exactly one distinct value, 0.0**, for the whole session. Preparation is healthy — stem-cache hit, BeatGrid installed (94.1 BPM, 47 beats), plan built. **The discriminator is a diff against the working local-file session 1.5 h earlier (`16-19-13Z`, same file, same OS build):** the working run logs `WIRING: provider.start INSTANCE` and an AVAudioEngine node tap (`TAP_BUFFER: requested=1024 delivered=4410 → 10 Hz`) and NO process tap; the failed run has an identical preparation sequence with `provider.start` **absent**, an unexplained 8 s gap, and then `TAP: startCapture → createProcessTap` — the SYSTEM-AUDIO path — installed twice. `resetStemPipeline caller=other` has exactly one call site (`handleLocalFileReady`), so that function ran and cleared all three of its guards, then never reached the router start. **Root cause NOT asserted** (BUG-061's rule): the strongest candidate is the `catch` around `audioRouter.start(mode:.localFilePlayback)`, which logs to `os_log` only and calls `endSession()` → `currentSource = nil` → `startAudio()`'s LF.4 guard misses → the tap is installed and `stopInternal()` tears the provider down. **Unconfirmable from the artifacts: the app's `lfLogger` output is not retained** (`log show --predicate 'subsystem == "com.phosphene.app"'` over the window returns zero lines), which is itself the reason an 84 s silent session left no trace of its cause. Instrumentation for exactly that is now in (see below). Detail below |
 | BUG-085 | P1 · HANG.1–2 complete 2026-08-05; remains open | renderer / app.hang | **App intermittently hangs hard in `CAMetalLayer.nextDrawable`; window unresponsive, force-quit required.** The live stack proves a main-thread drawable request blocked at 0 % CPU after healthy frames, but the cause remains unknown; direct render-path leakage, the capture hook, scene-swap skip, inflight semaphore, GPU completion, display sleep, and occlusion have been ruled out. **HANG.1 instrumentation is merged to `main` via PR #37 (`c54a2e7c`)**. HANG.2 completed a full-track control plus a 10 min 36 s Witchlight soak with 34,811/34,811 drawables balanced and no stalls or imbalances, refuting a deterministic per-frame leak but not identifying the intermittent owner. **THE INSTRUMENTED CAPTURE NOW EXISTS (2026-08-05, session `2026-08-05T21-21-03Z`, Fractal Tree / Cherub Rock)** — and every lifecycle counter is BALANCED at the moment of the hang: `drawable=12045/12045`, `unique_presented=6012/6012`, `command_completed=6012/6012`, `failures=0`, `unpresented=0`, one request outstanding (`pending=frame:6013,site:mesh.descriptor`). The app held ZERO drawables and CoreAnimation still would not vend one, which independently confirms HANG.2's soak: there is no app-side leak, and the owner is outside the app. Two captures 98 s apart are byte-identical on those counters — a PERMANENT block, not a long stall. See the detail section. |
@@ -321,10 +321,15 @@ future consumers and is independently regression-tested.
 
 ### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
 
-**Severity:** P2 · **Domain tag:** audio.capture / test-infrastructure · **Status:** OPEN — observed once
-with a full stack captured. **Not diagnosed, no fix attempted.** Found while running BUG-103's 5×
+**Severity:** P2 · **Domain tag:** audio.capture · **Status:** **RESOLVED 2026-09-23 (BUG139.1,
+`bf7c73fe`)** — root-caused from source, not inferred, and the lock-held teardown is gone. Found while running BUG-103's 5×
 verification streak; unrelated to that fix (BUG103.1 touches `LocalFilePlaybackProvider` only —
 `SystemAudioCapture.swift` is not in its diff).
+
+⚠ **Domain tag corrected.** Filed as `audio.capture / test-infrastructure` because it was first seen
+killing a test run. That was wrong: the deadlocking code is the **shipped** tap teardown, reached by
+`stopCapture()`, `performReinstall()` and `deinit`. The test suite is where it was *observed*, not
+where it lives.
 
 #### Expected behavior
 
@@ -351,9 +356,61 @@ FerrofluidLiveAudioTests.testLiveDSPPipeline()   FerrofluidLiveAudioTests.swift:
 ```
 
 Concurrently, a tap IO-callback thread sits in `caulk::semaphore::timed_wait` inside the
-`AudioTimeStamp`/`AudioBufferList` callback thunk — i.e. the thread that plausibly holds the mutex
-teardown is waiting on. **That pairing is the hypothesis, not a proven ordering**; nothing yet shows
-which lock each side holds.
+`AudioTimeStamp`/`AudioBufferList` callback thunk.
+
+#### Root cause — an exact ABBA, readable in the source (BUG139.1)
+
+`SystemAudioCapture.swift:407` — the line the sample is parked on — is `AudioDeviceStop(agg, proc)`,
+and `stateLock` has been held since line 401:
+
+```swift
+private func teardownTapResources() {
+    stateLock.lock()                       // 401
+    ...
+    if agg != 0 {
+        AudioDeviceStop(agg, proc)         // 407  ← BLOCKS until the IO proc drains
+```
+
+The other side is the IO proc block created in `createIOProc` (line ~243). It runs on the CoreAudio
+**real-time HAL thread** and calls `self?.probeInstallRMS(...)`, whose body is
+`stateLock.withLock { … }` (line 459).
+
+So:
+
+| Thread | Holds | Waits for |
+|---|---|---|
+| teardown (`stopCapture` / `performReinstall` / `deinit`) | `stateLock` | the IO proc to stop, inside `AudioDeviceStop` |
+| CoreAudio IO proc (real-time) | its HAL cycle | `stateLock`, inside `probeInstallRMS` |
+
+Neither can advance and `AudioDeviceStop` never returns. Both halves of the captured sample are
+accounted for, which is why this is recorded as proven rather than hypothesised.
+
+**This is BUG-021's lesson in a second place.** BUG-021 was *"no AVFoundation teardown under the
+provider lock"* in `LocalFilePlaybackProvider`; this is CoreAudio teardown under `stateLock` in the
+tap path. The doc comment above `probeInstallRMS` asserts *"the uncontended per-buffer stateLock"* —
+that word is the whole defect. The lock is uncontended per buffer and fatally contended at teardown.
+A secondary smell, not fixed here: an RT audio callback should not take a mutex at all (cf. BUG-036).
+
+#### Verification criteria (written before the fix)
+
+- [x] Automated: `SystemAudioCaptureTeardownTests` (4 tests) — claim returns the handles and clears
+      them in one locked step; a second claim yields nothing (no double-destroy); the lock is free the
+      moment claim returns; teardown and lock-taking callers interleave without wedging. As written,
+      this pins the **structure**, not the deadlock: reproducing the deadlock needs a real aggregate
+      device (hardware + Screen Recording) and is out of reach in the suite — the same honesty posture
+      BUG-103 took. **Negative control was run:** reintroducing the lock-held return wedged the suite,
+      the exact signature BUG-139 produces, so the gate demonstrably bites.
+- [x] Automated: full engine suite — see the closeout evidence block.
+      ⚠ `FerrofluidLiveAudioTests` in isolation is **not** a reproduction attempt worth anything: all
+      three of its tests **skip** (two after a ~10 s wait for a tap that a permissionless run never
+      gets). They exercise the teardown path via cleanup, which is how the deadlock was reached, but
+      they never take a live capture. Stated so nobody later reads "green in isolation" as evidence
+      the race was exercised.
+- [ ] **Manual: NOT DONE — the one gap in this fix.** This is the **shipped** streaming path, and the
+      automated gate cannot touch a real aggregate device. Outstanding: one app-level streaming
+      session (start capture, let audio flow, stop) plus one output-device change to exercise
+      `performReinstall`. Needs Screen Recording on a real Mac. Until that runs, the fix is
+      *structurally* proven and *not* live-validated.
 
 #### Suspected failure class
 
@@ -373,10 +430,11 @@ first is the obvious next step, since isolation-passes/parallel-hangs would matc
 `docs/diagnostics/BUG139_TEARDOWN_HANG_2026-09-23.txt` — the full `sample` output, committed so the
 stack survives the session. To capture a fresh one while hung: `sample <xctest-pid> 3`.
 
-#### Why it is filed rather than fixed
+#### Why it was filed rather than fixed at the time
 
 Found during another defect's verification. Fixing an audio-teardown lock ordering on one observation,
-inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first.
+inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first — and
+the evidence, read the next day, turned out to be conclusive from the source alone.
 
 ---
 
@@ -3501,6 +3559,8 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 | `PostProcessChainTests.test_fullChain_under2ms_at1080p` | GPU/CPU contention under the full parallel suite inflates a timed submit past the budget | Re-run in isolation to confirm before treating as a regression |
 | `RayMarchPipelineTests.test_fullPipeline_under8ms_at1080p` | Same shape as above (wall-clock assertion around a GPU submit) | Re-run in isolation to confirm before treating as a regression |
 | `StemSeparationPerformanceTests.test_separate_1SecondAudio_performance` | Same shape; MPSGraph submit under parallel load | Re-run in isolation to confirm before treating as a regression |
+| `PlayheadAnalysisClockTests` — "A stalled or paused playhead delivers silence, not the last frame forever" | Asserts an **exact** delivered-tick count (`delivered.count == stallFlushTicks - 20`) on a timer-driven dispatch source; under parallel load the clock over-delivers (observed 106 vs 100, and some frames not yet flushed to zero). Not a GPU submit — a counting assumption. Observed 1/5 full runs, BUG139.1, 2026-09-23 | Re-run in isolation. **The real fix is to drop the exact-count assumption**, per the deterministic-over-budget-widening rule (CLEAN.7.9–7.14) — assert the flush *reaches* silence, not how many ticks it took |
+| `StagedPersistenceTests` — "the watchdog probe's cost is set by the block, not by the texture" | Asserts a cost-growth **ratio** (`growth < 2.0`; observed 2.32) under the full parallel suite. Observed 1/5 full runs, BUG139.1, 2026-09-23 | Re-run in isolation. Same remedy shape as the rows above: take a min over warm samples rather than a single contended measurement |
 
 *(The three perf rows were added at RECON.2, 2026-08-03. They were declared "confirmed flake" during the BUG-080 investigation but never reached this table — so each run re-litigated them from scratch. **These are the known-flaky *shape*** — a single wall-clock sample around a GPU submit — that CLEAN.7.9→7.14 fixed elsewhere by asserting the **minimum of N warm samples** rather than one sample, or by removing the timing assumption entirely. Per the deterministic-over-budget-widening rule these three should get the same treatment rather than staying in this table; that is a small, well-precedented increment, not a mystery. Until then: a failure here is not evidence of a regression on its own.)*
 
