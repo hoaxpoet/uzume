@@ -321,10 +321,15 @@ future consumers and is independently regression-tested.
 
 ### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
 
-**Severity:** P2 · **Domain tag:** audio.capture / test-infrastructure · **Status:** OPEN — observed once
-with a full stack captured. **Not diagnosed, no fix attempted.** Found while running BUG-103's 5×
+**Severity:** P2 · **Domain tag:** audio.capture · **Status:** **ROOT-CAUSED 2026-09-23 (BUG139.1)** —
+proven from source, not inferred; fix in the same increment. Found while running BUG-103's 5×
 verification streak; unrelated to that fix (BUG103.1 touches `LocalFilePlaybackProvider` only —
 `SystemAudioCapture.swift` is not in its diff).
+
+⚠ **Domain tag corrected.** Filed as `audio.capture / test-infrastructure` because it was first seen
+killing a test run. That was wrong: the deadlocking code is the **shipped** tap teardown, reached by
+`stopCapture()`, `performReinstall()` and `deinit`. The test suite is where it was *observed*, not
+where it lives.
 
 #### Expected behavior
 
@@ -351,9 +356,54 @@ FerrofluidLiveAudioTests.testLiveDSPPipeline()   FerrofluidLiveAudioTests.swift:
 ```
 
 Concurrently, a tap IO-callback thread sits in `caulk::semaphore::timed_wait` inside the
-`AudioTimeStamp`/`AudioBufferList` callback thunk — i.e. the thread that plausibly holds the mutex
-teardown is waiting on. **That pairing is the hypothesis, not a proven ordering**; nothing yet shows
-which lock each side holds.
+`AudioTimeStamp`/`AudioBufferList` callback thunk.
+
+#### Root cause — an exact ABBA, readable in the source (BUG139.1)
+
+`SystemAudioCapture.swift:407` — the line the sample is parked on — is `AudioDeviceStop(agg, proc)`,
+and `stateLock` has been held since line 401:
+
+```swift
+private func teardownTapResources() {
+    stateLock.lock()                       // 401
+    ...
+    if agg != 0 {
+        AudioDeviceStop(agg, proc)         // 407  ← BLOCKS until the IO proc drains
+```
+
+The other side is the IO proc block created in `createIOProc` (line ~243). It runs on the CoreAudio
+**real-time HAL thread** and calls `self?.probeInstallRMS(...)`, whose body is
+`stateLock.withLock { … }` (line 459).
+
+So:
+
+| Thread | Holds | Waits for |
+|---|---|---|
+| teardown (`stopCapture` / `performReinstall` / `deinit`) | `stateLock` | the IO proc to stop, inside `AudioDeviceStop` |
+| CoreAudio IO proc (real-time) | its HAL cycle | `stateLock`, inside `probeInstallRMS` |
+
+Neither can advance and `AudioDeviceStop` never returns. Both halves of the captured sample are
+accounted for, which is why this is recorded as proven rather than hypothesised.
+
+**This is BUG-021's lesson in a second place.** BUG-021 was *"no AVFoundation teardown under the
+provider lock"* in `LocalFilePlaybackProvider`; this is CoreAudio teardown under `stateLock` in the
+tap path. The doc comment above `probeInstallRMS` asserts *"the uncontended per-buffer stateLock"* —
+that word is the whole defect. The lock is uncontended per buffer and fatally contended at teardown.
+A secondary smell, not fixed here: an RT audio callback should not take a mutex at all (cf. BUG-036).
+
+#### Verification criteria (written before the fix)
+
+- [ ] Automated: a deterministic gate that the teardown **claims** the tap/aggregate/proc IDs under
+      the lock and destroys them **after releasing it** — and that a second claim returns zeros, so a
+      concurrent double teardown cannot double-destroy. Reproducing the deadlock itself needs a real
+      aggregate device (Screen Recording permission + hardware) and is explicitly out of reach in the
+      suite; the gate pins the structure that makes the deadlock impossible, the same honesty posture
+      BUG-103 took.
+- [ ] Automated: full engine suite green, and `FerrofluidLiveAudioTests` (where it was observed)
+      green in isolation and under a repeat run.
+- [ ] Manual: this is the **shipped** streaming path. One app-level streaming session — start
+      capture, let audio flow, stop — plus one output-device change to exercise `performReinstall`.
+      Needs Screen Recording; recorded in the closeout as done or explicitly not done.
 
 #### Suspected failure class
 
@@ -373,10 +423,11 @@ first is the obvious next step, since isolation-passes/parallel-hangs would matc
 `docs/diagnostics/BUG139_TEARDOWN_HANG_2026-09-23.txt` — the full `sample` output, committed so the
 stack survives the session. To capture a fresh one while hung: `sample <xctest-pid> 3`.
 
-#### Why it is filed rather than fixed
+#### Why it was filed rather than fixed at the time
 
 Found during another defect's verification. Fixing an audio-teardown lock ordering on one observation,
-inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first.
+inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first — and
+the evidence, read the next day, turned out to be conclusive from the source alone.
 
 ---
 
