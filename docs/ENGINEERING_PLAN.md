@@ -1622,8 +1622,12 @@ the wild it now surfaces as a logged Swift error with a call stack — the instr
 missing.
 
 **Gates:** `PlayerNodeExceptionContractTests` (3 tests, deterministic, no sleeps; negative control =
-the same unwrapped `play()` aborts). Full engine suite 5/5 green, no new `swiftpm-testing-helper`
-`.ips`. swiftlint `--strict` 0/555. Doc gates 16/16. No capability-registry row: this is audio
+the same unwrapped `play()` aborts). Full engine suite **4/5 exit 0 with 0 new
+`swiftpm-testing-helper` `.ips` across all five** — the `.ips` half is the half that speaks to
+BUG-103 and it is clean; run 3's red was `PostProcessChainTests.test_fullChain_under2ms_at1080p`, a
+GPU wall-clock budget (10.57 ms vs a 5 ms assert) that runs 1/2/4/5 passed and that this diff cannot
+reach (no renderer or Metal file in it). Logged as not-met-as-written rather than waved through.
+swiftlint `--strict` 0/555. Doc gates 16/16. No capability-registry row: this is audio
 playback, not renderer/harness/certification surface.
 ### Increment BUG138.3 — VolumetricLithograph declares what it reads; FeatureVector's binding index is right ✅ (2026-09-23)
 

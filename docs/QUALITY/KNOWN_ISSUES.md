@@ -1630,9 +1630,18 @@ target's entire justification. Both `play()` sites route through it:
       Swift error carrying the reason; a non-raising `play()` passes through and the node really
       starts; the catcher survives repetition (a one-shot `@try` would only fail on track 2).
       Negative control: the same **unwrapped** `play()` aborts the process. No sleeps, no retries.
-- [x] Full parallel engine suite, 5 consecutive runs, exit 0, no new
-      `swiftpm-testing-helper` `.ips`. (Lottery caveat from BUG-078 stands: the streak is supporting
-      evidence, not the load-bearing signal — the gate is.)
+- [~] Full parallel engine suite, 5 consecutive runs: **4 of 5 exit 0**, and **0 new
+      `swiftpm-testing-helper` `.ips` across all five** — which is the half of this criterion that
+      actually speaks to BUG-103, and it is clean. The one red run (run 3) was
+      `PostProcessChainTests.test_fullChain_under2ms_at1080p`: a GPU wall-clock budget, 10.57 ms
+      against a 5 ms assert, which runs 1/2/4/5 passed and which this fix cannot reach (the diff
+      contains no renderer or Metal file). It also failed earlier the same day while an unrelated
+      Release app was holding the GPU. Recorded as **not met as written** rather than waved through;
+      the deterministic gate above is the load-bearing signal, per BUG-078's lottery caveat.
+      ⚠ Two asides for whoever touches that test: it is named `under2ms` but asserts `< 5.0`, and
+      being an XCTest it fails *while the swift-testing summary line still reads "passed"* — the
+      exact two-halves presentation this entry warns about above.
+      BUG-139's hang did **not** recur in these five runs.
 - [x] Manual: not required. The shipped start path changed, so one app-level local-file session
       (start / Next-churn / quit) is recorded in the closeout.
 

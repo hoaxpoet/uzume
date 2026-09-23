@@ -135,7 +135,7 @@ is **still** unreproduced synchronously — deliberately so. This fix removes th
 kill the process rather than claiming to explain it; if it fires in the wild it now arrives as a
 logged Swift error with a call stack.
 
-`PlayerNodeExceptionContractTests` (3 tests, deterministic, no sleeps). Full engine suite 5/5 green.
+`PlayerNodeExceptionContractTests` (3 tests, deterministic, no sleeps). Full engine suite 4/5 exit 0 with **no new crash reports across all five** — the one red run was a GPU wall-clock budget test this diff cannot reach, not a regression.
 `KNOWN_ISSUES.md` BUG-103 resolved; BUG-117's stale index row corrected in passing.
 
 ### [dev-2026-09-16-215311] BUG-137 — capture mode waits for a busy encoder instead of dropping frames
