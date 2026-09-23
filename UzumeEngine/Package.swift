@@ -37,10 +37,18 @@ let package = Package(
             ],
             path: "Sources/Shared"
         ),
+        // BUG-103: the ONLY Objective-C target. It exists so Swift can catch an
+        // NSException raised by AVFoundation instead of the process dying.
+        .target(
+            name: "ObjCShim",
+            path: "Sources/ObjCShim",
+            publicHeadersPath: "include"
+        ),
         .target(
             name: "Audio",
             dependencies: [
                 "Shared",
+                "ObjCShim",
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
             ],

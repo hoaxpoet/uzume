@@ -16,6 +16,7 @@
 // `installTap(bufferSize:)` requests.
 
 @preconcurrency import AVFoundation
+import ObjCShim
 import Foundation
 import os.log
 
@@ -156,19 +157,28 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // present under the lock (a pointer copy — no AVFoundation calls, so
         // BUG-021's constraint holds) and tear it down after unlocking, with a
         // strong reference held across `player.stop()`.
-        let stale: TeardownRefs? = try lock.withLock {
-            let previous = TeardownRefs(
-                player: playerNode,
-                engine: engine,
-                observer: configChangeObserver,
-                clock: analysisClock
-            )
-            try _startLocked()
-            let hadPrevious = previous.player != nil
-                || previous.engine != nil
-                || previous.observer != nil
-                || previous.clock != nil
-            return hadPrevious ? previous : nil
+        let stale: TeardownRefs?
+        do {
+            stale = try lock.withLock {
+                let previous = TeardownRefs(
+                    player: playerNode,
+                    engine: engine,
+                    observer: configChangeObserver,
+                    clock: analysisClock
+                )
+                try _startLocked()
+                let hadPrevious = previous.player != nil
+                    || previous.engine != nil
+                    || previous.observer != nil
+                    || previous.clock != nil
+                return hadPrevious ? previous : nil
+            }
+        } catch let aborted as StartAborted {
+            // BUG-103: `play()` raised after the engine came up. The lock is
+            // released by now, so this is the BUG-021-safe place to tear the
+            // half-built engine down; leaving it running is BUG-078's trap.
+            Self.teardownAVFoundation(refs: aborted.partial, diagnostic: onDiagnosticEvent)
+            throw aborted.underlying
         }
         if let stale {
             Self.teardownAVFoundation(refs: stale, diagnostic: onDiagnosticEvent)
@@ -242,7 +252,19 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// Resume playback after `pause()`. Safe to call when already playing or
     /// before `start()`.
     public func resume() {
-        lock.withLock { playerNode?.play() }
+        // BUG-103: same uncatchable-raise contract as the start path. `resume()`
+        // is non-throwing public API, so a raise is logged and swallowed —
+        // failing to resume is a bad transport, not a reason to kill the app.
+        lock.withLock {
+            guard let player = playerNode else { return }
+            do {
+                try Self.catchingNSException { player.play() }
+            } catch {
+                logger.error(
+                    "[BUG-103] resume: play() raised — \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
     }
 
     /// `true` while the engine + player exist and the player is not currently
@@ -318,7 +340,24 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
 
         try engine.start()
         _scheduleFileLoopLocked(player: player, file: file)
-        player.play()
+        // BUG-103: `play()` reports failure by RAISING an ObjC NSException
+        // ("player did not see an IO cycle"), which Swift cannot catch and which
+        // terminates the process when it unwinds past a Swift frame — the whole
+        // defect. Route it through the ObjC catcher so the failure becomes a
+        // Swift error the caller already tolerates.
+        //
+        // The engine is RUNNING at this point and `self.engine` is not assigned
+        // yet, so simply throwing would leak a running engine — BUG-078's trap.
+        // Hand the partial refs to `start()`, which tears them down AFTER
+        // unlocking (BUG-021: no AVFoundation teardown under the provider lock).
+        do {
+            try Self.catchingNSException { player.play() }
+        } catch {
+            throw StartAborted(
+                partial: TeardownRefs(player: player, engine: engine, observer: nil, clock: clock),
+                underlying: error
+            )
+        }
 
         // After `play()` — `playerTime(forNodeTime:)` returns nil until the node is rendering, and
         // the clock's first tick would otherwise be a wasted no-op.
@@ -354,6 +393,23 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// `teardownAVFoundation(...)` outside the lock so AVFoundation calls
     /// don't deadlock against the scheduleFile completion callback that
     /// itself acquires the lock.
+    /// BUG-103: thrown by `_startLocked()` when the engine came up but `play()`
+    /// raised. Carries the half-built objects so `start()` can tear them down
+    /// outside the lock rather than leaking a running engine.
+    private struct StartAborted: Error {
+        let partial: TeardownRefs
+        let underlying: Error
+    }
+
+    /// Run `body`, converting a raised `NSException` into a thrown Swift error.
+    /// See `UZExceptionCatch.h` for why an Objective-C target is required.
+    nonisolated static func catchingNSException(_ body: () -> Void) throws {
+        var raised: NSError?
+        if !UZRunCatchingNSException(body, &raised) {
+            throw raised ?? NSError(domain: UZExceptionCatchErrorDomain, code: 1)
+        }
+    }
+
     private struct TeardownRefs {
         let player: AVAudioPlayerNode?
         let engine: AVAudioEngine?
