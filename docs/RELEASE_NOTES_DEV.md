@@ -10,6 +10,107 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-23-143429] BUG138.3 — VolumetricLithograph declares what it reads, and `FeatureVector` is not at buffer(2)
+
+The two items BUG138.2 recorded and left open.
+
+**VL's routes: 6 → 13.** It read eight audio fields it declared none of —
+`drums/bass/vocals/otherOnsetRate` (peak density), `midDev` and `midAttRel` (their D-019 warmup
+fallbacks), `pulseBeatIndex` (bar position, with the already-declared `pulsePhase01`) and `valence`
+(hue offset). Each new route is anchored to an executable line with comments stripped, and
+`RouteCoverageTests` proves every one fires: **236 → 243 routes, 0 red**.
+
+**A dead route removed, which is the same defect inverted.** VL also declared
+`camera_dolly_speed ← bass`. The shader reads no `f.bass` anywhere and has no audio-driven dolly —
+the flight is free-running on `f.time`. That declaration stood for three months and route coverage
+never objected, because **it proves a declared primitive has activity in the session, not that the
+shader reads it.** Under- and over-declaration are both invisible to it. Worth remembering before
+citing a green route-coverage run as proof that a scene's routing is right.
+
+**`FeatureVector` is fragment `buffer(0)`** — and `buffer(1)` on the particle compute kernels.
+`buffer(2)` is the waveform. Both `ARCHITECTURE.md` lines that said `buffer(2)` now say so.
+
+**And a correction to my own work.** BUG138.2 rewrote VL's `description` and carried over two claims
+from the table it was replacing without checking them: a vocal-stem terrain depth, and the camera
+dolly scaling with bass. Both false. The increment whose entire subject was ungated prose
+reintroduced ungated prose one file later. The description now states only what an executable line
+supports.
+
+**Method note.** `grep '"bassOnsetRate"'` said the primitive was missing from
+`AudioRoutePrimitives.map`. It is not — the map composes those keys in a loop as `stem + suffix`. A
+literal grep cannot see a constructed identifier, the same failure shape as grepping a `.metal`
+without stripping comments. Derive the set and compare; never grep for the spelling.
+
+---
+
+### [dev-2026-09-22-234846] BUG138.2 — the prose that restates a gated fact is now itself gated
+
+BUG-138's second half, plus the two gates. The `48 floats / 192 bytes` claim about `FeatureVector`
+was not in two places, it was in **eight**: `Common.metal`, `AnalyzedFrame.swift`,
+`SpectralCartograph.metal`, four lines of `ARCHITECTURE.md`, and — with its own wrong number,
+`52 floats / 208 bytes` — the doc comment on `FeatureVector` itself. It is 56 / 224.
+
+**That doc comment is the point of this increment.** It carries FTR.6's lecture about exactly this
+failure: *"it had drifted to '48 floats = 192 bytes' … nothing caught it, because no gate reads
+prose."* FTR.6 diagnosed the class correctly and chose to DELETE that copy rather than gate the
+pattern. The prose grew back in eight places, including inside the lecture. Deleting one copy does
+not stop copies.
+
+**Two gates, both with negative controls, both proven red against the real shipped strings:**
+
+- `CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout` — scans `UzumeEngine/Sources/**` and
+  `ARCHITECTURE.md` for `N floats / M bytes` claims, attributes each to its nearest preceding struct
+  name, and checks it against `MemoryLayout`. **Expected values are derived, not written down**, so
+  the gate moves with the struct instead of becoming the ninth stale copy. Double-quoted numbers are
+  treated as citations, not claims, so the two comments that correctly *quote* the old wrong value
+  stay legal.
+- `SidecarDescriptionDriftTests` — a field named in a sidecar `description` must be declared in that
+  preset's `audio_routes` or read by its own `.metal` **with comments stripped**.
+
+**A correction this turned up.** The previous entry recorded that `VolumetricLithograph.json` had the
+*opposite* drift — prose right, routes incomplete — based on a grep that found `stems.drums_beat` in
+its shader. That grep did not strip comments, and all eight occurrences are comments. VL reads
+neither `drums_beat` nor `drums_attack_ratio` in any executable line; its peaks ride
+`pulse_beat_index + pulse_phase01` with per-stem onset rates for polish. Same drift as FFO, fixed the
+same way. The gate's comment-stripping exists because that mistake survived a first pass of this very
+investigation, and its negative control now asserts a commented-out read does not count.
+
+**Recorded, not fixed:** VL's routes *are* under-declared (eight read-but-undeclared fields), a
+separate route-coverage matter. And two `ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)"
+when every encoder binds it at buffer(0) — noticed while editing those lines for the size claim,
+deliberately left alone rather than silently widened.
+
+---
+
+### [dev-2026-09-22-231122] BUG138.1 — Ferrofluid Ocean's sidecar stops being a second routing table
+
+`FerrofluidOcean.json`'s `description` had been asserting audio routes the shader does not have. It
+named `bass_energy_dev → spike height`, removed at **D-153** three months earlier because AGC-levelled
+bass barely moved the spikes (motion std 0.09 — Matt's "frozen"); the `accumulated_audio_time × arousal`
+aurora-drift product, which **BUG-047** removed for retroactively rescaling history; and a raw
+`vocals_pitch_hz` palette read that **D-158** replaced with the CPU-smoothed composite after the raw
+one strobed. Three retired mechanisms, stated as current.
+
+The same file's `audio_routes` block was correct the whole time. That is the actual defect: **one file
+described the same shader twice, and only one half was gated** — `AudioRouteSchemaTests` and
+`RouteCoverageTests` read the declarations; nothing read the prose. It is the half a human reads first,
+and it is the most plausible origin of the live uzume.io caption *"Bass raises the spikes"*.
+
+**Now:** the description says what the preset LOOKS like and points at `audio_routes` and the
+`FerrofluidOcean.metal` header for the primitives, with a short tombstone recording why it is no longer
+a routing table. No engine, shader or route change — Ferrofluid Ocean renders identically and stays
+certified.
+
+**Still open (BUG-138).** The `48 floats / 192 bytes` claim in `ARCHITECTURE.md` §Buffer Binding Layout
+and `Common.metal:11` (it is **56 / 224**), and the gate that would stop this class recurring. The
+naive form of that gate — *a primitive named in a description must be declared in `audio_routes`* —
+would go red on `VolumetricLithograph.json` on day one, whose description correctly names
+`drums_beat` and `drums_attack_ratio` while its routes declare neither. That is route
+**under-declaration**, a different defect needing its own QG.1 evidence, and shipping a gate that needs
+an exemption the day it lands is worse than shipping none.
+
+---
+
 ### [dev-2026-09-16-215311] BUG-137 — capture mode waits for a busy encoder instead of dropping frames
 
 A capture recording made while the Mac was busy silently lost frames. Under CPU load the ProRes

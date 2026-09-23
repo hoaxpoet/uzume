@@ -52,6 +52,7 @@ scene**, and the two meanings share sentences:
 | `docs/ARCHITECTURE.md` | 20 | The mv_warp paragraph reads "alpha-blend current **scene** onto composeTexture … rendered directly by the **preset's** fragment shader" — one sentence, both meanings |
 | `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` | 20 | Same GPU-contract vocabulary throughout |
 | `docs/CAPABILITY_REGISTRY/PRESETS.md` | 3 | A per-file module registry: the sweep produced "The **Scenes** module", but the SPM target is literally named `Presets` |
+| `docs/AUDIO_CONTRACT.md` | 3 | Added at AUDIO.1, after VOCAB.2 drew this table. The same collision: it documents `SceneUniforms` at `buffer(4)` — "camera, lighting, and **scene** parameters" — one row above the `StemFeatures` binding a **preset** reads. It is the render-time GPU contract, so it stays `preset` for the reason the four above do |
 
 Sweeping these does not make them clearer; it makes them **wrong**, because they
 document code in which `Scene` is a different type. This is the same collision

@@ -29,7 +29,7 @@
 //   • All text labels rendered via DynamicTextOverlay (Core Text / SF Mono) at texture(12).
 //
 // Buffer / texture bindings (direct-pass layout):
-//   buffer(0)  = FeatureVector (192 bytes)
+//   buffer(0)  = FeatureVector (224 bytes)
 //   buffer(1)  = FFT magnitudes (512 floats)
 //   buffer(2)  = waveform (unused)
 //   buffer(3)  = StemFeatures (256 bytes)

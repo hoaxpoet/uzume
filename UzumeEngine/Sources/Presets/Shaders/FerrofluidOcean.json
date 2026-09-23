@@ -2,7 +2,7 @@
   "name": "Ferrofluid Ocean",
   "family": "geometric",
   "duration": 60,
-  "description": "Ocean-portion-scale ferrofluid surface: constant Rosensweig spike lattice over Gerstner swell, lit by mirror-reflects-procedural-sky aurora (D-126 / D-127). Audio routing per round 65 (V.9 Session 4.5c): bass_energy_dev → spike height; arousal → swell amplitude; vocals_pitch_hz → aurora palette; drums_energy_dev_smoothed → aurora intensity; accumulated_audio_time × arousal → aurora drift.",
+  "description": "Ocean-portion-scale ferrofluid surface: Rosensweig spike lattice over Gerstner swell, lit by a mirror-reflects-procedural-sky aurora (D-126 / D-127). The spikes heave on a grid-anchored four-beat pulse, sized by how loud the passage is; the swell beneath them drifts slowly with arousal; the aurora takes its hue from the vocal line, its intensity from the drums stem, and its slow orbit from accumulated audio time paced by arousal. Routing primitives are declared in `audio_routes` below and explained layer-by-layer in the FerrofluidOcean.metal header — this field describes the LOOK and is deliberately NOT a second routing table. It was one until BUG-138, and it went on naming three mechanisms for months after D-153, BUG-047 and D-158 respectively retired them, while `audio_routes` — the gated half of this file — stayed correct throughout. Describe behaviour here; let the declarations carry the field names.",
   "author": "Matt",
   "passes": ["ray_march", "post_process"],
   "beat_sensitivity": 1.0,

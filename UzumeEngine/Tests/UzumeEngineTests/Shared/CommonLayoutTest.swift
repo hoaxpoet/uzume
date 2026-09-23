@@ -144,4 +144,169 @@ struct CommonLayoutTest {
             \(zip(commonFields, preambleFields).first { $0 != $1 }.map { "\($0) vs \($1)" } ?? "length")
             """)
     }
+
+    // MARK: - Prose parity (BUG-138)
+
+    /// Structs whose size is restated in prose, with the expected values **derived** rather
+    /// than written down. A gate that hardcodes `56` becomes the ninth stale copy of the
+    /// number the moment a field lands; reading `MemoryLayout` means this gate cannot rot.
+    private static var gatedStructSizes: [String: (floats: Int, bytes: Int)] {
+        [
+            "FeatureVector": (MemoryLayout<FeatureVector>.size / 4, MemoryLayout<FeatureVector>.size),
+            "StemFeatures": (MemoryLayout<StemFeatures>.size / 4, MemoryLayout<StemFeatures>.size),
+            "FeedbackParams": (MemoryLayout<FeedbackParams>.size / 4, MemoryLayout<FeedbackParams>.size),
+        ]
+    }
+
+    /// A size claim written in prose, with the struct it is about and where it was found.
+    struct ProseSizeClaim: Sendable {
+        let file: String, structName: String, floats: Int, bytes: Int, text: String
+    }
+
+    /// Normalise source for prose scanning.
+    ///
+    /// Two deliberate transforms, each load-bearing:
+    ///
+    /// 1. **Double-quoted spans are blanked.** A number inside quotes is a CITATION of a past
+    ///    claim, not a claim — `AudioFeatures+Analyzed.swift` and `PresetLoader+Preamble.swift`
+    ///    both quote the old wrong `"48 floats = 192 bytes"` while explaining the drift, and a
+    ///    gate that failed on those would punish the two comments that got it right. (Same rule
+    ///    as the brand sweep: never rewrite a quotation.)
+    /// 2. **Comment markers are dropped and whitespace collapsed**, so a claim wrapped across
+    ///    two `///` lines reads as one string. The original defect spanned lines exactly that way.
+    static func normalisedForProse(_ source: String) -> String {
+        let unquoted = source.replacingOccurrences(
+            of: "\"[^\"]{0,400}\"", with: "\"\"",
+            options: [.regularExpression])
+        let uncommented = unquoted.replacingOccurrences(
+            of: "^[ \\t]*(///|//|\\*)", with: " ",
+            options: [.regularExpression])
+        return uncommented.replacingOccurrences(
+            of: "\\s+", with: " ", options: [.regularExpression])
+    }
+
+    /// How far back a claim may sit from the struct name it describes. These are written as
+    /// `FeatureVector (56 floats / 224 B)`, so the subject is always close — and attributing a
+    /// claim to the NEAREST PRECEDING name is what stops `FeatureVector (…) + StemFeatures (…)`
+    /// reading the neighbour's correct numbers as this struct's wrong ones.
+    private static let subjectLookbackChars = 60
+
+    /// Every prose `N floats / M bytes` claim about a gated struct, in one file.
+    static func proseSizeClaims(in source: String, file: String) -> [ProseSizeClaim] {
+        let text = normalisedForProse(source)
+        // Either order: "56 floats = 224 bytes" or "224 bytes / 56 floats".
+        let pattern = "(\\d+)\\s*floats?\\s*(?:=|/|,|is)\\s*(\\d+)\\s*(?:bytes|B)\\b"
+            + "|(\\d+)\\s*(?:bytes|B)\\s*(?:=|/|,)\\s*(\\d+)\\s*floats?\\b"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = text as NSString
+        var claims: [ProseSizeClaim] = []
+        regex.enumerateMatches(in: text, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m else { return }
+            func group(_ i: Int) -> Int? {
+                let r = m.range(at: i)
+                return r.location == NSNotFound ? nil : Int(ns.substring(with: r))
+            }
+            let floats: Int, bytes: Int
+            if let f = group(1), let b = group(2) { (floats, bytes) = (f, b) }
+            else if let b = group(3), let f = group(4) { (floats, bytes) = (f, b) }
+            else { return }
+
+            let backStart = max(0, m.range.location - subjectLookbackChars)
+            let back = ns.substring(with: NSRange(location: backStart,
+                                                 length: m.range.location - backStart))
+            // Nearest preceding gated name wins; no name means this is not our claim.
+            let subject = gatedStructSizes.keys
+                .compactMap { name in back.range(of: name, options: .backwards).map { (name, $0.lowerBound) } }
+                .max { $0.1 < $1.1 }?.0
+            guard let subject else { return }
+            claims.append(ProseSizeClaim(file: file, structName: subject,
+                                         floats: floats, bytes: bytes,
+                                         text: ns.substring(with: m.range)))
+        }
+        return claims
+    }
+
+    /// **The gate FTR.6 decided not to build, and the prose grew back in eight places.**
+    ///
+    /// FTR.6 found `FeatureVector`'s doc comment claiming `48 floats = 192 bytes` two
+    /// increments after it stopped being true, diagnosed it exactly — *"nothing caught it,
+    /// because no gate reads prose"* — and chose to DELETE that copy rather than gate the
+    /// pattern. By BUG-138 the claim was wrong again in `Common.metal`, `AnalyzedFrame.swift`,
+    /// `SpectralCartograph.metal`, three places in `ARCHITECTURE.md`, and in the very doc
+    /// comment that carries the FTR.6 lecture (as `52 floats = 208 bytes`). Deleting one copy
+    /// does not stop copies; this does.
+    ///
+    /// Expected values come from `MemoryLayout`, so adding a field moves the gate with the
+    /// struct instead of against it.
+    @Test func proseSizeClaims_agreeWithMemoryLayout() throws {
+        guard let root = Self.repoRoot else {
+            print("CommonLayoutTest: not a source checkout — skipping prose parity")
+            return
+        }
+        let fm = FileManager.default
+        var files: [(url: URL, label: String)] = []
+        let sources = root.appendingPathComponent("UzumeEngine/Sources")
+        if let walk = fm.enumerator(at: sources, includingPropertiesForKeys: nil) {
+            for case let url as URL in walk where ["swift", "metal"].contains(url.pathExtension) {
+                files.append((url, url.lastPathComponent))
+            }
+        }
+        let architecture = root.appendingPathComponent("docs/ARCHITECTURE.md")
+        files.append((architecture, "docs/ARCHITECTURE.md"))
+
+        #expect(files.count > 200, "source walk imploded — found only \(files.count) files")
+        #expect(fm.fileExists(atPath: architecture.path),
+                "docs/ARCHITECTURE.md missing from a source checkout — the doc half is unverified, never a pass")
+
+        var claims: [ProseSizeClaim] = []
+        for (url, label) in files {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            claims += Self.proseSizeClaims(in: text, file: label)
+        }
+        // Arm-or-fail: if the scanner finds nothing, it is broken, not the tree clean.
+        #expect(claims.count >= 8, "prose scanner found only \(claims.count) size claims — it has stopped working")
+
+        let wrong = claims.filter { claim in
+            guard let expected = Self.gatedStructSizes[claim.structName] else { return false }
+            return (claim.floats, claim.bytes) != (expected.floats, expected.bytes)
+        }
+        #expect(wrong.isEmpty, """
+            Prose restates a gated struct's size incorrectly. \
+            `CommonLayoutTest` locks the LAYOUT; this locks the SENTENCES that describe it, \
+            because the sentence is the half a human reads first (BUG-138):
+            \(wrong.map { claim in "  \(claim.file): \(claim.structName) written as \"\(claim.text)\", but MemoryLayout says \(Self.gatedStructSizes[claim.structName].map { "\($0.floats) floats / \($0.bytes) bytes" } ?? "?") " }.joined(separator: "\n"))
+            """)
+    }
+
+    /// Guards the guard: the exact sentence BUG-138 found must be caught, the corrected one
+    /// must pass, and a quoted citation of the old value must NOT be treated as a claim.
+    @Test func proseSizeGate_catchesTheOriginalDefect() throws {
+        let stale = Self.proseSizeClaims(
+            in: "// Matches Swift FeatureVector layout (48 floats = 192 bytes, MV-1/MV-3b).",
+            file: "probe")
+        #expect(stale.count == 1, "the original BUG-138 sentence must register as one claim")
+        #expect(stale.first?.structName == "FeatureVector")
+        let expected = try #require(Self.gatedStructSizes["FeatureVector"])
+        let staleClaim = try #require(stale.first)
+        #expect((staleClaim.floats, staleClaim.bytes) != (expected.floats, expected.bytes),
+                "the stale sentence must not compare equal to the real layout")
+
+        let fixed = Self.proseSizeClaims(
+            in: "// Matches Swift FeatureVector layout (56 floats = 224 bytes).", file: "probe")
+        let fixedClaim = try #require(fixed.first)
+        #expect((fixedClaim.floats, fixedClaim.bytes) == (expected.floats, expected.bytes))
+
+        // A CITATION, not a claim — FTR.6's own explanation of the drift must stay legal.
+        let quoted = Self.proseSizeClaims(
+            in: "/// it had drifted to \"48 floats = 192 bytes\" and was wrong for FeatureVector",
+            file: "probe")
+        #expect(quoted.isEmpty, "a quoted past value is a citation and must not fail the gate")
+
+        // The neighbour trap: two structs on one line must each get their own numbers.
+        let pair = Self.proseSizeClaims(
+            in: "// FeatureVector (56 floats / 224 B) + StemFeatures (64 floats / 256 B)", file: "probe")
+        #expect(pair.count == 2)
+        #expect(pair.first?.structName == "FeatureVector")
+        #expect(pair.last?.structName == "StemFeatures")
+    }
 }
