@@ -270,6 +270,7 @@ DOC_FAILS=$STEP_FAILURES_PRESENT
 LINT_SCRIPTS=(
   "Scripts/check_user_strings.sh"
   "Scripts/check_sample_rate_literals.sh"
+  "Scripts/check_blocking_calls_under_lock.sh"
 )
 SCRIPTS_FAILS=0
 emit "--- Step 4b: Repo lint scripts (CI fast-gate parity) ---"
