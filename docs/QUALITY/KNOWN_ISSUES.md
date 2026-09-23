@@ -63,7 +63,8 @@ reads" are not reads — see the entry.)*
 | BUG-135 | P3 · OPEN — **left alone on Matt's call 2026-09-14** | dsp.beat | **The grid's bar position cannot be confirmed to be the true musical downbeat.** Attempted on `2026-09-14T18-14-07Z` (verdict clean): `bassDev` is the only signal with real separation (bar-position 2, 1.33× lead) and it cannot distinguish beat 1 from beat 3, since a kick commonly plays both; `harmonic_flux`, `spectral_surge` and `spectralFlux` each pick a *different* position and spread only ~2 %, i.e. no bar-position discrimination at all. The recorded feature set cannot answer the question. Deliberately not chased: automated cold-start downbeat-phase derivation was falsified across six iterations and retired at Matt's Choice A (2026-05-25), marked *do not iterate*. Consequence is bounded — Membrane's 1.00/0.22/0.52/0.22 accent means a half-bar error swaps the strong and secondary beats, leaving a hard strike every four with a medium between, displaced but intact. Matt, shown the measurement: *leave it*. Detail below |
 | BUG-131 | **P1** · **FOUND + FIXED 2026-09-11, same session it was introduced** | audio.playback / concurrency | **The playhead analysis clock killed the process when a tick raced session teardown.** `PlayheadAnalysisClock.stop()` called `DispatchSourceTimer.cancel()`, which prevents FUTURE handlers but does NOT wait for one already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose engine had just been released and threw `com.apple.coreaudio.avfaudio: 'required condition is false: _engine != nil'`, an Objective-C exception no Swift `catch` can intercept. **Every track change and every session stop is a teardown**, so this was live on the local-file path from BUG087.4 onward. Introduced by me at BUG087.4 and shipped: the full suite was green on the BUG087.4, BUG087.5 and PR.24 runs, because it is a race. Detail below |
 | BUG-129 | P3 · **RESOLVED 2026-09-12 (BUG129.1)** — the peak was RIGHT; the missing thing was an upper guard | diagnostics / measurement | **`chain_health.json` reports `peakDBFS` exactly 0 on two consecutive sessions, and the verdict is still `clean`.** Measured: `2026-09-11T19-12-34Z` → −6.03, then `2026-09-11T19-58-15Z` → **0**, `2026-09-11T20-19-03Z` → **0**. An exact 0 is full scale, which would be clipping — yet `reasons` and `notes` are both empty and the verdict is `clean`, so either the peak is not being measured and defaults to 0, or it is measured and the clipping check does not fire on it. **Why it matters beyond tidiness:** the scene-session rule is that a fidelity/M7 closeout must cite the session's chain-health verdict, and D-184 makes a `clean` verdict the precondition for judging fidelity at all. A peak field that silently reads 0 weakens every such citation — including two M7s closed today (VL.2 and WL.11), both of which cite `clean` over a 0 peak and are flagged as such in their entries. Not diagnosed; found while checking a session before quoting its verdict. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is being read at all. |
-| BUG-103 | P2 · **RESOLVED 2026-09-23 (BUG103.1, `84b09189`)** — the uncatchable raise is a Swift error now; the trigger itself stays unreproduced by design | audio.playback / test-infrastructure | **The parallel engine suite dies with an uncaught NSException from `-[AVAudioPlayerNode play]` — console: `com.apple.coreaudio.avfaudio: 'player did not see an IO cycle'` — thrown inside `LocalFilePlaybackProvider._startLocked()` on a racing-start test thread.** `play()` reports this state as an Objective-C exception, not a Swift error; the crashing tests drive `provider.start()` from raw `Thread.detachNewThread` threads (`try?` cannot catch an NSException), so the exception unwinds off the thread and aborts the entire test process — SIGABRT, no failing test line, same suite-level presentation as BUG-078. **Fourteen `.ips` on 2026-08-25 alone (11:19–17:05), every one the identical stack:** `_startLocked()` → `-[AVAudioPlayerNode play]` → `AVAudioPlayerNodeImpl::StartImpl` → `NSException`; throwers span `LocalFilePlaybackStartRaceTests.rescheduleRacingTeardown…` (11), `SessionLifecycleChurnTests.concurrentDoubleStart…` (2), and `SessionLifecycleChurnTests.completionCallbackVsStop…` (1). **Passes in isolation** (`swift test --filter SessionLifecycleChurn`), fires only under full-suite parallel load — and it is **pre-existing, baseline-verified at merge `8cbf936a` twice** (RECON.14's check, plus a first-hand clean-worktree run at that commit while filing; found at RECON.14 while running closeout evidence). NOT the BUG-078 trap: that was `StopImpl`/dealloc `dispatch_sync` on `CommandQueue` (SIGTRAP); this is `StartImpl` at play-time (SIGABRT). Same family — AVAudioPlayerNode lifecycle under parallel scheduler load. The throw site is the SHIPPED local-file start path (and `resume()` carries a second, unproven `play()` site), so the app-facing form would be a hard crash — P2 by BUG-078's rationale. Detail below |
+| BUG-139 | P2 · OPEN — observed 2026-09-23, full stack captured, NOT diagnosed | audio.capture / test-infrastructure | **`SystemAudioCapture.teardownTapResources()` deadlocks against its own Core Audio IO callback, hanging the engine suite indefinitely.** Seen on run 2 of a 5× full-suite streak; run 1 passed. Main thread: `FerrofluidLiveAudioTests.testLiveDSPPipeline` → `stopCapture()` → `cleanup()` → `teardownTapResources()` → `_pthread_mutex_firstfit_lock_wait`, while a tap IO-callback thread holds the mutex in `caulk::semaphore::timed_wait`. Same ABBA shape as BUG-021, different lock and different path. |
+| BUG-103 | P2 · **RESOLVED 2026-09-23 (BUG103.1, `30e39b83`)** — the uncatchable raise is a Swift error now; the trigger itself stays unreproduced by design | audio.playback / test-infrastructure | **The parallel engine suite dies with an uncaught NSException from `-[AVAudioPlayerNode play]` — console: `com.apple.coreaudio.avfaudio: 'player did not see an IO cycle'` — thrown inside `LocalFilePlaybackProvider._startLocked()` on a racing-start test thread.** `play()` reports this state as an Objective-C exception, not a Swift error; the crashing tests drive `provider.start()` from raw `Thread.detachNewThread` threads (`try?` cannot catch an NSException), so the exception unwinds off the thread and aborts the entire test process — SIGABRT, no failing test line, same suite-level presentation as BUG-078. **Fourteen `.ips` on 2026-08-25 alone (11:19–17:05), every one the identical stack:** `_startLocked()` → `-[AVAudioPlayerNode play]` → `AVAudioPlayerNodeImpl::StartImpl` → `NSException`; throwers span `LocalFilePlaybackStartRaceTests.rescheduleRacingTeardown…` (11), `SessionLifecycleChurnTests.concurrentDoubleStart…` (2), and `SessionLifecycleChurnTests.completionCallbackVsStop…` (1). **Passes in isolation** (`swift test --filter SessionLifecycleChurn`), fires only under full-suite parallel load — and it is **pre-existing, baseline-verified at merge `8cbf936a` twice** (RECON.14's check, plus a first-hand clean-worktree run at that commit while filing; found at RECON.14 while running closeout evidence). NOT the BUG-078 trap: that was `StopImpl`/dealloc `dispatch_sync` on `CommandQueue` (SIGTRAP); this is `StartImpl` at play-time (SIGABRT). Same family — AVAudioPlayerNode lifecycle under parallel scheduler load. The throw site is the SHIPPED local-file start path (and `resume()` carries a second, unproven `play()` site), so the app-facing form would be a hard crash — P2 by BUG-078's rationale. Detail below |
 | BUG-091 | **P1** · instrumentation landed 2026-08-17; awaiting one reproduction | app.session / pipeline-wiring | **A single local file is selected, preparation succeeds, and NO PLAYBACK EVER STARTS — the session runs with every audio field exactly 0.0.** Matt, 2026-08-17. Measured on `2026-08-17T17-19-19Z`: 1262 frames over 84 s of render clock, and `playback_time_s` / `track_elapsed_s` / `accumulatedAudioTime` / `bass` / `mid` / `treble` / `pulse_amp01` / `beatPhase01` each hold **exactly one distinct value, 0.0**, for the whole session. Preparation is healthy — stem-cache hit, BeatGrid installed (94.1 BPM, 47 beats), plan built. **The discriminator is a diff against the working local-file session 1.5 h earlier (`16-19-13Z`, same file, same OS build):** the working run logs `WIRING: provider.start INSTANCE` and an AVAudioEngine node tap (`TAP_BUFFER: requested=1024 delivered=4410 → 10 Hz`) and NO process tap; the failed run has an identical preparation sequence with `provider.start` **absent**, an unexplained 8 s gap, and then `TAP: startCapture → createProcessTap` — the SYSTEM-AUDIO path — installed twice. `resetStemPipeline caller=other` has exactly one call site (`handleLocalFileReady`), so that function ran and cleared all three of its guards, then never reached the router start. **Root cause NOT asserted** (BUG-061's rule): the strongest candidate is the `catch` around `audioRouter.start(mode:.localFilePlayback)`, which logs to `os_log` only and calls `endSession()` → `currentSource = nil` → `startAudio()`'s LF.4 guard misses → the tap is installed and `stopInternal()` tears the provider down. **Unconfirmable from the artifacts: the app's `lfLogger` output is not retained** (`log show --predicate 'subsystem == "com.phosphene.app"'` over the window returns zero lines), which is itself the reason an 84 s silent session left no trace of its cause. Instrumentation for exactly that is now in (see below). Detail below |
 | BUG-085 | P1 · HANG.1–2 complete 2026-08-05; remains open | renderer / app.hang | **App intermittently hangs hard in `CAMetalLayer.nextDrawable`; window unresponsive, force-quit required.** The live stack proves a main-thread drawable request blocked at 0 % CPU after healthy frames, but the cause remains unknown; direct render-path leakage, the capture hook, scene-swap skip, inflight semaphore, GPU completion, display sleep, and occlusion have been ruled out. **HANG.1 instrumentation is merged to `main` via PR #37 (`c54a2e7c`)**. HANG.2 completed a full-track control plus a 10 min 36 s Witchlight soak with 34,811/34,811 drawables balanced and no stalls or imbalances, refuting a deterministic per-frame leak but not identifying the intermittent owner. **THE INSTRUMENTED CAPTURE NOW EXISTS (2026-08-05, session `2026-08-05T21-21-03Z`, Fractal Tree / Cherub Rock)** — and every lifecycle counter is BALANCED at the moment of the hang: `drawable=12045/12045`, `unique_presented=6012/6012`, `command_completed=6012/6012`, `failures=0`, `unpresented=0`, one request outstanding (`pending=frame:6013,site:mesh.descriptor`). The app held ZERO drawables and CoreAnimation still would not vend one, which independently confirms HANG.2's soak: there is no app-side leak, and the owner is outside the app. Two captures 98 s apart are byte-identical on those counters — a PERMANENT block, not a long stall. See the detail section. |
 | BUG-081 | P2 | app.hang | **3 instances now** (2026-08-03 ×1, 2026-08-04 ×2). | **App beachballed ~78 s into session `2026-08-03T22-54-06Z` and needed a force-quit; no `.ips` exists** (force-quit produces none) and `session.log` ends mid-normal-operation with no fatal. **Evidence-only — no root cause asserted.** What the capture DOES establish: the renderer was healthy to the last frame — steady 60 fps, Fractal Tree at **0.18 ms GPU against a 0.7 ms budget**, no degradation trend across 3756 frames; background ML load rising but modest (`stem_analyzer_ms` 0 → 3.4). **Ruled out by test:** FTR.2's shader overflowing the mesh primitive limit via a bad `branch_count` — no non-finite values in the capture and `branch_count` never exceeds 59 against the 63 ceiling. A frozen UI with a live render loop points away from the scene, but that is inference and BUG-061's rule forbids acting on it. **Same class as BUG-060** (force-quit hang, render loop died, no stack captured, never reproduced) — two instances now, both blocked on the same missing artifact. **Next evidence:** `sample UzumeApp 10 -file ~/Desktop/uzume-hang.txt` run DURING the beachball, before force-quitting |
@@ -317,6 +318,68 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
+
+**Severity:** P2 · **Domain tag:** audio.capture / test-infrastructure · **Status:** OPEN — observed once
+with a full stack captured. **Not diagnosed, no fix attempted.** Found while running BUG-103's 5×
+verification streak; unrelated to that fix (BUG103.1 touches `LocalFilePlaybackProvider` only —
+`SystemAudioCapture.swift` is not in its diff).
+
+#### Expected behavior
+
+`swift test --package-path UzumeEngine` terminates. A capture teardown completes or fails; it does not
+block forever.
+
+#### Actual behavior
+
+The suite hangs **indefinitely** — no timeout, no failing test, no crash report. Killed manually after
+12+ minutes on a run whose predecessor had completed in 259 s. Presents as a wedged CI/gate run rather
+than a failure, which is the worst shape: BUG-103's SIGABRT at least left an `.ips`.
+
+#### The stack (captured, `sample`)
+
+Main thread, blocked:
+
+```
+FerrofluidLiveAudioTests.testLiveDSPPipeline()   FerrofluidLiveAudioTests.swift:76
+  SystemAudioCapture.stopCapture()               SystemAudioCapture.swift:283
+    SystemAudioCapture.cleanup()                 SystemAudioCapture.swift:485
+      SystemAudioCapture.teardownTapResources()  SystemAudioCapture.swift:407
+        _pthread_mutex_firstfit_lock_wait
+          __psynch_mutexwait
+```
+
+Concurrently, a tap IO-callback thread sits in `caulk::semaphore::timed_wait` inside the
+`AudioTimeStamp`/`AudioBufferList` callback thunk — i.e. the thread that plausibly holds the mutex
+teardown is waiting on. **That pairing is the hypothesis, not a proven ordering**; nothing yet shows
+which lock each side holds.
+
+#### Suspected failure class
+
+`concurrency` — ABBA between the teardown path and the IO callback. Same *shape* as BUG-021 (which was
+the provider's `NSLock` vs. the `scheduleFile` completion callback) but a different lock, a different
+path, and the tap rather than the local-file provider. Related but distinct from BUG-058, which reaches
+`teardownTapResources()` via a device-change `performReinstall` rather than an ordinary `stopCapture()`.
+
+#### Reproduction
+
+Not reproduced on demand. Observed once: run 2 of 5 consecutive `swift test --package-path UzumeEngine`
+runs, run 1 green. `swift test --filter FerrofluidLiveAudio` in isolation was not attempted — doing that
+first is the obvious next step, since isolation-passes/parallel-hangs would match BUG-103's profile.
+
+#### Session artifacts
+
+`docs/diagnostics/BUG139_TEARDOWN_HANG_2026-09-23.txt` — the full `sample` output, committed so the
+stack survives the session. To capture a fresh one while hung: `sample <xctest-pid> 3`.
+
+#### Why it is filed rather than fixed
+
+Found during another defect's verification. Fixing an audio-teardown lock ordering on one observation,
+inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first.
+
+---
+
 
 ---
 
@@ -1463,7 +1526,7 @@ latency, compounds), D-059 (the scheduler's rationale), BUG-090 (the reasoning t
 declines).
 ### BUG-103 — Parallel engine suite dies on an uncaught NSException from `AVAudioPlayerNode.play()`: 'player did not see an IO cycle' (2026-08-25)
 
-**Severity:** P2 · **Domain tag:** audio.playback / test-infrastructure · **Status:** **RESOLVED 2026-09-23 (BUG103.1, `84b09189`)** — the uncatchable raise is now a Swift error. The *trigger* remains unreproduced by design (see §Fix); the *mechanism* that turned it into process death is closed and gated.
+**Severity:** P2 · **Domain tag:** audio.playback / test-infrastructure · **Status:** **RESOLVED 2026-09-23 (BUG103.1, `30e39b83`)** — the uncatchable raise is now a Swift error. The *trigger* remains unreproduced by design (see §Fix); the *mechanism* that turned it into process death is closed and gated.
 **Introduced:** Pre-existing — reproduces at merge `8cbf936a` with no other changes, verified twice independently on 2026-08-25: the RECON.14 baseline check, and a first-hand full-suite run in a clean worktree at that exact commit while filing this entry (crash at 17:00, `.ips` `…-170015`). First *filed* here; the class was previously visible only as BUG-078's SIGTRAP sibling.
 
 P2 by BUG-078's rationale: only ever observed killing the *test* process, but the throw site is the shipped local-file start path — `LocalFilePlaybackProvider._startLocked()` — so the app-facing form would be a hard crash during local-file playback start. Process impact is real even at P2: it takes down the whole parallel suite run (the regression gate) intermittently, presenting as a suite-level abort with **no failing test line**.
@@ -1533,7 +1596,7 @@ Three facts compose into the process kill:
 
 Contained to `LocalFilePlaybackProvider`'s start path, but the design needs care: any guard must respect the BUG-021 lock constraints (no AVFoundation teardown under the provider lock) and must not reintroduce the BUG-078 windows. Candidate directions, undesigned: check `engine.isRunning` after `engine.start()` and surface a Swift error; or bridge the `play()` call through an ObjC exception catcher so the failure is reportable. Test-side serialization of audio-hardware suites is a mitigation, not a fix — the contract gap ships.
 
-#### Fix (BUG103.1, 2026-09-23, `84b09189`)
+#### Fix (BUG103.1, 2026-09-23, `30e39b83`)
 
 **★ The filed candidate fix was measured and falsified.** The entry offered two undesigned
 directions; candidate (a) was "check `engine.isRunning` after `engine.start()` and surface a Swift
