@@ -110,6 +110,33 @@ would go red on `VolumetricLithograph.json` on day one, whose description correc
 an exemption the day it lands is worse than shipping none.
 
 ---
+### [dev-2026-09-23-145657] BUG-103 — a raising `play()` can no longer kill the process
+
+The parallel engine suite died intermittently with SIGABRT and **no failing test line** — fourteen
+crash reports in one day on 2026-08-25. The cause was not a test bug: `AVAudioPlayerNode.play()`
+reports some failures by **raising an Objective-C NSException**, Swift cannot catch one, and an
+NSException unwinding past a Swift frame calls `abort()`. The same throw site ships in the
+local-file start path, so the app-facing form was a hard crash when playback starts.
+
+**Now:** both `play()` call sites route through a new Objective-C shim
+(`Sources/ObjCShim/UZExceptionCatch.{h,m}` — the repo's only ObjC target, and the only way to catch
+an NSException from Swift) that converts a raise into a Swift error carrying the exception's name,
+reason and call stack. `start()` surfaces it as a thrown error and tears the half-built engine down
+after unlocking; `resume()` logs and carries on.
+
+**★ The obvious fix was falsified before it was written.** BUG-103 proposed checking
+`engine.isRunning` after `engine.start()`. Nine engine states were probed against AVFoundation
+first, and **every `isRunning == false` state returned from `play()` normally** — that guard would
+have covered a condition that never raises, and would have shipped looking like a fix. Only a
+detached player raises deterministically, which is what the new gate uses.
+
+The production trigger (`'player did not see an IO cycle'`) is a race against the HAL IO thread and
+is **still** unreproduced synchronously — deliberately so. This fix removes the trigger's ability to
+kill the process rather than claiming to explain it; if it fires in the wild it now arrives as a
+logged Swift error with a call stack.
+
+`PlayerNodeExceptionContractTests` (3 tests, deterministic, no sleeps). Full engine suite 5/5 green.
+`KNOWN_ISSUES.md` BUG-103 resolved; BUG-117's stale index row corrected in passing.
 
 ### [dev-2026-09-16-215311] BUG-137 — capture mode waits for a busy encoder instead of dropping frames
 

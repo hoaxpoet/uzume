@@ -1590,6 +1590,41 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG103.1 — a raising `play()` becomes a Swift error, not process death ✅ (2026-09-23)
+
+**Done-when:** the local-file start path cannot abort the process when `AVAudioPlayerNode.play()`
+raises; a deterministic gate proves it; the full parallel engine suite runs 5× clean with no new
+`.ips`.
+
+**Delivered.** `AVAudioPlayerNode.play()` reports some failures by raising an ObjC NSException.
+Swift cannot catch one, and a raise unwinding past a Swift frame calls `abort()` — which is why the
+parallel suite died with SIGABRT and **no failing test line** (fourteen crash reports on
+2026-08-25), and why the shipped local-file start path could hard-crash the app on playback start.
+
+Adds `Sources/ObjCShim/UZExceptionCatch.{h,m}` — the repo's **only** Objective-C target, justified
+solely by there being no pure-Swift way to catch an NSException. Both `play()` sites route through
+it. `_startLocked()` throws on a raise, carrying the half-built refs out on a private `StartAborted`
+so `start()` can tear down the still-running engine **after** unlocking — honouring BUG-021 (no
+AVFoundation teardown under the provider lock) without reopening BUG-078 (never leak a running
+engine). `resume()` is non-throwing public API, so it logs and carries on.
+
+**★ The filed candidate fix was falsified before any code was written.** BUG-103 offered "check
+`engine.isRunning` after `engine.start()`". Nine engine states were probed directly against
+AVFoundation first, and **every `isRunning == false` state returned from `play()` normally** — the
+guard would have covered a condition that never raises. It would have compiled, reviewed well, and
+left the contract gap shipping. Only the detached-player state raises deterministically, and that is
+what the gate uses.
+
+**The trigger remains unreproduced, deliberately.** `'player did not see an IO cycle'` is a race
+against the HAL IO thread; BUG-103's two candidate shapes are still unseparated. This increment
+removes the trigger's ability to kill the process rather than claiming to explain it. If it fires in
+the wild it now surfaces as a logged Swift error with a call stack — the instrument that was
+missing.
+
+**Gates:** `PlayerNodeExceptionContractTests` (3 tests, deterministic, no sleeps; negative control =
+the same unwrapped `play()` aborts). Full engine suite 5/5 green, no new `swiftpm-testing-helper`
+`.ips`. swiftlint `--strict` 0/555. Doc gates 16/16. No capability-registry row: this is audio
+playback, not renderer/harness/certification surface.
 ### Increment BUG138.3 — VolumetricLithograph declares what it reads; FeatureVector's binding index is right ✅ (2026-09-23)
 
 **Done-when:** the eight fields VL reads are declared and proven to fire; no `ARCHITECTURE.md` line
