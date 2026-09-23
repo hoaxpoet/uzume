@@ -1623,6 +1623,14 @@ from where it was observed (a test run), but the deadlocking code is the shipped
 run** — reintroducing the lock-held return wedged the suite, the exact signature BUG-139 produces.
 swiftlint `--strict` 0/555.
 
+**5× full-suite streak: 3 of 5 exit 0 — and the numbers that matter are clean.** No hang in any run
+(the defect's own signature), 0 new `.ips`, and this increment's gate green 5/5. The two reds were
+different wall-clock tests in unrelated subsystems: `PlayheadAnalysisClockTests` (exact delivered-tick
+count, 106 vs 100) and `StagedPersistenceTests` (cost-growth ratio, 2.32 vs < 2.0). Both added to
+KNOWN_ISSUES §Pre-existing Flakes, whose own note says untracked flakes get "re-litigated from
+scratch" every run. Not fixed here — the remedy for both is the established
+deterministic-over-budget-widening treatment (CLEAN.7.9–7.14), which is its own increment.
+
 ⚠ **Manual validation outstanding** — the shipped streaming path needs one app-level session plus an
 output-device change, which needs Screen Recording on real hardware. Structurally proven, not yet
 live-validated; tracked in the KNOWN_ISSUES entry's criteria as the one unticked box.
