@@ -271,13 +271,14 @@ Two gates, deliberately split (Matt, 2026-06-15). Know which one enforces what:
 - **SwiftLint** `--strict`.
 - **Doc gate** — `DocIntegrityTests`.
 - **Logic tests** — an explicit allow-list of GPU/fixture-free suites (Option A). It **under-covers by design**: a new pure-logic suite is not run until its filter is added to the workflow. (Filter strings match the test *type* name, e.g. `PresetScorer`, not the `@Suite("DefaultPresetScorer")` display string.)
-- **Lints** — `check_user_strings.sh` + `check_sample_rate_literals.sh`.
+- **Lints** — `check_user_strings.sh` + `check_sample_rate_literals.sh`. **Not** `check_blocking_calls_under_lock.sh` — see below.
 
 **Manual closeout — `Scripts/closeout_evidence.sh`, run at every increment closeout** (see CLAUDE.md §Increment Completion Protocol). This is the full gate and the *only* place these run:
 
 - The **full** engine SPM suite + the app `xcodebuild test` suite (incl. the ~74 Metal/GPU tests that `MTLCreateSystemDefaultDevice()` and so *fail, not skip,* without a GPU).
 - The **licensed-fixture** suites (BeatThis / tempo / live-drift / identity) — fixtures are gitignored, so CI can't run them.
 - The **perf-timing** assertions (single-sample wall-clock budgets that flake under shared-runner contention).
+- **`check_blocking_calls_under_lock.sh`** (BUG139.2) — *temporarily* closeout-only. It is red on `main` because it correctly flags the still-unfixed BUG-139 (`SystemAudioCapture.teardownTapResources` holds `stateLock` across `AudioDeviceStop`); the fix lives on the unmerged `claude/bug-139-tap-teardown`. Adding it to CI now would block every PR on someone else's in-flight branch. **When BUG139.1 merges, add it to the CI lints above** — closeout-stronger-than-CI is the safe direction of that asymmetry, but it is still an asymmetry and it is meant to close.
 
 CI green ≠ closeout green. CI is the fast push/PR signal; the closeout block is still mandatory before merge. The loud-on-missing-fixture rule (`BeatThisFixturePresenceGate`) stays loud **locally** — CI simply doesn't run those suites; it is never weakened into a silent skip.
 
