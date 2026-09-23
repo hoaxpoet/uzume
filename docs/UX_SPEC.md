@@ -188,17 +188,32 @@ UI response per case:
 
 ### 4.4 Spotify flow
 
-`SpotifyWebAPIConnector` is URL-paste only in v1. No OAuth. v1 supports **public playlists only** — private-playlist access requires user OAuth and is a v2 feature.
+**Rewritten at U.11a (2026-09-23).** This section described the pre-U.11 connector — client-credentials, "No OAuth", public playlists only — for as long as U.11 had been shipped. `RUNBOOK.md §Spotify connector setup` was correct throughout; this was the copy that drifted. Nothing gates prose, so nothing caught it (same failure family as BUG-138); it was found from outside, while the website was sourcing a docs page against both files.
 
-UI: single text field captioned "Paste a Spotify playlist link." Placeholder: `https://open.spotify.com/playlist/...`. Accepts any URL variant (`spotify:playlist:...`, `open.spotify.com/playlist/...`, with or without query params).
+**The connector is user-level OAuth.** `SpotifyOAuthPlaylistConnector` wraps `SpotifyWebAPIConnector(tokenProvider:)` with a PKCE token provider (`ConnectorPickerView.swift`). `SpotifyOAuthTokenProvider` runs Authorization Code + PKCE with scopes `playlist-read-private playlist-read-collaborative`, redirecting to `uzume://spotify-callback` (routed in `UzumeApp.swift`); the refresh token lives in the Keychain and later launches refresh silently. **Private and collaborative playlists the logged-in user can reach are therefore in scope** — the "public playlists only, v2 feature" line this section used to carry was never true after U.11. Developer setup (client ID in the gitignored `Uzume.local.xcconfig`) is in `RUNBOOK.md`, which stays canonical for it.
 
-Validation on paste:
+UI: single text field captioned "Paste a Spotify playlist link." Placeholder: `https://open.spotify.com/playlist/...`. Accepts any URL variant (`spotify:playlist:...`, `open.spotify.com/playlist/...`, with or without query params). The paste field is focused on appear.
 
-- Valid playlist URL → "Found [Playlist Name] — [N] tracks" preview, `Continue` button
-- Valid track/album/artist URL (not playlist) → "That's a [track/album/artist], not a playlist. Uzume needs a playlist URL."
-- Invalid → "That doesn't look like a Spotify playlist link."
+Validation on paste, one state each (`SpotifyConnectionViewModel.State`):
 
-Rate-limit handling: Spotify Web API has client-credentials rate limits. If hit during `.connecting`, show "Spotify is being slow — still trying" (auto-retry backoff `[2 s, 5 s, 15 s]`). If three attempts fail: "Couldn't reach Spotify. Check your network or try a different source."
+- Valid playlist URL → a preview card, `Continue` button
+- Valid track/album/artist URL (not playlist) → per-kind copy: "That's a [track/album/artist], not a playlist…"
+- Malformed → "That doesn't look like a Spotify playlist link."
+- Playlist not reachable → "Uzume couldn't find that playlist. It may be private or deleted."
+- Playlist private to someone else → "That playlist is private. Paste a link to a public playlist."
+
+Login, when the user is not yet authenticated (U.11):
+
+- `.requiresLogin` → "Log in to Spotify" headline, the body explaining the login is saved, and a **Log in with Spotify** button; tapping opens the system browser
+- `.waitingForCallback` → "Waiting for Spotify…" and a spinner until the redirect lands
+- `.authFailure` → "Couldn't connect to Spotify. Check your configuration and try again." A DEBUG build substitutes the missing-client-ID instruction instead
+
+Rate-limit handling: the Web API rate-limits the user token. If hit during `.connecting`, show "Spotify is being slow — still trying" plus "attempt N of 3" (auto-retry backoff `[2 s, 5 s, 15 s]`). If three attempts fail: "Couldn't reach Spotify. Check your network or try a different source."
+
+**Two things this section promised that the build does not do.** Recorded rather than deleted, because both are product intent and neither is mine to drop silently:
+
+1. **The preview card names nothing.** This section specified "Found [Playlist Name] — [N] tracks"; `previewCard` renders "Spotify playlist recognized" above the playlist **ID** in monospace. The user confirms they pasted the right link by reading a base-62 string, which is the opposite of the intent. The name and count are one API call the connector is about to make anyway.
+2. **There is no logout.** Keychain-stored credentials with no UI to clear them; the only route is Keychain Access (`io.uzume.spotify`). `RUNBOOK.md` records this as a developer workaround, which is not the same as a user-facing decision.
 
 ### 4.5 Cancel at any point
 

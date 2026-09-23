@@ -1590,6 +1590,36 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment U.11a — UX_SPEC §4.4 describes the connector U.11 shipped ✅ (2026-09-23)
+
+**Done-when:** §4.4 states the OAuth connector that is in the build, and the divergences it
+cannot state as settled are recorded rather than deleted.
+
+**Delivered.** §4.4 opened with *"`SpotifyWebAPIConnector` is URL-paste only in v1. No OAuth. v1
+supports **public playlists only** — private-playlist access requires user OAuth and is a v2
+feature."* Every clause of that was false from the moment U.11 landed. The build wires
+`SpotifyOAuthPlaylistConnector` around `SpotifyWebAPIConnector(tokenProvider: oauth)`,
+`SpotifyOAuthTokenProvider` runs Authorization Code + PKCE with scopes `playlist-read-private
+playlist-read-collaborative` against `uzume://spotify-callback`, and the refresh token sits in the
+Keychain for silent reuse. §4.4 now says so, adds the three login states the section never had
+(`.requiresLogin`, `.waitingForCallback`, `.authFailure`) and the two reachability states
+(`.notFound`, `.privatePlaylist`), and reframes the rate-limit note from client-credentials to the
+user token — the copy and the `[2 s, 5 s, 15 s]` backoff were correct and are unchanged.
+
+**Two spec promises the build does not keep, recorded in §4.4 rather than quietly dropped.** The
+preview card was specified as *"Found [Playlist Name] — [N] tracks"* and renders "Spotify playlist
+recognized" above the playlist **ID** in monospace — the user confirms their paste by reading a
+base-62 string. And there is no logout: Keychain credentials with no UI to clear them, the only
+route being Keychain Access. `RUNBOOK.md` calls that a developer workaround, which is not the same
+as a product decision. Both are Matt's to rule on; neither is invented here.
+
+**How it was found, and the part worth keeping.** Not by a gate — nothing reads prose, which is
+BUG-138's finding restated in a different doc. It surfaced from *outside the repo*: the website
+was writing a Spotify sentence and had to source it against both `UX_SPEC.md` and `RUNBOOK.md`,
+which disagreed. `RUNBOOK.md` was current throughout. **A second reader of the same fact is what
+caught this**, and the cheap version of that is keeping the site's claims table sourced to specific
+sections — it reads these docs adversarially every time it publishes a product sentence.
+
 ### Increment BUG103.1 — a raising `play()` becomes a Swift error, not process death ✅ (2026-09-23)
 
 **Done-when:** the local-file start path cannot abort the process when `AVAudioPlayerNode.play()`
