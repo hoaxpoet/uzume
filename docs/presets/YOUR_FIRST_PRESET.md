@@ -1,4 +1,4 @@
-# Your first preset — a complete working pair in ~60 lines
+# Your first scene — a complete working pair in ~60 lines
 
 The fastest path from zero to pixels-moving-with-music (PUB.7). Copy both
 files into `~/Library/Application Support/Uzume/Presets/` while the app
@@ -6,7 +6,7 @@ runs — hot-reload compiles every save and swaps it in live. Jargon:
 [docs/GLOSSARY.md](../GLOSSARY.md); when it lands in the repo, follow
 [NEW_PRESET_CHECKLIST.md](NEW_PRESET_CHECKLIST.md).
 
-The two smallest shipped presets, `Plasma` and `Waveform`
+The two smallest shipped scenes, `Plasma` and `Waveform`
 (`UzumeEngine/Sources/Presets/Shaders/`, 55 and 101 lines), are real
 worked examples of this exact shape; `Skein` and `Nacre` show the
 full-featured registers.
@@ -73,7 +73,7 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
 
 ## Run it
 
-1. Launch Uzume → Settings → Visuals → **Show uncertified presets**.
+1. Launch Uzume → Settings → Visuals → **Show uncertified scenes**.
 2. File → Open Local File (⌘O) — no streaming account needed.
 3. Cycle to *Halo* (arrow keys). Edit the `.metal`, save — it hot-swaps.
    A broken save toasts and keeps the last-good version

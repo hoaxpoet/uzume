@@ -603,7 +603,7 @@ extension VisualizerEngine {
             familyBoosts: adaptationFields.familyBoosts,
             temporarilyExcludedFamilies: adaptationFields.temporarilyExcludedFamilies,
             sessionExcludedPresets: adaptationFields.sessionExcludedPresets,
-            // Settings → Visuals → "Show uncertified presets" must propagate here
+            // Settings → Visuals → "Show uncertified scenes" must propagate here
             // or Shift+→ (presetNudge) produces "no eligible preset found" with
             // a fully-uncertified catalog. Other context builders (lines 98, 233)
             // already pass this; this one was missing.

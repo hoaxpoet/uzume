@@ -14,9 +14,20 @@ longer published, and four captions this document never adjudicated were live. �
 **uzume.io as read on 2026-09-22**, not the prompt's snapshot. Verdicts against the code are
 unchanged.
 
+**Vocabulary (D-250).** This file says *preset*, not *scene*, and that is deliberate: it is a
+renderer contract in which `scene` already means the 3D scene (`SceneUniforms`, camera, lights).
+It is listed in [`VOCABULARY.md`](VOCABULARY.md) §1 alongside `ARCHITECTURE.md` and
+`SHADER_CRAFT.md` for that reason. Prose a reader meets elsewhere — the site, the guides, the
+app — says *scene*.
+
 This document is the source of truth for audio claims made about Uzume anywhere — including
 the public site (`hoaxpoet/uzume-site`), which owns its own copy and wording. Where this
 document and a caption disagree, this document describes what the engine does.
+
+**The Ferrofluid Ocean caption §4.1 adjudicates was corrected on the site on 2026-09-22**
+(uzume-site #52) to *"The music's pulse heaves the spikes, its intensity sets the swell beneath
+them, and the vocal line moves the aurora's color."* §4.1 keeps the original sentence and its
+verdict, because the reasoning is what makes the replacement checkable.
 
 ---
 

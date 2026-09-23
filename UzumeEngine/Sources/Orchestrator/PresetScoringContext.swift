@@ -113,7 +113,7 @@ public struct PresetScoringContext: Sendable {
 
     /// When false (default), the scorer hard-excludes presets where `certified == false`.
     ///
-    /// Set to true via Settings → Visuals → "Show uncertified presets" to reveal
+    /// Set to true via Settings → Visuals → "Show uncertified scenes" to reveal
     /// in-progress presets for testing. Defaults to false for backward-compat (D-053).
     public let includeUncertifiedPresets: Bool
 

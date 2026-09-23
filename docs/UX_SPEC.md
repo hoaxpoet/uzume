@@ -4,7 +4,7 @@
 
 **Scope:** What the user sees, hears (via UI sound), reads, and does. Permissions, onboarding, session flow, recovery flows, error handling, settings, accessibility.
 
-**Out of scope:** Audio pipeline internals, render pipeline internals, preset authoring (see `SHADER_CRAFT.md`), orchestrator scoring.
+**Out of scope:** Audio pipeline internals, render pipeline internals, scene authoring (see `SHADER_CRAFT.md`), orchestrator scoring.
 
 **Changes from v0.1:** Persona model simplified from three roles to two (Curator + Active Viewer) to reflect the real use-case collapse. Preparation-time tolerance raised from 30 seconds to 2 minutes given delightful performance as the trade-off. New `§8 Recovery & Adaptation Flows` addresses mid-session disappointment and pre-play plan review — previously only the happy path was specified. `§7.9 Dedicated Output Display` elevates the Host-with-external-display scenario to first-class. "Increment" spelled out throughout (was abbreviated "Inc" in v0.1).
 
@@ -32,9 +32,9 @@ The person invited by the Curator to experience the playlist and visuals. They w
 
 **What they need:** continuous, compelling visuals that feel synchronized to the music. That's the entire contract.
 
-**What they will tolerate:** occasional subtle transitions, occasional presets they don't personally love, brief moments of reduced intensity during quiet passages.
+**What they will tolerate:** occasional subtle transitions, occasional scenes they don't personally love, brief moments of reduced intensity during quiet passages.
 
-**What they will not tolerate:** visible error messages in their line of sight, frame stutter or obviously dropped frames, cheap-looking shaders that read as "from a 2005 screensaver," audio/visual desynchronization, black frames, long gaps between presets, uninspired or repetitive preset sequences.
+**What they will not tolerate:** visible error messages in their line of sight, frame stutter or obviously dropped frames, cheap-looking shaders that read as "from a 2005 screensaver," audio/visual desynchronization, black frames, long gaps between scenes, uninspired or repetitive scene sequences.
 
 **They do not interact with the app.** They don't press keys, don't see the debug overlay, don't see error toasts (Curator sees toasts; viewers don't). Their only channel is their reaction: talking, saying "this is boring," or being visibly dazzled.
 
@@ -59,7 +59,7 @@ The person invited by the Curator to experience the playlist and visuals. They w
 | `.connecting` | `ConnectingView` | Per-connector spinner with honest copy ("Asking Apple Music for your playlist…") | Cancel |
 | `.preparing` | `PreparationProgressView` | Track list with per-track status + aggregate progress + partial-ready CTA | Cancel, "Start now" (when progressive-ready), retry individual track |
 | `.ready` | `ReadyView` (streaming) / `LocalFileCountdownView` (local file) | The cave from `.preparing`, fully open, behind both (§6). Streaming: "Ready. Press play in [Apple Music / Spotify]." Local file: a 3-2-1 count over silence, then Uzume starts the audio itself (§6.2). | Streaming: "Begin now", end session; first audio advances on its own. Local file: end session (cancels the count). |
-| `.playing` | `PlaybackView` | Visuals full-bleed + auto-hiding overlay chrome + hidden recovery shortcuts | Toggle overlay, fullscreen, feedback nudges, preset nudges, re-plan, end session |
+| `.playing` | `PlaybackView` | Visuals full-bleed + auto-hiding overlay chrome + hidden recovery shortcuts | Toggle overlay, fullscreen, feedback nudges, scene nudges, re-plan, end session |
 | `.ended` | `EndedView` | Summary card: track count played, session duration, "Open sessions folder" | Start new session, quit |
 
 **Hard rule:** no state ever shows a solid black screen without a legible message. `PlaybackView` is the only full-bleed state; its minimum floor on silence is the idle visualizer described in `§7.5`.
@@ -253,7 +253,7 @@ replaces the whole body for the catastrophic cases; **Cancel**, the view-toggle 
 (Increment 6.1 for Start now) — the cave may signal readiness, it never becomes the control.
 
 **Neither view exposes upcoming content** (`COMPONENTS.md`). The line is *heard vs. will-do*:
-both may show what Uzume heard in music the listener chose; neither shows which preset a track
+both may show what Uzume heard in music the listener chose; neither shows which scene a track
 gets, the emotional arc, or what is next.
 
 ### 5.3 Track status vocabulary
@@ -329,7 +329,7 @@ doing (Matt's M7: a text halo is not contrast):
 
 **Headline:** "Ready." **Subtext:** "Press play in [Apple Music / Spotify]." Ad-hoc and any
 sourceless session fall back to "your music app". **Plan summary** when a plan exists: "Planned
-[N] tracks, about [M] min" — a count and a length, never which preset or what comes next (D-238's
+[N] tracks, about [M] min" — a count and a length, never which scene or what comes next (D-238's
 surprise model).
 
 **Two bordered buttons of equal weight:** `End session` and `Begin now` (`uzume.ready.beginNow`,
@@ -379,7 +379,7 @@ On entry to `.playing`, `PlaybackArrivalOverlay` (PlaybackView Layer 7) runs `Ar
 over the already-live `MetalView`: the real `ApertureScene` scaled modestly toward its own centre,
 under a hundred streaks racing outward from the opening's centre with near/far parallax — what
 reads as the viewer moving in, where a plain zoom read as the light coming out — then a whiteout
-(2.7 s push), a 0.52 s hold filled with light, and a 0.6 s fade uncovering the first preset. Same
+(2.7 s push), a 0.52 s hold filled with light, and a 0.6 s fade uncovering the first scene. Same
 push for both sources; the trigger is the only difference. Flash-gated in the D-157 idiom
 (maxΔ/frame 0.0174, gate 0.05). Reduced motion: a still hold, then the same fade.
 
@@ -392,7 +392,7 @@ push for both sources; the trigger is the only difference. Flash-gated in the D-
 Three:
 
 1. **Render surface (full-bleed):** the `MetalView` hosting `VisualizerEngine`.
-2. **Auto-hiding overlay chrome (top-left + top-right):** track info, preset name, progress within session, mood readout, settings gear.
+2. **Auto-hiding overlay chrome (top-left + top-right):** track info, scene name, progress within session, mood readout, settings gear.
 3. **Error/status toast (bottom-right):** degradation messages only (audio silence detection, preview fallback, etc.). Only visible to the Curator, by convention — party setups put the output on a second display where viewers sit, leaving the primary display (with toasts) for the Curator.
 
 ### 7.2 Overlay chrome behavior
@@ -413,10 +413,10 @@ State changes take the design system's standard 240 ms exponential ease-out (`Uz
 reduced motion crossfades. The render surface is unmodified during fades — overlay chrome is a
 separate compositing layer.
 
-**Minimum contrast:** overlay text must achieve ≥ 4.5:1 against worst-case preset frame. Because
-presets are unpredictable, chrome sits on `PerformanceBackdrop` — `.ultraThinMaterial` under a
+**Minimum contrast:** overlay text must achieve ≥ 4.5:1 against worst-case scene frame. Because
+scenes are unpredictable, chrome sits on `PerformanceBackdrop` — `.ultraThinMaterial` under a
 **measured 45 %** black tint (`UzumeAppColor.Performance.backdropTint`), certified against real
-preset frames by `PresetContrastCertificationTests`.
+scene frames by `PresetContrastCertificationTests`.
 
 ### 7.3 Overlay content
 
@@ -424,8 +424,8 @@ preset frames by `PresetContrastCertificationTests`.
 is on (default on; toggled from the cluster or Settings; persisted). It says only what is playing
 now (D-238):
 - Track title, artist, artwork when the source has it
-- Currently playing preset name (subdued)
-- Never the next track, the next preset, a transition, or the shape of the plan. The
+- Currently playing scene name (subdued)
+- Never the next track, the next scene, a transition, or the shape of the plan. The
   "Planned / Reactive" orchestrator pill was removed at DS.6 (D-241) for that reason; "Adapting"
   was never wired.
 
@@ -444,14 +444,14 @@ Every control declares a VoiceOver label and a hint that says what it does now.
 
 ### 7.4 Live adaptation controls (keyboard-only, invisible to viewers)
 
-During `.playing`, the Curator can steer the experience without the Active Viewer noticing. The keystrokes below are silent by default (no toast visible to viewers) and take effect at the next natural boundary, not mid-preset.
+During `.playing`, the Curator can steer the experience without the Active Viewer noticing. The keystrokes below are silent by default (no toast visible to viewers) and take effect at the next natural boundary, not mid-scene.
 
 | Key | Action | Latency |
 |---|---|---|
-| `+` | More like this — boost current preset family weight; extend current preset by 30 s | Applies at next planned transition |
-| `-` | Less like this — transition out early; exclude this preset family for 10 minutes | Next structural boundary or 8 s, whichever first |
-| `.` | Reshuffle upcoming — re-roll the plan for not-yet-played tracks | Immediate (plan updates, current preset unaffected) |
-| `←` / `→` | Preset nudge — transition to a different preset at next structural boundary | Next structural boundary |
+| `+` | More like this — boost current scene family weight; extend current scene by 30 s | Applies at next planned transition |
+| `-` | Less like this — transition out early; exclude this scene family for 10 minutes | Next structural boundary or 8 s, whichever first |
+| `.` | Reshuffle upcoming — re-roll the plan for not-yet-played tracks | Immediate (plan updates, current scene unaffected) |
+| `←` / `→` | Scene nudge — transition to a different scene at next structural boundary | Next structural boundary |
 | `Shift+←` / `Shift+→` | Force-immediate nudge — cut now, accepting viewer disruption | Immediate |
 | `?` | Plan preview overlay — shows current position + upcoming tracks | Immediate |
 | `⌘R` | Re-plan session — see §8.3 | <1 s |
@@ -463,7 +463,7 @@ Settings → Visuals → "Show live-adaptation toasts" toggle surfaces a brief C
 
 ### 7.5 Idle-visualizer floor
 
-During `.silent` / `.suspect` / `.recovering` states from `AudioInputRouter`, the preset continues rendering but `FeatureVector` values fall to their warmup-fallback baseline. `SHADER_CRAFT.md §Noise layering` prescribes that every preset must stay visually alive at silence (non-black, non-static).
+During `.silent` / `.suspect` / `.recovering` states from `AudioInputRouter`, the scene continues rendering but `FeatureVector` values fall to their warmup-fallback baseline. `SHADER_CRAFT.md §Noise layering` prescribes that every scene must stay visually alive at silence (non-black, non-static).
 
 Additionally: a subtle "Listening…" badge appears top-center during prolonged silence (>3 s). Disappears on signal return.
 
@@ -527,7 +527,7 @@ For parties where the Curator wants a dedicated always-visible control surface. 
 Structure:
 
 - **Output window** — fullscreen on chosen display, visuals only, no chrome, no track info, no toasts. Optimized for viewer immersion.
-- **Controller window** — on Curator's display (laptop or Sidecar'd iPad), resizable, shows compact session state: current track, current preset, session progress, mood readout, debug overlay if enabled. Live-adaptation controls here render as buttons as well as keyboard shortcuts, so a Curator using an iPad via Sidecar has tap targets.
+- **Controller window** — on Curator's display (laptop or Sidecar'd iPad), resizable, shows compact session state: current track, current scene, session progress, mood readout, debug overlay if enabled. Live-adaptation controls here render as buttons as well as keyboard shortcuts, so a Curator using an iPad via Sidecar has tap targets.
 
 Implementation path: `NSScene` multi-window in SwiftUI with a shared `VisualizerEngine` rendering into both windows' drawables (output at full-bleed resolution, controller at lower resolution in a picture-in-picture pane). Non-trivial; earns its own increment (Increment U.11 or separate).
 
@@ -565,15 +565,15 @@ The Curator may need to intervene at three levels of cost, each with different l
 
 | Layer | When | Cost | Visible to viewer |
 |---|---|---|---|
-| **Feedback nudge** (§8.2) | Current preset isn't landing; mood shift needed | <1 s, next transition | No |
+| **Feedback nudge** (§8.2) | Current scene isn't landing; mood shift needed | <1 s, next transition | No |
 | **Plan revision** (§8.3) | Upcoming plan doesn't look right | <1 s, applies at next track | Minimal (next track looks different than "expected") |
 | **Hard reset** (§8.4) | Something is fundamentally wrong | 1 s – 2 minutes depending on depth | Yes — visuals pause briefly or switch to reactive mode |
 
 ### 8.2 Feedback nudges (in-flight steering)
 
-Already covered in §7.4. Restated here as the recovery entry point: when the Curator feels the current preset isn't working, they press `-`. The current preset transitions out at the next structural boundary (typically within 4–8 seconds), its family is excluded for 10 minutes, and the orchestrator re-ranks the next pick.
+Already covered in §7.4. Restated here as the recovery entry point: when the Curator feels the current scene isn't working, they press `-`. The current scene transitions out at the next structural boundary (typically within 4–8 seconds), its family is excluded for 10 minutes, and the orchestrator re-ranks the next pick.
 
-If the Curator loves the current preset, they press `+`: the preset is extended, its family weight boosted, and subsequent plan picks tilt toward it.
+If the Curator loves the current scene, they press `+`: the scene is extended, its family weight boosted, and subsequent plan picks tilt toward it.
 
 Feedback is **silent by default**. Active Viewers don't notice. Post-v1, repeated nudge patterns feed adaptive learning.
 
@@ -585,15 +585,15 @@ This is not a forced prompt — it's a hint. Dismisses after 5 seconds. Once per
 
 ### 8.3 Plan revision (pre-play and mid-session)
 
-*The pre-play plan preview and its mid-session overlay were removed at DS.5 (D-240): showing which preset each track will get is the "emotional arc across the session" D-238's surprise model forbids. The re-plan (`R`) and reshuffle shortcuts in §7.7 remain; what follows is the pre-DS.5 design of the overlay, kept for the record.* Curator could:
+*The pre-play plan preview and its mid-session overlay were removed at DS.5 (D-240): showing which scene each track will get is the "emotional arc across the session" D-238's surprise model forbids. The re-plan (`R`) and reshuffle shortcuts in §7.7 remain; what follows is the pre-DS.5 design of the overlay, kept for the record.* Curator could:
 
-- Tap any upcoming track row to see its preset's 10-second preview (on the controller window, if in Mode B, or overlaid at reduced opacity if Mode A)
-- Long-press any upcoming row to swap presets
+- Tap any upcoming track row to see its scene's 10-second preview (on the controller window, if in Mode B, or overlaid at reduced opacity if Mode A)
+- Long-press any upcoming row to swap scenes
 - Tap "Regenerate Plan" to re-roll upcoming tracks with a different random seed (already-played tracks locked)
 
 **`⌘R` — Re-plan session.** Shortcut for "Regenerate Plan" without opening the overlay. Re-runs `DefaultSessionPlanner.plan()` on unplayed tracks with a different random seed. Preserves already-played history and manually-locked picks. Cost: <1 second.
 
-Current preset continues until its next natural transition, at which point the new plan takes over. No visible seam for viewers.
+Current scene continues until its next natural transition, at which point the new plan takes over. No visible seam for viewers.
 
 ### 8.4 Hard reset paths
 
@@ -620,15 +620,15 @@ Returns to `.idle`. Typical use: change playlist, change source, or abandon the 
 
 Before pressing play in the music app, the Curator may want to change their mind about the plan. `ReadyView` (§6.1) supports this without needing to "reset":
 
-- ~~**Preview the plan** — see what's coming, lock specific presets, regenerate unlocked ones~~ *(removed at DS.5, D-240 — forbidden by D-238's surprise model)*
+- ~~**Preview the plan** — see what's coming, lock specific scenes, regenerate unlocked ones~~ *(removed at DS.5, D-240 — forbidden by D-238's surprise model)*
 - **"Not this playlist after all"** — back button returns to `ConnectorPickerView` without discarding the prepared cache. If the user comes back with a different playlist, any overlapping tracks reuse their cached analysis.
-- ~~**"Let me just preview"** — tap any track in the plan preview to auto-play a 10-second preset demo~~ *(removed with the plan preview)*
+- ~~**"Let me just preview"** — tap any track in the plan preview to auto-play a 10-second scene demo~~ *(removed with the plan preview)*
 
 v0.1's `ReadyView` only had pressure forward (press play, we're ready). v0.2 supports both directions.
 
 ### 8.6 Post-session reflection
 
-After `.ended`, `EndedView` shows a compact session summary: which presets played for which tracks, which were nudged, how many times the plan was regenerated. No data leaves the device (per D-003), but the session recorder has already logged everything to `~/Documents/uzume_sessions/`. A small "What happened this session?" link opens that folder with the specific session selected.
+After `.ended`, `EndedView` shows a compact session summary: which scenes played for which tracks, which were nudged, how many times the plan was regenerated. No data leaves the device (per D-003), but the session recorder has already logged everything to `~/Documents/uzume_sessions/`. A small "What happened this session?" link opens that folder with the specific session selected.
 
 This matters for Curators who want to tune their preferences over time — or for developers troubleshooting a session that didn't land.
 
@@ -737,7 +737,7 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 - **Quality ceiling** — Auto / Performance (disables SSGI, reduces mesh density) / Balanced (default) / Ultra (ignores frame-budget governor; for recording/capture)
 - **Output display** — picker listing all connected displays. Selecting moves Uzume there. (§7.9 Mode A)
 - **Reduced motion** — Matches system (default) / Always on / Always off
-- **Preset family blocklist** — multi-select; excludes families the user doesn't enjoy. This is the only catalog-narrowing control. There is deliberately **no "Include Milkdrop presets" switch** — Milkdrop-inspired presets are simply Uzume presets (D-119 / D-215 §13.5, Matt 2026-08-07); the dead "Coming in a future update" row was removed at MD.0.
+- **Scene family blocklist** — multi-select; excludes families the user doesn't enjoy. This is the only catalog-narrowing control. There is deliberately **no "Include Milkdrop scenes" switch** — Milkdrop-inspired scenes are simply Uzume scenes (D-119 / D-215 §13.5, Matt 2026-08-07); the dead "Coming in a future update" row was removed at MD.0.
 - **Show live-adaptation toasts** — Off (default) / On. Brief Curator-only acknowledgments on `+` / `-` / `⌘R` (per §7.4)
 - **Adaptive learning from feedback** — Off (default, post-v1) / On. Uses nudge history to tune weights.
 
@@ -758,7 +758,7 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 
 ### 10.5 Persistence
 
-All settings persist in `UserDefaults` keyed `"uzume.settings.<group>.<key>"`. Changes take effect immediately — no "Apply" button. Changing quality ceiling mid-session does not interrupt playback; it applies to the next preset transition.
+All settings persist in `UserDefaults` keyed `"uzume.settings.<group>.<key>"`. Changes take effect immediately — no "Apply" button. Changing quality ceiling mid-session does not interrupt playback; it applies to the next scene transition.
 
 ---
 
@@ -774,7 +774,7 @@ Contents per `RUNBOOK §Debug Overlay Fields` — retained as-is:
 - Sample rate
 - Current track
 - Preparation state
-- Current preset
+- Current scene
 - Frame time / dropped-frame warning
 - `InputLevelMonitor` signal quality (green/yellow/red)
 - Orchestrator state (Planned / Reactive / Adapting)
@@ -787,7 +787,7 @@ Position: bottom-left of `PlaybackView` (Curator's display only in Mode B). Opac
 
 ### 12.1 Contrast
 
-Overlay text: ≥ 4.5:1 against worst-case frame. Implemented via blurred dark backdrop (§7.2). Measured against the three regression fixtures from `Increment 5.2` (silence / steady mid-energy / beat-heavy) for every preset; failures gate preset certification.
+Overlay text: ≥ 4.5:1 against worst-case frame. Implemented via blurred dark backdrop (§7.2). Measured against the three regression fixtures from `Increment 5.2` (silence / steady mid-energy / beat-heavy) for every scene; failures gate scene certification.
 
 ### 12.2 Motion
 
@@ -797,7 +797,7 @@ Per `§7.10`. System `reduceMotion` flag respected. Forced setting in `§10.2`.
 
 Per `§3.3`. One-time notice. Reduced-motion mode caps beat-pulse amplitude.
 
-In addition: the orchestrator's family-repeat penalty (Increment 4.1) and fatigue cooldowns (Increment 4.0) inherently limit how often a preset with high motion intensity can recur. A future stricter mode could cap `motion_intensity > 0.8` presets entirely — tracked as a potential Increment U.9 follow-up.
+In addition: the orchestrator's family-repeat penalty (Increment 4.1) and fatigue cooldowns (Increment 4.0) inherently limit how often a scene with high motion intensity can recur. A future stricter mode could cap `motion_intensity > 0.8` scenes entirely — tracked as a potential Increment U.9 follow-up.
 
 ### 12.4 VoiceOver
 
@@ -887,7 +887,7 @@ No view file exceeds 200 lines. ViewModels are `@MainActor` subclasses of `Obser
 | U.2 | Permission onboarding | Permission flow working + 4 tests |
 | U.3 | Playlist connector picker | Three connector flows end-to-end |
 | U.4 | Preparation progress UI | Per-track status + `PreparationProgressPublishing` protocol |
-| U.5 | Ready + plan preview | `PlanPreviewView` (deleted at DS.5, D-240), first-audio autodetect, preset-preview loop |
+| U.5 | Ready + plan preview | `PlanPreviewView` (deleted at DS.5, D-240), first-audio autodetect, scene-preview loop |
 | U.6 | In-session chrome | Auto-hide chrome + keyboard shortcuts (including live-adaptation) |
 | U.7 | Error taxonomy + toast system | Every row in §9 table has `UserFacingError` case |
 | U.8 | Settings panel | All four settings groups persisted, including Output Display picker |
@@ -960,7 +960,7 @@ Items that need a decision before Increment U.1 ships:
 4. **Photosensitivity notice: mandatory first-run or skippable?** Proposed mandatory (dismissible but shown). Legal/ethical floor.
 5. **Do we ship `SettingsView` in v1 at all?** Proposed yes — at minimum the diagnostics section + Output Display picker. Full settings can incrementalize.
 6. **Two-window controller + output (Mode B) in v1?** Proposed deferred to v2 (Increment U.11). Single-window drag-to-display (Mode A) covers the common Host case. Deferral risk: Curators with one-Mac-one-TV setups will want it sooner than v2.
-7. **Plan preview preset-demo playback: in `ReadyView` background or a separate demo window?** Proposed background (the preset takes over the 0.3×-opacity `ReadyView` backdrop for 10 seconds on row-tap). Alternative is a small PiP demo pane. Background is simpler; PiP is more discoverable.
+7. **Plan preview scene-demo playback: in `ReadyView` background or a separate demo window?** Proposed background (the scene takes over the 0.3×-opacity `ReadyView` backdrop for 10 seconds on row-tap). Alternative is a small PiP demo pane. Background is simpler; PiP is more discoverable.
 8. **Adaptive learning from feedback: opt-in or opt-out in v1 when it ships post-v1?** Proposed opt-in (off by default). Privacy stance preserves D-003 ("local-only processing") but users must know it exists to benefit.
 
 ---
@@ -1058,7 +1058,7 @@ As a physical object: a Braun audio component redesigned today — precise, purp
 
 **PreparationProgressView:** Three-region layout — playlist header (compact), track list (scrollable), action bar (anchored bottom). Track rows "light up" in teal as tracks become ready. "Start now" appears in coral at the progressive-readiness threshold — it should feel like permission being granted.
 
-**ReadyView:** Full-bleed, first-track preset at very low opacity. Headline: "Ready." — one word, maximum size, Clash Display. Soft purple pulse on the window border (breathing animation, not glow). "Press play in [source app]" is the only instruction.
+**ReadyView:** Full-bleed, first-track scene at very low opacity. Headline: "Ready." — one word, maximum size, Clash Display. Soft purple pulse on the window border (breathing animation, not glow). "Press play in [source app]" is the only instruction.
 
 **PlaybackView:** The UI is not there. Overlay chrome is ghost — appears on motion, fades after 3s. Track info uses no borders — blur-and-tint backdrop only. Error toasts are small, bottom-right, never alarming.
 

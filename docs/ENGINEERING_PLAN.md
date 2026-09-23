@@ -1702,6 +1702,83 @@ published scenes whose behaviour is identical and zero-latency on streaming.
 Open-Unmix separation quality; the live path's current stem update rate (12.8 Hz is from BUG-109 and
 predates LFSTEM.1e). Listed in §5 rather than guessed.
 
+### Increment VOCAB.2 — the maintainer-doc prose sweep, and where it stops ✅ (2026-09-22)
+
+**Done-when:** the living maintainer references named in VOCABULARY.md §1 say *scene* in prose, or
+the file is excluded with a recorded reason.
+
+**Delivered — four of eight swept, four excluded permanently.**
+
+Swept: `CLAUDE.md`, `docs/RUNBOOK.md` (including its §Certifying a scene heading and the one
+cross-reference to it in `NEW_PRESET_CHECKLIST.md`), `docs/PUBLISHING.md`,
+`docs/QUALITY/KNOWN_ISSUES.md`.
+
+**Excluded, and this is the increment's finding.** `docs/SHADER_CRAFT.md` (31 pre-existing uses of
+"scene"), `docs/ARCHITECTURE.md` (20), `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` (20) and
+`docs/CAPABILITY_REGISTRY/PRESETS.md` (3) document the renderer, where **`scene` already means the
+3D scene** — and the two meanings share sentences. ARCHITECTURE's mv_warp paragraph reads
+"alpha-blend current *scene* onto composeTexture … rendered directly by the *preset's* fragment
+shader". SHADER_CRAFT §17 says "Preferred *scene* duration" two rows above "ray-march *scene*
+setup" and the `scene_*` keys. The mechanical pass also produced "The **Scenes** module" for an SPM
+target literally named `Presets`. **Sweeping these makes them wrong, not clearer** — so the sweep
+was reverted on all four and the reason recorded in VOCABULARY.md §1.
+
+This is the D-250 collision (VOCABULARY §5.3) surfacing in prose rather than in identifiers, and it
+is a second, independent reason not to pursue Option C: the documentation cannot adopt one word
+while the renderer holds the other.
+
+**Three restorations after the mechanical pass**, each a name rather than prose: PUBLISHING's
+verbatim quote of the D-111/D-113 wording; KNOWN_ISSUES' 8 defect-taxonomy cells
+(`preset.fidelity` / `.routing` / `.render` are controlled vocabulary in `DEFECT_TAXONOMY.md`); and
+SHADER_CRAFT §17's heading, so `#17-preset-metadata-format-json-sidecar` stays valid in all three
+citing docs.
+
+**Gates:** doc gates 16/16 (CLAUDE.md 3,453 est. tokens against the 7,000 cap); full evidence block
+in the closeout. Docs-only — no code, no data, no sidecar touched.
+
+### Increment VOCAB.1 — presets become scenes (prose + what the app displays) ✅ (2026-09-22)
+
+**Done-when:** a contributor reads the same word on uzume.io, in this repo's guides, and on screen
+in the app; code identifiers, type names, file paths and data keys still say `preset`; the boundary
+and the map to Option C are written down; the website's generator still runs clean.
+
+**Delivered.** Scope was Option B, as specified — prose and displayed strings only.
+
+- **Group (a), the contributor path:** `CONTRIBUTING.md` (the destination of uzume.io's "Write a
+  scene" button) rewritten end to end, plus `README.md`, `docs/GLOSSARY.md` (new **Scene** row
+  naming the boundary outright), `docs/CREDITS.md`, `docs/PRESET_SESSION_CHECKLIST.md`,
+  `docs/presets/YOUR_FIRST_PRESET.md`, `docs/presets/NEW_PRESET_CHECKLIST.md`.
+- **Group (b), displayed strings:** 9 values in `Localizable.strings` (every *key* unchanged, so no
+  lookup moved) + the DEBUG cycle toast. `docs/UX_SPEC.md` rewritten outside backticks so
+  identifiers survived. Verified in the built bundle, not just the source.
+- **Task 4:** `NimbusState.swift` kickPunch comment claimed a drums-stem refinement that `_tick`
+  never had; it now describes `max(anticipatory beatPhase01 ramp, max(beatBass, beatComposite))`.
+- **`docs/VOCABULARY.md` (new)** — the rule, the group (c)/(d) inventory with paths, and the
+  Option C scope/break map.
+
+**Three prompt premises corrected against the tree.** (1) There is no "Preset Eligibility Picker";
+the surface is the family blocklist — UX_SPEC's "Preset family blocklist", shipped as "Hidden preset
+families" via `PresetCategoryBlocklistPicker`. Both strings renamed. (2) Sidecars carry **no `slug`
+key**; `generate_presets.py` slugifies the `name` *value*, so `name` — not a slug field — is the
+cross-repo join key. (3) **No sidecar key contains "preset" at all**, so the data-side Option C
+exposure is the directory and the `name` value, not key names.
+
+**The finding that decides Option C:** `Scene` is already taken — `SceneUniforms` / `SceneCamera` /
+`SceneLight`, the `scene_*` sidecar keys, the documented "scene → warp → compose → swap" dispatch
+order, 336 uses in `*.swift`. `Preset` → `Scene` is a collision, not a rename, and resolving it is
+upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3 — and on the strength of that scoping Matt **declined Option C** (D-250): the boundary is the destination, not a waypoint, and §5 is now a contingency plan rather than queued work.
+
+**Deliberately not done:** living maintainer references still say `preset` in prose
+(ARCHITECTURE 374, RENDER_CAPABILITY_REGISTRY 312, SHADER_CRAFT 231, KNOWN_ISSUES 200,
+CAPABILITY_REGISTRY/PRESETS 188, RUNBOOK 30, CLAUDE.md 27, PUBLISHING 5) — a follow-on prose sweep,
+listed in VOCABULARY.md §1. Append-only records (DECISIONS, ENGINEERING_PLAN, release notes,
+prompts/, archive/) are frozen by design: rewriting them would falsify the record.
+
+**Gates:** swiftlint `--strict` 0 violations / 555 files; `check_user_strings.sh` clean; app build
+SUCCEEDED; engine suite 1980 tests green apart from the time-based DOC.6 rotation gate, rotated in
+its own `[DOC.6]` commit. `generate_presets.py --check` exits 0 / 8 entries, unchanged before and
+after; zero sidecars touched.
+
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after

@@ -483,7 +483,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// reference-frame match against `docs/VISUAL_REFERENCES/<preset>/`.
     ///
     /// The Orchestrator excludes uncertified presets from session planning unless the
-    /// user enables "Show uncertified presets" in Settings → Visuals. Defaults to `false`.
+    /// user enables "Show uncertified scenes" in Settings → Visuals. Defaults to `false`.
     public let certified: Bool
 
     /// Which rubric ladder this preset is evaluated against (full vs. lightweight).

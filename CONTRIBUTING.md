@@ -1,13 +1,19 @@
 # Contributing to Uzume
 
-Uzume is open to contributions with a specific focus: **presets** — the
+Uzume is open to contributions with a specific focus: **scenes** — the
 visualizers themselves. Engine/app changes are welcome as issues first; the
 core is small-team-maintained and changes there move through the project's
 decision process.
 
-## What a preset is
+> **A note on names.** Everything a person reads — this guide, the app,
+> uzume.io — says *scene*. The code and the data still say `preset`:
+> directory names, type names and JSON keys are unchanged, so paths like
+> `UzumeEngine/Sources/Presets/Shaders/` below are correct as written.
+> [docs/VOCABULARY.md](docs/VOCABULARY.md) has the boundary in full.
 
-A preset is a two-file drop-in, auto-discovered at build time:
+## What a scene is
+
+A scene is a two-file drop-in, auto-discovered at build time:
 
 ```
 UzumeEngine/Sources/Presets/Shaders/<Name>.metal   — the shader(s)
@@ -16,8 +22,8 @@ UzumeEngine/Sources/Presets/Shaders/<Name>.json    — the sidecar (metadata + a
 
 The sidecar schema is documented in
 [docs/SHADER_CRAFT.md §17](docs/SHADER_CRAFT.md); look at a small shipped
-preset (`Waveform`, `Plasma`) for the minimal shape and at `Skein` or `Nacre`
-for the full-featured shape. Stateful presets (particle systems, CPU-side
+scene (`Waveform`, `Plasma`) for the minimal shape and at `Skein` or `Nacre`
+for the full-featured shape. Stateful scenes (particle systems, CPU-side
 simulation) additionally register a runtime — see how `Murmuration` does it.
 
 New to the docs' shorthand (M7, D-###, increment IDs)? One page:
@@ -32,7 +38,7 @@ Read these two, in this order:
 
 1. **[docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md)** —
    the authoring discipline: musical role first, the temporal contract, the
-   concept bar. This is distilled from many failed presets; it will save you
+   concept bar. This is distilled from many failed scenes; it will save you
    weeks.
 2. **[docs/ARCHITECTURE.md §GPU Contract Details](docs/ARCHITECTURE.md)** —
    texture/buffer slot conventions and the pass preamble every shader builds
@@ -49,24 +55,24 @@ motion is valid only on the cached `BeatGrid`. The full hierarchy is in
 
 1. **Hot-reload (fastest):** drop your `.metal` + `.json` into
    `~/Library/Application Support/Uzume/Presets/` (created on first
-   launch) while the app runs — every save recompiles and swaps the preset
+   launch) while the app runs — every save recompiles and swaps the scene
    in live. A broken save shows a toast and keeps the previous version
    running (full compiler diagnostics in the log:
    `log stream --predicate 'subsystem == "io.uzume.presets"'`).
    Note: a `certified: true` flag in a hot-reload sidecar is honored locally
    without the repo's flash/rubric gates — leave it `false` while developing
-   and use *Show uncertified presets* (below).
+   and use *Show uncertified scenes* (below).
 2. In-repo: place the pair in `UzumeEngine/Sources/Presets/Shaders/` and
    build; broken shaders are logged and skipped, never crash the app.
 3. **Contact sheets:** `RENDER_VISUAL=1 swift test --package-path UzumeEngine --filter PresetVisualReviewTests`
-   renders your preset against recorded real-music feature streams.
-4. **Reference comparison:** `Scripts/compare_render.sh <preset>` diffs
+   renders your scene against recorded real-music feature streams.
+4. **Reference comparison:** `Scripts/compare_render.sh <scene>` diffs
    against your reference imagery.
-5. **Live:** run the app, Settings → Visuals → *Show uncertified presets*,
+5. **Live:** run the app, Settings → Visuals → *Show uncertified scenes*,
    then File → Open Local File (⌘O). No streaming account, no Screen
    Recording permission.
 
-## Gates your preset must pass
+## Gates your scene must pass
 
 All runnable locally with `swift test --package-path UzumeEngine`:
 
@@ -75,7 +81,7 @@ All runnable locally with `swift test --package-path UzumeEngine`:
 - **Fidelity rubric** — the automated floor for visual quality
   (`FidelityRubricTests`); the bar itself is documented in
   [docs/SHADER_CRAFT.md](docs/SHADER_CRAFT.md).
-- **Flash safety** — photosensitivity gate; certified presets must measure
+- **Flash safety** — photosensitivity gate; certified scenes must measure
   0 flashes/s under the harness.
 - **Lint + full suite** — `swiftlint lint --strict`; the engine suite stays
   green (`file_length` is deliberately relaxed for `.metal` — a good
@@ -86,31 +92,34 @@ All runnable locally with `swift test --package-path UzumeEngine`:
 `certified: false` is how you ship. Certification — joining the production
 rotation the orchestrator plans with — is a maintainer step:
 
-1. You submit the preset PR: shader + sidecar (`certified: false`), your
+1. You submit the scene PR: shader + sidecar (`certified: false`), your
    `audio_routes`, and a reference folder under `docs/VISUAL_REFERENCES/<name>/`
    (copy `_TEMPLATE`) stating the visual target and its provenance/licensing.
 2. Automated gates run in CI (and locally, above).
 3. The maintainer runs a live review with real music ("M7" in the docs — the
    load-bearing gate; automated gates are the floor, not the bar) and, on
-   sign-off, flips `certified: true` and adds the preset to the certified
+   sign-off, flips `certified: true` and adds the scene to the certified
    test tables (rubric + flash harness — these are deliberate fail-loud
    dual entries).
 
-## Milkdrop-inspired presets
+## Milkdrop-inspired scenes
 
 Porting the *concept* of a Milkdrop preset is welcome and has an established
-posture ([docs/CREDITS.md](docs/CREDITS.md)): the preset is authored from
+posture ([docs/CREDITS.md](docs/CREDITS.md)): the scene is authored from
 scratch on Uzume's primitives, carries an `inspired_by` block in its
 sidecar (source preset name, original artist, pack), and gets a row in
 CREDITS.md. **Never commit a `.milk` file** — no source redistribution.
+
+("Preset" is Milkdrop's own word for its visualizers and stays that way when
+naming one — the thing you write here is a scene.)
 
 ## Conventions
 
 - Swift 6, strict concurrency; no `print()` (use `os.Logger`); protocol-first
   DI; every public API gets `///` docs. See [CLAUDE.md §Code Style](CLAUDE.md).
 - Commit messages: `[<increment-id>] <component>: <description>` — for an
-  external PR, use your preset name as the ID, e.g.
-  `[MYPRESET.1] Preset: initial drop-in`.
+  external PR, use your scene name as the ID, e.g.
+  `[MYSCENE.1] Scene: initial drop-in`.
 - Small commits over one large commit.
 
 ## Questions

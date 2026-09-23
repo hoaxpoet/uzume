@@ -75,12 +75,13 @@ For the inner dev loop, `Scripts/test_fast.sh` runs the pure-logic core
   re-grant, relaunch. Or just develop against local-file playback, which
   needs no permission.
 
-## Contributing presets
+## Contributing scenes
 
 That's why this repo is public — see [CONTRIBUTING.md](CONTRIBUTING.md).
-A preset is a Metal shader + JSON sidecar drop-in; you can develop and test
+A scene is a Metal shader + JSON sidecar drop-in; you can develop and test
 one end-to-end with local files and `swift test`, no accounts or extra
-hardware required.
+hardware required. (Code and data still say `preset`; everything a person
+reads says scene — see [docs/VOCABULARY.md](docs/VOCABULARY.md).)
 
 ## Documentation map
 
@@ -88,15 +89,16 @@ hardware required.
 |---|---|
 | [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) | Product definition |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, audio analysis, key types, GPU contract |
-| [docs/SHADER_CRAFT.md](docs/SHADER_CRAFT.md) | Visual quality bar, shader technique, preset sidecar schema (§17) |
-| [docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md) | The preset-authoring discipline |
+| [docs/SHADER_CRAFT.md](docs/SHADER_CRAFT.md) | Visual quality bar, shader technique, scene sidecar schema (§17) |
+| [docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md) | The scene-authoring discipline |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Build/test mechanics, connector setup, troubleshooting |
 | [docs/UX_SPEC.md](docs/UX_SPEC.md) | UX contract and error taxonomy |
 | [docs/ENGINEERING_PLAN.md](docs/ENGINEERING_PLAN.md) | Roadmap and increment history |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Numbered engineering decisions (D-###) |
-| [docs/CREDITS.md](docs/CREDITS.md) | ML weights + Milkdrop-inspired preset attribution |
+| [docs/CREDITS.md](docs/CREDITS.md) | ML weights + Milkdrop-inspired scene attribution |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | The internal shorthand decoded (D-###, M7, increment IDs, …) |
-| [docs/presets/YOUR_FIRST_PRESET.md](docs/presets/YOUR_FIRST_PRESET.md) | A complete working preset pair in ~60 lines (gate-verified to compile) |
+| [docs/VOCABULARY.md](docs/VOCABULARY.md) | Why prose says *scene* and code says `preset` — and what it would take to unify them |
+| [docs/presets/YOUR_FIRST_PRESET.md](docs/presets/YOUR_FIRST_PRESET.md) | A complete working scene pair in ~60 lines (gate-verified to compile) |
 
 This project is developed by Matt (product/design) with Claude Code doing the
 implementation; the docs and `prompts/` directories reflect that working
@@ -104,10 +106,10 @@ process. Internal shorthand you'll meet in the docs is decoded in
 [docs/GLOSSARY.md](docs/GLOSSARY.md) — the load-bearing three: `D-###` = a
 numbered decision in DECISIONS.md; `[XX.n]` = an increment ID in
 ENGINEERING_PLAN.md; "M7" = the maintainer's live visual review, the
-load-bearing quality gate for presets.
+load-bearing quality gate for scenes.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Milkdrop-inspired presets carry per-preset
+MIT — see [LICENSE](LICENSE). Milkdrop-inspired scenes carry per-scene
 attribution (see [docs/CREDITS.md](docs/CREDITS.md)); Uzume honors
 takedown requests routed through the projectM team.

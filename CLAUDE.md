@@ -34,7 +34,7 @@ All tests must pass before any new code is merged (regression gate).
 
 ## Increment Completion Protocol
 
-Every increment — engine, preset, UX, docs, infrastructure — ends by invoking the **`closeout` skill** (`.claude/skills/closeout/`; auto-applies when you finish an increment or are about to commit/push). It is the canonical home of the 8-part closeout report, the mandatory `docs/ENGINEERING_PLAN.md` + `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` updates, the durable-learnings-stay-in-docs rule, the `[<increment-id>] <component>: <description>` commit format (prefer small commits), and the stop-and-report triggers.
+Every increment — engine, scene, UX, docs, infrastructure — ends by invoking the **`closeout` skill** (`.claude/skills/closeout/`; auto-applies when you finish an increment or are about to commit/push). It is the canonical home of the 8-part closeout report, the mandatory `docs/ENGINEERING_PLAN.md` + `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` updates, the durable-learnings-stay-in-docs rule, the `[<increment-id>] <component>: <description>` commit format (prefer small commits), and the stop-and-report triggers.
 
 **Do not push to the remote without Matt's explicit approval.** Local `main` commits stay local. `git push` requires "yes, push" in the chat — even when the work is clearly green and clearly Matt's request. Pushing remains a separate decision.
 
@@ -50,15 +50,15 @@ The pruning pass (every tenth increment or every two weeks) and the D-161 rulebo
 
 ## Defect Handling Protocol
 
-Any defect — a `BUG-*` ID, a P0/P1/P2 report, a regression, a user-reported failure — is worked under the **`defect-handling` skill** (`.claude/skills/defect-handling/`; auto-applies when you pick up a defect). It is the canonical home of the evidence-before-implementation gate, the instrument → diagnose → fix → validate → release-notes process for P0/P1, the fix-increment doc obligations (`docs/QUALITY/KNOWN_ISSUES.md` + `docs/RELEASE_NOTES_DEV.md`), the domain-specific artifact table (beat-sync / stem-routing / preset-fidelity / renderer), and the manual-validation requirements (musical feel, visual fidelity, UX flow). Reference docs: `docs/QUALITY/DEFECT_TAXONOMY.md`, `docs/QUALITY/BUG_REPORT_TEMPLATE.md`, `docs/QUALITY/KNOWN_ISSUES.md`.
+Any defect — a `BUG-*` ID, a P0/P1/P2 report, a regression, a user-reported failure — is worked under the **`defect-handling` skill** (`.claude/skills/defect-handling/`; auto-applies when you pick up a defect). It is the canonical home of the evidence-before-implementation gate, the instrument → diagnose → fix → validate → release-notes process for P0/P1, the fix-increment doc obligations (`docs/QUALITY/KNOWN_ISSUES.md` + `docs/RELEASE_NOTES_DEV.md`), the domain-specific artifact table (beat-sync / stem-routing / scene-fidelity / renderer), and the manual-validation requirements (musical feel, visual fidelity, UX flow). Reference docs: `docs/QUALITY/DEFECT_TAXONOMY.md`, `docs/QUALITY/BUG_REPORT_TEMPLATE.md`, `docs/QUALITY/KNOWN_ISSUES.md`.
 
 ---
 
 ## Audio Data Hierarchy — The Most Important Design Rule
 
-**Learned in the Electron prototype and validated across every preset since: visuals driven primarily by continuous energy feel locked to the music; visuals driven primarily by raw live beat detections feel out of sync.** Continuous energy (`bass`/`mid`/`treble` bands, driven from the deviation primitives `bassRel`/`bassDev` per D-026 — never absolute thresholds on AGC-normalized values, FA #31) is the DEFAULT PRIMARY DRIVER. Beat-locked motion is valid only on the cached `BeatGrid`, not raw live onsets (±80 ms jitter), and only under the Layer-4 constraints (beat-irregular tracks excluded D-154; bounded per-beat footprint + steady luminance D-157).
+**Learned in the Electron prototype and validated across every scene since: visuals driven primarily by continuous energy feel locked to the music; visuals driven primarily by raw live beat detections feel out of sync.** Continuous energy (`bass`/`mid`/`treble` bands, driven from the deviation primitives `bassRel`/`bassDev` per D-026 — never absolute thresholds on AGC-normalized values, FA #31) is the DEFAULT PRIMARY DRIVER. Beat-locked motion is valid only on the cached `BeatGrid`, not raw live onsets (±80 ms jitter), and only under the Layer-4 constraints (beat-irregular tracks excluded D-154; bounded per-beat footprint + steady luminance D-157).
 
-The full five-layer hierarchy (spectrum/waveform textures, spectral features, beat events, pre-analyzed vs. real-time stems) and the **Cold-Start Phase Contract** are the canonical content of the **`preset-session` skill** (`.claude/skills/preset-session/`; auto-applies for any preset increment). Cold-start headline: automated beat-phase derivation was empirically falsified and retired (Matt's Choice A, 2026-05-25) — **do not iterate**; ungated beat accents fire wrong-phase at track start, so presets that need suppression implement it themselves. Full history: [`docs/CAPABILITY_REGISTRY/BEAT_SYNC.md`](docs/CAPABILITY_REGISTRY/BEAT_SYNC.md) §Cold-Start Phase Contract.
+The full five-layer hierarchy (spectrum/waveform textures, spectral features, beat events, pre-analyzed vs. real-time stems) and the **Cold-Start Phase Contract** are the canonical content of the **`preset-session` skill** (`.claude/skills/preset-session/`; auto-applies for any scene increment). Cold-start headline: automated beat-phase derivation was empirically falsified and retired (Matt's Choice A, 2026-05-25) — **do not iterate**; ungated beat accents fire wrong-phase at track start, so scenes that need suppression implement it themselves. Full history: [`docs/CAPABILITY_REGISTRY/BEAT_SYNC.md`](docs/CAPABILITY_REGISTRY/BEAT_SYNC.md) §Cold-Start Phase Contract.
 
 ---
 
@@ -70,14 +70,14 @@ One-line pointers to the load-bearing references (the former per-topic pointer s
 
 | Topic | Where |
 |---|---|
-| Module map — per-file behavioural reference (every Swift file, Metal shader, test target) | [docs/ARCHITECTURE.md §Module Map](docs/ARCHITECTURE.md#module-map); per-preset design history split to `docs/presets/*_DESIGN.md §Module-Map history` (DOC.4) |
+| Module map — per-file behavioural reference (every Swift file, Metal shader, test target) | [docs/ARCHITECTURE.md §Module Map](docs/ARCHITECTURE.md#module-map); per-scene design history split to `docs/presets/*_DESIGN.md §Module-Map history` (DOC.4) |
 | Audio analysis tuning — AGC, band definitions, onset thresholds, tempo, chroma, LF-vs-tap deltas (LF.1.5) | [docs/ARCHITECTURE.md §Audio Analysis Tuning](docs/ARCHITECTURE.md#audio-analysis-tuning) |
 | Key types — FeatureVector / FeedbackParams / StemFeatures / SceneUniforms layouts | [docs/ARCHITECTURE.md §Key Types](docs/ARCHITECTURE.md#key-types-shared-module) — layouts are part of the GPU contract; update pointer + reference together |
-| **Audio contract — what a shader receives at render time, per audio path** | [docs/AUDIO_CONTRACT.md](docs/AUDIO_CONTRACT.md) — the field-by-field render-time surface and the local-file (pre-analysed series, 0 lag) vs system-audio (live Open-Unmix, ≈2.5 s lag) split. Cite this, not a sidecar `description`, before asserting what any preset responds to (BUG-138) |
+| **Audio contract — what a shader receives at render time, per audio path** | [docs/AUDIO_CONTRACT.md](docs/AUDIO_CONTRACT.md) — the field-by-field render-time surface and the local-file (pre-analysed series, 0 lag) vs system-audio (live Open-Unmix, ≈2.5 s lag) split. Cite this, not a sidecar `description`, before asserting what any scene responds to (BUG-138) |
 | GPU contract — texture slots 0–11, buffer slots 0–8, preamble order, G-buffer, SSGI, mesh/ICB | [docs/ARCHITECTURE.md §GPU Contract Details](docs/ARCHITECTURE.md#gpu-contract-details) — read before authoring any pass |
-| Preset metadata — JSON sidecar schema (`name`, `family`, `passes`, `certified`, `rubric_profile`, …) | [docs/SHADER_CRAFT.md §17](docs/SHADER_CRAFT.md#17-preset-metadata-format-json-sidecar) — every preset ships a sidecar |
+| Scene metadata — JSON sidecar schema (`name`, `family`, `passes`, `certified`, `rubric_profile`, …) | [docs/SHADER_CRAFT.md §17](docs/SHADER_CRAFT.md#17-preset-metadata-format-json-sidecar) — every scene ships a sidecar |
 | Visual quality floor + fidelity rubric — detail cascade, ≥4 noise octaves, ≥3 materials, pale-tone ≤ 30 %, §12 rubric | [docs/SHADER_CRAFT.md](docs/SHADER_CRAFT.md) — `file_length: 400` is relaxed for `.metal` (§11.1); good ray-march shaders run 800–2000 lines, do not split for lint |
-| **Preset session-start checklist — mandatory opener for every preset increment** | [docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md) |
+| **Scene session-start checklist — mandatory opener for every scene increment** | [docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md) |
 | Session preparation pipeline — lifecycle states, progressive readiness, metadata-fetcher priority | [docs/ARCHITECTURE.md §Session Preparation](docs/ARCHITECTURE.md#session-preparation) |
 | UX contract — state-to-view mapping, copy principles (§9.5), error taxonomy (§9), accessibility | [docs/UX_SPEC.md](docs/UX_SPEC.md) — SettingsStore + string-externalization invariants are gated (`SettingsStoreEnvironmentRegressionTests`, `Scripts/check_user_strings.sh`); the unmechanized rule: tooltips describe what a control does *now* — hide unwired controls behind a build flag |
 | ML inference — no-CoreML decision (D-009), model shapes, dispatch scheduling (D-059) | [docs/ARCHITECTURE.md §ML Inference](docs/ARCHITECTURE.md#ml-inference) |
@@ -115,10 +115,10 @@ One-line pointers to the load-bearing references (the former per-topic pointer s
 | #45, #46, #47 | `docs/RUNBOOK.md §Spotify connector setup` |
 | #1, #2, #3, #11, #15, #16, #17, #18 | `docs/HISTORICAL_DEAD_ENDS.md` §RB.2 rulebook purge (superseded DSP/API-era entries; Matt per-entry review 2026-06-11; context in `docs/diagnostics/RB1_FA_DN_EXPLANATIONS.md`) |
 | #21, #22 | code comment at `SystemAudioCapture` tap install + `docs/RUNBOOK.md` troubleshooting (RB.2) |
-| #39, #63 | `docs/PRESET_SESSION_CHECKLIST.md` (RB.2 — replaced by the preset session-start checklist) |
+| #39, #63 | `docs/PRESET_SESSION_CHECKLIST.md` (RB.2 — replaced by the scene session-start checklist) |
 | #4 | §Audio Data Hierarchy above (RB.2-2 — the absolutist "never primary" form retired for constraint-based framing; beat-locked motion on the cached grid is a valid technique per D-153 → D-158) |
 | #23, #24, #25, #26, #28, #29, #30, #32, #33, #48, #49, #50, #51, #52, #53, #54, #55, #56, #57, #58, #59, #60, #61, #62, #66, #68, #69, #70, #71, #72 | removed at RB.2 (Matt per-entry review 2026-06-11) — tombstones in `docs/HISTORICAL_DEAD_ENDS.md` §RB.2; context in `docs/diagnostics/RB1_FA_DN_EXPLANATIONS.md` |
-| #27, #31, #67 | `.claude/skills/preset-session/` (full text; DOC.9 — fire only during preset work, exactly when that skill loads) |
+| #27, #31, #67 | `.claude/skills/preset-session/` (full text; DOC.9 — fire only during scene work, exactly when that skill loads) |
 | #64, #65, #73 | `.claude/skills/shader-authoring/` (full text; DOC.9 — reference/desk-research discipline, loads for shader work) |
 
 ---
@@ -127,7 +127,7 @@ One-line pointers to the load-bearing references (the former per-topic pointer s
 
 Operational rules for *how to work*, distilled from past failure cycles (Drift Motes / D-102, Ferrofluid, Aurora Veil, Phase MD). They apply at every scope, including strategy/product-commitment scope: a strategy decision is a forecast until evidence converts it — commit decisions when the work has produced evidence, not before. When a strategic commitment is being drafted without empirical input from the work it governs, stop and bring the gap to Matt.
 
-**Preset-session discipline lives in [docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md)** — musical-role-first, temporal contract, the three-part concept bar, production-pipeline testing obligations, design grounding priority, and evidence-based closeout rules. Mandatory reading at the start of any preset increment (moved there from this section at RB.2-2).
+**Scene-session discipline lives in [docs/PRESET_SESSION_CHECKLIST.md](docs/PRESET_SESSION_CHECKLIST.md)** — musical-role-first, temporal contract, the three-part concept bar, production-pipeline testing obligations, design grounding priority, and evidence-based closeout rules. Mandatory reading at the start of any scene increment (moved there from this section at RB.2-2).
 
 **The next response to pushback must change the answer, not justify it.** The failure mode is producing structured analysis — pros/cons lists, three-part frames — as a substitute for thinking. If a reply has more structure than substance, delete the structure. Real thinking changes the answer; decorating the existing answer with more framework is cope.
 
@@ -139,7 +139,7 @@ Operational rules for *how to work*, distilled from past failure cycles (Drift M
 
 **Decisions presented to Matt: product-level language, benefits and trade-offs, a recommendation with a default.** Matt is product/design lead, not a peer engineer. Frame options in user-visible terms ("how dense are the spikes," not "particle count 256/512/1024"); name what the user sees or feels under each option; include a recommendation he can accept without doing engineering math. Only bring decisions with product-level consequences (visual character, motion feel, audible behaviour, UX flow) — engineering implementation choices are Claude's responsibility. If answering would require Matt to know implementation details, the question is wrong: reframe at the product level or decide yourself.
 
-**Escalation thresholds** — the preset-scoped stop-and-bring-to-Matt triggers (unarticulable M7 root cause, concept pitch fails the three-part bar, structure-as-substitute, "reusable infrastructure" defense forming, the unchanged preset-failure sentence between rounds) are canonical in the **`preset-session` skill**. The cost of pausing is small; another day of mechanical iteration on a broken concept is high.
+**Escalation thresholds** — the scene-scoped stop-and-bring-to-Matt triggers (unarticulable M7 root cause, concept pitch fails the three-part bar, structure-as-substitute, "reusable infrastructure" defense forming, the unchanged scene-failure sentence between rounds) are canonical in the **`preset-session` skill**. The cost of pausing is small; another day of mechanical iteration on a broken concept is high.
 
 ---
 
