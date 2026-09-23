@@ -10,6 +10,35 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-23-162630] BUG-139 — the tap teardown deadlock that hung the suite forever
+
+`SystemAudioCapture.teardownTapResources()` held `stateLock` across `AudioDeviceStop`, which blocks
+until the CoreAudio IO proc drains — while the IO proc itself took `stateLock` in `probeInstallRMS`.
+Teardown waited for the IO proc, the IO proc waited for the lock, and `AudioDeviceStop` never
+returned. The presentation was the worst kind: **no timeout, no failing test, no crash report** — a
+wedged run, where BUG-103's SIGABRT at least left an `.ips`.
+
+**Now:** teardown is split in two halves that cannot recombine. `claimTapResourcesForTeardown()`
+takes the handles and zeroes the fields in one locked step and returns; `destroyTapResources(_:)`
+does the blocking HAL work with no lock held, and is `nonisolated static` over a value type **on
+purpose** — it cannot reach `stateLock` even by accident, so the compiler enforces the property
+instead of a comment asking nicely. Zeroing inside the lock also makes teardown idempotent: a racing
+`stopCapture()` and `deinit` can no longer double-destroy a handle.
+
+This is BUG-021's lesson in a second place — that one was "no AVFoundation teardown under the
+provider lock", this is CoreAudio teardown under `stateLock` in the tap path. The doc comment above
+`probeInstallRMS` called that lock *"uncontended"*; it is uncontended per buffer and fatally
+contended at teardown.
+
+`SystemAudioCaptureTeardownTests` (4 tests). The gate pins the claim-then-destroy structure rather
+than reproducing the deadlock, which needs a real aggregate device — but the **negative control was
+run**: reintroducing the lock-held return wedged the suite, exactly as the defect does.
+
+⚠ **Manual validation outstanding.** This is the shipped streaming path and no automated test can
+reach a real aggregate device. One app-level streaming session plus an output-device change still
+needs to run before this is called live-validated.
+
+
 ### [dev-2026-09-23-143429] BUG138.3 — VolumetricLithograph declares what it reads, and `FeatureVector` is not at buffer(2)
 
 The two items BUG138.2 recorded and left open.

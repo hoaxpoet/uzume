@@ -1590,6 +1590,42 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG139.1 — the tap teardown deadlock, root-caused from source ✅ (2026-09-23)
+
+**Done-when:** the CoreAudio tap teardown cannot block while holding `stateLock`; a deterministic
+gate pins the property; the defect's root cause is proven rather than hypothesised.
+
+**Delivered.** BUG-139 was filed the same day with a captured stack and an explicit "not diagnosed".
+Read against the source the next step, it resolved completely: `SystemAudioCapture.swift:407` — the
+exact line the sample was parked on — is `AudioDeviceStop(agg, proc)`, called with `stateLock` held
+since line 401. `AudioDeviceStop` blocks until the IO proc drains; the IO proc block runs on the
+CoreAudio real-time thread and calls `probeInstallRMS`, whose body is `stateLock.withLock`. Teardown
+waits for the IO proc, the IO proc waits for the lock. Both halves of the captured sample are
+accounted for.
+
+**Fix.** Teardown splits into `claimTapResourcesForTeardown()` (takes the handles and zeroes the
+fields in one locked step, then returns) and `destroyTapResources(_:)` (blocking HAL work, no lock
+held). The destroy half is `nonisolated static` over a value type deliberately: it **cannot** reach
+`stateLock`, so the compiler enforces the property rather than a comment. Zeroing under the lock also
+makes teardown idempotent against a racing `stopCapture()`/`deinit`.
+
+**This is BUG-021's lesson in a second place** — "no AVFoundation teardown under the provider lock",
+one layer down in the tap path. The comment above `probeInstallRMS` asserted *"the uncontended
+per-buffer stateLock"*; that word was the defect. Worth carrying forward: the rule is not
+provider-specific, it is *never hold a lock across a blocking audio-stack call that the audio thread
+can contend*.
+
+**Domain tag corrected** from `audio.capture / test-infrastructure` to `audio.capture`: it was filed
+from where it was observed (a test run), but the deadlocking code is the shipped teardown reached by
+`stopCapture()`, `performReinstall()` and `deinit`.
+
+**Gates:** `SystemAudioCaptureTeardownTests` (4 tests), plus a **negative control that was actually
+run** — reintroducing the lock-held return wedged the suite, the exact signature BUG-139 produces.
+swiftlint `--strict` 0/555.
+
+⚠ **Manual validation outstanding** — the shipped streaming path needs one app-level session plus an
+output-device change, which needs Screen Recording on real hardware. Structurally proven, not yet
+live-validated; tracked in the KNOWN_ISSUES entry's criteria as the one unticked box.
 ### Increment U.11a — UX_SPEC §4.4 describes the connector U.11 shipped ✅ (2026-09-23)
 
 **Done-when:** §4.4 states the OAuth connector that is in the build, and the divergences it
