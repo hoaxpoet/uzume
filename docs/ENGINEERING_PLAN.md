@@ -1659,6 +1659,50 @@ GPU wall-clock budget (10.57 ms vs a 5 ms assert) that runs 1/2/4/5 passed and t
 reach (no renderer or Metal file in it). Logged as not-met-as-written rather than waved through.
 swiftlint `--strict` 0/555. Doc gates 16/16. No capability-registry row: this is audio
 playback, not renderer/harness/certification surface.
+### Increment BUG139.2 — the blocking-call-under-lock rule is now a gate ✅ (2026-09-23)
+
+**Done-when:** a repo lint flags a blocking audio-stack call made inside a locked region; it is
+verified against both historical cases; it is wired into the closeout evidence block.
+
+**Delivered.** `Scripts/check_blocking_calls_under_lock.sh`. D-161's ratchet — a rule violated twice
+gets mechanized, not restated — and this one was violated twice, four months apart, in two files:
+BUG-021 (`LocalFilePlaybackProvider`, AVFoundation teardown under the provider's NSLock while the
+`scheduleFile` completion callback took it) and BUG-139 (`SystemAudioCapture`, `stateLock` held
+across `AudioDeviceStop` while the IO proc took the same lock). Both were caught only after they bit.
+
+**Verified against both, as historical checkouts, not by assertion:**
+
+| Tree | Result |
+|---|---|
+| `8eeb9ac6^` (BUG-139 pre-fix) | flags `SystemAudioCapture.swift:407 AudioDeviceStop` + 409/411/414 |
+| `8eeb9ac6` (post-fix) | **exit 0** — the negative control |
+| `18d1ea4c^` (BUG-021 pre-fix) | flags `LocalFilePlaybackProvider.swift:230 player.stop()`, the site the fix commit names as the hang |
+
+BUG-021's shape is one frame deeper than lexical — the blocking call sits in `_stopLocked()`, called
+from `lock.withLock { }`. It is caught only because the script treats the body of any `func *Locked`
+as a locked region, which is this repo's naming convention and nothing stronger. **The script cannot
+see a blocking call inside an ordinarily-named helper called from a locked region.** That is the
+harder half of the real rule, no grep can reach it, and the header says so rather than implying the
+gate is complete (the `check_user_strings.sh` scope-limit convention).
+
+**One allowlist entry**, `LocalFilePlaybackProvider._startLocked`'s `try engine.start()`: the engine
+and player are local and freshly constructed, `self.engine`/`self.playerNode` are not assigned until
+after `_scheduleFileLoopLocked`, and the completion callback guards on `self.playerNode === player` —
+so no callback for this engine exists yet to block on. `start()` also brings a render thread *up*;
+there is no prior IO cycle to drain. BUG-021 and BUG-139 are both teardown-direction defects. Entries
+are regexes over `path:line:code`, so they survive line drift; this one is void if `engine.start()`
+ever moves below the `self.engine = engine` assignment.
+
+**The gate is RED on `main` and that is correct, not a false positive.** `main` (42dc7d4a) still
+carries BUG-139 — the fix `8eeb9ac6` is on the unmerged `claude/bug-139-tap-teardown`, checked out in
+another worktree. Four hits, all real. **Deliberately NOT wired into the CI fast-gate** for that
+reason (Matt's call): enrolling it now would block every PR on another session's in-flight branch.
+Closeout-only until BUG139.1 merges; `docs/RUNBOOK.md` §CI fast gate records the asymmetry and the
+condition that closes it. Closeout-stronger-than-CI is the safe direction — step 4b exists because
+the reverse produced six false-green pushes — but it is still an asymmetry and it is meant to close.
+
+**Next:** when BUG139.1 merges, add the one CI line and delete the RUNBOOK caveat.
+
 ### Increment BUG138.3 — VolumetricLithograph declares what it reads; FeatureVector's binding index is right ✅ (2026-09-23)
 
 **Done-when:** the eight fields VL reads are declared and proven to fire; no `ARCHITECTURE.md` line
