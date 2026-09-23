@@ -472,5 +472,6 @@ Both were verified red against the exact strings that shipped, then green after 
 ⚠ **A correction to this document's own §6.** Its first version said VolumetricLithograph had the
 *opposite* drift, prose correct and routes incomplete. That rested on a grep that did not strip
 comments: all eight `drums_beat` / `drums_attack_ratio` occurrences in that shader are comments, and
-VL reads neither in executable code. VL had the same drift as FFO. Its route under-declaration is
-real but separate and still open.
+VL reads neither in executable code. VL had the same drift as FFO. Its route under-declaration was
+real and is now also fixed (BUG138.3): all eight read-but-undeclared fields are declared and proven to
+fire, and the dead `camera_dolly_speed ← bass` route is gone.

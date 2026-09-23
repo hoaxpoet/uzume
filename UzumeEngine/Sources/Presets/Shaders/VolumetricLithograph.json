@@ -2,7 +2,7 @@
   "name": "Volumetric Lithograph",
   "family": "geometric",
   "duration": 35,
-  "description": "Psychedelic linocut terrain — forward-dollying flight over an infinite audio-reactive landscape. Terrain depth follows the lead/vocal stem; the camera dolly scales with bass; peaks are placed and lifted on the grid-anchored beat pulse, with their polish coming from per-stem onset density; the palette hue tracks the energy-weighted stem composition. No atmospheric fog (printmaking has no aerial perspective). CSP.4 audit (2026-05-28) confirmed it structurally clean of the FFO antipatterns BUG-019 fixed. Routing primitives are declared in `audio_routes` below and explained in the VolumetricLithograph.metal header — this field describes the LOOK, not the routing. It carried a \"v9.4 routing:\" table until BUG-138, crediting the peak lift to a drum-stem beat/attack pair that appears only in this shader's COMMENTS and in no executable line of it.",
+  "description": "Psychedelic linocut terrain — forward-dollying flight over an infinite audio-reactive landscape. The flight itself is free-running, not audio-driven. What the music moves: peaks are placed on the bar position of the grid-anchored beat pulse; their density and polish come from per-stem onset rates (drums weighted heaviest); and the palette hue tracks the energy-weighted stem composition, offset by mood. Each stem-fed route carries a FeatureVector fallback for the D-019 warmup, before the stems converge. No atmospheric fog (printmaking has no aerial perspective). CSP.4 audit (2026-05-28) confirmed it structurally clean of the FFO antipatterns BUG-019 fixed. Routing primitives are declared in `audio_routes` below and explained in the VolumetricLithograph.metal header — this field describes the LOOK, not the routing. It carried a \"v9.4 routing:\" table until BUG-138, crediting the peak lift to a drum-stem beat/attack pair that appears only in this shader's COMMENTS and in no executable line of it. BUG138.3 removed two further claims from that table which this file had repeated unverified: a vocal-stem terrain depth, and a camera dolly scaling with `features.bass` — the shader reads no `f.bass` at all, and the dead `camera_dolly_speed` route it had declared for three months is gone.",
   "author": "Matt",
   "passes": [
     "ray_march",
@@ -79,11 +79,6 @@
   "audio_routes": [
     {
       "kind": "continuous",
-      "primitive": "bass",
-      "route": "camera_dolly_speed"
-    },
-    {
-      "kind": "continuous",
       "primitive": "bassEnergy",
       "route": "palette_hue"
     },
@@ -103,9 +98,49 @@
       "route": "palette_hue"
     },
     {
+      "kind": "continuous",
+      "primitive": "midAttRel",
+      "route": "palette_hue_fallback"
+    },
+    {
+      "kind": "continuous",
+      "primitive": "valence",
+      "route": "palette_hue_mood"
+    },
+    {
       "kind": "accent",
       "primitive": "pulsePhase01",
       "route": "fold_downbeat_ratchet"
+    },
+    {
+      "kind": "accent",
+      "primitive": "pulseBeatIndex",
+      "route": "fold_downbeat_ratchet"
+    },
+    {
+      "kind": "continuous",
+      "primitive": "drumsOnsetRate",
+      "route": "peak_density"
+    },
+    {
+      "kind": "continuous",
+      "primitive": "bassOnsetRate",
+      "route": "peak_density"
+    },
+    {
+      "kind": "continuous",
+      "primitive": "vocalsOnsetRate",
+      "route": "peak_density"
+    },
+    {
+      "kind": "continuous",
+      "primitive": "otherOnsetRate",
+      "route": "peak_density"
+    },
+    {
+      "kind": "continuous",
+      "primitive": "midDev",
+      "route": "peak_density_fallback"
     }
   ],
   "_comment_audio_routes": "QG.1 manifest. The identity coupling — fold ROTATION SPEED and terrain morph, both off accumulatedAudioTime — is the animation time base and reads constant on offline fixtures (QG.1.1 boundary, FD/VL precedent), so it is documented not declared. Declared routes are the offline-testable ones: bass->dolly speed, per-stem energies->palette hue, downbeat->fold ratchet.",

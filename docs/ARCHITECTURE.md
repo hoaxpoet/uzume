@@ -848,7 +848,7 @@ UzumeEngine/
     AudioResponseMetrics    → **QG.5 response-band seam.** One protocol: a preset runtime publishes named scalar response metrics via `responseMetric(_:)`, which `ResponseBandTests` reads after a fixture replay. Lives in `Shared` because `Renderer` (home of the preset runtimes) does not depend on `Presets`. Exists because QG.1 gates the INPUT (the declared primitive varies) and nothing gated the OUTPUT (the visual quantity it drives moves a useful amount) — the structural gap behind BUG-027/CR.1.1, AGC2, FA #73 and Witchlight's 6×-under-driven pen. Opt-in per route, exactly as `audio_routes` rolled out at QG.1.
     UMABuffer               → Generic .storageModeShared MTLBuffer + UMARingBuffer + UMABufferError.
     AudioFeatures           → Umbrella file for the AudioFeatures+ extensions (comment-only).
-    AudioFeatures+Analyzed  → FeatureVector (56 floats / 224 B, GPU buffer(2), D-099 / DM.2), FeedbackParams (8 floats / 32 B), EmotionalQuadrant enum, EmotionalState (valence + arousal + computed quadrant), StructuralPrediction.
+    AudioFeatures+Analyzed  → FeatureVector (56 floats / 224 B, fragment buffer(0) — buffer(1) on the particle compute kernels; D-099 / DM.2), FeedbackParams (8 floats / 32 B), EmotionalQuadrant enum, EmotionalState (valence + arousal + computed quadrant), StructuralPrediction.
     AudioFeatures+Frame     → AudioFrame (PCM block metadata, 24 B), FFTResult (16 B), StemData (4× AudioFrame).
     AudioFeatures+Metadata  → MetadataSource enum (5 cases), TrackMetadata, PreFetchedTrackProfile. Authoritative location per CA.3 / CA-Audio / CA-Shared boundary closure.
     AudioFeatures+SceneUniforms → SceneUniforms GPU struct (8× SIMD4<Float> = 128 B, bound at buffer(4)).
@@ -1009,7 +1009,7 @@ Per-type contract reference for the Shared module's GPU-contract value types + c
 ```swift
 // === Shared/ — Swift-side GPU contract & cross-cutting value types ===
 
-struct FeatureVector          // 56 floats = 224 bytes (SIMD-aligned), @frozen. GPU buffer(2). D-099 / DM.2.
+struct FeatureVector          // 56 floats = 224 bytes (SIMD-aligned), @frozen. Fragment buffer(0); buffer(1) on particle compute. D-099 / DM.2.
                               // Floats  1– 3: bass, mid, treble (instant energy)
                               // Floats  4– 6: bassAtt, midAtt, trebleAtt (smoothed)
                               // Floats  7–12: subBass, lowBass, lowMid, midHigh, highMid, high (6-band)

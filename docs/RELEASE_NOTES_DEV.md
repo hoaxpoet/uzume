@@ -10,6 +10,39 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-23-143429] BUG138.3 — VolumetricLithograph declares what it reads, and `FeatureVector` is not at buffer(2)
+
+The two items BUG138.2 recorded and left open.
+
+**VL's routes: 6 → 13.** It read eight audio fields it declared none of —
+`drums/bass/vocals/otherOnsetRate` (peak density), `midDev` and `midAttRel` (their D-019 warmup
+fallbacks), `pulseBeatIndex` (bar position, with the already-declared `pulsePhase01`) and `valence`
+(hue offset). Each new route is anchored to an executable line with comments stripped, and
+`RouteCoverageTests` proves every one fires: **236 → 243 routes, 0 red**.
+
+**A dead route removed, which is the same defect inverted.** VL also declared
+`camera_dolly_speed ← bass`. The shader reads no `f.bass` anywhere and has no audio-driven dolly —
+the flight is free-running on `f.time`. That declaration stood for three months and route coverage
+never objected, because **it proves a declared primitive has activity in the session, not that the
+shader reads it.** Under- and over-declaration are both invisible to it. Worth remembering before
+citing a green route-coverage run as proof that a scene's routing is right.
+
+**`FeatureVector` is fragment `buffer(0)`** — and `buffer(1)` on the particle compute kernels.
+`buffer(2)` is the waveform. Both `ARCHITECTURE.md` lines that said `buffer(2)` now say so.
+
+**And a correction to my own work.** BUG138.2 rewrote VL's `description` and carried over two claims
+from the table it was replacing without checking them: a vocal-stem terrain depth, and the camera
+dolly scaling with bass. Both false. The increment whose entire subject was ungated prose
+reintroduced ungated prose one file later. The description now states only what an executable line
+supports.
+
+**Method note.** `grep '"bassOnsetRate"'` said the primitive was missing from
+`AudioRoutePrimitives.map`. It is not — the map composes those keys in a loop as `stem + suffix`. A
+literal grep cannot see a constructed identifier, the same failure shape as grepping a `.metal`
+without stripping comments. Derive the set and compare; never grep for the spelling.
+
+---
+
 ### [dev-2026-09-22-234846] BUG138.2 — the prose that restates a gated fact is now itself gated
 
 BUG-138's second half, plus the two gates. The `48 floats / 192 bytes` claim about `FeatureVector`

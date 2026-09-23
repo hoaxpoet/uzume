@@ -1590,6 +1590,36 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG138.3 — VolumetricLithograph declares what it reads; FeatureVector's binding index is right ✅ (2026-09-23)
+
+**Done-when:** the eight fields VL reads are declared and proven to fire; no `ARCHITECTURE.md` line
+misstates `FeatureVector`'s binding; full suite and lint clean.
+
+**Delivered.** VL's `audio_routes` went 6 → 13. The eight added (`drums/bass/vocals/otherOnsetRate`,
+`midDev`, `midAttRel`, `pulseBeatIndex`, `valence`) are each anchored to an executable line of
+`VolumetricLithograph.metal` with comments stripped, and `RouteCoverageTests` proves every one fires:
+**236 → 243 routes, 0 red**. `FeatureVector` is now described as fragment `buffer(0)` — `buffer(1)` on
+the particle compute kernels — in both places that said `buffer(2)`, which is the *waveform*.
+
+**★ Two things found while fixing, both the same defect wearing different clothes.**
+
+1. **A dead route — over-declaration, the mirror image.** VL declared `camera_dolly_speed ← bass`. The
+   shader reads no `f.bass` anywhere and has no audio-driven dolly at all; the flight is free-running
+   on `f.time`. Removed. It had stood for three months and `RouteCoverageTests` never objected, because
+   that gate proves a declared primitive has **activity in the session**, not that the shader **reads**
+   it. Under- and over-declaration are both invisible to it — worth knowing before citing a green
+   route-coverage run as evidence that routing is correct.
+2. **BUG138.2 repeated two unverified claims, in prose I wrote.** Rewriting VL's `description` the day
+   before, I carried over "terrain depth follows the lead/vocal stem" and "the camera dolly scales with
+   bass" from the very table I was replacing, without checking either. Both are false. The increment
+   whose whole subject was ungated prose reintroduced ungated prose. Corrected; the description now
+   states only what an executable line supports.
+
+**Method note worth keeping.** `grep '"bassOnsetRate"'` reported the primitive missing from
+`AudioRoutePrimitives.map`; it is present, composed by a loop as `stem + suffix`. A literal grep cannot
+see a constructed identifier — the same failure shape as grepping a `.metal` without stripping
+comments. Derive the set and compare; do not grep for the spelling.
+
 ### Increment BUG138.2 — the prose that restates a gated fact is now gated ✅ (2026-09-22)
 
 **Done-when:** BUG-138(b) fixed everywhere it occurs; a gate exists for prose size claims and one for
@@ -1618,9 +1648,9 @@ neither field in any executable line; its peaks ride `pulse_beat_index + pulse_p
 more evidence than *"no references found"* until comments are stripped — the gate does, and its
 negative control pins it, because that mistake survived a first pass of this investigation.
 
-**Recorded, not fixed:** VL reads eight fields it does not declare (a route-coverage matter); and two
-`ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)" when every encoder binds it at
-buffer(0) — seen while editing those lines, deliberately not widened into.
+**Recorded, not fixed here — both closed the next day at BUG138.3:** VL reads eight fields it does not
+declare (a route-coverage matter); and two `ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)"
+when every encoder binds it at buffer(0) — seen while editing those lines, deliberately not widened into.
 
 ### Increment BUG138.1 — the Ferrofluid Ocean sidecar stops being a routing table ✅ (2026-09-22)
 

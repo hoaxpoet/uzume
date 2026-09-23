@@ -348,9 +348,15 @@ found"** unless comments are stripped first. Gate 2 strips them, and its negativ
 that a commented-out read does not count — because that exact mistake survived the first pass of
 this investigation.
 
-VL's routes *are* also under-declared (it reads `bass_onset_rate`, `drums_onset_rate`,
+VL's routes were *also* under-declared — it read `bass_onset_rate`, `drums_onset_rate`,
 `other_onset_rate`, `vocals_onset_rate`, `mid_att_rel`, `mid_dev`, `pulse_beat_index` and `valence`
-without declaring them) — a **separate, still-open** route-coverage matter, not this defect.
+without declaring any of them. ✅ **RESOLVED 2026-09-23 (BUG138.3)**: all eight declared, and
+`RouteCoverageTests` proves each one fires (236 → 243 routes, 0 red). The same pass removed the
+**dead** `camera_dolly_speed ← bass` route: VL reads no `f.bass` anywhere and has no audio-driven
+dolly, so that was a named behaviour the shader does not have — over-declaration, the mirror image of
+the rest of this defect. `bass` had been declared for three months and `RouteCoverageTests` never
+objected, because it proves a declared primitive has *activity in the session*, not that the shader
+*reads* it.
 
 **Why the obvious gate was not the one built.** The first-stated criterion — *a primitive named in a
 description must be declared in `audio_routes`* — would have failed VolumetricLithograph for its
