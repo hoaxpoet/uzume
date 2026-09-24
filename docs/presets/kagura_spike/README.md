@@ -11,7 +11,10 @@ source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus 
 > and one salsa film was re-rendered at the correct speed for comparison. Lindy (93), modern (05) and the
 > §5 twist and cabbage-patch clips (15) are 120 fps and unaffected.
 
-**Status (2026-09-24):** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
+**Status (2026-09-24, latest):** five dances (§7). Twist, cabbage patch, chicken dance and macarena read;
+the Russian squat-kick does not. R2 (per-song identity) is still open.
+
+**Earlier status:** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
 cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
 the beat lock is much tighter. It leaves the library problem (R2 / R4). Pass-1 films are in
 `~/Documents/uzume_spikes/kagura/final/`; §5 films are in `.../final_b/` (never in git, D-211).
@@ -331,6 +334,71 @@ that.
 | Macarena | **143_35** | 10.7 s | yes (0.22 m) | none found yet (feet barely move) | a "gesture landing" pulse (a wrist arriving at the arm, head or hip) |
 | Russian squat-kick | **90_30**, **90_31** | 8–12 s | travels 1.2–1.4 m; head drops 0.75 m | arm-circle bottoms 103–104/min, CV 0.06–0.13 | the leash for its travel, and a check that the deep squats read |
 | (rejected) Mickey Dance | 120_05–07 | 9–12 s | travels 1–2.7 m | — | too much travel |
+
+## §7 KAG.0d — five dances (Matt: "yes, go ahead with all 5 dances")
+
+**The library.** Nine clips, cut from CMU and all 120 fps. Films are in `final_e/` (the first attempt,
+without the facing fix, is in `final_d/`).
+
+| Dance | Clips (window, s) | Pulse the warp pins | Rate /min, CV | Reads as a person? |
+|---|---|---|---|---|
+| Twist | `15_04@109.5-114`, `15_05@110-116` | each hip-turn extreme | 158–164, 0.05–0.08 | **Yes.** |
+| Cabbage patch | `15_04@117-122.5`, `15_05@117-123` | the bottom of each arm circle | 50–53, 0.04 | **Yes.** |
+| Chicken dance | `18_15@1-12.8`, `20_01@0-10.7` | gesture landings (new) | 93–94, 0.14–0.15 | **Yes, and the best trail look.** The beak, then the wing flaps (elbow arcs), then the tail-wiggle down (vertical "flame" trails), then the clap. |
+| Macarena | `143_35@0.3-10.6` | gesture landings | 87, 0.07 | **Yes, after the facing fix.** The capture faces side-on, so every gesture was edge-on until each clip was turned to a common three-quarter facing (below). |
+| Russian squat-kick | `90_30@3.2-9` | the bottom of each arm circle | 103, 0.06 | **No, in stills.** The whole body hops, so every joint draws the same parallel arch, and the deep squat packs the figure into two clusters. It is the weakest of the five. |
+
+Dropped: `90_31` (travels 1.44 m and kick-slides its feet inside the window); `141_12` "Dance, Twist" (a
+small sideways hip wiggle); `143_34` chicken dance (pulse CV 0.21 at best).
+
+**What was added to `kagura.py`:**
+- **Gesture-landing pulse** (`pulse="gesture"`). The chicken dance and macarena have no single repeating
+  joint motion; each move ends in a held pose. A landing is a minimum of arm speed relative to the pelvis.
+  The raw landings are noisy (CV 0.4–0.6), because the beak snaps subdivide the beat, so the warp pins a
+  regular lattice at the median move period and snaps each lattice point to a landing within ±20 %.
+- **Facing normalisation** (`face_camera`, on by default; `--raw-facing` reproduces every earlier film).
+  Each clip is turned about its mean pelvis so its hip line sits at the same three-quarter angle to the
+  fixed camera. The camera still never moves.
+- **Output check for gesture dances.** It uses the raw landings detected in the rendered motion, not a
+  re-fitted lattice, because a re-fit can pick a different phase and under-report the lock.
+- `five` family: twist → cabbage → chicken → macarena → Russian → twist → cabbage → chicken, changing
+  on bar lines.
+
+**Films** (look B, 30 s, audio muxed). Pulse lock counts pulse events in the rendered output within ±⅛
+beat of a grid beat; chance is 25 %.
+
+| Film | Local rate p10–p90 | Pulse lock | Dancer's range (x) | Foot-slide out / in crossfade | Gate mean / spikes |
+|---|---|---|---|---|---|
+| Olive Drab 86 — five | 0.50–1.03 | 73 % (n = 30) | −0.35 to 0.58 m | 5.7 / 10.7 | 0.35 / 56 |
+| Dracula 97 — five | 0.58–1.16 | 71 % (n = 31) | −0.43 to 0.72 m | 7.5 / 12.3 | 0.39 / 47 |
+| Billie Jean 117 — five | 0.69–1.39 | 62 % (n = 39) | −0.42 to 0.78 m | 9.0 / 15.0 | 0.46 / 26 |
+| Wild Rose 166 — five | 0.75–1.06 | 67 % + 22 % on the "and" (n = 46) | −0.28 to 0.58 m | 5.4 / 17.7 | 0.40 / 21 |
+| Billie Jean — chicken | 1.06–1.47 | 42 % on the beat + 38 % on the "and" (n = 40) | ±0.1 m | 2.3 / 8.2 | 0.38 / 9 |
+| Billie Jean — macarena | 1.16–1.46 | 55 %, **skewed early** (28 of 42 in the quarter-beat before the beat) | ±0.07 m | 2.4 / 38.2 | 0.30 / 59 |
+| Billie Jean — Russian | 1.04–1.18 | n/a | ±0.3 m | n/a (no floor contacts detected) | 1.07 / 0 |
+
+**Reading the gate spikes** (twist and cabbage patch had none):
+- **Macarena.** It holds near-still poses between fast gestures (764 of 899 frames near-frozen), so its real
+  gestures exceed 3× the median. That is the dance, not a defect.
+- **Five-dance films.** The spikes cluster at the one-beat crossfade **into and out of the Russian squat**:
+  the standing figure visibly "melts" down into a squat over half a second (`final_e/spikes.png`, bottom
+  row). It is continuous, but it is an unnatural morph and the Russian clip's second weakness.
+
+**Motion verdict** (gate samples and 1–4 fps sheets):
+- Twist, cabbage patch and chicken dance read at once and stay in place.
+- Macarena reads once it faces the camera.
+- The Russian squat-kick does not read in stills, and its crossfades morph visibly. Replacing it is the
+  obvious fix. Candidates: the Egyptian walk (15_04/15_05 at about 98–104 s; it turns and travels), or
+  lambada (55_02; travels).
+
+**R2 (per-song identity).** The two-song sheet (`final_e/r2_two_song_sheet.png`) now differs frame by frame,
+but only because dance changes fall at different moments at different tempi. Both songs get the same five
+dances in the same order. **R2 is still structurally unsolved.** It needs the song to choose the dances
+(for example by tempo, energy or mood), and nothing does that yet.
+
+**Macarena's early skew** (the arm stops about 0.1–0.2 beat before the beat) comes either from the snapped
+lattice or from the check's detector; not diagnosed. It may read as anticipation or as early. It is part of
+the live look.
 
 ## Files
 

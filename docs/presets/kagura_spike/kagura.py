@@ -247,13 +247,31 @@ def beat_events(P, names, fps=MOCAP_FPS, pulse=None):
 
     pulse="hipyaw": each extreme of the hip line's yaw (a twist to the left or right).
     pulse="wrists": each bottom of summed wrist height (one per arm circle; the tops are uneven).
-    Both are for planted-feet dances (twist, cabbage patch) where footfalls carry no pulse.
+    pulse="gesture": a regular lattice at the dancer's median move period, each point snapped to the
+    nearest "gesture landing" (a minimum of arm speed relative to the pelvis) within ±20 %. For
+    move-sequence dances (chicken dance, macarena) where each move ends in a held pose.
+    All of these are for planted-feet dances where footfalls carry no pulse.
     Returns (events_s, step_period_s, source).
     """
     if pulse == "hipyaw":
         hip = P[:, names.index("lhip")] - P[:, names.index("rhip")]
         ev = _extrema(np.degrees(np.unwrap(np.arctan2(hip[:, 2], hip[:, 0]))), fps)
         return ev, float(np.median(np.diff(ev))), "hip-yaw extrema"
+    if pulse == "gesture":
+        from scipy.ndimage import gaussian_filter1d
+        from scipy.signal import find_peaks
+        pel = P[:, names.index("pelvis")]
+        idx = [names.index(j) for j in ("lwrist", "rwrist", "lelbow", "relbow")]
+        sp = np.linalg.norm(np.gradient(P[:, idx] - pel[:, None], axis=0), axis=2).sum(1) * fps
+        sp = gaussian_filter1d(sp, fps * 0.06)
+        land = find_peaks(-sp, distance=int(0.4 * fps), prominence=np.ptp(sp) * 0.05)[0] / fps
+        per = float(np.median(np.diff(land)))
+        ph = (np.angle(np.mean(np.exp(2j * np.pi * land / per))) / (2 * np.pi)) % 1 * per
+        ev = []
+        for t in np.arange(ph, len(P) / fps, per):
+            near = land[np.abs(land - t) < 0.2 * per]
+            ev.append(near[np.argmin(np.abs(near - t))] if len(near) else t)
+        return np.array(ev), per, "gesture landings"
     if pulse == "wrists":
         from scipy.ndimage import gaussian_filter1d
         from scipy.signal import find_peaks
@@ -275,6 +293,25 @@ def beat_events(P, names, fps=MOCAP_FPS, pulse=None):
 
 
 # MARK: - Session grid
+
+def face_camera(P, names, yaw_deg=35.0):
+    """Rotate a clip about its mean pelvis so its mean hip line (right -> left hip) sits at a
+    three-quarter angle to the fixed camera. Captures face arbitrary directions; a side-on
+    macarena hides every gesture edge-on (KAG.0d)."""
+    hip = (P[:, names.index("lhip")] - P[:, names.index("rhip")]).mean(0)
+    a_now = np.arctan2(hip[2], hip[0])
+    cam = np.deg2rad(yaw_deg)
+    # screen-right in world is (cos cam, 0, sin cam); three-quarter = screen-right turned a further 35 deg
+    a_want = np.arctan2(np.sin(cam), np.cos(cam)) + np.deg2rad(35.0)
+    d = a_want - a_now
+    c, s_ = np.cos(d), np.sin(d)
+    ctr = P[:, names.index("pelvis")].mean(0)
+    Q = P - np.array([ctr[0], 0, ctr[2]])
+    x, z = Q[..., 0].copy(), Q[..., 2].copy()
+    Q[..., 0] = c * x - s_ * z
+    Q[..., 2] = s_ * x + c * z
+    return Q
+
 
 def load_session(session_dir):
     rows = list(csv.DictReader(open(os.path.join(session_dir, "features.csv"))))
@@ -450,6 +487,12 @@ FAMILIES = {   # clip list per family; the film cycles through them on bar bound
     # motion signature and confirmed in trail renders; README §5)
     "twist": ["15_04@109.5-114", "15_05@110-116"],
     "cabbage": ["15_04@117-122.5", "15_05@117-123"],
+    # KAG.0d — Matt: "go ahead with all 5 dances" (README §7)
+    "chicken": ["18_15@1-12.8", "20_01@0-10.7"],
+    "macarena": ["143_35@0.3-10.6"],
+    "russian": ["90_30@3.2-9"],   # 90_31 dropped: travels 1.44 m and kick-slides its feet inside the window
+    "five": ["15_05@110-116", "15_04@117-122.5", "18_15@1-12.8", "143_35@0.3-10.6", "90_30@3.2-9",
+             "15_04@109.5-114", "15_05@117-123", "20_01@0-10.7"],
     "twistcabbage": ["15_05@110-116", "15_04@117-122.5", "15_04@109.5-114", "15_05@117-123"],
 }
 # KAG.0c (Matt: "half-time twist on slow songs"): a twist never goes to two turns per beat. On a slow
@@ -458,10 +501,12 @@ PULSE_LEVELS = {"hipyaw": (1, 2, 4)}
 CLIP_PULSE = {   # clips whose beat is not in the feet
     "15_04@109.5-114": "hipyaw", "15_05@110-116": "hipyaw",
     "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
+    "18_15@1-12.8": "gesture", "20_01@0-10.7": "gesture", "143_35@0.3-10.6": "gesture",
+    "90_30@3.2-9": "wrists",
 }
 
 
-def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, bars_per_clip=4):
+def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, bars_per_clip=4, face=True):
     """-> (frames_fn, log). frames_fn(t) gives warped, energy-scaled world positions."""
     fps_r = 30
     beats = sess["beats"] + shift_beats * 60 / sess["bpm"]
@@ -494,6 +539,8 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
         while t0 < seconds:
             tr = FAMILIES[family][si % len(FAMILIES[family])]
             names, P = point_lights(tr)
+            if face:
+                P = face_camera(P, names)
             ev, step, src = beat_events(P, names, pulse=CLIP_PULSE.get(tr))
             m, ratio = choose_level(step, grid_period, PULSE_LEVELS.get(CLIP_PULSE.get(tr), (0.5, 1, 2, 4)))
             seg_beats = beats[beats >= t0 - 2 * grid_period]
@@ -603,14 +650,16 @@ def beat_lock(Y, names, fps, beats):
 
 def cmd_film(a):
     sess = load_session(a.session)
-    fn, names, segs, log = build_dancer(sess, a.family, a.shift_beats, a.seconds, a.irregular)
+    fn, names, segs, log = build_dancer(sess, a.family, a.shift_beats, a.seconds, a.irregular,
+                                       face=not a.raw_facing)
     print(f"grid {sess['bpm']:.2f} BPM, {len(sess['beats'])} beats, {len(sess['bars'])} bars, "
           f"bpb {sess['bpb']}, bar_declined={sess['bar_declined']}")
     for line in log:
         print("  " + line)
     n = int(a.seconds * 30)
     strip = beat_strip(sess["beats"]) if a.strip else None
-    render(fn, n, 30, a.out, audio=None if a.mute else a.audio, strip=strip)
+    if not a.metrics_only:
+        render(fn, n, 30, a.out, audio=None if a.mute else a.audio, strip=strip)
     # measured foot-slide + footfall-to-beat alignment on the rendered motion
     ts = np.arange(n) / 30.0
     Y = np.concatenate([fn(ts[i:i + 60]) for i in range(0, n, 60)])
@@ -644,7 +693,16 @@ def cmd_film(a):
         m = (ts >= sg[0] + gp) & (ts < min(sg[1], a.seconds))      # skip the crossfade beat
         if m.sum() < 30:
             continue
-        ev, _, _ = beat_events(Y[m], names, 30, pulse=pulse)
+        if pulse == "gesture":   # raw landings, NOT the re-fitted lattice (which can pick another phase)
+            from scipy.ndimage import gaussian_filter1d
+            from scipy.signal import find_peaks
+            Z = Y[m]
+            pel = Z[:, names.index("pelvis")]
+            idx = [names.index(j) for j in ("lwrist", "rwrist", "lelbow", "relbow")]
+            spd = gaussian_filter1d(np.linalg.norm(np.gradient(Z[:, idx] - pel[:, None], axis=0), axis=2).sum(1) * 30, 30 * 0.06)
+            ev = find_peaks(-spd, distance=int(0.6 * 30 * 60 / sess["bpm"]), prominence=np.ptp(spd) * 0.05)[0] / 30
+        else:
+            ev, _, _ = beat_events(Y[m], names, 30, pulse=pulse)
         ev = ev + ts[m][0]
         ev = ev[(ev >= b[0]) & (ev < b[-1])]
         k = np.searchsorted(b, ev, side="right") - 1
@@ -711,6 +769,9 @@ def main():
     p.add_argument("--seconds", type=float, default=30)
     p.add_argument("--irregular", action="store_true")
     p.add_argument("--strip", action="store_true"); p.add_argument("--mute", action="store_true")
+    p.add_argument("--raw-facing", action="store_true",
+                   help="keep each capture's own facing (all films before KAG.0d)")
+    p.add_argument("--metrics-only", action="store_true", help="skip rendering; print the measurements")
     p = sp.add_parser("slide"); p.add_argument("trials", nargs="+")
     p = sp.add_parser("sheet"); p.add_argument("films", nargs="+"); p.add_argument("out")
     p.add_argument("--seconds", type=float, default=30)
