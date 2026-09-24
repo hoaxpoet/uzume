@@ -512,6 +512,8 @@ CLIP_PULSE = {   # clips whose beat is not in the feet
 }
 
 
+GRID_CV_SWAY = 0.08   # KAG.0h: sway when the grid's beat-interval CV exceeds this
+
 DANCES = ["twist", "cabbage", "chicken", "macarena", "egyptian"]   # KAG.0f: the auto-picked library
 
 # KAG.0g (Matt: "calibrate the energy bands on the beta test playlist"). Song energy = the song's rank
@@ -579,12 +581,21 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
     scale_of = lambda tq: 1 + 0.25 * np.interp(tq, t, en)    # at most ±25 %
 
     clips, log = [], []
-    if irregular or len(beats) < 8:
+    # KAG.0h safety net (Matt: "go with your recommendation"): the planner already keeps Kagura off
+    # D-154-flagged songs (the sidecar will declare requires_regular_beat); songs that slip through
+    # (Pyramid Song misses the flag by 0.1 %, Warszawa has no drums tempo -> nil -> permitted) sway
+    # when the cached grid's own beat spacing is uneven. 0.08 sits in the measured gap: steady songs
+    # 0.010-0.075, irregular 0.105+ (README §11).
+    ibi = np.diff(sess["beats"])
+    grid_cv = float(np.std(ibi) / np.mean(ibi)) if len(ibi) > 2 else float("inf")
+    safety = grid_cv > GRID_CV_SWAY
+    if irregular or safety or len(beats) < 8:
+        why = "forced (--irregular)" if irregular else f"safety net: grid beat-spacing CV {grid_cv:.3f} > {GRID_CV_SWAY}"
         names, P = point_lights(FAMILIES["sway"][0])
         dur = len(P) / MOCAP_FPS
         # ping-pong loop (forward, then backward): a plain modulo wrap teleports the figure (a pop)
         segs = [(0.0, seconds + 1, P, lambda tq, d=dur - 0.02: d - np.abs(np.mod(tq, 2 * d) - d), 1.0, None)]
-        log.append(f"fallback: unwarped sway clip {FAMILIES['sway'][0]} (beat-irregular / bar-declined)")
+        log.append(f"fallback: unwarped sway clip {FAMILIES['sway'][0]} ({why})")
     else:
         # clip changes on bar boundaries: each clip runs up to bars_per_clip bars, or fewer
         # if its capture runs out first (the Lindy trials are 2-5 s long)

@@ -14,7 +14,8 @@ source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus 
 **Status (2026-09-24, latest):** five dances (§7, §8). The song's tempo and energy now pick a three-dance
 repertoire, and the moment's energy picks the dance at each bar line (§9). R2 passes on the calm-vs-energetic
 pairs tested.
-Energy bands calibrated on the beta test playlist (§10).
+Energy bands calibrated on the beta test playlist (§10). Kagura is excluded from D-154-flagged songs, and a
+grid-regularity safety net sways the rest (§11).
 
 **Earlier status:** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
 cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
@@ -572,6 +573,49 @@ Clean, B.O.B., Smells Like Teen Spirit):
   Superstition's grid is steady at 100–103 BPM in all three windows here, so its flag looks like the known
   drums-stem disagreement false positive (D-154 amendment).
 - Pyramid Song, Moonlight I and Warszawa sway by design.
+
+## §11 KAG.0h — excluded songs and the sway safety net (Matt: "go with your recommendation")
+
+**Decision (Matt, 2026-09-24):**
+1. **Kagura's sidecar will declare `requires_regular_beat: true`.** This is the existing D-154 mechanism:
+   `SessionPlanner` / `PresetScorer` / `ReactiveOrchestrator` hard-exclude the scene from tracks whose
+   `TrackProfile.beatIrregular == true`, and other scenes cover those songs. Membrane already declares it.
+2. **The sway stays as a safety net** for songs that slip past the flag.
+3. **The flag's false positive on Superstition-type songs** is a separate beat-sync defect, spun off as its
+   own task. No threshold was changed here.
+
+**Why the flag alone is not enough.** How the D-154 flag (census, 30 s window) would sort the beta playlist:
+
+| Song | Folded grid-vs-drums disagreement / bar confidence | Flag | Kagura, flag alone | Right? |
+|---|---|---|---|---|
+| Dance Yrself Clean, B.O.B., Smells Like Teen Spirit | ≤ 0.016 / 1.0 | steady | paired | yes |
+| Take Five | 0.009 / 0.79 | steady | paired; clip changes every 4 beats (bar declined, D-210) | yes |
+| Penny Lane, Teardrop, Moonlight I | 0.12–0.30 | irregular | excluded | probably |
+| **Superstition** | **0.403** (drums stem 138 vs grid 98.5) | irregular | **excluded** | **no.** Its grid is steady at 100–103 BPM in every window |
+| **Pyramid Song** | **0.0987** / 0.31 | steady (misses 0.10 by a hair) | **paired** | **no** |
+| **Warszawa** | — (no drums tempo) | unknown, which is permissive | **paired** | **no**, at least for its last third |
+
+**The safety net** (`GRID_CV_SWAY = 0.08`, automatic; `--irregular` still forces the sway). Kagura sways when
+the cached grid's own beat spacing is uneven, measured as the coefficient of variation of the grid's
+inter-beat intervals. Measured across 61 production-chain captures (the 30 playlist windows plus the
+first-30 s spike sessions):
+
+| Group | Grid beat-spacing CV |
+|---|---|
+| Steady songs (DYC after the drop, B.O.B., Superstition, Smells, Penny Lane, Take Five, Teardrop, Billie Jean, Stayin' Alive, Wild Rose, Olive Drab …) | 0.010–0.046 (the highest steady ones: Glitz 0.075, I Have My Doubts 0.073) |
+| Pyramid Song | 0.105–0.395 |
+| Moonlight I | 0.129–0.533 |
+| Warszawa | 0.025 / 0.038 / **0.566** (20 / 50 / 80 %) |
+| Dance Yrself Clean, first 30 s (the near-silent intro) | 0.164 |
+
+What it does:
+- **Sways:** Pyramid Song, Moonlight, the last third of Warszawa, and Dance Yrself Clean's intro. That last
+  one looks right: it sways through the hush and dances after the drop.
+- **False sways on steady-sounding music:** Girl from Ipanema (0.122), Money (0.127, the D-210 wrong-level
+  grid), and several lo-fi Cindy Lee tracks (0.12–0.27). This is the safe failure: a calm sway instead of
+  wrong steps.
+- **In a build this check is per section,** not per song. The spike evaluates one 30 s window at a time,
+  which is why Warszawa dances in its first two-thirds and sways at the end.
 
 ## Files
 
