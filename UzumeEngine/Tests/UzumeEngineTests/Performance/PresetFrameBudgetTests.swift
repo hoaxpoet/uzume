@@ -122,7 +122,7 @@ struct PresetFrameBudgetTests {
         // The headline: **Skein 5.31 -> 13.19 ms**, from the cheapest third to the 4th most
         // expensive preset, because its breakpoint ring now fills (1 -> 16) and Layer A is no
         // longer skipped. Presets that read absolute bands rather than deviations moved DOWN
-        // (Nebula/Plasma/Waveform 9.5 -> 6.3) — a band sweeping 0.2-0.95 is simply not the same
+        // (Nebula/Waveform 9.5 -> 6.3) — a band sweeping 0.2-0.95 is simply not the same
         // work as a band pinned at 0.5, and the old figure was no more "correct" for being higher.
         "Volumetric Lithograph": 18.07,
         "Cytokinesis": 14.63,
@@ -136,7 +136,6 @@ struct PresetFrameBudgetTests {
         "Ricercar": 6.33,
         "Nebula": 6.30,
         "Waveform": 6.30,
-        "Plasma": 6.30,
         "Meniscus": 5.76,
         // PR.18 — Gossamer's first recorded cost was **6.61 ms, 0.9x median, 18th of 22**, which
         // answered "can this preset afford a fidelity uplift" with yes. The V.8 uplift then spent
@@ -160,7 +159,7 @@ struct PresetFrameBudgetTests {
     /// Presets `MultiPassRenderHarness` cannot drive. Named, printed, and NOT counted as passing.
     /// PERF.7 removed "Fractal Tree" — the harness now drives the mesh-shader path.
     ///
-    /// PERF.10 took the `direct` four (Nebula, Plasma, Spectral Cartograph, Waveform), which PERF.7's
+    /// PERF.10 took the `direct` four (Nebula, Spectral Cartograph, Waveform, and a demo scene removed at D-253), which PERF.7's
     /// survey had named as the cheapest remaining paradigm. **Coverage is now 20 of 29.**
     ///
     /// What is left, and what each would cost — surveyed so the next increment does not re-derive it:

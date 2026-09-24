@@ -9,7 +9,7 @@ import Shared
 
 /// Which fidelity rubric ladder a preset is evaluated against (V.6, D-###).
 ///
-/// Four stylized-2D / diagnostic presets (Plasma, Waveform, Nebula, SpectralCartograph)
+/// Stylized-2D / diagnostic presets (Waveform, Nebula, SpectralCartograph, and others)
 /// use `.lightweight` — they are exempt from the full detail-cascade and material-count
 /// requirements. All other presets use `.full`.
 public enum RubricProfile: String, Sendable, Codable, Hashable {

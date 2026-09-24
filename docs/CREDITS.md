@@ -249,6 +249,27 @@ the wordmark; the application itself ships neither as a bundled resource.
 
 ---
 
+## nimitz "Auroras" — Aurora Veil scene shader (CC BY-NC-SA 3.0, NOT MIT)
+
+**Used in:** `UzumeEngine/Sources/Presets/Shaders/AuroraVeil.metal` — the whole
+fragment shader of the Aurora Veil scene (AV.7, D-185).
+
+**Source:** nimitz (@stormoid), *Auroras*, Shadertoy XtGGRt (2017) —
+https://www.shadertoy.com/view/XtGGRt
+
+**What was taken:** the algorithm and all of its constants, ported to Metal
+Shading Language; the adaptations (time, resolution, view and y-flip bindings,
+plus the tunables the file header lists) are recorded in the file header.
+
+**License:** Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported
+(CC BY-NC-SA 3.0) — https://creativecommons.org/licenses/by-nc-sa/3.0/.
+Contact the author for other licensing options. Under ShareAlike the adapted
+file is itself CC BY-NC-SA 3.0: **it is not covered by Uzume's MIT licence and
+may not be used commercially.** Uzume allows at most about three such ports,
+each with a clean-room replacement named (D-252).
+
+---
+
 ## WebGL-Fluid-Simulation — GPU pressure-projection shaders
 
 **Used in:** `UzumeEngine/Sources/Presets/Shaders/PoissonSandbox.metal` — the
@@ -316,6 +337,9 @@ If you ship a derivative of Uzume, you must:
 1a. Preserve the CC-BY-4.0 attribution for the PANNs MobileNetV1 weights
    (Kong et al., Zenodo 3987831) and the AudioSet ontology — both are
    live CC-BY redistribution obligations.
+1b. Preserve the CC BY-NC-SA 3.0 notice for nimitz's "Auroras" in
+   `AuroraVeil.metal` and in this file, and do not distribute that file
+   commercially — it is not MIT.
 2. Make this `CREDITS.md` (or an equivalent compilation of the
    notices) reachable from a user-visible surface — e.g. an "About"
    panel — alongside license text or hyperlinks.

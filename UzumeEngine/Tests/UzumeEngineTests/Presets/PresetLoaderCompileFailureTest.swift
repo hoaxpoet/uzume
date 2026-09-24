@@ -13,10 +13,10 @@
 // AND a bump to the expected count means a preset was silently lost.
 //
 // **Verification (done at QR.3 land)**: temporarily edited
-// `Sources/Presets/Shaders/Plasma.metal` to add `int half = 1;` (the same Metal
+// a production `.metal` (a demo scene since removed at D-253) to add `int half = 1;` (the same Metal
 // compiler error that motivated Failed Approach #44 — shadows the `half` type).
 // Loader count dropped from 14 → 13 and this test failed with a count mismatch
-// pointing at Failed Approach #44. Plasma was used because the original
+// pointing at Failed Approach #44. That scene was used because the original
 // instructions referenced Stalker.metal but Stalker is no longer in production.
 // To re-verify after future preset churn: pick any production .metal, add
 // `int half = 1;` inside a function body, run this test, confirm fail, revert.
@@ -137,7 +137,7 @@ struct PresetLoaderCompileFailureTest {
     /// the loaded roster, so it is the arbiter, not this arithmetic.)
     /// 32 → 31 at ROOTCHOIR-RETIRE.1 (Root Choir retired after the merged live build
     /// failed its selected Liquid Script motion oracle; BUG-128 / D-249.)
-    static let expectedProductionPresetCount = 31
+    static let expectedProductionPresetCount = 30
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

@@ -298,11 +298,10 @@ import Metal
     let loader = PresetLoader(device: device, pixelFormat: .bgra8Unorm_srgb)
 
     #expect(loader.presets.count >= 3,
-            "Expected at least 3 built-in presets (Waveform, Plasma, Nebula), got \(loader.presets.count)")
+            "Expected at least 3 built-in presets (e.g. Waveform, Nebula), got \(loader.presets.count)")
 
     let names = loader.presets.map(\.descriptor.name)
     #expect(names.contains("Waveform"), "Built-in Waveform preset not found. Available: \(names)")
-    #expect(names.contains("Plasma"), "Built-in Plasma preset not found. Available: \(names)")
     #expect(names.contains("Nebula"), "Built-in Nebula preset not found. Available: \(names)")
 }
 

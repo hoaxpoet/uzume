@@ -230,7 +230,18 @@ what he took (plus Release); **concurrency across tracks was not taken** — it 
 that no longer blocks the listener, and PREP.1 found four workers being OOM-killed at 23–45 GB, so
 it needs the memory question answered before it is worth anything.
 
-## Phase PR — Preset review remediation 🔨 (2026-09-04; from Matt's full-roster review, scope calls below)
+## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
+
+Matt's 2026-09-24 decisions (D-251…D-256) replace Phase PR with a scene programme aimed at the October 15
+public beta: attempt eleven original scenes in parallel lanes, each taken through `preset-concept` from a
+proven moving source, reviewed against the ten-song beta test playlist
+([`docs/presets/BETA_TEST_PLAYLIST.md`](presets/BETA_TEST_PLAYLIST.md)), with a new-scene cutoff of
+October 11 and a whole-roster soak after it. Fifty certified scenes is the goal, not a floor (D-256); the
+honest beta read is about 33–35. The plan, lanes, order and per-entry sources live in
+[`docs/presets/BETA_SCENE_SLATE_2026-09-24.md`](presets/BETA_SCENE_SLATE_2026-09-24.md) §00; increments are
+recorded in their own rows as they land.
+
+## Phase PR — Preset review remediation ⏸ superseded by Phase BETA (Matt, 2026-09-24; D-255) (opened 2026-09-04 from Matt's full-roster review, scope calls below)
 
 Matt watched the roster end to end against **David Bowie — *Low*** (local FLAC,
 `/Volumes/Extreme SSD/B/Bowie, David/[1977] - Low/`, 11 tracks, so the **local-file** path with
@@ -276,7 +287,7 @@ implementation."*
 
 ---
 
-## Phase PR, restructured (2026-09-09) — one preset at a time
+## Phase PR, restructured (2026-09-09) — one preset at a time ⏸ superseded by Phase BETA (Matt, 2026-09-24)
 
 **The unit of work is a preset, not a mechanism.** Each deep dive runs in four steps and does not
 skip forward:
@@ -318,7 +329,7 @@ abbreviated; the review is the authority. **Open** rows are candidate deep dives
 | **Filigree** | *"seems like it's a movie on a loop"*; *"Speed of music could be better tied to speed of the motion? Perhaps."* | ⏳ **open.** The hedge is his; treat rate-coupling as one hypothesis to test on this preset, not a mechanism to roll out. |
 | **Membrane** | *"Sync with music is weak, puddle pulse could be improved visually and with respect to motion."* | ✅ **CERTIFIED 2026-09-14, the 25th (PR.25 → PR.29).** M7 passed (*"read as real impacts... sync feels tighter overall"*) and the reference frame match approved against a recurated folder. Strike moved to the cached beat grid (26 % → 100 % on-beat), metric accent gave it a 19.7× dynamic range, X-seam `min()` crease fixed, 7 sourced references replacing a set curated for the wrong concept. Flash-safe MEASURED (Δ0.109, 0.00 flashes/s). Residual sync on two tracks is **BUG-134**, engine-side and parked. |
 | **Nebula** | *"Needs better sync with music. Spikes are too sporadic. Should look more activated."* | ✅ **CERTIFIED 2026-09-11, the 24th** (PR.24; the reviewed build carried PR.19/.20/.21, so their review is given). Five measured mechanisms fixed at PR.19: linear-bin→angle (2 % of the circle carried 27 % of the energy), a band pinned at its floor, 0.60× spatial noise, level-dependence, zero declared routes. Nine routes now declared. No cost increase. ⚠ Reference set is still an unfilled template — the one open item. |
-| **Plasma** | *"Needs better sync with the music, very jittery for Bowie's Low."* | ⏳ **open.** 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
+| ~~**Plasma**~~ | *"Needs better sync with the music, very jittery for Bowie's Low."* | ✅ **REMOVED 2026-09-24 (BETA.0, D-253), Matt's call.** Was: ⏳ open. 55-line day-one shader. "Jittery" may be material (side two is near-beatless). |
 | **Mitosis** | *"Sync with music is tenuous. Speed is seemingly uniform."* | ⏳ **open.** The one preset whose observation genuinely supports tempo-scaled rate. |
 | **Nacre** | *"Slow down the speed slightly or make it match the tempo of the music. Too fast overall."* | ⏳ **open.** Primary complaint is a constant that is too high; tempo-matching is his *alternative*, not the requirement. |
 | **Floret** | *"Pulses to the beat but more connection could be obvious."*; *"Mesmerizing but also kinda boring."* | ⏳ **open.** Variation/longevity, not rate. |
@@ -1513,7 +1524,7 @@ are the same fact seen twice.
 |---|---|---|---|
 | **Waveform** | 101 lines, 2026-04-06, 2 commits | A spectrum-and-waveform bar display — a signal readout rather than a visualizer | **Load-bearing:** `VisualizerEngine.swift:936` installs it as the launch default before any plan wires, and `PresetLoaderTests` asserts it exists. Removing it needs a replacement default first. |
 | **Nebula** | 77 lines, 2026-04-06, 2 commits | Radial starburst on black | Day-one demo shader; zero routes |
-| **Plasma** | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes |
+| ~~**Plasma**~~ | 55 lines, 2026-04-06, 2 commits | Classic plasma blob field | Day-one demo shader; zero routes. **REMOVED 2026-09-24 (BETA.0, D-253), Matt's call:** *"Remove Plasma, keep Waveform."* |
 | **Membrane** | 243 lines, 2026-04-09, 5 commits | `feedback` reaction-diffusion field | Zero routes. Sole `reaction`-family preset — `GoldenSessionTests` documents it winning repeated slots for lack of a family competitor |
 | **Gossamer** | 272 lines, 2026-04-21, 9 commits | `mv_warp`; renders a blue polar grid | Zero routes. Carries **BUG-060** (app hang on a `preset → Gossamer` switch; recurred 2026-08-03, no stack captured) |
 | ~~**Arachne**~~ | 1652 lines, 48 commits, 872-line design doc + architecture contract | `staged` 3D web | **REMOVED 2026-09-09 (D-246), Matt's call.** Seen live (session `15-08-12Z`): *"Arachne is visible, but it's still a massively broken preset."* Zero routes, no reference images, broken render, eight prior design iterations — certifying meant authoring it again. ~6,100 lines deleted. |
@@ -1532,7 +1543,7 @@ iterations — and it renders broken, has zero audio coupling, and has no refere
 against. "Certify" here is not tuning or repair; it is authoring the preset again. That is the trade-off
 Matt is deciding, not a recommendation from this row.
 
-**Dispositions so far.** **Arachne — REMOVE, 2026-09-09 (D-246).** Five remain undecided: Gossamer
+**Dispositions so far.** **Arachne — REMOVE, 2026-09-09 (D-246).** **Plasma — REMOVE, 2026-09-24 (D-253); Waveform — KEEP, uncertified, as the launch default (D-253).** The rest of this row, as written 2026-09-09: Five remain undecided: Gossamer
 (carries BUG-060), Membrane, Nebula, Plasma, and Waveform (load-bearing as the launch default — removing
 it needs a replacement chosen first).
 
@@ -1589,6 +1600,35 @@ and think the ball has a personality."* That is the preset working; it is not to
 only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
+
+### Increment GOLDEN.1 — golden sessions plan against the shipped roster ✅ (2026-09-24)
+
+**Done-when:** `GoldenSessionTests.makeRealCatalog()` loads the real sidecars instead of a hand
+mirror; Sessions A–D regenerated with scoring traces; whether the BUG-133 monopoly survives on the
+real roster is measured, not assumed.
+
+**Delivered.** The fixture now decodes `Sources/Presets/Shaders/*.json` via
+`PresetLoader.bundledShadersURL` in loader order, with a guard test pinning its count to
+`PresetLoaderCompileFailureTest.expectedProductionPresetCount` so a partial load can't pass. BETA.0's
+`[VL, Membrane ×4]` is gone: **Membrane does not appear at all** on the real roster. New goldens:
+A `[Cymatic Resonance ×5]` (each track cycles CR → Mitosis → Dragon Bloom), B `[Gossamer ×5]`
+(→ Skein), C `[CR, Gossamer, Glaze, Mitosis, Gossamer, Mitosis]`, D Lumen Mosaic (unchanged).
+**Monopoly verdict: does not persist on the production path.** The identical track-firsts are the
+seed-0 argmax restarting a 3-scene (A) / 2-scene (B) cycle once the leader's cooldown expires,
+which is the track-granularity repeat BUG133.1 already recorded. Both production call sites plan with a
+random non-zero seed; over seeds 1…24, Session A draws 7–11 distinct scenes per 15–16 segments,
+B 5–8 per 10–12, C 10–15 per ~20. No new defect filed. Test-only; no `Sources/` change.
+
+### Increment BETA.0 — beta decisions recorded, Plasma removed, beta test playlist ✅ (2026-09-24)
+
+**Done-when:** D-251…D-256 filed with Matt's verbatim words; Phase BETA above Phase PR, PR marked
+superseded; Aurora Veil carries its CC BY-NC-SA notice (golden unchanged); Plasma gone from
+`Sources/` and `Tests/`; the ten-song playlist exists as `.m3u` + doc and resolves.
+
+**Delivered.** All five. Production count 31 → 30. The playlist resolves **10/10** through
+`M3UParser`, with census tempo and D-154 flags in `docs/presets/BETA_TEST_PLAYLIST.md`. ⚠
+`GoldenSessionTests`' mirrored catalog is a stale 10-preset subset (still carries Arachne); without
+Plasma its Session A reverts to a Membrane run — recorded as a fixture property, re-mirror queued. → Done at GOLDEN.1.
 
 ### Increment BUG139.1 — the tap teardown deadlock, root-caused from source ✅ (2026-09-23)
 

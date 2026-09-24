@@ -26,7 +26,6 @@ private let referenceTable: [ReferenceRow] = [
     ReferenceRow(presetName: "Membrane",               expectedSeconds: 49),
     ReferenceRow(presetName: "Murmuration",            expectedSeconds: 67),
     ReferenceRow(presetName: "Nebula",                 expectedSeconds: 96),
-    ReferenceRow(presetName: "Plasma",                 expectedSeconds: 27),
     ReferenceRow(presetName: "Spectral Cartograph",    expectedSeconds: nil),  // diagnostic
     ReferenceRow(presetName: "Volumetric Lithograph",  expectedSeconds: 82),
     ReferenceRow(presetName: "Waveform",               expectedSeconds: 58)
@@ -87,13 +86,13 @@ struct MaxDurationFrameworkTests {
     @Test("V.7.6.C Option B: ambient lingers, bridge is shortest")
     func sectionLingerOrderingIsOptionB() throws {
         let descriptors = try loadProductionDescriptors()
-        guard let plasma = descriptors["Plasma"] else { return }
+        guard let waveform = descriptors["Waveform"] else { return }
 
-        let ambient = plasma.maxDuration(forSection: .ambient)
-        let peak = plasma.maxDuration(forSection: .peak)
-        let comedown = plasma.maxDuration(forSection: .comedown)
-        let buildup = plasma.maxDuration(forSection: .buildup)
-        let bridge = plasma.maxDuration(forSection: .bridge)
+        let ambient = waveform.maxDuration(forSection: .ambient)
+        let peak = waveform.maxDuration(forSection: .peak)
+        let comedown = waveform.maxDuration(forSection: .comedown)
+        let buildup = waveform.maxDuration(forSection: .buildup)
+        let bridge = waveform.maxDuration(forSection: .bridge)
 
         // Option B ordering: ambient > peak > comedown > buildup > bridge.
         #expect(ambient > peak, "Ambient should linger longest (meditative)")

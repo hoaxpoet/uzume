@@ -63,7 +63,7 @@ struct MultiPassRenderHarness {
         // its own row rather than an assumption.
         "Fractal Tree",
         // PERF.10 — direct presets: one fullscreen fragment each.
-        "Nebula", "Plasma", "Spectral Cartograph", "Waveform",
+        "Nebula", "Spectral Cartograph", "Waveform",
         // RICERCAR-CERT.1 — the fifth ParticleGeometry preset the harness reaches, and the
         // first with a geometry-owned resolution-dependent target (ensureAllocated). Absent
         // until this increment: PresetFrameBudgetTests carried "Ricercar" in its UNVERIFIED
@@ -106,7 +106,7 @@ struct MultiPassRenderHarness {
             return try renderMVWarp(presetName, features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)
-        case "Nebula", "Plasma", "Spectral Cartograph", "Waveform":
+        case "Nebula", "Spectral Cartograph", "Waveform":
             return try renderDirectPreset(presetName, features, stems, reduce)
         default:
             throw HarnessError.presetNotFound("\(presetName) is not a multi-pass harness preset")
@@ -1029,8 +1029,8 @@ struct MultiPassRenderHarness {
         // ★★ PR.19 — AND THAT NOISE IS WHY NO STILL OF A `direct` PRESET HAS EVER SHOWN
         //    WHAT IT LOOKS LIKE ON MUSIC. The LCG fill above is right for the frame-budget
         //    gate (deterministic, dense, no early-outs) and wrong for anything that LOOKS
-        //    at the frame: all four `direct` presets — Nebula, Plasma, Spectral Cartograph,
-        //    Waveform — read the spectrum as their primary driver, so a broadband-noise
+        //    at the frame: all four `direct` presets of the time — Nebula, Spectral Cartograph,
+        //    Waveform and a demo scene since removed (D-253) — read the spectrum as their primary driver, so a broadband-noise
         //    spectrum renders a preset nobody will ever see. Three of the four are on
         //    Matt's roster review with sync complaints, and every artifact anyone could
         //    have checked them against was noise.

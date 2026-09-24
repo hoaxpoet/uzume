@@ -1035,7 +1035,7 @@ turn, and they lose it every time.
 | family | members | scenes that ever appeared |
 |---|---|---|
 | particles | **6** | **1** — Cytokinesis ×14 (Nebula, Witchlight, Murmuration, Mitosis, Filigree: never) |
-| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) |
+| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) — Plasma removed 2026-09-24 (BETA.0, D-253) |
 | geometric | 4 | 1 — Cymatic Resonance ×8 |
 | painterly | 2 | 1 — Ricercar ×3 |
 | waveform | 2 | 2 — Stave ×8, Waveform ×1 |
@@ -1216,6 +1216,14 @@ sampling.
 **BUG-132 held across the long session:** 8 `grid_bpm` changes for 1 opener + 7 track changes, none
 mid-track. `chain_health` clean, peak −0.07 dBFS, `maxFullScaleRun` 0 (BUG129.1's field reporting on
 a real capture).
+
+**Golden fixture re-checked on the real roster (GOLDEN.1, 2026-09-24).** BETA.0's
+`GoldenSessionTests` Session A had regressed to `[VL, Membrane ×4]`, which looked like the monopoly
+coming back. It was the fixture: a stale 10-scene hand mirror. Loading the shipped sidecars,
+Membrane never appears. At seed 0 (argmax, test-only) the track-firsts still repeat, e.g. Cymatic
+Resonance ×5, each track cycling the same 3 scenes. That is the track-granularity repeat noted
+above, not a single-scene monopoly. On the seeded production path the same session draws 7–11
+distinct scenes over 15–16 segments (seeds 1…24).
 
 ⚠ **Matt's felt verdict is still outstanding** — the automated question was "do more scenes
 appear", and the answer is yes; the question only he can answer is whether any of the newly-admitted
