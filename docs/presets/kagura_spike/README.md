@@ -14,6 +14,7 @@ source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus 
 **Status (2026-09-24, latest):** five dances (§7, §8). The song's tempo and energy now pick a three-dance
 repertoire, and the moment's energy picks the dance at each bar line (§9). R2 passes on the calm-vs-energetic
 pairs tested.
+Energy bands calibrated on the beta test playlist (§10).
 
 **Earlier status:** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
 cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
@@ -501,6 +502,76 @@ fail to pass on these pairs.** A decoy-style check of R2 across a real playlist 
   not rotated to avoid repeats. If a song stays loud, the vigorous dance stays (Billie Jean: five of eight
   changes are twist). Do not add a variety or anti-repeat term.
 - **Macarena's early skew** (§7) is still undiagnosed.
+
+## §10 KAG.0g — energy bands calibrated on the beta test playlist (Matt: "calibrate the energy bands on the beta test playlist")
+
+**Data.** The ten songs in `tools/data/beta_test_playlist.m3u`, from `/Volumes/Extreme SSD`. For each
+track, three 30 s windows centred at 20 %, 50 % and 80 % of its length were cut with ffmpeg
+(`~/Documents/uzume_spikes/kagura/beta_windows/`) and run through the production chain
+(`FixtureSessionCaptureGenerator`, `sessions_beta/`). One window from the start would mislead: Dance Yrself
+Clean's arousal is −0.28 in its hush and 0.69 after the drop.
+
+| # | Track | Arousal 20 / 50 / 80 % | Song (median) | Grid BPM |
+|---|---|---|---|---|
+| 1 | Dance Yrself Clean | −0.28 / 0.69 / 0.72 | 0.69 | 98 |
+| 2 | B.O.B. | 0.67 / 0.63 / 0.68 | 0.67 | 154 |
+| 3 | Superstition | 0.47 / 0.53 / 0.51 | 0.51 | 100–103 |
+| 4 | Smells Like Teen Spirit | 0.47 / 0.61 / 0.54 | 0.54 | 117–118 |
+| 5 | Penny Lane | −0.04 / 0.07 / −0.05 | −0.04 | 113 |
+| 6 | Take Five | 0.51 / 0.10 / 0.48 | 0.48 | 167–174 (0 bars: bar declined) |
+| 7 | Pyramid Song | −0.13 / 0.45 / 0.46 | 0.45 | 67 / 146 / 156 (the grid jumps levels) |
+| 8 | Teardrop | 0.43 / 0.53 / 0.36 | 0.43 | 77 |
+| 9 | Moonlight I | −0.28 / −0.17 / −0.42 | −0.28 | 40–58 (0 bars) |
+| 10 | Warszawa | 0.13 / 0.19 / 0.39 | 0.19 | 77–83 |
+
+**What calibration changed.** The KAG.0f range [0.1, 0.6] put almost every beat-bearing playlist song at
+energy ≥ 0.66, because they cluster at arousal 0.43–0.69. Song energy is now the song's **interpolated rank
+among the ten playlist medians** (`ENERGY_REFERENCE`, `song_energy`). "Calm" now means calmer than most of
+the beta playlist.
+
+| Song | Energy old → new | Repertoire before | Repertoire after |
+|---|---|---|---|
+| Moonlight I, Penny Lane, Warszawa | ≤ 0.18 → ≤ 0.22 | Egyptian, macarena, chicken | unchanged |
+| **Teardrop** | 0.66 → **0.33** | macarena, chicken, cabbage | **Egyptian, macarena, chicken** |
+| Pyramid Song | 0.70 → 0.44 | macarena, chicken, cabbage | unchanged |
+| Take Five | 0.76 → 0.56 | chicken, cabbage, twist | unchanged (its 170 BPM suits the twist) |
+| **Superstition** | 0.82 → **0.67** | chicken, cabbage, twist | **Egyptian, chicken, cabbage** |
+| Smells Like Teen Spirit, B.O.B., Dance Yrself Clean | 0.88–1.0 → 0.78–1.0 | chicken, cabbage, twist | unchanged |
+| (spike) **Dracula** | 0.42 → **0.28** | Egyptian, chicken, cabbage | **Egyptian, macarena, chicken** |
+| (spike) Olive Drab, Dreams of You, Wild Rose, Stayin' Alive, Billie Jean | — | — | unchanged |
+
+On the playlist, four songs get the calm set, two a middle set and four the energetic set.
+
+**Films** (`final_h/`, the 50 % window of each track, `--arousal` set to the song median):
+
+| Film | Energy | Dances (one per clip change) | Pulse lock (±⅛, chance 25 %) | Gate spikes |
+|---|---|---|---|---|
+| Dance Yrself Clean (drop) | 1.00 | ch tw tw ch ca ca tw | 61 % + 23 % on the "and" | 0 |
+| B.O.B. | 0.89 | ch tw tw ca tw ca tw ca ca ch ch | 82 % | 0 |
+| Smells Like Teen Spirit | 0.78 | ch tw tw ca tw ca ca ca ch ca | 77 % | 0 |
+| Superstition | 0.67 | eg ca ca ca ch eg eg eg ca ca | 57 % + 39 % | 3 |
+| Teardrop | 0.33 | eg eg ma ch ch ch eg | 50 % + 21 % | 40 (macarena gestures) |
+| Penny Lane | 0.11 | eg eg eg eg ma ma ch ma ch | 45 % + 25 % | 32 (macarena gestures) |
+
+**R2** (`final_h/r2_teardrop_vs_bob.png`): the dances differ, but the contrast is milder than Olive Drab
+against Billie Jean, because Teardrop's chicken-dance stretch also draws dense trails.
+
+**Caveats:**
+- The census cannot cross-check this. Its `arousal` column is on a different scale from runtime arousal
+  (library median 0.04), its ranks agree only weakly with runtime (Spearman ρ = 0.32, n = 11), and several
+  title matches were the wrong recording.
+- Ten songs is a small reference. Two of them (Moonlight I, Warszawa) never dance but still anchor the low
+  end, which is deliberate: energy is about the music, not the beat.
+
+**Found in passing — not decided (product call for Matt):** the prompt's fallback rule sends beat-irregular
+**or** bar-declined songs to the sway. Applied to this playlist, only **3 of 10 would dance** (Dance Yrself
+Clean, B.O.B., Smells Like Teen Spirit):
+- Take Five is bar-declined in every window. D-210 says "decline the bar, keep the beat", so it could keep
+  dancing with clip changes every 4 beats (the spike already does this when bars are declined).
+- Superstition, Penny Lane and Teardrop carry the census's D-154 flag, which comes from a 30 s window.
+  Superstition's grid is steady at 100–103 BPM in all three windows here, so its flag looks like the known
+  drums-stem disagreement false positive (D-154 amendment).
+- Pyramid Song, Moonlight I and Warszawa sway by design.
 
 ## Files
 

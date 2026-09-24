@@ -514,6 +514,19 @@ CLIP_PULSE = {   # clips whose beat is not in the feet
 
 DANCES = ["twist", "cabbage", "chicken", "macarena", "egyptian"]   # KAG.0f: the auto-picked library
 
+# KAG.0g (Matt: "calibrate the energy bands on the beta test playlist"). Song energy = the song's rank
+# against these reference arousals: the median over three 30 s windows (20 / 50 / 80 % of the track) of
+# each tools/data/beta_test_playlist.m3u song, through the production chain (README §10). Ordered
+# Moonlight I, Penny Lane, Warszawa, Teardrop, Pyramid Song, Take Five, Superstition, Smells Like Teen
+# Spirit, B.O.B., Dance Yrself Clean. Replaces KAG.0f's fixed [0.1, 0.6] range.
+ENERGY_REFERENCE = [-0.28, -0.04, 0.19, 0.43, 0.45, 0.48, 0.51, 0.54, 0.67, 0.69]
+
+
+def song_energy(arousal):
+    """0..1: interpolated rank of the song's arousal among ENERGY_REFERENCE (clamped at the ends)."""
+    ref = np.sort(ENERGY_REFERENCE)
+    return float(np.interp(arousal, ref, np.linspace(0, 1, len(ref))))
+
 
 @functools.lru_cache(maxsize=None)
 def dance_profile(dance):
@@ -535,12 +548,12 @@ def pick_repertoire(bpm, arousal, k=3):
     Score = tempo cost + energy cost, lowest wins; the best k dances are the song's repertoire.
       tempo cost  = |log2 playback rate| at the dance's best metrical level (0 = plays at native speed)
       energy cost = |dance vigor (0..1 across the library) - song energy (0..1)|
-    Song energy = arousal mapped from [0.1, 0.6] to [0, 1] (the span of the 9 spike songs; not a corpus fit).
+    Song energy = song_energy(arousal): rank against the beta-playlist reference (KAG.0g).
     Returns [(dance, score, rate)] sorted calmest -> most vigorous."""
     prof = {d: dance_profile(d) for d in DANCES}
     v = np.array([prof[d][0] for d in DANCES])
     vn = dict(zip(DANCES, (v - v.min()) / (v.max() - v.min())))
-    energy = float(np.clip((arousal - 0.1) / 0.5, 0, 1))
+    energy = song_energy(arousal)
     rows = []
     for d in DANCES:
         _, per, levels = prof[d]
@@ -709,6 +722,8 @@ def beat_lock(Y, names, fps, beats):
 
 def cmd_film(a):
     sess = load_session(a.session)
+    if a.arousal is not None:   # song-level energy when the session is one window of a longer track
+        sess["arousal"] = a.arousal
     fn, names, segs, log = build_dancer(sess, a.family, a.shift_beats, a.seconds, a.irregular,
                                        face=not a.raw_facing)
     print(f"grid {sess['bpm']:.2f} BPM, {len(sess['beats'])} beats, {len(sess['bars'])} bars, "
@@ -828,6 +843,8 @@ def main():
     p.add_argument("--seconds", type=float, default=30)
     p.add_argument("--irregular", action="store_true")
     p.add_argument("--strip", action="store_true"); p.add_argument("--mute", action="store_true")
+    p.add_argument("--arousal", type=float, default=None,
+                   help="override the session's arousal with a song-level value (auto family)")
     p.add_argument("--raw-facing", action="store_true",
                    help="keep each capture's own facing (all films before KAG.0d)")
     p.add_argument("--metrics-only", action="store_true", help="skip rendering; print the measurements")
