@@ -31,6 +31,10 @@ except ImportError:   # ponytail: lets `--help` run on a bare python3; every com
 MOCAP = os.path.expanduser(os.environ.get("KAGURA_MOCAP", "~/Documents/uzume_spikes/kagura/mocap"))
 UNIT_M = 0.0254 / 0.45     # CMU ASF length unit -> metres
 MOCAP_FPS = 120.0
+# CMU captures most subjects at 120 fps but lists the salsa subjects at 60 ("Animated 60" on the search
+# page; AMC files carry no rate). KAG.0 assumed 120 everywhere, so its salsa films ran at DOUBLE speed.
+# Fixed at KAG.0c: those subjects are upsampled to 120 on load.
+SUBJECT_FPS = {"60": 60.0, "61": 60.0}
 
 # MARK: - ASF / AMC
 
@@ -114,6 +118,11 @@ def load_trial(trial):
             walk(name)
     walk("root")
     out = {k: v * UNIT_M for k, v in pos.items()}
+    src_fps = SUBJECT_FPS.get(subj, MOCAP_FPS)
+    if src_fps != MOCAP_FPS:   # resample to the common 120 fps timeline
+        t_src = np.arange(T) / src_fps
+        t_dst = np.arange(0, t_src[-1], 1 / MOCAP_FPS)
+        out = {k: np.stack([np.interp(t_dst, t_src, v[:, c]) for c in range(3)], 1) for k, v in out.items()}
     floor = np.percentile(np.minimum(out["ltibia"][:, 1], out["rtibia"][:, 1]), 2)
     for v in out.values():
         v[:, 1] -= floor
@@ -290,10 +299,10 @@ def load_session(session_dir):
 
 # MARK: - Time-warp
 
-def choose_level(clip_period, grid_period):
-    """Grid beats per clip beat in {0.5, 1, 2, 4}: the one whose playback rate is closest to 1.
+def choose_level(clip_period, grid_period, levels=(0.5, 1, 2, 4)):
+    """Grid beats per clip beat from `levels`: the one whose playback rate is closest to 1.
     (4 was added at KAG.0b: a cabbage-patch arm circle spans a whole bar at fast tempi.)"""
-    best = min((0.5, 1, 2, 4), key=lambda m: abs(np.log(clip_period / (m * grid_period))))
+    best = min(levels, key=lambda m: abs(np.log(clip_period / (m * grid_period))))
     return best, clip_period / (best * grid_period)
 
 
@@ -443,6 +452,9 @@ FAMILIES = {   # clip list per family; the film cycles through them on bar bound
     "cabbage": ["15_04@117-122.5", "15_05@117-123"],
     "twistcabbage": ["15_05@110-116", "15_04@117-122.5", "15_04@109.5-114", "15_05@117-123"],
 }
+# KAG.0c (Matt: "half-time twist on slow songs"): a twist never goes to two turns per beat. On a slow
+# song it plays one turn per beat below native speed (Olive Drab 86 BPM: 0.54x) instead of double time.
+PULSE_LEVELS = {"hipyaw": (1, 2, 4)}
 CLIP_PULSE = {   # clips whose beat is not in the feet
     "15_04@109.5-114": "hipyaw", "15_05@110-116": "hipyaw",
     "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
@@ -483,7 +495,7 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
             tr = FAMILIES[family][si % len(FAMILIES[family])]
             names, P = point_lights(tr)
             ev, step, src = beat_events(P, names, pulse=CLIP_PULSE.get(tr))
-            m, ratio = choose_level(step, grid_period)
+            m, ratio = choose_level(step, grid_period, PULSE_LEVELS.get(CLIP_PULSE.get(tr), (0.5, 1, 2, 4)))
             seg_beats = beats[beats >= t0 - 2 * grid_period]
             tt, cc, fmap = warp_map(seg_beats, ev, m, start_event=1)
             loc = np.diff(cc) / np.diff(tt)                   # local playback rate per beat

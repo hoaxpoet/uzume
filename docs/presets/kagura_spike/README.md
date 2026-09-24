@@ -5,6 +5,12 @@ answer three concept questions with frames: does it read as dancing *to* the son
 survive warping, and how bad is foot-slide. `kagura.py` imports nothing from Uzume; it is not a porting
 source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus the story (artifact 3).
 
+> **ERRATUM (KAG.0c).** CMU lists the salsa subjects 60 and 61 at **60 fps**. KAG.0 assumed 120 fps
+> everywhere, so **every salsa number and film in §2–§4 is at double speed**: step rates, local rates,
+> travel speed and foot-slide are all about 2× too high. The loader now resamples those subjects (§6),
+> and one salsa film was re-rendered at the correct speed for comparison. Lindy (93), modern (05) and the
+> §5 twist and cabbage-patch clips (15) are 120 fps and unaffected.
+
 **Status (2026-09-24):** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
 cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
 the beat lock is much tighter. It leaves the library problem (R2 / R4). Pass-1 films are in
@@ -282,6 +288,49 @@ native clips already measure 24–37 cm/s.
 double-time twisting**: on Olive Drab at 86 BPM the twist runs at 171 per minute, faster than on Billie Jean
 at 117 BPM (117 per minute). A half-time twist on slow songs (one twist per beat, played at 0.54×) may read
 more musically. That is a look-and-feel question for Matt, not something the spike can settle.
+
+## §6 KAG.0c: half-time twist on slow songs, the salsa frame-rate fix, and more dances
+
+**Half-time twist** (Matt: *"yes, try half-time twist on slow songs"*). Twist clips may no longer use the
+×½ level (two turns per beat); see `PULSE_LEVELS`. On a slow song the dancer makes one turn per beat below
+native speed. Films are in `final_c/`.
+
+| Film | Twist rate | Local rate p10–p90 | Pulse lock | Gate mean / spikes / near-frozen |
+|---|---|---|---|---|
+| Olive Drab 86 — twist (before: double time, `final_b/`) | 171/min | 1.02–1.11 | 39 % beat + 61 % "and" | — |
+| Olive Drab 86 — twist (half time) | 86/min | 0.49–0.56 | 100 % (n = 29) | 0.28 / 0 / 886 of 899 |
+| Olive Drab 86 — twist+cabbage | — | 0.49–0.83 | 100 % (n = 24) | 0.30 / 0 / 885 of 899 |
+| Dracula 97 — twist | 97/min | 0.56–0.65 | 100 % (n = 34) | — |
+| Dracula 97 — twist+cabbage | — | 0.56–0.92 | 100 % (n = 26) | 0.35 / 0 / 826 of 899 |
+| Billie Jean 117 — twist and twist+cabbage | unchanged | unchanged | unchanged | regression check: identical to §5 |
+
+The twist rate now follows the song (86, 97, 117 and 166 turns per minute) instead of doubling on slow songs.
+In stills (`final_c/before_after.png`) the arm trails are shorter and the figure reads more clearly.
+**Risk:** at about 0.5× the capture may read as slow motion rather than as a slower dance. The gate flags
+nearly every frame as near-still (886 of 899, against 697 at double time). Only a live look can settle
+that.
+
+**Salsa at the correct speed** (`final_c/mid_billie_jean_117bpm_salsa_fpsfixed.*`):
+- The clips are **30–57 s** (not 15–28), step at **100–111 per minute**, and travel at 1.0–1.4 m/s.
+  Native foot-slide is 7–10 cm/s.
+- On Billie Jean the warp now picks ×1, and **86 % of footfalls land within ±⅛ beat** (49 of 57). The
+  double-speed pass managed about 46 %.
+- Foot-slide is 15.8 cm/s outside crossfades (was 20.6). Local rate p90 is 2.3, because the steps are still
+  uneven.
+- **It still travels (±1.3 m) and still streaks while travelling.** The look verdict stands, but it was
+  overstated by the double speed. The long clips are an advantage the double speed hid.
+
+**Candidates for a five-dance library** (Matt asked for up to 5). Surveyed from CMU's own index (search
+"dance"), downloaded, and measured for length, travel and pulse steadiness. None has been rendered yet.
+
+| Dance | CMU clips | Length | Stays in place? | Best pulse candidate (rate, CV) | What it needs |
+|---|---|---|---|---|---|
+| Twist | 15_04, 15_05 windows; **141_12** "Dance, Twist" | 4.5–6 s each | yes (0.6 m for 141_12) | hip turns (158–164/min, 0.05–0.08; 141_12 reads 360/min, which is probably a hip wiggle and needs a look) | nothing, working |
+| Cabbage patch | 15_04, 15_05 windows | 5.5–6 s | yes | arm-circle bottoms (50–53/min, 0.04) | nothing, working |
+| Chicken dance | **143_34**, **18_15**, **20_01** (18–21 are partner captures) | 6.5–12.8 s | yes (≤ 0.23 m) | pelvis-downs 41–61/min, CV 0.19–0.23 | a section-aware pulse: the dance cycles beak, wings, wiggle and clap, so no single joint carries the beat throughout |
+| Macarena | **143_35** | 10.7 s | yes (0.22 m) | none found yet (feet barely move) | a "gesture landing" pulse (a wrist arriving at the arm, head or hip) |
+| Russian squat-kick | **90_30**, **90_31** | 8–12 s | travels 1.2–1.4 m; head drops 0.75 m | arm-circle bottoms 103–104/min, CV 0.06–0.13 | the leash for its travel, and a check that the deep squats read |
+| (rejected) Mickey Dance | 120_05–07 | 9–12 s | travels 1–2.7 m | — | too much travel |
 
 ## Files
 
