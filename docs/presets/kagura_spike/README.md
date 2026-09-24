@@ -497,8 +497,9 @@ fail to pass on these pairs.** A decoy-style check of R2 across a real playlist 
 **Open:**
 - **The energy mapping is fitted to nine songs.** A real playlist could put most songs in one band. The
   mapping should be calibrated on the beta test playlist before any build.
-- **Repetition is not managed.** The picks never avoid repeating the same dance, and a whole song can sit on
-  one or two dances (Billie Jean: five of eight changes are twist).
+- **Repetition follows the song, by design.** **Matt, 2026-09-24: "follow the song's energy."** The pick is
+  not rotated to avoid repeats. If a song stays loud, the vigorous dance stays (Billie Jean: five of eight
+  changes are twist). Do not add a variety or anti-repeat term.
 - **Macarena's early skew** (§7) is still undiagnosed.
 
 ## Files
