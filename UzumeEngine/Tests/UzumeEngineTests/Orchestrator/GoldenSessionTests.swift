@@ -29,11 +29,11 @@ struct GoldenSessionTests {
     // (D-080). makeStemBalance sets energy fields only (dev=0), so all presets score
     // neutral 0.5 in stem affinity. 25% weight is equal for all → mood+section+tempo
     // dominate. targetTemp=0.78, targetDensity=0.82, targetMotion=0.633:
-    //   Plasma = 0.803 (moodScore=0.85: tempCenter 0.6 close to 0.78; density 0.70≈0.82)
+    //   [demo scene, removed D-253] = 0.803 (moodScore=0.85)
     //   FO     = 0.793 (tempCenter 0.325 far; partially rescued by density 0.75≈0.82)
     //   Mur    = 0.781 (motion 0.85≈0.633, buildup/peak suitability)
-    //   VL loses to Plasma now that the old +0.25 stem bonus is gone (dev=0 → 0.0 < 0.5)
-    // Track 0: Plasma wins. Track 1 (Plasma excluded): Murmuration (high motion/density).
+    //   VL lost to that scene once the old +0.25 stem bonus was gone (dev=0 → 0.0 < 0.5)
+    // Track 0: that scene won. Track 1 (it excluded): Murmuration (high motion/density).
     // Track 2: Murmuration excluded → Ferrofluid Ocean.
     // Track 3: FO excluded → Waveform (neutral fits high-energy well enough).
     // Track 4: Waveform excluded → Membrane.
@@ -62,7 +62,7 @@ struct GoldenSessionTests {
         // segments because every preset's computed maxDuration (≈ 50–95 s for the
         // catalog at sectionDynamicRange=0.5) is shorter than the track length.
         // QR.2 update: dev fields = 0 → stemAffinity neutral 0.5 for all presets →
-        // Plasma (moodScore=0.85) beats VL (no stem bonus) at track 0. Subsequent
+        // a since-removed demo scene (D-253) beat VL (no stem bonus) at track 0. Subsequent
         // track-firsts driven by family-repeat penalty cascade.
         // D-123 (2026-05-13) — Ferrofluid Ocean moved abstract → geometric and now
         // family-clusters with Volumetric Lithograph / Lumen Mosaic (Glass Brutalist
@@ -99,9 +99,17 @@ struct GoldenSessionTests {
         // calibrated when they were family-scoped and are deliberately unchanged here; if track
         // firsts want more spread, that is a window-tuning question with Matt's eye on it, not a
         // scoping one.
+        //
+        // ⚠ BETA.0 (2026-09-24, D-253): regenerated after the demo scene removed at D-253 left
+        // this fixture. The BUG133.1 sequence above was `[VL, VL, FT, FT, FO]`; without that
+        // scene the Membrane run COMES BACK. Read it as a property of this FIXTURE, not of
+        // production: `makeRealCatalog()` is a May-era 10-production-preset subset (it still
+        // carries Arachne, removed at D-246) with one `reaction` preset and almost no
+        // competition, while the shipped roster is 30 scenes. BUG-133's production measurements
+        // are the surface that says whether the planner rotates; this golden only locks what
+        // the planner does with these inputs. Re-mirroring the fixture is a follow-up.
         #expect(ids == [
-            "Volumetric Lithograph", "Volumetric Lithograph", "Fractal Tree", "Fractal Tree",
-            "Ferrofluid Ocean",
+            "Volumetric Lithograph", "Membrane", "Membrane", "Membrane", "Membrane",
         ])
     }
 
@@ -199,8 +207,8 @@ struct GoldenSessionTests {
     // presets (added Arachne, Gossamer, Lumen Mosaic, Staged Sandbox; the latter two
     // diagnostic via isDiagnostic=true). Sessions A + B unchanged because the high-
     // energy / mellow-jazz mood profiles don't favour any newcomer. Session C track 5
-    // (BPM=135, val=0.75, arous=0.85) now picks Ferrofluid Ocean instead of Plasma —
-    // Plasma's high fatigue_risk cooldown extends past Track 5's start (≈720 s with
+    // (BPM=135, val=0.75, arous=0.85) now picks Ferrofluid Ocean instead of the demo
+    // scene later removed at D-253 — its high fatigue_risk cooldown extends past Track 5's start (≈720 s with
     // varied durations, below the 300 s cooldown window from Track 0's appearance)
     // when re-evaluated against the expanded fatigue history; FO is the next-best
     // high-energy candidate (tempCenter 0.325 mismatch but density 0.75 close to
@@ -213,13 +221,13 @@ struct GoldenSessionTests {
     //
     // QR.2 prior-state baseline (preserved for reference; predates GBRETIRE.1 / D-186
     // when Glass Brutalist still existed):
-    //   Track 0 (BPM=130, val=0.70, arous=0.80): Plasma 0.803 wins.
+    //   Track 0 (BPM=130, val=0.70, arous=0.80): demo scene (removed D-253) 0.803 wins.
     //   Track 1 (BPM=80,  val=0.20, arous=-0.40): GB 0.975 wins (very close tempCenter).
     //   Track 2 (BPM=115, val=0.50, arous=0.40):  Fractal Tree (GB excluded by repeat penalty).
-    //   Track 3 (BPM=125, val=0.60, arous=0.75):  Membrane (Plasma/FT excluded).
+    //   Track 3 (BPM=125, val=0.60, arous=0.75):  Membrane (demo scene/FT excluded).
     //   Track 4 (BPM=70,  val=0.30, arous=-0.50): GB re-eligible → wins.
     //   Track 5 (BPM=135, val=0.75, arous=0.85):  Ferrofluid Ocean (Membrane/GB excluded,
-    //                                              Plasma fatigue-suppressed).
+    //                                              demo scene fatigue-suppressed).
 
     @Test("Session C: preset IDs match V.7.6.2 multi-segment genre-driven sequence")
     func sessionC_presetSequence() throws {
@@ -242,7 +250,9 @@ struct GoldenSessionTests {
         // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
         // sole-family repeats below are the same catalog symptom the comments above describe.
 #expect(session.tracks.map { $0.preset.id } == [
-            "Volumetric Lithograph", "Gossamer", "Plasma", "Fractal Tree", "Gossamer", "Membrane",
+            // BETA.0 (D-253): Arachne takes the slot the removed demo scene held (the fixture's
+            // stale Arachne entry — see Session A's note).
+            "Volumetric Lithograph", "Gossamer", "Arachne", "Fractal Tree", "Gossamer", "Membrane",
         ])
     }
 
@@ -275,7 +285,7 @@ struct GoldenSessionTests {
     //                (tempCenter 0.5 → 1.00; density 0.40 → 0.78; motion 0.30 → 0.9375)
     //   Arachne   : moodScore=0.985  motion=0.7375 → total ≈ 0.818
     //                (tempCenter 0.5 → 1.00; density 0.65 → 0.97; motion 0.50 → 0.7375)
-    //   Plasma    : moodScore=0.910  motion=0.7375 → total ≈ 0.796
+    //   (a demo scene removed at D-253 scored ≈ 0.796 here; it never won)
     //   (Glass Brutalist, moodScore≈0.815, ranked below LM here — retired GBRETIRE.1 / D-186.)
     //
     // → Track 0, Segment 0: Lumen Mosaic wins.
@@ -405,12 +415,6 @@ private func makeRealCatalog() -> [PresetDescriptor] {
             colorTempRange: SIMD2(0.2, 0.8), fatigueRisk: .medium,
             sectionSuitability: SongSection.allCases,
             complexityCost: ComplexityCost(tier1: 0.4, tier2: 0.2)),
-        makePreset(
-            name: "Plasma", family: .hypnotic,
-            motionIntensity: 0.5, visualDensity: 0.7,
-            colorTempRange: SIMD2(0.3, 0.9), fatigueRisk: .high,
-            sectionSuitability: [.ambient, .buildup],
-            complexityCost: ComplexityCost(tier1: 0.5, tier2: 0.25)),
         makePreset(
             name: "Nebula", family: .particles,
             motionIntensity: 0.3, visualDensity: 0.8,

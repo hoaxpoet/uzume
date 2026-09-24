@@ -488,7 +488,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
 
     /// Which rubric ladder this preset is evaluated against (full vs. lightweight).
     ///
-    /// Lightweight presets (Plasma, Waveform, Nebula, SpectralCartograph) are evaluated
+    /// Lightweight presets (e.g. Waveform, Nebula, SpectralCartograph) are evaluated
     /// against a 4-item stylization contract instead of the full 15-item rubric. Per D-064.
     /// Defaults to `.full`.
     public let rubricProfile: RubricProfile

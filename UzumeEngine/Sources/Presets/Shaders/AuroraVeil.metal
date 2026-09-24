@@ -27,6 +27,15 @@
 // (WSCG 2011) — the per-step `sin(...)` palette is their H(z) height curve.
 // nimitz's Shadertoy source is CC-BY-NC-SA; this port carries the attribution
 // and adds no Uzume-specific behaviour.
+//
+// ── LICENCE — THIS FILE IS NOT MIT ────────────────────────────────────────────
+// The code in this file is adapted from "Auroras" by nimitz (@stormoid),
+// https://www.shadertoy.com/view/XtGGRt, licensed under the Creative Commons
+// Attribution-NonCommercial-ShareAlike 3.0 Unported License (CC BY-NC-SA 3.0),
+// https://creativecommons.org/licenses/by-nc-sa/3.0/. Contact the author for
+// other licensing options. Under ShareAlike this adaptation is distributed under
+// the same CC BY-NC-SA 3.0 licence; it is NOT covered by Uzume's MIT licence
+// and may not be used commercially. See docs/CREDITS.md and D-252.
 
 // ── Tunables (the only departures from nimitz's defaults) ─────────────────────
 // Matt live-review 2026-07-19: static upward view (no pan → no star twinkle),

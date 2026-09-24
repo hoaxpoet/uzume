@@ -143,7 +143,7 @@ data-side exposure is not key names; it is three other things:
 1. **The directory** `UzumeEngine/Sources/Presets/Shaders/*.json`.
 2. **The `name` *value***, which is load-bearing twice over — see §4.1.
 3. **`"preset_fragment"`**, the hardcoded default Metal fragment entry point
-   (`PresetDescriptor.swift:635`), used by `Nebula`, `Plasma` and `Waveform`
+   (`PresetDescriptor.swift:635`), used by `Nebula` and `Waveform`
    and by every hot-reloaded scene that omits `fragment_function`.
 
 ### 4.1 The cross-repo contract — what uzume.io reads

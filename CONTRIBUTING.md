@@ -22,7 +22,7 @@ UzumeEngine/Sources/Presets/Shaders/<Name>.json    — the sidecar (metadata + a
 
 The sidecar schema is documented in
 [docs/SHADER_CRAFT.md §17](docs/SHADER_CRAFT.md); look at a small shipped
-scene (`Waveform`, `Plasma`) for the minimal shape and at `Skein` or `Nacre`
+scene (`Waveform`, `Nebula`) for the minimal shape and at `Skein` or `Nacre`
 for the full-featured shape. Stateful scenes (particle systems, CPU-side
 simulation) additionally register a runtime — see how `Murmuration` does it.
 
