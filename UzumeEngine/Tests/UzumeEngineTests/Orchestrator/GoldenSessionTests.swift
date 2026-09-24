@@ -6,6 +6,11 @@
 // a golden test is a regression — fix the test only by updating the expected
 // values AND adding a scoring-trace comment that proves correctness.
 //
+// Catalog: the shipped sidecars, loaded directly (GOLDEN.1). Every plan here is
+// UNSEEDED (`seed == 0` → pure argmax), so these goldens pin the scorer, not the
+// near-tie sampling (BUG133.2) that every production plan runs with a random seed.
+// Seeded variety is covered by the BUG133.2 tests, not here.
+//
 // No Sources/ files are modified. Tests only.
 
 import Foundation
@@ -25,18 +30,18 @@ struct GoldenSessionTests {
 
     // MARK: — Session A: High-Energy Electronic (5 × 180 s, BPM=130, val=0.7, arous=0.8)
 
-    // Scoring trace — QR.2 update: stemAffinitySubScore now uses deviation primitives
-    // (D-080). makeStemBalance sets energy fields only (dev=0), so all presets score
-    // neutral 0.5 in stem affinity. 25% weight is equal for all → mood+section+tempo
-    // dominate. targetTemp=0.78, targetDensity=0.82, targetMotion=0.633:
-    //   [demo scene, removed D-253] = 0.803 (moodScore=0.85)
-    //   FO     = 0.793 (tempCenter 0.325 far; partially rescued by density 0.75≈0.82)
-    //   Mur    = 0.781 (motion 0.85≈0.633, buildup/peak suitability)
-    //   VL lost to that scene once the old +0.25 stem bonus was gone (dev=0 → 0.0 < 0.5)
-    // Track 0: that scene won. Track 1 (it excluded): Murmuration (high motion/density).
-    // Track 2: Murmuration excluded → Ferrofluid Ocean.
-    // Track 3: FO excluded → Waveform (neutral fits high-energy well enough).
-    // Track 4: Waveform excluded → Membrane.
+    // Scoring trace — GOLDEN.1 (2026-09-24), real 30-scene roster (25 eligible: 4
+    // diagnostic + uncertified Waveform are hard-excluded). targetTemp=0.78,
+    // targetDensity=0.82, targetMotion=0.633. makeStemBalance sets energy fields only
+    // (dev=0), so stemAffinity is 0.000 for every scene and sect is 1.000 for every
+    // scene — mood + tempo decide. Track-0 ranking:
+    //   Cymatic Resonance 0.588 (mood 0.825, tempo 0.967)
+    //   Mitosis           0.586 (mood 0.875, tempo 0.883)
+    //   Cytokinesis       0.574 · Dragon Bloom 0.569 · Glaze 0.564 · Fractal Tree 0.549
+    // Segments per track: CR (0–52 s) → Mitosis (52–125 s) → Dragon Bloom (125–180 s).
+    // Cytokinesis loses the third slot to the 0.2× family-repeat against Mitosis
+    // (both `particles`); CR is still inside its 120 s window. By each 180 s track
+    // boundary CR has recovered, so argmax restarts the same cycle every track.
 
     @Test("Session A: 5 tracks, no errors")
     func sessionA_producesCorrectCount() throws {
@@ -58,58 +63,19 @@ struct GoldenSessionTests {
         let session = try planner.plan(
             tracks: makeSessionA(), catalog: makeRealCatalog(), deviceTier: .tier2)
         let ids = session.tracks.map { $0.preset.id }
-        // V.7.6.2 multi-segment regeneration: each 180 s track now contains multiple
-        // segments because every preset's computed maxDuration (≈ 50–95 s for the
-        // catalog at sectionDynamicRange=0.5) is shorter than the track length.
-        // QR.2 update: dev fields = 0 → stemAffinity neutral 0.5 for all presets →
-        // a since-removed demo scene (D-253) beat VL (no stem bonus) at track 0. Subsequent
-        // track-firsts driven by family-repeat penalty cascade.
-        // D-123 (2026-05-13) — Ferrofluid Ocean moved abstract → geometric and now
-        // family-clusters with Volumetric Lithograph / Lumen Mosaic (Glass Brutalist
-        // retired GBRETIRE.1 / D-186; Kinetic Sculpture retired KSRETIRE.1 / D-188);
-        // the previous sequence had FO winning a slot that's now under more
-        // family-repeat pressure.
-        // Membrane is the only `reaction` preset in the catalog, so once selected it
-        // has no family-repeat competitor and gets picked across remaining slots.
-        // This reveals a real catalog clustering symptom (4 of 12 aesthetic presets
-        // share `geometric`); the orchestrator's behavior is correct given the inputs.
-                // PR.8 (2026-09-09): regenerated under the re-weighted scorer — the always-1.0 section
-        // quarter is gated out when no section data exists, and presets with no declared
-        // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
-        // sole-family repeats below are the same catalog symptom the comments above describe.
+        // GOLDEN.1 (2026-09-24): regenerated against the real roster. The BETA.0 expectation
+        // `[VL, Membrane ×4]` was a property of the stale 10-scene fixture (one `reaction`
+        // scene, no competition) — Membrane does not appear at all on the real roster.
         //
-        // ★ BUG133.1 (2026-09-14): regenerated because fatigue now cools the PRESET, not the
-        // family (Matt: "cool down the preset, not the family"). The previous expectation was
-        // `[VL, Membrane, Membrane, Membrane, Membrane]` — 2 distinct presets across 5 tracks —
-        // and the comment above it already diagnosed why, in May: *"Membrane is the only
-        // `reaction` preset in the catalog, so once selected it has no family-repeat competitor
-        // and gets picked across remaining slots… This reveals a real catalog clustering
-        // symptom."* That was BUG-133 described four months before it was filed, recorded here
-        // as *"the orchestrator's behavior is correct given the inputs"* and left. It was the
-        // inputs that were wrong: a family-scoped cooldown makes a family one rotation slot.
-        //
-        // Why this sequence is right, not merely different: **3 distinct presets, and the
-        // four-in-a-row monopoly is gone.** Sessions B, C and D are unchanged (including
-        // "Session C: genre diversity produces ≥3 distinct preset families"), so the change is
-        // narrow to the case the old comment flagged.
-        //
-        // ⚠ Adjacent repeats persist at TRACK granularity (VL, VL / FT, FT) and that is not the
-        // same defect. These are track-FIRST segments 180 s apart, while the cooldown windows are
-        // 60/120/300 s — so a preset legitimately recovers inside one track. The windows were
-        // calibrated when they were family-scoped and are deliberately unchanged here; if track
-        // firsts want more spread, that is a window-tuning question with Matt's eye on it, not a
-        // scoping one.
-        //
-        // ⚠ BETA.0 (2026-09-24, D-253): regenerated after the demo scene removed at D-253 left
-        // this fixture. The BUG133.1 sequence above was `[VL, VL, FT, FT, FO]`; without that
-        // scene the Membrane run COMES BACK. Read it as a property of this FIXTURE, not of
-        // production: `makeRealCatalog()` is a May-era 10-production-preset subset (it still
-        // carries Arachne, removed at D-246) with one `reaction` preset and almost no
-        // competition, while the shipped roster is 30 scenes. BUG-133's production measurements
-        // are the surface that says whether the planner rotates; this golden only locks what
-        // the planner does with these inputs. Re-mirroring the fixture is a follow-up.
+        // ⚠ Five identical track-firsts is NOT the BUG-133 monopoly back: each track runs
+        // three distinct scenes (see trace above), and it is the seed-0 argmax restarting the
+        // same cycle once CR's window expires — the track-granularity repeat BUG133.1 already
+        // recorded as a window-tuning question for Matt. Production never plans at seed 0;
+        // measured over seeds 1…24 this session draws 7–11 distinct scenes across its
+        // 15–16 segments (2–5 distinct track-firsts).
         #expect(ids == [
-            "Volumetric Lithograph", "Membrane", "Membrane", "Membrane", "Membrane",
+            "Cymatic Resonance", "Cymatic Resonance", "Cymatic Resonance", "Cymatic Resonance",
+            "Cymatic Resonance",
         ])
     }
 
@@ -147,28 +113,21 @@ struct GoldenSessionTests {
 
     // MARK: — Session B: Mellow Jazz (5 × 180 s, BPM=85, val=0.3, arous=−0.3)
 
-    // Scoring trace — GBRETIRE.1 (2026-07-19): Glass Brutalist retired (D-186).
-    // targetTemp=0.62, targetDensity=0.38, targetMotion=0.3125:
-    //   Pre-retirement GB (moodScore=0.975, tempCenter 0.65 ≈ 0.62, density 0.4 ≈ 0.38)
-    //   dominated this mellow-jazz session. With GB gone, Waveform is the next-best
-    //   sparse-friendly candidate: density 0.3 ≈ target 0.38, motion 0.6, neutral
-    //   temp centre 0.5. Waveform is the *only* `waveform`-family preset, so once it
-    //   wins track 0 it faces no family-repeat competitor — its fatigue-penalised
-    //   score still beats every alternative across all five slots. This is the same
-    //   sole-family clustering documented for Membrane in Session A (a real catalog
-    //   symptom, not a planner fault); the orchestrator's behaviour is correct given
-    //   the inputs.
+    // Scoring trace — GOLDEN.1 (2026-09-24), real roster. targetTemp=0.62,
+    // targetDensity=0.38, targetMotion=0.3125; stemAffinity 0.000 / sect 1.000 for all.
+    // Track-0 ranking: Gossamer 0.635 (mood 0.930, tempo 0.988) · Skein 0.615 ·
+    // Nacre 0.602 · Alfvén 0.599 · Aurora Veil 0.599 · Nimbus 0.595.
+    // Segments per track: Gossamer (0–101.5 s, its maxDuration) → Skein. Gossamer's
+    // 60 s window (fatigue_risk low) has expired by the next track boundary, so it
+    // takes every track-first. Same seed-0 argmax property as Session A; seeds 1…24
+    // give 5–8 distinct scenes over the 10–12 segments.
 
     @Test("Session B: preset IDs match V.7.6.2 multi-segment golden sequence")
     func sessionB_presetSequence() throws {
         let session = try planner.plan(
             tracks: makeSessionB(), catalog: makeRealCatalog(), deviceTier: .tier2)
-        // GBRETIRE.1: GB retired → Waveform (sole waveform-family) now wins mellow jazz.
-                // PR.8 (2026-09-09): regenerated under the re-weighted scorer — the always-1.0 section
-        // quarter is gated out when no section data exists, and presets with no declared
-        // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
-        // sole-family repeats below are the same catalog symptom the comments above describe.
-#expect(session.tracks.map { $0.preset.id } == [
+        // GOLDEN.1: unchanged by the re-mirror — Gossamer was already the winner.
+        #expect(session.tracks.map { $0.preset.id } == [
             "Gossamer", "Gossamer", "Gossamer", "Gossamer", "Gossamer",
         ])
         #expect(session.tracks.map { $0.preset.family?.rawValue } == [
@@ -192,7 +151,7 @@ struct GoldenSessionTests {
     func sessionB_highMotionPresetsNeverWin() throws {
         let session = try planner.plan(
             tracks: makeSessionB(), catalog: makeRealCatalog(), deviceTier: .tier2)
-        // Murmuration (motion=0.85) scores 0.664 on jazz — well below winners.
+        // Murmuration (motion=0.85) is far from targetMotion 0.3125 and never ranks.
         for entry in session.tracks {
             #expect(
                 entry.preset.motionIntensity <= 0.8,
@@ -203,56 +162,24 @@ struct GoldenSessionTests {
 
     // MARK: — Session C: Genre-Diverse Mix (6 tracks, varied durations)
 
-    // Scoring trace — BUG-004 closure (2026-05-12): catalog expanded 11→15 production
-    // presets (added Arachne, Gossamer, Lumen Mosaic, Staged Sandbox; the latter two
-    // diagnostic via isDiagnostic=true). Sessions A + B unchanged because the high-
-    // energy / mellow-jazz mood profiles don't favour any newcomer. Session C track 5
-    // (BPM=135, val=0.75, arous=0.85) now picks Ferrofluid Ocean instead of the demo
-    // scene later removed at D-253 — its high fatigue_risk cooldown extends past Track 5's start (≈720 s with
-    // varied durations, below the 300 s cooldown window from Track 0's appearance)
-    // when re-evaluated against the expanded fatigue history; FO is the next-best
-    // high-energy candidate (tempCenter 0.325 mismatch but density 0.75 close to
-    // 0.815 target, motion 0.65 close to 0.685 target). Lumen Mosaic and Gossamer
-    // never win these three sessions (low-motion/low-density presets lose to the
-    // mid-energy slots in Sessions A and C; post-GBRETIRE.1 jazz Session B favours
-    // Waveform's sparse-density fit) but are eligible candidates: Suite
-    // "LumenMosaic-eligible" below regression-locks LM winning at least one slot in
-    // an ambient-mood-favouring fixture.
-    //
-    // QR.2 prior-state baseline (preserved for reference; predates GBRETIRE.1 / D-186
-    // when Glass Brutalist still existed):
-    //   Track 0 (BPM=130, val=0.70, arous=0.80): demo scene (removed D-253) 0.803 wins.
-    //   Track 1 (BPM=80,  val=0.20, arous=-0.40): GB 0.975 wins (very close tempCenter).
-    //   Track 2 (BPM=115, val=0.50, arous=0.40):  Fractal Tree (GB excluded by repeat penalty).
-    //   Track 3 (BPM=125, val=0.60, arous=0.75):  Membrane (demo scene/FT excluded).
-    //   Track 4 (BPM=70,  val=0.30, arous=-0.50): GB re-eligible → wins.
-    //   Track 5 (BPM=135, val=0.75, arous=0.85):  Ferrofluid Ocean (Membrane/GB excluded,
-    //                                              demo scene fatigue-suppressed).
+    // Scoring trace — GOLDEN.1 (2026-09-24), real roster, track-firsts:
+    //   Track 0 (BPM=130, val=0.70, arous=0.80):  Cymatic Resonance 0.588 (= Session A).
+    //   Track 1 (BPM=80,  val=0.20, arous=-0.40): Gossamer 0.632 (mood 0.930, tempo 0.975).
+    //   Track 2 (BPM=115, val=0.50, arous=0.40):  Glaze 0.630 (mood 0.920, tempo 0.983).
+    //   Track 3 (BPM=125, val=0.60, arous=0.75):  Mitosis 0.589 (CR, used 551–603 s, is
+    //                                              still inside its 120 s window).
+    //   Track 4 (BPM=70,  val=0.30, arous=-0.50): Gossamer 0.596 (recovered, 60 s window).
+    //   Track 5 (BPM=135, val=0.75, arous=0.85):  Mitosis 0.586.
+    // Four families (geometric / sparkle / hypnotic / particles); 9 distinct scenes over
+    // 20 segments at seed 0.
 
     @Test("Session C: preset IDs match V.7.6.2 multi-segment genre-driven sequence")
     func sessionC_presetSequence() throws {
         let session = try planner.plan(
             tracks: makeSessionC(), catalog: makeRealCatalog(), deviceTier: .tier2)
-        // GBRETIRE.1 (2026-07-19): Glass Brutalist retired (D-186). GB previously won
-        // the two low-arousal slots (tracks 1 + 4). With GB gone the greedy planner
-        // reslots deterministically: Waveform takes the low-energy tracks (sparse
-        // density fit) and Ferrofluid Ocean returns at track 5.
-        // KSRETIRE.1 (2026-07-20): Kinetic Sculpture retired (D-188). KS had held the
-        // mid-energy geometric slot at track 2 (Rock-2, BPM=115, val=0.50, arous=0.40);
-        // with KS gone that slot cleanly falls to Membrane, the next-best fit for that
-        // mood (the only `reaction` preset, so no family-repeat competitor). Every other
-        // slot is byte-identical to the pre-retirement sequence — a single runner-up
-        // substitution, not a planning regression. Six tracks, four distinct presets
-        // across four families (hypnotic / waveform / reaction / geometric) — the
-        // ≥3-family variety guard still holds.
-                // PR.8 (2026-09-09): regenerated under the re-weighted scorer — the always-1.0 section
-        // quarter is gated out when no section data exists, and presets with no declared
-        // stem_affinity score the track's mean stem deviation instead of a flat 0.5. The
-        // sole-family repeats below are the same catalog symptom the comments above describe.
-#expect(session.tracks.map { $0.preset.id } == [
-            // BETA.0 (D-253): Arachne takes the slot the removed demo scene held (the fixture's
-            // stale Arachne entry — see Session A's note).
-            "Volumetric Lithograph", "Gossamer", "Arachne", "Fractal Tree", "Gossamer", "Membrane",
+        // GOLDEN.1: regenerated against the real roster (trace above).
+        #expect(session.tracks.map { $0.preset.id } == [
+            "Cymatic Resonance", "Gossamer", "Glaze", "Mitosis", "Gossamer", "Mitosis",
         ])
     }
 
@@ -266,34 +193,18 @@ struct GoldenSessionTests {
 
     // MARK: — Session D: Lumen Mosaic eligibility (BUG-004 closure verification)
 
-    // Scoring trace — BUG-004 closure (2026-05-12). Session D is the load-bearing
-    // verification surface for "at least one certified preset producing non-zero
-    // orchestrator selections" against a *production-cert-aware* catalog. Per the
-    // post-LM.7 cert state, Lumen Mosaic is the only certified production preset;
-    // this fixture proves it wins a track segment under a mood profile aligned to
-    // its visual identity (low-motion + medium density + neutral colour temp).
+    // Scoring trace — GOLDEN.1 (2026-09-24), real roster. Session D locks that a scene
+    // wins when the mood matches its identity (BUG-004 closure, 2026-05-12): Lumen Mosaic
+    // is low-motion, medium-density, neutral-temperature.
     //
     // Track profile: BPM=75, val=0.0, arous=+0.30, single 180 s track.
     //   targetTemp    = 0.5 + 0.4 * 0.0   = 0.50
     //   targetDensity = 0.5 + 0.4 * 0.30  = 0.62
     //   targetMotion  = 0.2 + 0.3 * (75-70)/40 = 0.2375
     //
-    // First-segment scoring (all candidates; ranked):
-    //   LM        : moodScore=0.985  motion=0.9875 → total ≈ 0.868
-    //                (tempCenter 0.5 → 1.00; density 0.65 → 0.97; motion 0.25 → 0.9875)
-    //   Gossamer  : moodScore=0.890  motion=0.9375 → total ≈ 0.830
-    //                (tempCenter 0.5 → 1.00; density 0.40 → 0.78; motion 0.30 → 0.9375)
-    //   Arachne   : moodScore=0.985  motion=0.7375 → total ≈ 0.818
-    //                (tempCenter 0.5 → 1.00; density 0.65 → 0.97; motion 0.50 → 0.7375)
-    //   (a demo scene removed at D-253 scored ≈ 0.796 here; it never won)
-    //   (Glass Brutalist, moodScore≈0.815, ranked below LM here — retired GBRETIRE.1 / D-186.)
-    //
-    // → Track 0, Segment 0: Lumen Mosaic wins.
-    //
-    // After LM emits its segment, family-repeat penalty (0.2× for "geometric") moves
-    // LM and the other geometric presets to the back of the queue for the next segment —
-    // a different preset takes the next segment (likely Gossamer at this mood),
-    // but the first-segment win is sufficient to satisfy the BUG-004 criterion.
+    // Ranking: Lumen Mosaic 0.824 (mood 0.985, tempo 0.988) · Alfvén 0.789 ·
+    // Gossamer 0.773 · Nimbus 0.753 · Ricercar 0.749 · Skein 0.746.
+    // Segments: Lumen Mosaic (0–100.3 s) → Alfvén → Gossamer.
 
     @Test("Session D: Lumen Mosaic wins track 0 segment 0 under LM-favourable mood")
     func sessionD_lumenMosaicWinsFirstSegment() throws {
@@ -306,6 +217,11 @@ struct GoldenSessionTests {
     }
 
     // MARK: — Cross-session
+
+    @Test("Catalog fixture is the full shipped roster (no silent partial load)")
+    func catalog_isTheShippedRoster() {
+        #expect(makeRealCatalog().count == PresetLoaderCompileFailureTest.expectedProductionPresetCount)
+    }
 
     @Test("Determinism: identical inputs produce identical PlannedSession")
     func determinism_samePlanOnRepeatedCalls() throws {
@@ -359,154 +275,30 @@ private func makeProfile(
     )
 }
 
-/// JSON-decoded PresetDescriptor. visual_density is explicit so moodSubScore is correct.
-private func makePreset(
-    name: String,
-    family: PresetCategory?,
-    motionIntensity: Float,
-    visualDensity: Float,
-    colorTempRange: SIMD2<Float>,
-    fatigueRisk: FatigueRisk = .medium,
-    sectionSuitability: [SongSection] = SongSection.allCases,
-    stemAffinity: [String: String] = [:],
-    complexityCost: ComplexityCost = ComplexityCost(tier1: 2.0, tier2: 1.5),
-    transitionAffordances: [TransitionAffordance] = [.crossfade],
-    isDiagnostic: Bool = false
-) -> PresetDescriptor {
-    let secs = sectionSuitability.map { "\"\($0.rawValue)\"" }.joined(separator: ",")
-    let stms = stemAffinity.map { "\"\($0.key)\":\"\($0.value)\"" }.joined(separator: ",")
-    let affs = transitionAffordances.map { "\"\($0.rawValue)\"" }.joined(separator: ",")
-    // D-123: diagnostic presets pass family: nil; JSON omits the field entirely.
-    let familyLine = family.map { "\"family\":\"\($0.rawValue)\"," } ?? ""
-    let json = """
-    {"name":"\(name)",\(familyLine)
-     "visual_density":\(visualDensity),"motion_intensity":\(motionIntensity),
-     "color_temperature_range":[\(colorTempRange.x),\(colorTempRange.y)],
-     "fatigue_risk":"\(fatigueRisk.rawValue)","section_suitability":[\(secs)],
-     "stem_affinity":{\(stms)},
-     "complexity_cost":{"tier1":\(complexityCost.tier1),"tier2":\(complexityCost.tier2)},
-     "transition_affordances":[\(affs)],
-     "is_diagnostic":\(isDiagnostic ? "true" : "false"),
-     "certified":true}
-    """
-    // swiftlint:disable:next force_try
-    return try! JSONDecoder().decode(PresetDescriptor.self, from: Data(json.utf8))
-}
-
 // MARK: — Catalog Fixture
 
-/// All 13 production presets mirrored verbatim from their JSON sidecars
-/// (was 15 before Glass Brutalist's retirement GBRETIRE.1 / D-186, then 14
-/// before Kinetic Sculpture's retirement KSRETIRE.1 / D-188).
-/// Only scoring-relevant fields are populated; rendering fields use decoder defaults.
-/// Note: Murmuration.json (renamed from Starburst.json in MM.0) declares name "Murmuration".
+/// The shipped scene roster, decoded from the sidecars in `Sources/Presets/Shaders/`
+/// exactly as `PresetLoader` decodes them, in the loader's filename order (the
+/// planner breaks score ties by catalog position). The app passes every loaded
+/// scene — diagnostics and uncertified included — and the scorer's exclusion gate
+/// drops them, so this fixture does the same.
 ///
-/// BUG-004 closure (2026-05-12): expanded from 11 → 15 presets to match
-/// production catalog. Added Arachne, Gossamer, Lumen Mosaic, Staged Sandbox.
-/// Spectral Cartograph and Staged Sandbox carry `isDiagnostic: true` so the
-/// orchestrator excludes them categorically per D-074. Lumen Mosaic is
-/// Uzume's first production certified preset (LM.7 / 2026-05-12) and
-/// participates in golden scoring as a real eligible candidate.
+/// GOLDEN.1 (2026-09-24): replaces a hand-mirrored copy of the sidecars that had
+/// drifted to a May-2026 subset of ~10 scenes (it still carried Arachne, removed at
+/// D-246). A copy cannot go stale if there is no copy; `PresetLoaderCompileFailureTest`
+/// owns the roster count.
 private func makeRealCatalog() -> [PresetDescriptor] {
-    [
-        makePreset(
-            name: "Waveform", family: .waveform,
-            motionIntensity: 0.6, visualDensity: 0.3,
-            colorTempRange: SIMD2(0.2, 0.8), fatigueRisk: .medium,
-            sectionSuitability: SongSection.allCases,
-            complexityCost: ComplexityCost(tier1: 0.4, tier2: 0.2)),
-        makePreset(
-            name: "Nebula", family: .particles,
-            motionIntensity: 0.3, visualDensity: 0.8,
-            colorTempRange: SIMD2(0.1, 0.5), fatigueRisk: .low,
-            sectionSuitability: [.ambient, .comedown],
-            complexityCost: ComplexityCost(tier1: 0.6, tier2: 0.3)),
-        makePreset(
-            name: "Murmuration", family: .particles,
-            motionIntensity: 0.85, visualDensity: 0.9,
-            colorTempRange: SIMD2(0.2, 0.7), fatigueRisk: .low,
-            sectionSuitability: [.buildup, .peak],
-            complexityCost: ComplexityCost(tier1: 2.5, tier2: 1.4)),
-        makePreset(
-            name: "Volumetric Lithograph", family: .geometric,
-            motionIntensity: 0.6, visualDensity: 0.7,
-            colorTempRange: SIMD2(0.2, 0.95), fatigueRisk: .low,
-            sectionSuitability: [.buildup, .peak, .bridge],
-            stemAffinity: ["bass": "b", "vocals": "v", "other": "o", "drums": "d"],
-            complexityCost: ComplexityCost(tier1: 3.8, tier2: 2.0),
-            transitionAffordances: [.crossfade, .cut]),
-        makePreset(
-            name: "Spectral Cartograph", family: nil,
-            motionIntensity: 0.0, visualDensity: 0.1,
-            colorTempRange: SIMD2(0.3, 0.6), fatigueRisk: .low,
-            sectionSuitability: [.ambient],
-            complexityCost: ComplexityCost(tier1: 0.3, tier2: 0.15),
-            isDiagnostic: true),
-        makePreset(
-            name: "Membrane", family: .reaction,
-            motionIntensity: 0.7, visualDensity: 0.55,
-            colorTempRange: SIMD2(0.25, 0.8), fatigueRisk: .medium,
-            sectionSuitability: [.buildup, .peak],
-            complexityCost: ComplexityCost(tier1: 0.8, tier2: 0.4)),
-        makePreset(
-            name: "Fractal Tree", family: .fractal,
-            motionIntensity: 0.55, visualDensity: 0.65,
-            colorTempRange: SIMD2(0.2, 0.75), fatigueRisk: .medium,
-            sectionSuitability: [.ambient, .buildup, .bridge],
-            complexityCost: ComplexityCost(tier1: 1.2, tier2: 0.7)),
-        makePreset(
-            name: "Ferrofluid Ocean", family: .geometric,
-            motionIntensity: 0.65, visualDensity: 0.75,
-            colorTempRange: SIMD2(0.1, 0.55), fatigueRisk: .medium,
-            sectionSuitability: [.buildup, .peak, .bridge],
-            complexityCost: ComplexityCost(tier1: 1.5, tier2: 0.8)),
-        makePreset(
-            name: "Arachne", family: .drawing,
-            motionIntensity: 0.5, visualDensity: 0.65,
-            colorTempRange: SIMD2(0.25, 0.75), fatigueRisk: .low,
-            sectionSuitability: [.ambient, .buildup, .bridge, .comedown],
-            stemAffinity: [
-                "drums": "web_spawn_rate",
-                "bass": "strand_thickness_and_vibration",
-                "other": "birth_color",
-                "vocals": "hue_drift",
-            ],
-            complexityCost: ComplexityCost(tier1: 5.5, tier2: 5.5),
-            transitionAffordances: [.crossfade, .cut]),
-        makePreset(
-            name: "Gossamer", family: .sparkle,
-            motionIntensity: 0.3, visualDensity: 0.4,
-            colorTempRange: SIMD2(0.15, 0.85), fatigueRisk: .low,
-            sectionSuitability: [.ambient, .bridge, .comedown],
-            stemAffinity: [
-                "drums": "strand_tremor_accent",
-                "bass": "strand_tautness",
-                "other": "wave_emission_rate",
-                "vocals": "wave_hue_and_emission_gate",
-            ],
-            complexityCost: ComplexityCost(tier1: 6.0, tier2: 3.5),
-            transitionAffordances: [.crossfade, .morph]),
-        makePreset(
-            name: "Lumen Mosaic", family: .geometric,
-            motionIntensity: 0.25, visualDensity: 0.65,
-            colorTempRange: SIMD2(0.3, 0.7), fatigueRisk: .low,
-            sectionSuitability: [.ambient, .comedown, .bridge],
-            stemAffinity: [
-                "drums": "ripple_origin",
-                "bass": "agent_drift_speed",
-                "vocals": "vocal_hotspot",
-                "other": "ambient_palette_drift",
-            ],
-            complexityCost: ComplexityCost(tier1: 4.5, tier2: 3.7)),
-        makePreset(
-            name: "Staged Sandbox", family: nil,
-            motionIntensity: 0.1, visualDensity: 0.3,
-            colorTempRange: SIMD2(0.3, 0.55), fatigueRisk: .high,
-            sectionSuitability: [.ambient],
-            complexityCost: ComplexityCost(tier1: 1.5, tier2: 1.0),
-            transitionAffordances: [.cut],
-            isDiagnostic: true),
-    ]
+    guard let shaders = PresetLoader.bundledShadersURL,
+          let files = try? FileManager.default.contentsOfDirectory(
+              at: shaders, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+        return []
+    }
+    return files
+        .filter { $0.pathExtension == "json" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        .compactMap { url in
+            (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode(PresetDescriptor.self, from: $0) }
+        }
 }
 
 // MARK: — Session Fixtures

@@ -232,7 +232,7 @@ The Orchestrator is the product's key differentiator and is implemented as an ex
 - **`PlaybackActionRouter`** (D-050) — protocol contract for keyboard-surface live-adaptation actions. Concrete `DefaultPlaybackActionRouter` lives in `UzumeApp/Services/` per U.6b. All seven methods (`moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation` / `toggleMoodLock`) wired through `PlaybackShortcutRegistry` to keyboard shortcuts.
 - **`QualityCeiling`** (U.8, D-053) — `.auto / .performance / .balanced / .ultra` enum; `complexityThresholdMs(for: tier)` returns nil for `.ultra` (no exclusion), 12 ms for `.performance`, `tier.frameBudgetMs` otherwise. Read by `DefaultPresetScorer` for the complexity-cost exclusion gate and by `MLDispatchScheduler` (Renderer) per D-059d.
 
-Golden-session regression fixtures (4.4) live in `Tests/Orchestrator/GoldenSessionTests.swift` — 12 regression tests across three curated playlists; regenerated multiple times since landing as the scoring surface evolved (QR.2 / V.7.6.2 / BUG-004).
+Golden-session regression fixtures (4.4) live in `Tests/Orchestrator/GoldenSessionTests.swift` — 12 regression tests across three curated playlists; regenerated multiple times since landing as the scoring surface evolved (QR.2 / V.7.6.2 / BUG-004). Since GOLDEN.1 the catalog is the shipped sidecars loaded directly (no hand mirror); all plans are unseeded (seed 0 = pure argmax), so they pin the scorer, not BUG133.2's near-tie sampling.
 
 ## UI Layer
 
