@@ -45,7 +45,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-111 | Accepted (amended ×2) | Phase MD license posture: provenance + attribution + takedown |
 | D-113 | Accepted | Phase MD posture reframe: inspired-by, not derivative-of |
 | D-114 | Accepted | Phase MD release model: 20-preset first-release bundle |
-| D-119 | Accepted | Product brand identity: Milkdrop-influenced modern platform |
+| D-119 | Superseded by D-251 | Product brand identity: Milkdrop-influenced modern platform |
 | D-121 | Accepted | Phase MD visual-divergence rule |
 | D-122 | Accepted | Phase MD kill-switch / re-evaluation triggers |
 | D-123 | Accepted | `family` taxonomy aligned to cream-of-crop themes; D-120 superseded |
@@ -132,6 +132,12 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-248 | Accepted for uncertified review | **Root Choir retires the failed Newton mechanism and becomes Liquid Script** — shader-only tapered local writing through bounded distributed feedback, with `bassDev` advection and `beatComposite` accents (ROOTCHOIR.3, 2026-09-10) |
 | D-250 | Accepted | **Vocabulary stops at the prose/code boundary: what a person reads says *scene*, code and data keep saying `preset`.** Option C (one word everywhere, code included) is NOT planned — pursued only if something forces it (VOCAB.1, Matt 2026-09-22) |
 | D-249 | Accepted — executed | **Retire Root Choir completely after the merged live build failed the selected Martin motion oracle**; retain only the generic sidecar-owned feedback-format capability (ROOTCHOIR-RETIRE.1 / BUG-128, 2026-09-11) |
+| D-251 | Accepted | **D-119 is retired as a rule; original scenes are preferred over Milkdrop-inspired ones, as many as possible** (BETA.0, Matt 2026-09-24) |
+| D-252 | Accepted | **CC BY-NC-SA ports are allowed: each file marked, capped at about 3, each with a clean-room replacement named**; Aurora Veil's header carries its notice (BETA.0, Matt 2026-09-24) |
+| D-253 | Accepted — executed | **Plasma removed; Waveform kept, uncertified, as the launch default** — it does not count toward the scene target (BETA.0, Matt 2026-09-24) |
+| D-254 | Accepted | **Tier-2-first flagship scenes are allowed** (BETA.0, Matt 2026-09-24) |
+| D-255 | Accepted | **The beta scene programme (Phase BETA) supersedes Phase PR**, the 2026-09-04 remediation (BETA.0, Matt 2026-09-24) |
+| D-256 | Accepted | **50 certified scenes is a goal, not a floor; the quality bar governs** (BETA.0, Matt 2026-09-24) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -1128,6 +1134,8 @@ The reframe is operative on three axes:
 ---
 
 ## D-119 — Uzume product brand identity: Milkdrop-influenced modern platform (Strategy Addendum follow-up, filed 2026-05-12)
+
+> **Superseded by D-251 (Matt, 2026-09-24):** retired as a rule; original scenes are preferred. Kept as the historical record.
 
 **Rule.** Uzume's product identity is **"Milkdrop-influenced modern platform"** — a music-visualization product whose catalog is intentionally majority-Milkdrop-inspired, drawing on the 25-year Milkdrop preset tradition as Uzume's primary aesthetic well, layered with Uzume's modern capabilities (stems via Open-Unmix HQ, beat phase via Beat This!, ray-march scenes, `mv_warp` per-vertex feedback, PBR materials, MV-3 audio analysis surface). This is the committed product identity going forward.
 
@@ -5905,3 +5913,90 @@ sidecar, dedicated tests, reference folder, and design document are deleted, and
 harness lists drop by one. The generic sidecar-owned `mv_warp` feedback-format resolver and its
 app regression tests remain: they are independent renderer capability, not a defense of the
 retired preset. D-247 and D-248 remain as historical records and are superseded by this decision.
+
+## D-251: D-119 is retired as a rule; originals are preferred (BETA.0)
+
+**Date:** 2026-09-24 · **Increment:** BETA.0 · **Status:** Accepted · **Supersedes:** D-119
+
+Matt, verbatim (slate §00, decision 1): *"D-119 shouldn't be a rule. We want more original presets than
+ports of Milkdrop. I want as many original presets as possible."*
+
+D-119's catalog-ratio commitment (≥ 50 % Milkdrop-inspired at steady state) no longer governs. The beta
+slate's answer to its DECISION-NEEDED 1 follows: Milkdrop Lane E is out of the beta window and is emergency
+backfill only, and only if Matt asks for it. D-119 stays in place as the historical record; D-115's C'
+(10 + 10) and D-122's trigger 4, both of which measure against D-119's ratio, lose their target with it.
+
+**References.** `docs/presets/BETA_SCENE_SLATE_2026-09-24.md` §00 (decision 1) and §7 (DECISION-NEEDED 1),
+D-119, D-115, D-122, D-215.
+
+## D-252: CC BY-NC-SA ports are allowed, marked and capped (BETA.0)
+
+**Date:** 2026-09-24 · **Increment:** BETA.0 · **Status:** Accepted
+
+Matt, verbatim (slate §00, decision 2): *"Agree with your recommendation: B."* No commercial distribution
+is planned.
+
+Option B from slate §7 DECISION-NEEDED 2, with its cap: NC-SA ports are allowed, **each file marked**,
+**capped at about 3 scenes**, and **each with a clean-room replacement named**. ShareAlike means such a
+port is itself CC BY-NC-SA — it cannot be relicensed MIT, and it stops being distributable the day Uzume
+charges money; the named replacement is the exit. This already applied to `AuroraVeil.metal` (D-185, a
+faithful port of nimitz's Shadertoy XtGGRt), whose header credited nimitz but carried no licence notice.
+BETA.0 adds that notice and a `docs/CREDITS.md` row. The slate notes this is not legal advice.
+
+**References.** Slate §00 (decision 2) and §7 (DECISION-NEEDED 2), D-185,
+`UzumeEngine/Sources/Presets/Shaders/AuroraVeil.metal` header, `docs/CREDITS.md`.
+
+## D-253: Plasma removed; Waveform kept as the launch default (BETA.0)
+
+**Date:** 2026-09-24 · **Increment:** BETA.0 · **Status:** Accepted — executed
+
+Matt, verbatim (slate §00, decision 3): *"Remove Plasma, keep Waveform. I will likely remove Waveform
+later."*
+
+Plasma (a 55-line day-one demo shader, zero audio routes, no reference images; PR.9 inventory) is
+deleted: `Plasma.{metal,json}`, `docs/VISUAL_REFERENCES/plasma/`, and every test enumeration, following
+the D-246 Arachne pattern. **Waveform stays, uncertified, as the launch default** (`VisualizerEngine`
+installs it before any plan wires) and **does not count toward the scene target**. This departs from the
+slate's recommendation (make a certified scene the default, then remove both); the Waveform removal is
+deferred, not declined. Historical references in dated records are left intact.
+
+**References.** Slate §00 (decision 3) and §7 (DECISION-NEEDED 3), D-246 (removal precedent),
+`ENGINEERING_PLAN.md` PR.9.
+
+## D-254: Tier-2-first flagship scenes are allowed (BETA.0)
+
+**Date:** 2026-09-24 · **Increment:** BETA.0 · **Status:** Accepted
+
+Matt, verbatim (slate §00, decision 4): *"Yes"*
+
+Answering slate §7 DECISION-NEEDED 4: flagship scenes may target 6–12 ms on M3+ and step down, or be
+excluded on M1/M2 through `complexity_cost`, using the existing governor ladder (D-057).
+
+**References.** Slate §00 (decision 4) and §7 (DECISION-NEEDED 4), D-057.
+
+## D-255: The beta scene programme supersedes Phase PR (BETA.0)
+
+**Date:** 2026-09-24 · **Increment:** BETA.0 · **Status:** Accepted
+
+Matt, verbatim (slate §00, decision 5): *"This work trumps the 2026-09-04 work."*
+
+Phase BETA (the slate's October 15 plan) replaces Phase PR, the preset-review remediation opened from the
+2026-09-04 roster review. Phase PR is marked ⏸ superseded in `ENGINEERING_PLAN.md`; its register table is
+kept intact because the observations it records remain true, and any of them can be picked up again as
+an ordinary increment.
+
+**References.** Slate §00 (decision 5), `ENGINEERING_PLAN.md` §Phase BETA and §Phase PR,
+`docs/PRESET_ROSTER_REVIEW_2026-09-04.md`.
+
+## D-256: 50 is a goal, not a floor; the quality bar governs (BETA.0)
+
+**Date:** 2026-09-24 · **Increment:** BETA.0 · **Status:** Accepted
+
+Matt, verbatim (slate §00, decision 6): *"50 is a target … not a strict floor"*; *"I just don't want
+things to look cheap and amateurish."*
+
+The slate's honest read follows from this: 50 certified by October 15 is not achievable at the quality
+bar, so the window attempts 11 originals and expects 8–10 to certify (a beta roster of about 33–35), and
+50 remains the post-beta goal. No scene certifies to hit a count.
+
+**References.** Slate §00 (decision 6 and the October 15 plan).

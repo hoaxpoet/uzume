@@ -230,7 +230,18 @@ what he took (plus Release); **concurrency across tracks was not taken** — it 
 that no longer blocks the listener, and PREP.1 found four workers being OOM-killed at 23–45 GB, so
 it needs the memory question answered before it is worth anything.
 
-## Phase PR — Preset review remediation 🔨 (2026-09-04; from Matt's full-roster review, scope calls below)
+## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
+
+Matt's 2026-09-24 decisions (D-251…D-256) replace Phase PR with a scene programme aimed at the October 15
+public beta: attempt eleven original scenes in parallel lanes, each taken through `preset-concept` from a
+proven moving source, reviewed against the ten-song beta test playlist
+([`docs/presets/BETA_TEST_PLAYLIST.md`](presets/BETA_TEST_PLAYLIST.md)), with a new-scene cutoff of
+October 11 and a whole-roster soak after it. Fifty certified scenes is the goal, not a floor (D-256); the
+honest beta read is about 33–35. The plan, lanes, order and per-entry sources live in
+[`docs/presets/BETA_SCENE_SLATE_2026-09-24.md`](presets/BETA_SCENE_SLATE_2026-09-24.md) §00; increments are
+recorded in their own rows as they land.
+
+## Phase PR — Preset review remediation ⏸ superseded by Phase BETA (Matt, 2026-09-24; D-255) (opened 2026-09-04 from Matt's full-roster review, scope calls below)
 
 Matt watched the roster end to end against **David Bowie — *Low*** (local FLAC,
 `/Volumes/Extreme SSD/B/Bowie, David/[1977] - Low/`, 11 tracks, so the **local-file** path with
@@ -276,7 +287,7 @@ implementation."*
 
 ---
 
-## Phase PR, restructured (2026-09-09) — one preset at a time
+## Phase PR, restructured (2026-09-09) — one preset at a time ⏸ superseded by Phase BETA (Matt, 2026-09-24)
 
 **The unit of work is a preset, not a mechanism.** Each deep dive runs in four steps and does not
 skip forward:
