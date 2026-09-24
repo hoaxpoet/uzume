@@ -98,7 +98,9 @@ struct ReplayHarnessRouteCoverageTests {
         "drumsCentroid", "bassCentroid", "vocalsCentroid", "otherCentroid",
         "vocalsBand1", "otherBand1",
         "stringsActivityDev", "brassActivityDev", "woodwindsActivityDev",
-        "percussionActivityDev"
+        "percussionActivityDev",
+        // BC.1 — track-scoped beat clarity (missing column → unknown, not zero)
+        "beatClarity01"
     ]
 
     /// Primitives that are NOT `FeatureVector` / `StemFeatures` fields and so cannot be
