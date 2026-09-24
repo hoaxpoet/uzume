@@ -1,11 +1,12 @@
-# Increment BETA.0 — decisions recorded, Plasma removed, beta test playlist proposed (docs + fix-scope removal)
+# Increment BETA.0 — decisions recorded, Plasma removed, beta test playlist written (docs + fix-scope removal)
 
 **Objective.** After this session:
 - the beta scene programme exists in the plan of record;
 - Matt's six 2026-09-24 decisions carry D-numbers;
 - Aurora Veil's ported shader carries the licence notice its source requires;
 - Plasma is gone from the repo;
-- a genre-spread test playlist is proposed for Matt's approval.
+- Matt's approved 10-track test playlist exists as an `.m3u` Uzume can open, plus a doc that says what each
+  track tests.
 
 Waveform is **not** touched: Matt keeps it for now.
 
@@ -21,8 +22,8 @@ Waveform is **not** touched: Matt keeps it for now.
 2. `docs/DECISIONS.md` §Index (format of rows), and D-119, D-115, D-185, D-246 (the removal precedent).
 3. `docs/ENGINEERING_PLAN.md` §Phase PR (lines ~233–345) and PR.9.
 4. `UzumeEngine/Sources/Presets/Shaders/AuroraVeil.metal` (header only) and `docs/CREDITS.md`.
-5. `tools/data/corpus_pilot_1000.csv` (column `genre_bucket`) and `docs/diagnostics/CENSUS_FULL_REPORT.md`
-   §headline (what per-track data the census holds).
+5. `UzumeEngine/Sources/Session/M3UParser.swift` header. Absolute paths are accepted; `.m4a`, `.mp3` and
+   `.flac` are allowed; unreadable entries are skipped.
 
 ## Pre-flight invariants (each failure stops the session)
 - Clean tree on a new branch `claude/beta-0`, created from `main`.
@@ -85,21 +86,67 @@ Waveform is **not** touched: Matt keeps it for now.
    - The full engine suite plus the app build pass.
    - `RELEASE_NOTES_DEV.md` carries one line.
 
-5. **Propose the beta test playlist, then STOP.**
-   - Write a small script at `tools/beta_playlist_candidates.py`. It picks **2 candidates per genre
-     bucket** from `corpus_pilot_1000.csv` for: electronic, hiphop, rock_alt_indie, jazz, classical, pop,
-     soul_rnb, folk_country, world_latin, soundtrack.
-   - Prefer FLAC/lossless tracks, 3–6 minutes long, spread across decades.
-   - If the census results on `/Volumes/Extreme SSD` are mounted, include per-track BPM and the
-     beat-irregularity flag, and make sure the set includes ≥ 2 beat-irregular tracks and one track in a
-     meter other than 4/4 if the census can identify one.
-   - Add Bowie, *Low* ("Speed of Life" + "Warszawa") as the fixed anchors.
-   - Write `docs/presets/BETA_TEST_PLAYLIST_CANDIDATES.md`: a table with artist, title, bucket, BPM,
-     irregular, duration, and why.
+5. **Write the beta test playlist.** Matt approved it on 2026-09-24. It is the fixed review material for
+   every Phase BETA scene: each spike, M7 and rewatch check runs against these ten songs. Local files are the
+   review path (whole-track analysis, stems on time). Matt mirrors the same ten songs by hand as a Spotify
+   playlist for the streaming pass.
 
-   **Hard stop:** report the table and wait for Matt to choose about 10. Do **not** write an .m3u until he
-   approves.
-   **Done-when:** the candidates doc exists and the session has stopped.
+   **(a) Write `tools/data/beta_test_playlist.m3u` with exactly this content.** Every path was checked
+   against `tools/data/corpus_manifest.csv.gz`.
+   ```
+   #EXTM3U
+   #EXTINF:538,LCD Soundsystem — Dance Yrself Clean
+   /Volumes/Extreme SSD/L/LCD Soundsystem/[2010] - This Is Happening/01 Dance Yrself Clean.mp3
+   #EXTINF:304,OutKast — B.O.B.
+   /Volumes/Extreme SSD/O/OutKast/[2000] - Stankonia/1-11 B.O.B..mp3
+   #EXTINF:266,Stevie Wonder — Superstition
+   /Volumes/Extreme SSD/UVW/Wonder, Stevie/[1972] - Talking Book - FLAC/06-Superstition.flac
+   #EXTINF:301,Nirvana — Smells Like Teen Spirit
+   /Volumes/Extreme SSD/N/Nirvana/[1991] - Nevermind/01 Smells Like Teen Spirit.m4a
+   #EXTINF:181,The Beatles — Penny Lane
+   /Volumes/Extreme SSD/B/The Beatles/[1967] - Magical Mystery Tour - FLAC/Penny Lane (stereo).flac
+   #EXTINF:327,Dave Brubeck Quartet — Take Five
+   /Volumes/Extreme SSD/B/Brubeck, Dave/[1959] - Time Out/1-03 Take Five.mp3
+   #EXTINF:289,Radiohead — Pyramid Song
+   /Volumes/Extreme SSD/R/Radiohead/[2001] - Amnesiac/FLAC/02. Pyramid Song.flac
+   #EXTINF:331,Massive Attack — Teardrop
+   /Volumes/Extreme SSD/M/Massive Attack/[1998] - Mezzanine - FLAC/03 - Massive Attack - Teardrop.flac
+   #EXTINF:426,Beethoven (Barenboim) — Piano Sonata No. 14 "Moonlight", I. Adagio sostenuto
+   /Volumes/Extreme SSD/B/Beethoven/[1989] - The Complete Piano Sonatas (Daniel Barenboim)/CD05/04 - Sonata No.14 in C sharp minor, Op.27 No.2 Moonlight - 1. Adagio sostenuto.flac
+   #EXTINF:384,David Bowie — Warszawa
+   /Volumes/Extreme SSD/B/Bowie, David/[1977] - Low/08 - Warszawa.flac
+   ```
+
+   **(b) Write `docs/presets/BETA_TEST_PLAYLIST.md`.** It holds:
+   - where the `.m3u` lives, and how to open it (File → Open, or drag it onto the window; it then stays in
+     File → Open Recent);
+   - a note that Matt keeps a Spotify mirror of the same ten songs;
+   - this table, verbatim:
+
+   | # | Track | Genre | What it tests |
+   |---|---|---|---|
+   | 1 | LCD Soundsystem, "Dance Yrself Clean" | electronic | About three minutes of near-hush, then the drop. Goldengrove bloom timing, Supernova build and detonation, Fireflies at near-silence, four-on-the-floor. |
+   | 2 | OutKast, "B.O.B." | hip-hop | Very fast and dense. Kagura's fast-tempo case; stress for stem-driven scenes. |
+   | 3 | Stevie Wonder, "Superstition" | soul/funk | Mid-tempo groove with horns. "Does it dance?" (Kagura, Pendulums). |
+   | 4 | Nirvana, "Smells Like Teen Spirit" | rock | Quiet-verse/loud-chorus switches. Section boundaries (Sumi's comb stroke, Physarum rule changes), calming at verses. |
+   | 5 | The Beatles, "Penny Lane" | pop | Audible key changes. Drumhead, Harmonograph, harmony-driven colour. |
+   | 6 | Dave Brubeck Quartet, "Take Five" | jazz | 5/4 with swing. The *"everything seems like 4/4"* note (FFO); meter-aware Pendulums. |
+   | 7 | Radiohead, "Pyramid Song" | art rock | The "where's the beat?" track (the census's disagreement example). Fireflies stay free; Kagura falls back to its sway. |
+   | 8 | Massive Attack, "Teardrop" | trip-hop | Slow, heartbeat kick, deep bass, lead vocal. The slow-tempo case; Lantern, Pool. |
+   | 9 | Beethoven, "Moonlight" I (Barenboim) | classical | Solo piano, no drums, slow harmonic drift. Restraint; harmony-driven scenes without a beat. |
+   | 10 | David Bowie, "Warszawa" | ambient | Nearly beatless. The anchor to the 2026-09-04 roster review; near-silence behaviour. |
+
+   **(c) Verify.**
+   - If `/Volumes/Extreme SSD` is mounted, run `test -r` on each of the ten paths and parse the file once
+     through `M3UParser` (a throwaway `swift` snippet or a one-off test run is fine; do not commit it).
+     Report `10/10 resolved`.
+   - If the census results are on the SSD, add measured BPM and the beat-irregularity flag per track to the
+     doc table, and cite the source file. Do not type BPMs from memory.
+   - If the SSD is not mounted, say so in the closeout and mark the verification **owed**. Do not fail the
+     session over it.
+
+   **Done-when:** both files exist and the verification result is stated. No hard stop: the list is already
+   approved.
 
 ## Do NOT
 - Touch Waveform in any way (D-253 keeps it; it remains the launch default).
@@ -122,10 +169,10 @@ grep -rn "Plasma" UzumeEngine/Sources UzumeEngine/Tests
 - `[BETA.0] docs: D-251…D-256 — Matt's 2026-09-24 beta decisions; Phase BETA supersedes PR`
 - `[BETA.0] AuroraVeil: CC BY-NC-SA notice for the adapted nimitz code`
 - `[BETA.0] Presets: remove Plasma (D-253)`
-- `[BETA.0] tools: beta test-playlist candidates for Matt's pick`
+- `[BETA.0] docs+tools: the beta test playlist (.m3u + what each track tests)`
 
 ## Closeout
 Invoke `closeout`: the 8-part report with the verbatim `Scripts/closeout_evidence.sh` block as §2. Add:
 - the D-number → decision table;
 - the list of files that referenced Plasma and what happened to each;
-- the playlist candidates table (repeat it, so Matt can answer from the report).
+- the playlist verification result (`N/10 resolved`, or owed if the SSD was not mounted).

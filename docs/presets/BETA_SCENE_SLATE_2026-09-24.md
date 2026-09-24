@@ -67,10 +67,10 @@ All six can run in parallel worktrees. Every spike ends in a hard stop with fram
 
 **Day-0, done in parallel with the first spikes. No new infrastructure is built for the window.**
 - **Plasma removal increment.** Scene, sidecar, tests, docs and roster counts.
-- **Test playlist.** About 10 local FLACs drawn from `tools/data/corpus_pilot_1000.csv` (the CENSUS stratified
-  pilot is already genre-stratified from Matt's own library), with one pick per genre bucket plus *Low*.
-  Matt approves the list. Local-file playback is the M7 path. Do one streaming pass per scene before it
-  certifies.
+- **Test playlist: approved by Matt 2026-09-24.** Ten songs from his library, written to
+  `tools/data/beta_test_playlist.m3u` with what-each-tests in `docs/presets/BETA_TEST_PLAYLIST.md`
+  (BETA.0 task 5). Local-file playback is the M7 path. Do one streaming pass per scene on Matt's Spotify
+  mirror of the same ten before it certifies.
 - **The rewatch bar (§2) is applied by hand in the window.**
   - R2 and R3 run through `compare_render.sh` and `motion_gate.sh` on two contrasting playlist tracks.
   - Mechanising the R1 decoy lift is post-beta.
