@@ -93,7 +93,7 @@ struct DiagnosticHoldTests {
     @Test("updatedTransition still passes through when diagnosticPresetLocked is true")
     func diagnosticHold_allowsBoundaryReschedule() {
         let plan = PlannedTransition(
-            fromPreset: makeDescriptor(name: "Plasma"),
+            fromPreset: makeDescriptor(name: "Waveform"),
             toPreset: makeDescriptor(name: "Nebula"),
             style: .crossfade,
             duration: 2.0,

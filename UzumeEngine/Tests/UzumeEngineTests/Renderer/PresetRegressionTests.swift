@@ -240,7 +240,6 @@ private let goldenPresetHashes: [String: PresetHashes] = [
     //   locking in the defect Matt reported. A golden is only a regression guard if the
     //   picture it encodes is worth keeping.
     "Nebula": (steady: 0x7B330F0F0F8D1C16, beatHeavy: 0x39398B0F0F0B1D1C, quiet: 0x53772D1F0F0C0E5F),
-    "Plasma": (steady: 0x030F170A072F1B0F, beatHeavy: 0x4193254F0E8E87C7, quiet: 0x0F1F0F0F0F07070F),
     // Skein.6 (D-159 cert): all three fixtures are IDENTICAL — the standalone
     // `skein_fragment` this harness renders is the static canvas GROUND (the
     // painting is built by the mv_warp marks-on-top branch + SkeinState slot-6

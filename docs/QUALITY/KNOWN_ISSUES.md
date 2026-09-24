@@ -1035,7 +1035,7 @@ turn, and they lose it every time.
 | family | members | scenes that ever appeared |
 |---|---|---|
 | particles | **6** | **1** — Cytokinesis ×14 (Nebula, Witchlight, Murmuration, Mitosis, Filigree: never) |
-| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) |
+| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) — Plasma removed 2026-09-24 (BETA.0, D-253) |
 | geometric | 4 | 1 — Cymatic Resonance ×8 |
 | painterly | 2 | 1 — Ricercar ×3 |
 | waveform | 2 | 2 — Stave ×8, Waveform ×1 |

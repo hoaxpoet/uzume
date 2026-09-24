@@ -263,7 +263,7 @@ struct AlfvenFilmPreviewTests {
         // drawn by `AlfvenSolver` through the ParticleGeometry seam. Its `Alfven.metal` is a
         // 53-line stub, so adding "Alfvén" to that harness's preset list would composite a
         // sheet of the D-037 background and nothing else — plausible-looking and entirely
-        // wrong. That is the Nebula/Plasma failure (the `direct` harness fed LCG noise and
+        // wrong. That is the Nebula failure (the `direct` harness fed LCG noise and
         // every still was noise). Driving the real solver is the whole point.
         //
         // Fixtures are the MEASURED operating range, not invented levels: bassRel p05/p50/p95

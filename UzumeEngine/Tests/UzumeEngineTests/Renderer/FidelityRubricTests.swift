@@ -158,7 +158,6 @@ private let expectedAutomatedGate: [String: Bool] = [
     // L4 stayed manual and Nebula stayed `certified: false` until Matt's M7 of 2026-09-11
     // (PR.24). ⚠ Its reference set is STILL an unfilled template — see the certifiedPresets note.
     "Nebula":               true,    // lightweight; L1-L3 pass since PR.19
-    "Plasma":               false,   // lightweight; L2 fails — no deviation primitives in source
     "Skein":                false,   // lightweight; L2 fails BY CONSTRUCTION — Skein's deviation
                                      // primitives (stems.*EnergyDev, midAttRel — D-026) are consumed
                                      // CPU-side in SkeinState and reach the shader pre-computed via

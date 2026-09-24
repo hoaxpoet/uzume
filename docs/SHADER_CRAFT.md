@@ -2019,7 +2019,7 @@ swift test --package-path UzumeEngine --filter "FidelityRubricReportTests/rubric
 3. Set `"certified": true` in the preset's JSON sidecar.
 4. Run `swift test --package-path UzumeEngine --filter FidelityRubricTests` — Suite 2 gate dict must be updated (change `false → true` for the newly certified preset).
 
-**Lightweight presets** (Plasma, Waveform, Nebula, SpectralCartograph) use a 4-item ladder (L1–L4) instead of the full 15. Add `"rubric_profile": "lightweight"` to the sidecar. Detail-cascade and material-count requirements are waived for stylized 2D / diagnostic presets. See D-067(b).
+**Lightweight presets** (e.g. Waveform, Nebula, SpectralCartograph) use a 4-item ladder (L1–L4) instead of the full 15. Add `"rubric_profile": "lightweight"` to the sidecar. Detail-cascade and material-count requirements are waived for stylized 2D / diagnostic presets. See D-067(b).
 
 **`rubric_hints`** allows authors to assert P1 (hero specular) and P3 (dust motes) when the static analyzer cannot detect them from function names alone. Add `"rubric_hints": {"hero_specular": true, "dust_motes": false}` to the sidecar. The hints do not affect M1–M6 or the mandatory gate.
 
@@ -2499,7 +2499,7 @@ Every preset ships a `<PresetName>.json` sidecar alongside its `.metal` file. Th
 | `section_suitability` | all sections | Array of `"ambient"`, `"buildup"`, `"peak"`, `"bridge"`, `"comedown"`. Sections this preset suits. Default = all (no penalty). (Increment 4.0) |
 | `complexity_cost` | `{"tier1":1.0,"tier2":1.0}` | Estimated ms at 1080p per device tier (M1/M2 = tier1, M3+ = tier2). Accepts scalar or `{"tier1":x,"tier2":y}`. (Increment 4.0) |
 | `certified` | `false` | Matt-approved reference-frame match. Only flipped to `true` after reviewing against `docs/VISUAL_REFERENCES/<preset>/` references. Orchestrator excludes uncertified presets by default. (Increment V.6) |
-| `rubric_profile` | `"full"` | Which rubric ladder to apply. `"full"` = 7 mandatory + 4 expected + 4 preferred. `"lightweight"` = 4 items for stylized 2D / diagnostic presets (Plasma, Waveform, Nebula, SpectralCartograph). Unknown strings fall back to `"full"` with a warning. (Increment V.6) |
+| `rubric_profile` | `"full"` | Which rubric ladder to apply. `"full"` = 7 mandatory + 4 expected + 4 preferred. `"lightweight"` = 4 items for stylized 2D / diagnostic presets (e.g. Waveform, Nebula, SpectralCartograph). Unknown strings fall back to `"full"` with a warning. (Increment V.6) |
 | `rubric_hints` | `{}` | Author-asserted flags for rubric items the analyzer cannot auto-detect. `"hero_specular": true` satisfies P1; `"dust_motes": true` satisfies P3. Missing keys default to `false`. (Increment V.6) |
 | `audio_routes` | `[]` | The preset's audio-routing manifest — see §17.1. Required non-empty for certification (QG.1). |
 | `feedback_pixel_format` | drawable | mv_warp feedback-buffer format: `"rgba16Float"` (HDR bloom headroom — safe ONLY for decay-bounded feedback: Nacre/Floret/Glaze) or `"bgra8Unorm"` (linear non-sRGB 8-bit — Fata Morgana, D-139). Omit for faithful no-decay warps: the 8-bit clamp is load-bearing (Dragon Bloom, D-137 — float over-accumulates to pale white). Unknown values warn + fall back to the drawable. (PUB.4) |

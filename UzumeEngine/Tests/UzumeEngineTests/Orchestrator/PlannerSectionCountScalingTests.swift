@@ -63,7 +63,7 @@ struct PlannerSectionCountScalingTests {
     private static func makeCatalog() -> [PresetDescriptor] {
         [
             makePreset(name: "Waveform", family: "waveform", motion: 0.6, density: 0.3),
-            makePreset(name: "Plasma", family: "hypnotic", motion: 0.7, density: 0.7),
+            makePreset(name: "Glaze", family: "hypnotic", motion: 0.7, density: 0.7),
             makePreset(name: "Ferrofluid Ocean", family: "geometric", motion: 0.45, density: 0.75),
             makePreset(name: "Murmuration", family: "particles", motion: 0.85, density: 0.8),
             makePreset(name: "Membrane", family: "reaction", motion: 0.5, density: 0.6),

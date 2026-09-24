@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-24-202938] BETA.0 — Plasma removed (D-253)
+
+Plasma is removed from the roster on Matt's call (*"Remove Plasma, keep Waveform"*): shader, sidecar, reference folder and every test enumeration; production count 31 → 30. Waveform stays, uncertified, as the launch default.
+
 ### [dev-2026-09-23-162630] BUG-139 — the tap teardown deadlock that hung the suite forever
 
 `SystemAudioCapture.teardownTapResources()` held `stateLock` across `AudioDeviceStop`, which blocks
