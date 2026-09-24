@@ -241,6 +241,21 @@ honest beta read is about 33–35. The plan, lanes, order and per-entry sources 
 [`docs/presets/BETA_SCENE_SLATE_2026-09-24.md`](presets/BETA_SCENE_SLATE_2026-09-24.md) §00; increments are
 recorded in their own rows as they land.
 
+### Lane 4 · Kagura (slate A3)
+
+| ID | Status | Done-when |
+|---|---|---|
+| **KAG.0** look-spike (+ 0b–0h follow-ups) | ✅ 2026-09-24, on `spike/kag-0` (local). **Matt's calls:** look **B** (dots + trails); in-place dances (salsa travels and smears); **half-time twist** on slow songs; **five dances** (twist, cabbage patch, chicken dance, macarena, Egyptian walk); the song's **tempo and energy pick** a three-dance repertoire and the dance choice **follows the song's energy** (no anti-repeat); energy bands calibrated on the beta playlist; `requires_regular_beat` exclusion plus a grid-regularity sway safety net. | Twist and cabbage pulse events land 100 % within ±⅛ beat; five-dance films 59–73 %; the half-beat decoy moves them wholesale. [`docs/presets/kagura_spike/README.md`](presets/kagura_spike/README.md) §0–§11 |
+| **KAG.D** design doc | ✅ 2026-09-24 | [`docs/presets/KAGURA_DESIGN.md`](presets/KAGURA_DESIGN.md): warp, dance choice, exclusion, look, the shipped clip format, the increment plan, grounding levels |
+| **KAG.1** clip bake + data resource (infra, ships alone) | ⏳ next | `tools/kagura/bake_clips.py`, `Presets/Data/Kagura/` (about 0.3 MB, tracked), a Swift loader, `SHA256SUMS`, and the CMU entry in `docs/CREDITS.md`. The loader test decodes every clip |
+| **KAG.2** dancer geometry, one dance | ⏳ | `KaguraDancer: ParticleGeometry` with the warp, trails, sway and cold start, twist only. Still sheet + motion gate; a replay pulse-lock test on the route-coverage captures |
+| **KAG.3** dance selection + exclusion | ⏳ | Arousal-source equivalence shown first; repertoire, arm reach, per-section safety net, silence rest, sidecar with `requires_regular_beat`, `audio_routes`; `RouteCoverageTests`; M7 on the beta playlist, then the streaming pass |
+| **KAG.4** certification | ⏳ | Lightweight rubric, reference set, cert gates |
+
+Open for Matt's live look (not blocking KAG.1): whether the beat lock is legible with audio (R1), and
+whether the macarena's slightly early arms read as anticipation. The Superstition D-154 false positive is
+tracked as its own beat-sync task, not inside Kagura.
+
 ## Phase PR — Preset review remediation ⏸ superseded by Phase BETA (Matt, 2026-09-24; D-255) (opened 2026-09-04 from Matt's full-roster review, scope calls below)
 
 Matt watched the roster end to end against **David Bowie — *Low*** (local FLAC,
