@@ -11,8 +11,9 @@ source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus 
 > and one salsa film was re-rendered at the correct speed for comparison. Lindy (93), modern (05) and the
 > §5 twist and cabbage-patch clips (15) are 120 fps and unaffected.
 
-**Status (2026-09-24, latest):** five dances (§7). Twist, cabbage patch, chicken dance and macarena read;
-the Russian squat-kick does not. R2 (per-song identity) is still open.
+**Status (2026-09-24, latest):** five dances, all of which read: twist, cabbage patch, chicken dance, macarena
+and Egyptian walk (§7, §8). The Egyptian walk replaced the Russian squat-kick. R2 (per-song identity) is
+still open.
 
 **Earlier status:** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
 cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
@@ -399,6 +400,34 @@ dances in the same order. **R2 is still structurally unsolved.** It needs the so
 **Macarena's early skew** (the arm stops about 0.1–0.2 beat before the beat) comes either from the snapped
 lattice or from the check's detector; not diagnosed. It may read as anticipation or as early. It is part of
 the live look.
+
+## §8 KAG.0e — Egyptian walk replaces the Russian squat-kick (Matt: "go with Egyptian walk")
+
+Options surveyed first (CMU, measured and seen in trail sheets): the Egyptian walk; Charleston kicks (93_04
+and 93_05, in place but only 4 s); freestyle dancing (111_05 and 113_04, not a named dance); salsa and
+lambada (they travel); breakdance (90_28 and 85_10, where a point-light figure on the floor stops reading).
+
+- **Correction to §7:** the Egyptian walk barely travels (0.14 m in its window). It turns on the spot.
+- **Clips:** `15_04@98-104.5` and `15_05@98-104.5`, 6.5 s each, gesture-landing pulse at 96–100 per minute.
+- **The `five` family** is now twist → cabbage → chicken → macarena → Egyptian walk → twist → cabbage →
+  chicken → Egyptian walk. `russian` stays defined but is out of the mix. Films are in `final_f/`.
+
+| Film | Local rate p10–p90 | Pulse lock (±⅛ beat, chance 25 %) | Dancer's range (x) | Foot-slide out / in crossfade | Gate mean / spikes (§7 with the Russian clip) |
+|---|---|---|---|---|---|
+| Olive Drab 86 — five | 0.50–1.03 | 68 % (n = 31) | −0.06 to 0.11 m | 4.1 / 11.0 | 0.28 / **11** (56) |
+| Dracula 97 — five | 0.58–1.16 | 66 % (n = 32) | −0.07 to 0.12 m | 5.3 / 13.2 | 0.33 / **8** (47) |
+| Billie Jean 117 — five | 0.69–1.39 | 59 % (n = 39) | −0.07 to 0.12 m | 6.0 / 15.7 | 0.39 / **5** (26) |
+| Wild Rose 166 — five | 0.74–1.06 | 72 % + 16 % on the "and" (n = 50) | −0.08 to 0.09 m | 4.2 / 17.0 | 0.33 / **7** (21) |
+| Billie Jean — Egyptian walk | 1.02–1.28 | 47 % on the beat + 53 % on the "and" (n = 36) | ±0.05 m | 10.6 / 20.2 | 0.39 / 0 |
+
+**Motion verdict:**
+- The figure reads as a person in all 40 frames of the Billie Jean overview (`final_f/mid_five_overview.png`).
+- The squat "melt" is gone. The remaining 5–11 gate spikes fall in the macarena's fast gestures.
+- The Egyptian walk shows its signature pose (one arm raised and bent, the other pointing down) and every
+  move lands on a beat or a half-beat.
+- The dancer now stays within about ±0.12 m for all 30 s.
+
+**Still open:** R2 per-song identity (§7), macarena's early skew (§7), and a live look with audio for R1.
 
 ## Files
 

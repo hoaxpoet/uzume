@@ -491,8 +491,10 @@ FAMILIES = {   # clip list per family; the film cycles through them on bar bound
     "chicken": ["18_15@1-12.8", "20_01@0-10.7"],
     "macarena": ["143_35@0.3-10.6"],
     "russian": ["90_30@3.2-9"],   # 90_31 dropped: travels 1.44 m and kick-slides its feet inside the window
-    "five": ["15_05@110-116", "15_04@117-122.5", "18_15@1-12.8", "143_35@0.3-10.6", "90_30@3.2-9",
-             "15_04@109.5-114", "15_05@117-123", "20_01@0-10.7"],
+    # KAG.0e — Matt: "go with Egyptian walk" in place of the Russian squat-kick (README §8)
+    "egyptian": ["15_04@98-104.5", "15_05@98-104.5"],
+    "five": ["15_05@110-116", "15_04@117-122.5", "18_15@1-12.8", "143_35@0.3-10.6", "15_04@98-104.5",
+             "15_04@109.5-114", "15_05@117-123", "20_01@0-10.7", "15_05@98-104.5"],
     "twistcabbage": ["15_05@110-116", "15_04@117-122.5", "15_04@109.5-114", "15_05@117-123"],
 }
 # KAG.0c (Matt: "half-time twist on slow songs"): a twist never goes to two turns per beat. On a slow
@@ -503,6 +505,7 @@ CLIP_PULSE = {   # clips whose beat is not in the feet
     "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
     "18_15@1-12.8": "gesture", "20_01@0-10.7": "gesture", "143_35@0.3-10.6": "gesture",
     "90_30@3.2-9": "wrists",
+    "15_04@98-104.5": "gesture", "15_05@98-104.5": "gesture",
 }
 
 
