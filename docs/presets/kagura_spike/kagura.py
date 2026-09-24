@@ -321,6 +321,9 @@ def load_session(session_dir):
     bass = np.array([float(r["bass_att"]) for r in rows])
     bpb = int(float(rows[len(rows) // 2]["beatsPerBar"]))
     bpm = float(rows[len(rows) // 2]["grid_bpm"])
+    # song-level energy: MoodClassifier arousal (comparable across songs, unlike AGC-normalised
+    # bass_att — FA #31); median after the first sixth, while the classifier warms up
+    arousal = float(np.median([float(r["arousal"]) for r in rows[len(rows) // 6:]]))
 
     def wraps(ph):
         out = []
@@ -330,7 +333,7 @@ def load_session(session_dir):
                 out.append(t[i - 1] + (1 - a) / (b - a) * (t[i] - t[i - 1]))
         return np.array(out)
     beats, bars = wraps(bp), wraps(bar)
-    return {"t": t, "beats": beats, "bars": bars, "bass": bass, "bpb": bpb, "bpm": bpm,
+    return {"t": t, "beats": beats, "bars": bars, "bass": bass, "bpb": bpb, "bpm": bpm, "arousal": arousal,
             "bar_declined": len(bars) < 2}
 
 
@@ -509,6 +512,44 @@ CLIP_PULSE = {   # clips whose beat is not in the feet
 }
 
 
+DANCES = ["twist", "cabbage", "chicken", "macarena", "egyptian"]   # KAG.0f: the auto-picked library
+
+
+@functools.lru_cache(maxsize=None)
+def dance_profile(dance):
+    """(vigor m/s, pulse period s, allowed levels) measured from the dance's own clips at native speed.
+    Vigor = mean speed of wrists, ankles and head relative to the pelvis."""
+    vig, per = [], []
+    for c in FAMILIES[dance]:
+        names, P = point_lights(c)
+        pel = P[:, names.index("pelvis")]
+        idx = [names.index(j) for j in ("lwrist", "rwrist", "lankle", "rankle", "head")]
+        vig.append(np.linalg.norm(np.gradient(P[:, idx] - pel[:, None], axis=0), axis=2).mean() * MOCAP_FPS)
+        per.append(beat_events(P, names, pulse=CLIP_PULSE.get(c))[1])
+    levels = PULSE_LEVELS.get(CLIP_PULSE.get(FAMILIES[dance][0]), (0.5, 1, 2, 4))
+    return float(np.mean(vig)), float(np.mean(per)), levels
+
+
+def pick_repertoire(bpm, arousal, k=3):
+    """KAG.0f (Matt: "have the song's tempo and energy pick the dances").
+    Score = tempo cost + energy cost, lowest wins; the best k dances are the song's repertoire.
+      tempo cost  = |log2 playback rate| at the dance's best metrical level (0 = plays at native speed)
+      energy cost = |dance vigor (0..1 across the library) - song energy (0..1)|
+    Song energy = arousal mapped from [0.1, 0.6] to [0, 1] (the span of the 9 spike songs; not a corpus fit).
+    Returns [(dance, score, rate)] sorted calmest -> most vigorous."""
+    prof = {d: dance_profile(d) for d in DANCES}
+    v = np.array([prof[d][0] for d in DANCES])
+    vn = dict(zip(DANCES, (v - v.min()) / (v.max() - v.min())))
+    energy = float(np.clip((arousal - 0.1) / 0.5, 0, 1))
+    rows = []
+    for d in DANCES:
+        _, per, levels = prof[d]
+        _, rate = choose_level(per, 60 / bpm, levels)
+        rows.append((d, abs(np.log2(rate)) + abs(vn[d] - energy), rate))
+    best = sorted(rows, key=lambda r: r[1])[:k]
+    return sorted(best, key=lambda r: vn[r[0]]), energy, vn
+
+
 def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, bars_per_clip=4, face=True):
     """-> (frames_fn, log). frames_fn(t) gives warped, energy-scaled world positions."""
     fps_r = 30
@@ -539,8 +580,23 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
             else beats[::bpb]
         bar_times = bar_times[bar_times < seconds]
         t0, si, segs, rates = 0.0, 0, [], []
+        if family == "auto":
+            rep, song_e, _ = pick_repertoire(sess["bpm"], sess["arousal"])
+            log.append(f"auto: arousal {sess['arousal']:.2f} -> song energy {song_e:.2f}; repertoire "
+                       + ", ".join(f"{d} (score {sc:.2f}, rate {r:.2f})" for d, sc, r in rep))
+            # local energy = song-relative percentile of the smoothed bass envelope over the next bar
+            erank = np.argsort(np.argsort(e)) / (len(e) - 1)
+            used = {d: 0 for d, _, _ in rep}
         while t0 < seconds:
-            tr = FAMILIES[family][si % len(FAMILIES[family])]
+            if family == "auto":
+                w = (t >= t0) & (t < t0 + bpb * grid_period)
+                le = float(erank[w].mean()) if w.any() else 0.5
+                d = rep[min(int(le * len(rep)), len(rep) - 1)][0]      # tercile -> calm / mid / vigorous
+                tr = FAMILIES[d][used[d] % len(FAMILIES[d])]
+                used[d] += 1
+                log.append(f"  bar at {t0:5.2f}s local energy {le:.2f} -> {d}")
+            else:
+                tr = FAMILIES[family][si % len(FAMILIES[family])]
             names, P = point_lights(tr)
             if face:
                 P = face_camera(P, names)
@@ -767,7 +823,7 @@ def main():
     p.add_argument("--joints", type=int, default=15, choices=(13, 15, 17))
     p = sp.add_parser("tempo"); p.add_argument("trials", nargs="+")
     p = sp.add_parser("film"); p.add_argument("session"); p.add_argument("audio"); p.add_argument("out")
-    p.add_argument("--family", default="salsa", choices=sorted(FAMILIES))
+    p.add_argument("--family", default="salsa", choices=sorted(FAMILIES) + ["auto"])
     p.add_argument("--shift-beats", type=float, default=0.0)
     p.add_argument("--seconds", type=float, default=30)
     p.add_argument("--irregular", action="store_true")

@@ -11,9 +11,9 @@ source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus 
 > and one salsa film was re-rendered at the correct speed for comparison. Lindy (93), modern (05) and the
 > §5 twist and cabbage-patch clips (15) are 120 fps and unaffected.
 
-**Status (2026-09-24, latest):** five dances, all of which read: twist, cabbage patch, chicken dance, macarena
-and Egyptian walk (§7, §8). The Egyptian walk replaced the Russian squat-kick. R2 (per-song identity) is
-still open.
+**Status (2026-09-24, latest):** five dances (§7, §8). The song's tempo and energy now pick a three-dance
+repertoire, and the moment's energy picks the dance at each bar line (§9). R2 passes on the calm-vs-energetic
+pairs tested.
 
 **Earlier status:** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
 cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
@@ -428,6 +428,78 @@ lambada (they travel); breakdance (90_28 and 85_10, where a point-light figure o
 - The dancer now stays within about ±0.12 m for all 30 s.
 
 **Still open:** R2 per-song identity (§7), macarena's early skew (§7), and a live look with audio for R1.
+
+## §9 KAG.0f — the song's tempo and energy pick the dances (Matt: "have the song's tempo and energy pick the dances")
+
+**The rule** (`--family auto`; `pick_repertoire`, `dance_profile`). It is deterministic, and every input is
+measured.
+
+1. **Dance profile**, from each dance's own clips at native speed:
+   - *vigor* is the mean speed of the wrists, ankles and head relative to the pelvis;
+   - *pulse period* comes from the warp's own pulse.
+
+   | Dance | Vigor (m/s) |
+   |---|---|
+   | twist | 0.71 |
+   | cabbage patch | 0.60 |
+   | chicken dance | 0.45 |
+   | macarena | 0.38 |
+   | Egyptian walk | 0.38 |
+
+2. **Song energy** is MoodClassifier `arousal` (the median after the first sixth), mapped from [0.1, 0.6]
+   to [0, 1]. The range is the span of the nine spike songs, not a corpus fit. `bass_att` is not used here
+   because it is AGC-normalised and reads about 0.2 on every song (FA #31).
+
+3. **Repertoire:** each dance is scored on tempo cost plus energy cost, and the best three are kept.
+   - *Tempo cost* is |log₂ playback rate| at the dance's best metrical level, so a twist that must run at
+     0.5× on a slow song costs 1.
+   - *Energy cost* is |dance vigor, normalised 0–1 across the library − song energy|.
+
+4. **Within the song**, at each bar-line clip change, the song-relative percentile of the smoothed bass
+   envelope over the next bar picks by tercile: the calmest, middle or most vigorous dance in the repertoire.
+   Each dance alternates between its clips.
+
+**What it picks** (nine songs; `--metrics-only`). Films for six of them are in `final_g/`.
+
+| Song | BPM | Arousal → energy | Repertoire | Dance sequence (one per clip change) | Pulse lock (±⅛, chance 25 %) |
+|---|---|---|---|---|---|
+| Dreams of You | 123 | 0.10 → 0.00 | Egyptian, macarena, chicken | eg ma ma ch ma ma eg eg eg | 48 % |
+| Olive Drab | 86 | 0.16 → 0.13 | Egyptian, macarena, chicken | eg ch eg eg ma ma eg | 44 % + 37 % on the "and" |
+| Dracula | 97 | 0.31 → 0.43 | Egyptian, chicken, cabbage | eg cb eg ch cb cb ch ch eg | 39 % + 39 % on the "and" |
+| Superstition | 99 | 0.42 → 0.63 | Egyptian, chicken, cabbage | eg eg eg ch cb ch cb ch | 52 % |
+| Around the World | 126 | 0.43 → 0.67 | chicken, cabbage, twist | ch ch cb tw tw tw tw cb | 78 % |
+| GAYBLEVISION | 143 | 0.43 → 0.66 | chicken, cabbage, twist | ch cb cb cb ch cb cb cb tw cb tw tw | 70 % |
+| Wild Rose | 166 | 0.49 → 0.78 | chicken, cabbage, twist | ch ch cb tw tw cb cb cb tw tw tw | 72 % |
+| Stayin' Alive | 104 | 0.54 → 0.88 | chicken, cabbage, twist | ch cb cb tw cb cb ch cb | 57 % |
+| Billie Jean | 117 | 0.59 → 0.98 | chicken, cabbage, twist | ch ch tw tw cb tw tw tw | 75 % |
+
+**Reading it:**
+- **Three distinct repertoires across nine songs:** calm songs get the gesture dances, energetic songs get
+  twist and cabbage patch, and the middle songs mix them.
+- **Energy does most of the choosing.** Tempo mainly keeps the twist off slow songs. Dreams of You is 123 BPM
+  but calm, and it gets the calm set, which shows tempo alone does not decide.
+- **The within-song energy envelope** orders the dances. Billie Jean's loud bars go to the twist.
+- **Pulse lock is lower on calm songs** (39–52 % on the beat, plus the "and"), because the gesture dances'
+  pulse is noisier than the twist's and cabbage patch's.
+
+**R2 two-song sheet** (`final_g/r2_calm_vs_energetic.png`, Olive Drab over Billie Jean): the rows now differ
+**in character**, not just in timing. The calm row is sparse poses with few trails. The energetic row is
+dense trails: wing flaps, twisting knees, arm circles. `final_g/r2_same_tempo_band.png` compares Dreams of
+You (123 BPM, calm) with Billie Jean (117 BPM, energetic): similar tempo, different dances. **R2 moves from
+fail to pass on these pairs.** A decoy-style check of R2 across a real playlist has not been done.
+
+**Gate:**
+- Energetic films: 0 spikes.
+- Middle films: 7–9.
+- Calm films: 30–44, all from the macarena's fast gestures against a near-still median (§7). This is not a
+  pop.
+
+**Open:**
+- **The energy mapping is fitted to nine songs.** A real playlist could put most songs in one band. The
+  mapping should be calibrated on the beta test playlist before any build.
+- **Repetition is not managed.** The picks never avoid repeating the same dance, and a whole song can sit on
+  one or two dances (Billie Jean: five of eight changes are twist).
+- **Macarena's early skew** (§7) is still undiagnosed.
 
 ## Files
 
