@@ -1217,6 +1217,14 @@ sampling.
 mid-track. `chain_health` clean, peak −0.07 dBFS, `maxFullScaleRun` 0 (BUG129.1's field reporting on
 a real capture).
 
+**Golden fixture re-checked on the real roster (GOLDEN.1, 2026-09-24).** BETA.0's
+`GoldenSessionTests` Session A had regressed to `[VL, Membrane ×4]`, which looked like the monopoly
+coming back. It was the fixture: a stale 10-scene hand mirror. Loading the shipped sidecars,
+Membrane never appears. At seed 0 (argmax, test-only) the track-firsts still repeat, e.g. Cymatic
+Resonance ×5, each track cycling the same 3 scenes. That is the track-granularity repeat noted
+above, not a single-scene monopoly. On the seeded production path the same session draws 7–11
+distinct scenes over 15–16 segments (seeds 1…24).
+
 ⚠ **Matt's felt verdict is still outstanding** — the automated question was "do more scenes
 appear", and the answer is yes; the question only he can answer is whether any of the newly-admitted
 scenes is *wrong for the song*. That is the failure mode of widening the band, and no count detects

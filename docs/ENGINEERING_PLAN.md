@@ -1601,6 +1601,24 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment GOLDEN.1 — golden sessions plan against the shipped roster ✅ (2026-09-24)
+
+**Done-when:** `GoldenSessionTests.makeRealCatalog()` loads the real sidecars instead of a hand
+mirror; Sessions A–D regenerated with scoring traces; whether the BUG-133 monopoly survives on the
+real roster is measured, not assumed.
+
+**Delivered.** The fixture now decodes `Sources/Presets/Shaders/*.json` via
+`PresetLoader.bundledShadersURL` in loader order, with a guard test pinning its count to
+`PresetLoaderCompileFailureTest.expectedProductionPresetCount` so a partial load can't pass. BETA.0's
+`[VL, Membrane ×4]` is gone: **Membrane does not appear at all** on the real roster. New goldens:
+A `[Cymatic Resonance ×5]` (each track cycles CR → Mitosis → Dragon Bloom), B `[Gossamer ×5]`
+(→ Skein), C `[CR, Gossamer, Glaze, Mitosis, Gossamer, Mitosis]`, D Lumen Mosaic (unchanged).
+**Monopoly verdict: does not persist on the production path.** The identical track-firsts are the
+seed-0 argmax restarting a 3-scene (A) / 2-scene (B) cycle once the leader's cooldown expires,
+which is the track-granularity repeat BUG133.1 already recorded. Both production call sites plan with a
+random non-zero seed; over seeds 1…24, Session A draws 7–11 distinct scenes per 15–16 segments,
+B 5–8 per 10–12, C 10–15 per ~20. No new defect filed. Test-only; no `Sources/` change.
+
 ### Increment BETA.0 — beta decisions recorded, Plasma removed, beta test playlist ✅ (2026-09-24)
 
 **Done-when:** D-251…D-256 filed with Matt's verbatim words; Phase BETA above Phase PR, PR marked
@@ -1610,7 +1628,7 @@ superseded; Aurora Veil carries its CC BY-NC-SA notice (golden unchanged); Plasm
 **Delivered.** All five. Production count 31 → 30. The playlist resolves **10/10** through
 `M3UParser`, with census tempo and D-154 flags in `docs/presets/BETA_TEST_PLAYLIST.md`. ⚠
 `GoldenSessionTests`' mirrored catalog is a stale 10-preset subset (still carries Arachne); without
-Plasma its Session A reverts to a Membrane run — recorded as a fixture property, re-mirror queued.
+Plasma its Session A reverts to a Membrane run — recorded as a fixture property, re-mirror queued. → Done at GOLDEN.1.
 
 ### Increment BUG139.1 — the tap teardown deadlock, root-caused from source ✅ (2026-09-23)
 
