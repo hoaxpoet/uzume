@@ -251,7 +251,14 @@ jitter. Every change is a point, and the largest whole-frame change is 3.2/255.
   On an irregular or beatless track they stay free: Teardrop and Warszawa at K = 0, R ≈ 0.11. Near-silence
   leaves a few stragglers.
 
-## 6. DECISION-NEEDED (Matt)
+## 6. Decisions (Matt, 2026-09-24): *"A, and unknown stays free."*
+
+- **Setting: A, the dusk meadow with a tree line.**
+- **Unknown beat clarity (0.5) behaves as free (K = 0)** in the scene. The scene maps it itself, so the
+  StemFeatures float keeps its 1 / 0 / 0.5 spec.
+
+These still need D-numbers from a doc session. The options as they were put:
+
 
 **Where do the fireflies live?**
 
