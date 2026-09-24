@@ -12,7 +12,7 @@ before this set (FF.0 README §7.3).
 **Musical role.** *The beat grid pulls a meadow of fireflies into unison, as strongly as the beat is
 clear.* They blink at random at the top of a track, relay flashes neighbour to neighbour, and lock
 onto the beat within about 15 s on a clear beat. They stay free on an irregular or unknown one
-(`stems.beat_clarity01`, D-257, where unknown maps to free).
+(`stems.beat_clarity01`, from BC.1; unknown maps to free).
 
 **Setting: A, the dusk meadow with a tree line** (Matt, 2026-09-24). **The bar** (FF.0 §7.2): a
 matte-painting-quality dusk, not photoreal grass.
@@ -87,7 +87,7 @@ and the traits that must be **actively disregarded**.
 ## Audio routing notes
 
 - The per-beat nudge couples on the cached `BeatGrid`, scaled by `stems.beat_clarity01`, with unknown
-  mapped to 0 (Matt, D-257). The relay between neighbours runs whatever the audio.
+  mapped to 0 (Matt, 2026-09-24). The relay between neighbours runs whatever the audio.
 - `near_silent01` dims the swarm to about 5 % stragglers over ~1.5 s. The world stays lit.
 
 ---
