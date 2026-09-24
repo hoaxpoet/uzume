@@ -19,6 +19,7 @@ Requires numpy, scipy, pillow, ffmpeg.
 
 import argparse
 import csv
+import functools
 import os
 import subprocess
 import sys
@@ -87,6 +88,7 @@ def parse_amc(path):
     return frames
 
 
+@functools.lru_cache(maxsize=None)
 def load_trial(trial):
     """-> dict joint -> (T,3) positions in metres, Y up, feet on the floor at y=0."""
     subj = trial.split("_")[0]
@@ -132,9 +134,15 @@ JOINT_SETS = {13: JOINTS13, 15: JOINTS15, 17: JOINTS17}
 
 
 def point_lights(trial, n=15):
-    raw = load_trial(trial)
+    """`trial` is a CMU id ("60_03") or a sub-range of one ("15_04@109.5-114", seconds)."""
+    tid, _, rng = trial.partition("@")
+    raw = load_trial(tid)
     names = list(JOINT_SETS[n])
-    return names, np.stack([raw[JOINT_SETS[n][k]] for k in names], axis=1)  # (T,J,3)
+    P = np.stack([raw[JOINT_SETS[n][k]] for k in names], axis=1)  # (T,J,3)
+    if rng:
+        a, b = (float(x) for x in rng.split("-"))
+        P = P[int(a * MOCAP_FPS):int(b * MOCAP_FPS)]
+    return names, P
 
 
 # MARK: - Clip tempo, beat phase, foot-slide
@@ -214,12 +222,35 @@ def clip_tempo(P, names, fps=MOCAP_FPS):
             "downs": mins / fps, "falls": ff}
 
 
-def beat_events(P, names, fps=MOCAP_FPS):
-    """Clip beat events = the dancer's own footfalls (feet landing within 40 % of a step merged).
+def _extrema(sig, fps):
+    """Both local maxima and minima of a smoothed, detrended signal (15 % prominence), seconds."""
+    from scipy.ndimage import gaussian_filter1d
+    from scipy.signal import find_peaks
+    x = sig - gaussian_filter1d(sig, fps * 1.0)
+    x = gaussian_filter1d(x, fps * 0.03)
+    kw = dict(distance=int(0.2 * fps), prominence=np.ptp(x) * 0.15)
+    return np.sort(np.concatenate([find_peaks(x, **kw)[0], find_peaks(-x, **kw)[0]])) / fps
 
-    Returns (events_s, step_period_s, source). Falls back to pelvis-down minima when the clip has
-    too few footfalls to carry a pulse (standing / arm-led material).
+
+def beat_events(P, names, fps=MOCAP_FPS, pulse=None):
+    """Clip beat events. Default: the dancer's own footfalls (feet landing within 40 % of a step
+    merged), falling back to pelvis-down minima when there are too few footfalls.
+
+    pulse="hipyaw": each extreme of the hip line's yaw (a twist to the left or right).
+    pulse="wrists": each bottom of summed wrist height (one per arm circle; the tops are uneven).
+    Both are for planted-feet dances (twist, cabbage patch) where footfalls carry no pulse.
+    Returns (events_s, step_period_s, source).
     """
+    if pulse == "hipyaw":
+        hip = P[:, names.index("lhip")] - P[:, names.index("rhip")]
+        ev = _extrema(np.degrees(np.unwrap(np.arctan2(hip[:, 2], hip[:, 0]))), fps)
+        return ev, float(np.median(np.diff(ev))), "hip-yaw extrema"
+    if pulse == "wrists":
+        from scipy.ndimage import gaussian_filter1d
+        from scipy.signal import find_peaks
+        wy = gaussian_filter1d(P[:, names.index("lwrist"), 1] + P[:, names.index("rwrist"), 1], fps * 0.03)
+        ev = find_peaks(-wy, distance=int(0.2 * fps), prominence=np.ptp(wy) * 0.15)[0] / fps
+        return ev, float(np.median(np.diff(ev))), "arm-circle bottoms"
     info = clip_tempo(P, names, fps)
     ff = info["falls"] if info else np.array([])
     if len(ff) >= 6:
@@ -260,8 +291,9 @@ def load_session(session_dir):
 # MARK: - Time-warp
 
 def choose_level(clip_period, grid_period):
-    """Grid beats per clip beat in {0.5, 1, 2}: the one whose playback rate is closest to 1."""
-    best = min((0.5, 1, 2), key=lambda m: abs(np.log(clip_period / (m * grid_period))))
+    """Grid beats per clip beat in {0.5, 1, 2, 4}: the one whose playback rate is closest to 1.
+    (4 was added at KAG.0b: a cabbage-patch arm circle spans a whole bar at fast tempi.)"""
+    best = min((0.5, 1, 2, 4), key=lambda m: abs(np.log(clip_period / (m * grid_period))))
     return best, clip_period / (best * grid_period)
 
 
@@ -405,6 +437,15 @@ FAMILIES = {   # clip list per family; the film cycles through them on bar bound
     "lindy": ["93_05", "103_05", "93_07"],
     "modern": ["05_02", "05_11"],
     "sway": ["05_12"],
+    # KAG.0b — planted-feet dances cut from the mixed trials 15_04 / 15_05 (windows found by
+    # motion signature and confirmed in trail renders; README §5)
+    "twist": ["15_04@109.5-114", "15_05@110-116"],
+    "cabbage": ["15_04@117-122.5", "15_05@117-123"],
+    "twistcabbage": ["15_05@110-116", "15_04@117-122.5", "15_04@109.5-114", "15_05@117-123"],
+}
+CLIP_PULSE = {   # clips whose beat is not in the feet
+    "15_04@109.5-114": "hipyaw", "15_05@110-116": "hipyaw",
+    "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
 }
 
 
@@ -428,7 +469,7 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
         names, P = point_lights(FAMILIES["sway"][0])
         dur = len(P) / MOCAP_FPS
         # ping-pong loop (forward, then backward): a plain modulo wrap teleports the figure (a pop)
-        segs = [(0.0, seconds + 1, P, lambda tq, d=dur - 0.02: d - np.abs(np.mod(tq, 2 * d) - d), 1.0)]
+        segs = [(0.0, seconds + 1, P, lambda tq, d=dur - 0.02: d - np.abs(np.mod(tq, 2 * d) - d), 1.0, None)]
         log.append(f"fallback: unwarped sway clip {FAMILIES['sway'][0]} (beat-irregular / bar-declined)")
     else:
         # clip changes on bar boundaries: each clip runs up to bars_per_clip bars, or fewer
@@ -441,7 +482,7 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
         while t0 < seconds:
             tr = FAMILIES[family][si % len(FAMILIES[family])]
             names, P = point_lights(tr)
-            ev, step, src = beat_events(P, names)
+            ev, step, src = beat_events(P, names, pulse=CLIP_PULSE.get(tr))
             m, ratio = choose_level(step, grid_period)
             seg_beats = beats[beats >= t0 - 2 * grid_period]
             tt, cc, fmap = warp_map(seg_beats, ev, m, start_event=1)
@@ -451,7 +492,7 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
             ok = bar_times[(bar_times > t0 + 0.5 * grid_period) & (bar_times <= limit)]
             nxt = bar_times[bar_times > t0 + 0.5 * grid_period]
             t1 = ok[-1] if len(ok) else (nxt[0] if len(nxt) else seconds + 1)
-            segs.append((t0, t1, P, fmap, ratio))
+            segs.append((t0, t1, P, fmap, ratio, tr))
             inseg = (tt[:-1] >= t0) & (tt[:-1] < min(t1, seconds))
             lr = loc[inseg] if inseg.any() else loc
             log.append(f"{t0:6.2f}-{min(t1, seconds):6.2f}s  {tr}  steps {60/step:.1f}/min ({src})  "
@@ -467,7 +508,7 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
     xfade = grid_period                                   # crossfade over one beat
 
     def seg_pose(s, tq):
-        _, _, P, fmap, _ = s
+        P, fmap = s[2], s[3]
         X = sample(P, fmap(tq))
         return X
 
@@ -580,6 +621,29 @@ def cmd_film(a):
           f"pelvis-downs R={rp:.2f} phase={pp:.2f} n={npv} (chance {0.89/np.sqrt(max(npv,1)):.2f})")
     print(f"  footfall beat-phase histogram (8 bins from the beat): {beat_lock.foot_hist.tolist()}  "
           f"R at half-beat level {beat_lock.foot_r2:.2f}")
+    # planted-feet dances: detect each segment's own pulse events in the OUTPUT and phase them
+    ph = []
+    gp = 60 / sess["bpm"]
+    b = sess["beats"]
+    for sg in segs:
+        pulse = CLIP_PULSE.get(sg[5]) if len(sg) > 5 else None
+        if not pulse:
+            continue
+        m = (ts >= sg[0] + gp) & (ts < min(sg[1], a.seconds))      # skip the crossfade beat
+        if m.sum() < 30:
+            continue
+        ev, _, _ = beat_events(Y[m], names, 30, pulse=pulse)
+        ev = ev + ts[m][0]
+        ev = ev[(ev >= b[0]) & (ev < b[-1])]
+        k = np.searchsorted(b, ev, side="right") - 1
+        ph.extend(((ev - b[k]) / (b[k + 1] - b[k])).tolist())
+    if ph:
+        ph = np.array(ph)
+        d = np.minimum(ph, 1 - ph)
+        dh = np.abs(ph - 0.5)
+        print(f"  pulse events (hip-yaw / arm-circle) n={len(ph)}: within ±1/8 beat of a grid beat "
+              f"{np.mean(d < 0.125)*100:.0f} % (chance 25 %), of a half-beat {np.mean(dh < 0.125)*100:.0f} %; "
+              f"histogram {np.histogram(ph, bins=8, range=(0, 1))[0].tolist()}")
 
 
 def cmd_slide(a):

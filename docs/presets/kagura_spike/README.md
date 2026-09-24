@@ -5,8 +5,10 @@ answer three concept questions with frames: does it read as dancing *to* the son
 survive warping, and how bad is foot-slide. `kagura.py` imports nothing from Uzume; it is not a porting
 source for the engine. This is `preset-concept` gate artifacts 1, 2 and 4, plus the story (artifact 3).
 
-**Status: stopped for Matt's go / no-go (2026-09-24).** Films are in `~/Documents/uzume_spikes/kagura/final/`
-(never in git, D-211).
+**Status (2026-09-24):** Matt chose **look B** (dots with light-painting trails) and asked for the twist and
+cabbage-patch clips next. That pass is §5. It fixes the look problem, since the dancer stays in place, and
+the beat lock is much tighter. It leaves the library problem (R2 / R4). Pass-1 films are in
+`~/Documents/uzume_spikes/kagura/final/`; §5 films are in `.../final_b/` (never in git, D-211).
 
 ## Story (See / Move / Music)
 
@@ -213,13 +215,82 @@ capture's own residual, replayed faster, roughly in proportion to the rate. **Th
 the crossfade:** 36–80 cm/s inside the one-beat crossfades against 18–21 outside. This is the fix target for
 a build, whatever the warp ratio.
 
+## §5 KAG.0b — twist and cabbage patch (Matt: "B, try the twist and cabbage patch clips next")
+
+**Finding the dances.** CMU 15_04 and 15_05 are mixed trials of about 190 s (wash windows, hand signals,
+Egyptian walk, the Dive, the Twist, the Cabbage Patch, boxing), and nothing records where each action sits in
+time. I located the windows by motion signature in 2 s and then 1 s windows:
+- the twist as hips turning against the shoulders by 20–33°;
+- the cabbage patch as both wrists circling at about 1.1 m/s in front of the chest with the feet planted.
+
+I confirmed each window in trail renders (`survey/clips/*.tile.png`); the sequence matches the order CMU
+lists for the trial. **15_12 has no usable dance.** Its 26–34 s shows overhead wind-ups, and in 44–72 s only
+the arms move. The windows used:
+
+| Clip | Dance | Length | Pulse the warp pins | Rate /min | Interval CV |
+|---|---|---|---|---|---|
+| `15_04@109.5-114` | twist | 4.5 s | each hip-turn extreme (left, right) | 158 | 0.08 |
+| `15_05@110-116` | twist | 6.0 s | each hip-turn extreme | 164 | 0.05 |
+| `15_04@117-122.5` | cabbage patch | 5.5 s | the bottom of each arm circle | 50 | 0.04 |
+| `15_05@117-123` | cabbage patch | 6.0 s | the bottom of each arm circle | 53 | 0.04 |
+
+Neither dance's beat is in the feet, because both keep the feet planted. That is why `beat_events` gained a
+per-clip pulse (`CLIP_PULSE`). Both pulses are **8–15× steadier** than salsa footfalls (CV 0.6–0.7). The
+cabbage-patch arm-circle *tops* were uneven (CV 0.12–0.25), so only the bottoms are pinned. The metrical-level
+set gained **×4** so that a circle can span a whole bar at fast tempi.
+
+**Films** (look B unchanged from pass 2; 30 s, 30 fps, audio muxed; `final_b/`). Pulse lock counts the pulse
+events detected in the *rendered output* that sit within ±⅛ beat of a grid beat; chance is 25 %. Because the
+warp pins those events by construction, this checks the pipeline end to end (crossfades, arm scaling); it is
+not evidence of perception.
+
+| Film | Local rate p10–p90 | Pulse lock | Dancer's range | Foot-slide out / in crossfade cm/s | Gate mean / spikes |
+|---|---|---|---|---|---|
+| slow Olive Drab 86 — twist | 1.02–1.11 | 39 % on the beat + 61 % on the "and" (level ×½: two twists per beat) | ±0.14 m | 28.0 / 42.3 | — |
+| slow Olive Drab 86 — cabbage | 0.78–0.92 | 100 % (n = 10) | ±0.14 m | 5.7 / 11.1 | — |
+| slow Olive Drab 86 — twist+cabbage | 0.80–1.10 | 50 % beat + 50 % "and" | ±0.16 m | 9.8 / 22.2 | 0.39 / 0 |
+| mid Billie Jean 117 — twist | 0.67–0.77 | 100 % (n = 39) | ±0.16 m | 22.9 / 27.5 | 0.39 / 0 |
+| mid Billie Jean 117 — cabbage | 1.05–1.17 | 100 % (n = 16) | ±0.14 m | 7.5 / 11.6 | 0.43 / 0 |
+| mid Billie Jean 117 — twist+cabbage | 0.67–1.10 | 100 % (n = 34) | ±0.18 m | 12.1 / 22.7 | 0.41 / 0 |
+| fast Wild Rose 166 — twist | 0.95–1.11 | 100 % (n = 57) | ±0.20 m | 33.8 / 42.8 | — |
+| fast Wild Rose 166 — cabbage | 0.75–0.90 | 100 % (n = 19) | ±0.12 m | 6.8 / 14.2 | — |
+| fast Wild Rose 166 — twist+cabbage | 0.77–1.06 | 100 % (n = 41) | ±0.18 m | 12.4 / 30.8 | 0.45 / 0 |
+
+Compare salsa: local rate 0.6–1.8, dancer range ±1.7 m, crossfade slide 36–80 cm/s.
+
+The twist's 23–34 cm/s is **the dance itself**: the heels grind, so the ankles swivel on the floor. The
+native clips already measure 24–37 cm/s.
+
+**Motion verdict** (gate samples of five films plus 6 fps sheets; `final_b/gates_all.png`):
+- **Smooth.** 0 spikes on every film gated.
+- **Reads as a person in every sample.** None of the salsa streak-smear.
+- **The trails do what look B promised.** The cabbage patch draws sweeping arcs in front of the chest. The
+  twist draws small arcs at the knees and ankles and swings the arms.
+- **One flaw.** In two samples an ankle lifts to knee height. The 15_04 twist window starts at 109.5 s, where
+  the dancer is probably still getting up from the Dive; starting it at 110 s would likely remove this.
+
+**Rewatch:**
+- **R1 decoy** (`final_b/r1_decoy_side_by_side.mp4`; the key is in `r1_KEY.txt`: left = grid shifted +½
+  beat, right = true grid). The data is fully separated: 100 % of pulse events on the beat against 100 % on
+  the half-beat. From stills 125 ms around five ticks (`r1_frames_at_beats.png`) **I still could not honestly
+  call it**, and I also knew the key. Legibility with audio remains the open question for Matt's look.
+- **R2** (`final_b/r2_two_song_sheet.png`): **still fails.** The same four captures play under both songs,
+  so the sheets are interchangeable.
+- **R4:** the library is now four captures of 4.5–6 s, and each one repeats 2–3 times per 30 s.
+
+**Product-level observation (not decided).** The "rate closest to native" rule sends a **slow song to
+double-time twisting**: on Olive Drab at 86 BPM the twist runs at 171 per minute, faster than on Billie Jean
+at 117 BPM (117 per minute). A half-time twist on slow songs (one twist per beat, played at 0.54×) may read
+more musically. That is a look-and-feel question for Matt, not something the spike can settle.
+
 ## Files
 
 - `kagura.py`: ASF/AMC loader and FK, point-light sets, clip tempo and footfalls, session grid reader, PCHIP
-  warp, renderer (ffmpeg pipe), and the subcommands `native`, `tempo`, `slide`, `film`, `sheet`.
+  warp, renderer (ffmpeg pipe), and the subcommands `native`, `tempo`, `slide`, `film`, `sheet`. Clip
+  sub-ranges (`15_04@109.5-114`) and per-clip pulses (`CLIP_PULSE`) were added at §5.
 - Outside git, under `~/Documents/uzume_spikes/kagura/`: `mocap/` (CMU), `sessions*/` (production-chain
   captures), `native/`, `films/` (pass 1), `final/` (pass 2 films, GIFs, R1 and R2 artifacts, `gate_*/`
-  samples).
+  samples), `survey/` (the twist and cabbage-patch search), `final_b/` (§5).
 
 Regenerate one film:
 
