@@ -276,3 +276,64 @@ These still need D-numbers from a doc session. The options as they were put:
 (Warszawa: no drums, so no drums tempo) behave as **free**, like K = 0, or **half-coupled**, like 0.5?
 Free keeps ambient music calm. Half-coupled makes the swarm half-lock to a grid the listener can't hear.
 **Recommendation: free. Default if no reply: free.**
+
+## 7. FF.0 passed on condition: the fidelity work is scoped (Matt, 2026-09-24)
+
+> *"ff.0 is a pass, but only if there is future optimization work scoped, because the scene looked cheap
+> and quickly produced, like a sketch vs. a detailed rendering"*
+
+The spike proved the **behaviour** (the swarm finds the beat, stays free without one, and never flashes
+the frame). It made no attempt at the **look**. Everything visible was built in an afternoon of numpy.
+Below is why it reads as a sketch, and the work that turns it into a rendering.
+
+### 7.1 Why it reads as a sketch (each item checkable in the spike stills)
+
+| Element | What the spike draws | What a detailed rendering has (per `SHADER_CRAFT.md` §1.2: ≥ 4 detail scales per surface) |
+|---|---|---|
+| Tree line | One flat-tone silhouette with near-identical semicircle crowns | 2–3 ridges, lighter and bluer with distance (aerial perspective). Ragged, fractal leaf edges. Sky showing through gaps in the canopy. The odd trunk and spire. |
+| Sky | A 3-stop linear gradient that reads like a CSS gradient | An afterglow that falls off from where the sun set, a faint cloud band, the first stars, and dithering so there's no banding |
+| Meadow | A flat colour with 1-D vertical streaks | Grass blades, with seed heads against the mist in the foreground. Clumps and variation across the ground. |
+| Mist | One horizontal Gaussian band, static | Volumetric ground mist that pools in the low ground, drifts slowly and is thicker far away |
+| Fireflies | 600 identical Gaussian dots, hovering | Light sources: near ones as soft out-of-focus discs, light scattering into the mist, faint light on nearby grass, and grass hiding some flashes. A short streak where one flashes in flight. Per-fly variation in colour, peak and duration. |
+| Motion | Only the flashes change | Wind moving through the grass, drifting mist, and an almost imperceptible camera drift |
+| Image | A clipped sqrt encode | ACES tone map, bloom and a trace of sensor grain (the footage has all three) |
+
+### 7.2 The bar, stated up front
+
+**A matte-painting-quality dusk, not photoreal grass.** Layered silhouettes, volumetric mist and
+lens-like firefly light are established fragment-shader craft, and the engine already ships them:
+
+- **Mist:** volumetric fog, certified in Nimbus.
+- **Finish:** bloom and ACES in `PostProcessChain`.
+- **Firefly sprites:** screen-sized sprites with a halo, from Witchlight WL.2-g.
+
+A field of individually shaded, photographic grass blades is out of reach at 60 fps next to 600 light
+sources, and I won't promise it.
+
+### 7.3 The scoped increments (order is the dependency order)
+
+| ID | What | Done-when |
+|---|---|---|
+| **FF.R** | **References first** (§2.3 reference-image discipline). Curate 8–12 references into `docs/VISUAL_REFERENCES/fireflies/`, from motion where possible (curate-from-motion rule): dusk-meadow firefly long exposures and video stills, a layered tree line at blue hour, ground mist, and firefly bokeh. Annotate what each one is the reference *for*. | Matt picks the set. No look work starts before this. |
+| **BC.1** (infra, not the scene) | The beat-clarity float: a `StemFeatures` `_pad14` slot, 1 steady / 0 irregular / 0.5 unknown, written at track change and cleared at session boundaries on every path | Gates plus both-paths tests. It ships alone, never bundled with the scene. |
+| **FF.1** | Port the swarm to the engine (a `ParticleGeometry` sibling with instanced sprites) at spike fidelity, reading BC.1 with unknown mapped to free | Coherence curves reproduced on the same 30 s captures (DYC, Pyramid, Warszawa, Teardrop) within ±0.1. Flash safety measured in the real pipeline. |
+| **FF.2** | **The world.** Layered tree line, sky with afterglow and stars, meadow with blades and foreground silhouettes, drifting volumetric mist. ≥ 4 noise octaves per surface and ≥ 3 distinct materials (foliage, grass, mist, sky). | `compare_render.sh` against the FF.R references, the motion gate clean, and a Release-build frame budget at 1080p that leaves room for FF.3 |
+| **FF.3** | **The light.** Out-of-focus discs for near flies, scatter into the mist, grass occlusion, light cast on nearby grass, in-flight streaks, per-fly variation, then bloom, ACES and grain | Side-by-side against the references, flash safety re-measured (scatter enlarges each flash, D-157), and 60 fps at 1080p in Release |
+| **FF.4** | M7 on the beta playlist, the rewatch checks R1–R5 on the real pipeline, then certification | Matt's M7 |
+
+**Optional, and your call rather than mine:** let the dusk deepen across the song, with the sky darkening
+and stars appearing over the track. It would give each song a second, slower arc under the entrainment
+arc. It's not in scope unless you ask for it.
+
+### 7.4 Honest schedule read
+
+Lane 1's new-scene cutoff is **October 11** (slate §00).
+
+- FF.R and BC.1 can run in parallel.
+- FF.1 is one session.
+- FF.2 and FF.3 are 1–2 sessions each, plus review.
+
+That fits the window only if FF.R lands within about two days and the first M7 on FF.3 is close. The risk
+sits in FF.2/FF.3 fidelity, not in the behaviour, which FF.0 already proved. If the fidelity doesn't
+reach the reference bar by October 11, the recommendation will be to ship Fireflies after the beta rather
+than ship the sketch.
