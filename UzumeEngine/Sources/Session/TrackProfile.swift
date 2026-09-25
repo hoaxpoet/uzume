@@ -22,7 +22,9 @@ public struct TrackProfile: Sendable, Codable {
     /// Estimated musical key (e.g. "C major", "F# minor"), or nil if atonal/percussive.
     public var key: String?
 
-    /// Emotional state (valence × arousal) from the mood classifier.
+    /// Emotional state (valence × arousal) from the mood classifier: the song's typical mood,
+    /// i.e. the per-frame median after the first sixth (BUG-143). Covers the whole file on the
+    /// local-file path and the 30 s preview on streaming.
     public var mood: EmotionalState
 
     /// Average normalized spectral centroid across the preview (0–1).

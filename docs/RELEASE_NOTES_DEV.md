@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-25-220217] BUG-143 — a song is planned with its own mood, not its last two seconds
+
+Each song's stored mood was the mood classifier's reading at the very end of the analysed audio: the fade-out on local files, and the last seconds of the 30 s preview on streaming. Mood is 40 % of how a scene is chosen, so songs were planned from their endings. On the beta playlist, Teardrop, Take Five and Pyramid Song were planned as calm, and Moonlight I as warm. The stored mood is now the song's median after its first sixth (Matt's option A). Its rank agreement with the full production-chain analysis on the beta playlist rose from 0.59 to 0.86. With no plan history, the top-scored opening scene changes on 8 of 10 beta songs. **Local files re-analyse once** (stem cache schema v16). The preparation view's mood word can change on those songs. The live mood path is unchanged. Still to do: Matt's listen on the beta playlist.
+
 ### [dev-2026-09-25-170143] BUG-142 — no track-change event after streaming metadata stops
 
 A Now Playing poll that was still waiting on Music/Spotify when observation stopped fired a track-change event (with no previous track) afterwards, and set `currentTrack` again. This showed up as an intermittent CI failure (3 events where the test expected 2). A generation counter bumped under the lock at stop now makes a stale poll drop its result. A deterministic test parks the reader across a stop; it failed every time before the fix. Test sleep budgets are unchanged.

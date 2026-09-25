@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG143.2 — the stored mood is the song's median ✅ (2026-09-25; manual feel check pending)
+
+**Delivered (Matt's option A).** `analyzeMIR` stores `SessionPreparer.songMood`: the per-frame median of valence and arousal after the first sixth, instead of the classifier's last-frame EMA state. Cache schema 15 → 16. The rule matches KAG.3's `songArousal`; its owner will read `mood.arousal` and drop that field, and whichever branch merges second takes v17.
+**Done-when:** ✅ `SongMoodTests` (failed on the old line, passes); ✅ `SongMoodBetaPlaylistTests` over fresh Release caches: ρ 0.588 before (fails) → 0.855 after (passes); ✅ KNOWN_ISSUES + release notes; ⏳ Matt's listen on the beta playlist (do the opening scenes for Teardrop, Take Five, Pyramid Song and Moonlight I suit the songs?). BUG-144 and BUG-145 stay open.
+
 ### Increment BUG143.1 — the stored mood is the last seconds of the audio: diagnosed ✅ (2026-09-25; fix awaits Matt)
 
 **Delivered (diagnosis only, no code change).** The KAG.3 finding was filed as BUG-143 and measured through the shipping `LocalFilePreparationPipeline` (Release `PrepTimingRunner` with a temporary recording classifier) over the beta playlist. `TrackProfile.mood` equals the last frame on 10/10 songs. Spearman vs the production chain is 0.59, against 0.85 for a song-level median. With no history, the top-scored scene changes on 8/10 songs (local) and 5/10 (30 s window), and a ±0.02 control changes 0/10. Whole-session diffs are **not** evidence: the +0.02 control already changes 64/100 openers. Golden session plans are unaffected because they hand-author mood. Two defects were found in passing and filed: **BUG-144** (`TrackProfile.bpm` is 130–143 on every song) and **BUG-145** (prep mood moves with the file's sample rate: Superstition reads 0.21 at 96 kHz and 0.52 at 44.1 kHz). The Regenerate-seed `hashValue` non-reproducibility was flagged as a separate task.

@@ -227,7 +227,10 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       stems are at the separator's 44.1 kHz, so every non-44.1 kHz
     ///                       v13/v14 entry holds a time-scaled drums grid (48 kHz: tempo x1.088) that
     ///                       feeds the D-154 beat-irregularity gate. Data again — re-analyse.
-    public static let currentSchemaVersion: Int = 15
+    ///   v16 (BUG-143) — `TrackProfile.mood` was the classifier's state at the LAST frame (the
+    ///                       audio's final second or two); it is now the song's median after the
+    ///                       first sixth. Every v15 mood describes the fade-out — re-analyse.
+    public static let currentSchemaVersion: Int = 16
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

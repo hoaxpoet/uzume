@@ -288,6 +288,7 @@ extension SessionPreparer {
         var centroidSum: Float = 0
         var frameCount = 0
         var moodAccumulator = MoodFeatureAccumulator()   // DYN.7
+        var moodTrace: [EmotionalState] = []             // BUG-143
         var offset = 0
 
         while offset + fftSize <= samples.count {
@@ -324,7 +325,9 @@ extension SessionPreparer {
             // Classify every frame, as live does. The output window is wall-clock now, so
             // the cadence no longer sets the smoothing — it only sets the cost, and the
             // forward pass is a 10→64→32→16→2 MLP over a 30 s window.
-            _ = try? classifier.classify(features: smoothed, deltaTime: dt)
+            if let state = try? classifier.classify(features: smoothed, deltaTime: dt) {
+                moodTrace.append(state)
+            }
 
             offset += fftSize
         }
@@ -344,9 +347,28 @@ extension SessionPreparer {
         return MIRAnalysisResult(
             bpm: mir.stableBPM,
             key: mir.stableKey,
-            mood: classifier.currentState,
+            mood: songMood(moodTrace),
             centroidAvg: centroidAvg,
             sectionCount: sectionCount
+        )
+    }
+
+    /// The song's typical mood (BUG-143, Matt's option A): the per-frame median of valence and
+    /// arousal after the first sixth, which is the classifier's warm-up (the KAG.0 spike's
+    /// `load_session` rule). `classifier.currentState` after the loop was a 0.7 s EMA, so it
+    /// described only the last second or two. On the beta playlist its rank agreement with the
+    /// production chain was 0.59; this statistic scores 0.85. `.neutral` when no frame was classified.
+    nonisolated static func songMood(_ trace: [EmotionalState]) -> EmotionalState {
+        guard !trace.isEmpty else { return .neutral }
+        let settled = trace[(trace.count / 6)...]
+        func median(_ values: [Float]) -> Float {
+            let sorted = values.sorted()
+            let mid = sorted.count / 2
+            return sorted.count % 2 == 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+        }
+        return EmotionalState(
+            valence: median(settled.map(\.valence)),
+            arousal: median(settled.map(\.arousal))
         )
     }
 }
