@@ -322,7 +322,7 @@ future consumers and is independently regression-tested.
 
 ### BUG-140 — the D-154 beat-irregularity gate flags steady songs; its drums-grid BPM is an octave average (2026-09-24)
 
-**Severity:** P2 · **Domain:** `dsp.beat` / `orchestrator` · **Failure class:** `algorithm` (primary) + `sample-rate` (local-file path) · **Status:** Diagnosed (BUG140.1), no fix · **Related:** D-154, BUG-134 (same `computeBPM` fault, other consumer), PR.26 (Membrane declares `requires_regular_beat`), KAG.0h
+**Severity:** P2 · **Domain:** `dsp.beat` / `orchestrator` · **Failure class:** `algorithm` (primary) + `sample-rate` (local-file path) · **Status:** Diagnosed (BUG140.1), no fix · **Related:** D-154, BUG-134 (same `computeBPM` fault, other consumer), PR.26 (Membrane declares `requires_regular_beat`), BC.1 / D-257 (the same flag reaches every shader as `StemFeatures.beat_clarity01`; Fireflies FF.1 is its first reader, so false flags reach it too), KAG.0h
 
 #### Expected / actual
 
