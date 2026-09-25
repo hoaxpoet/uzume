@@ -21,8 +21,11 @@
 // pooled in the low distance. The branching trees in front of the cards are real 3D segments
 // drawn by `FirefliesGeometry` through the same camera; the fireflies after them.
 //
-// Silence (D-037): nothing here reads the music but the breath (FF.2 Task 5), so the world is
-// lit at silence and its wind and mist keep moving — it coasts, never black.
+// The world's one audio route is the BREATH (FIREFLIES_DESIGN §4.3, Matt's "B"): a 4 s average
+// of `bassAttRel`, computed on the CPU (`FirefliesWorld.advance`), which sets how hard the wind
+// leans the grass and sways the trees and how fast the mist drifts — swelling over seconds,
+// never on the beat. Silence (D-037): the tone never reads the music, so the world stays lit;
+// the breath sinks and the wind and mist slow but keep moving — it coasts, never black.
 //
 // buffer(6) is `FFWorldGPU` (FirefliesWorld.swift). A ZEROED buffer (a generic harness that
 // binds a blank slot 6) falls back to the rest camera and `features.time`.
@@ -32,6 +35,7 @@ struct FFWorld {
     float4 right;          // xyz, w = aspect
     float4 up;             // xyz, w = world time (s)
     float4 fwd;            // xyz, w = world breath 0…1
+    float4 motion;         // x wind phase (s), y mist drift (m)
 };
 
 // MARK: - Inks and tone
@@ -107,9 +111,9 @@ static inline float ff_blades(float col, float row, float t, float breath) {
     float along = 1.0 - fract(r);                          // 0 root (near) … 1 tip (up the frame)
     float cell = floor(r);
     float size = 0.6 + 0.8 * ff_hash(float2(c, cell));     // blades differ in length
-    // Wind leans each blade by its height; the breath widens the sway (Task 5).
+    // Wind leans each blade by its height; the breath widens the sway.
     float gust = sin(0.8 * t + 0.05 * c + 0.9 * cell) + 0.5 * sin(2.3 * t + 0.21 * c);
-    float lean = (0.25 * jitter + gust * (0.35 + 0.5 * breath)) * along;
+    float lean = (0.25 * jitter + gust * (0.15 + 0.9 * breath * breath)) * along;
     float across = abs(fract(col) - 0.5 - 0.3 * jitter - lean) * 2.0;
     float taper = max(1.0 - along / size, 0.0);           // blades narrow to a point
     return saturate(across / (0.55 * taper + 1e-3));
@@ -154,7 +158,8 @@ fragment float4 fireflies_world_fragment(VertexOut in [[stage_in]],
                                          constant FFWorld& world [[buffer(6)]]) {
     // Camera (the rest camera if slot 6 is blank).
     float3 ro = world.cam_pos.xyz, right = world.right.xyz, up = world.up.xyz, fwd = world.fwd.xyz;
-    float tan_y = world.cam_pos.w, aspect = world.right.w, t = world.up.w, breath = world.fwd.w;
+    float tan_y = world.cam_pos.w, aspect = world.right.w, breath = world.fwd.w;
+    float t = world.motion.x, mist_drift = world.motion.y;
     if (dot(fwd, fwd) < 0.5) {
         const float pitch = 6.6 * 3.14159265 / 180.0;
         ro = float3(0, 1.5, 0);
@@ -164,7 +169,8 @@ fragment float4 fireflies_world_fragment(VertexOut in [[stage_in]],
         tan_y = tan(20.0 * 3.14159265 / 180.0);
         aspect = features.aspect_ratio > 0.0 ? features.aspect_ratio : 16.0 / 9.0;
         t = features.time;
-        breath = 0.0;
+        mist_drift = 0.7 * features.time;
+        breath = 0.5;
     }
     float2 ndc = float2(in.uv.x * 2.0 - 1.0, 1.0 - in.uv.y * 2.0);
     float3 rd = normalize(fwd + ndc.x * tan_y * aspect * right + ndc.y * tan_y * up);
@@ -236,7 +242,7 @@ fragment float4 fireflies_world_fragment(VertexOut in [[stage_in]],
     float b = 1.0 / 2.2;
     float tt = min(dist, 400.0);
     float3 mid = ro + rd * min(tt, 140.0);
-    float density = 0.014 * (0.55 + 0.9 * ff_fbm(float2(mid.x + 0.7 * t * (1.0 + breath), mid.z) / 45.0, 4));
+    float density = 0.014 * (0.55 + 0.9 * ff_fbm(float2(mid.x + mist_drift, mid.z) / 45.0, 4));
     float ry = abs(rd.y) < 1e-4 ? 1e-4 : rd.y;
     float optical = density * exp(-b * ro.y) * (1.0 - exp(-b * ry * tt)) / (b * ry);
     float mist = 1.0 - exp(-max(optical, 0.0));
