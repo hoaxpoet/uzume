@@ -25,8 +25,12 @@ import ArgumentParser
 import Foundation
 import Shared
 
+// Deliberately SYNC. The test bundle links this target (`@testable import`), and under
+// -O an async `@main` emits a weak specialized thunk (`...10async_MainTf3npf_n`) with the
+// same name as the test runner's; the linker coalesces them and the runner's `main` runs
+// THIS CLI instead of the tests ("Executed 0 tests" + our usage text). See RUNBOOK.
 @main
-struct PresetSessionReplay: AsyncParsableCommand {
+struct PresetSessionReplay: ParsableCommand {
 
     static let configuration = CommandConfiguration(
         commandName: "preset-session-replay",
@@ -63,7 +67,7 @@ struct PresetSessionReplay: AsyncParsableCommand {
     @Option(name: .long, help: "Number of evenly-spaced rendered video frames to grade against the rubric.")
     var rubricFrameCount: Int = 24
 
-    mutating func run() async throws {
+    mutating func run() throws {
         let sessionURL = URL(fileURLWithPath: session)
         let outputURL = URL(fileURLWithPath:
             output ?? "/tmp/uzume_replay/\(sessionURL.lastPathComponent)_\(preset)")
