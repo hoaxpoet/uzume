@@ -137,7 +137,8 @@ struct PresetLoaderCompileFailureTest {
     /// the loaded roster, so it is the arbiter, not this arithmetic.)
     /// 32 → 31 at ROOTCHOIR-RETIRE.1 (Root Choir retired after the merged live build
     /// failed its selected Liquid Script motion oracle; BUG-128 / D-249.)
-    static let expectedProductionPresetCount = 30
+    /// 30 → 31 at FF.1 (Fireflies, the `particles`-only pulse-coupled swarm; certified: false).
+    static let expectedProductionPresetCount = 31
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {
