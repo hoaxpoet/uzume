@@ -1616,6 +1616,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG141.1 — stem analysis at the separator's rate, not the file's ✅ (2026-09-25)
+
+**Delivered.** BUG-141 was found during BUG140.2 and filed and fixed in one P2 increment. `LocalFilePreparationPipeline`'s stem-series `StemAnalyzer` and `analyzePreview`'s warmup fps both used the file's rate, though the stems are 44.1 kHz. Both now use `separator.outputSampleRate`. Cache schema 13 → 14. Real-file A/B (Release `PrepTimingRunner`): the 44.1 kHz control is bit-identical. On 48 kHz, vocal pitch drops 7–10 % to true and the scorer input moves ≤ 0.01. On 96 kHz, pitch halves to true and low bands move ×2–3.
+**Done-when:** ✅ two wiring tests, fail-before confirmed; ✅ real-file before/after; ✅ KNOWN_ISSUES + release notes. **Open:** schema-version collision with `claude/bug140-2` (both take v14; the second to merge goes to v15); optional manual check on a 96 kHz file.
+
 ### Increment BUG140.1 — why the beat-irregularity gate flags Superstition, diagnosed ✅ (2026-09-24)
 
 **Delivered (diagnosis only — no behaviour change, no threshold change).** BUG-140 filed with two root causes: (1) the drums-grid BPM the D-154 gate compares comes from `BeatGridResolver.computeBPM`, which averages IOIs across two octaves (BUG-134 fault 1, still unfixed in `computeBPM`), so Superstition's 138.25 is an eighth/quarter average, not a 4:3 or 3:2 relation; (2) on the local-file path the drums grid is analysed at `preview.sampleRate` though stems are 44.1 kHz — every 48 kHz file's drums BPM is scaled ×1.088. Corpus: 34 % flagged (July census), 42 % of flagged duplicate recordings disagree with their other copy; ratio folding rejected (no metrical peak in the data; un-flags Mingus). Median-IOI estimator measured on a 602-track re-run: corpus-est flag rate 27.7 % → 17.1 %. Instrumentation: `CENSUS_DUMP_BEATS=<dir>` on `CorpusCensusRunner`. Also fixed the stale `TrackProfile.beatIrregular` comment (Membrane declares `requires_regular_beat` since PR.26).
