@@ -1,4 +1,4 @@
-// KaguraDancer — Kagura's `ParticleGeometry`: fifteen points of light dancing the twist (KAG.2).
+// KaguraDancer — Kagura's `ParticleGeometry`: fifteen points of light dancing (KAG.2; five dances KAG.3).
 //
 // KAGURA_DESIGN §1, §5, §8. The dance itself is `KaguraChoreographer` (pure CPU); the beat position
 // is `KaguraBeatClock` (fed by the app's stateful tick, `VisualizerEngine+Presets`). This file is
@@ -15,8 +15,8 @@
 // metre with the floor at 0.88·H, core σ 2.6 px, halo σ 9 px, trail σ 2.4 px; every one of those
 // scales with drawable HEIGHT, and the figure is centred on the width.
 //
-// Nothing brightens on the beat (D-157). Not built here (KAG.3): dance selection, arm reach, the
-// grid-CV safety net, the silence rest.
+// Nothing brightens on the beat (D-157). The choice of dance, arm reach and the safety nets are CPU-side
+// (`KaguraChoreographer`, `KaguraSelection`); this file only feeds them `bassAtt` and the song's arousal.
 
 import Foundation
 import Metal
@@ -101,9 +101,14 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
 
     private let device: MTLDevice
     private let clips: KaguraClipLibrary
+    private let forcedDance: KaguraDance?
     private var choreographer: KaguraChoreographer
     private let clockLock = NSLock()
     private var clock = KaguraBeatClock()
+    /// The song's arousal as the app last pushed it, and whether a per-track reset is pending — both
+    /// written under `clockLock` by the app and applied to the choreographer on the render thread.
+    private var pushedArousal: Double?
+    private var songResetPending = false
 
     private let jointCount: Int
     private var trail: [MTLTexture] = []
@@ -128,12 +133,16 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
 
     /// - Parameters:
     ///   - pixelFormat: the drawable's format for `render`; `nil` builds the offscreen passes only.
+    ///   - dance: dance only this one (tests); `nil` chooses by the song (§6).
     public init(device: MTLDevice, library: MTLLibrary, pixelFormat: MTLPixelFormat? = nil,
-                clips: KaguraClipLibrary? = nil) throws {
+                clips: KaguraClipLibrary? = nil, dance: KaguraDance? = nil) throws {
         let lib = try clips ?? KaguraClipLibrary.shared()
-        guard let choreographer = KaguraChoreographer(library: lib) else { throw KaguraError.clipsUnavailable }
+        guard let choreographer = KaguraChoreographer(library: lib, dance: dance) else {
+            throw KaguraError.clipsUnavailable
+        }
         self.device = device
         self.clips = lib
+        forcedDance = dance
         self.choreographer = choreographer
         jointCount = lib.jointNames.count
 
@@ -186,10 +195,22 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
         }
     }
 
-    /// Per-track reset: forget the playback clock's history. The grid push handles the rest (a new
-    /// grid fades the dancer to the sway; it rejoins at the new grid's next bar line).
+    /// The song's arousal (`TrackProfile.songArousal`), or `nil` when the track has none. The app
+    /// writes it at every track change on both paths — a value, or `nil` — so a previous track's
+    /// arousal never reaches the next one's repertoire (CLAUDE.md §What NOT To Do).
+    public func setSongArousal(_ arousal: Double?) {
+        clockLock.withLock { pushedArousal = arousal }
+    }
+
+    /// Per-track reset: forget the playback clock's history and the song's energy distribution. The
+    /// grid push handles the rest (a new grid fades the dancer to the sway; it rejoins at the new
+    /// grid's next bar line). The song arousal is NOT cleared here: the app pushes the new track's
+    /// value (or `nil`) at the same track change, and the two may land in either order.
     public func reset() {
-        clockLock.withLock { clock.resetClock() }
+        clockLock.withLock {
+            clock.resetClock()
+            songResetPending = true
+        }
     }
 
     /// Preset activation: start from the sway with an empty trail and no clock history, so a
@@ -197,7 +218,7 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     /// The installed grid is kept (it belongs to the track, not the activation).
     public func restart() {
         clockLock.withLock { clock.resetClock() }
-        if let fresh = KaguraChoreographer(library: clips) { choreographer = fresh }
+        if let fresh = KaguraChoreographer(library: clips, dance: forcedDance) { choreographer = fresh }
         lastPixels = nil
         clearTrail()
     }
@@ -226,20 +247,26 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
         if trail.isEmpty { ensureAllocated(width: 1280, height: 720) }
         let deltaTime = features.deltaTime > 0 ? features.deltaTime : 1.0 / 60.0
         lastDeltaTime = deltaTime
-        let (beat, grid, generation, permitted) = clockLock.withLock {
-            (
+        let (beat, grid, generation, permitted, arousal, resetSong) = clockLock.withLock {
+            defer { songResetPending = false }
+            return (
                 clock.beatPosition(atRenderTime: Double(features.time)),
                 clock.grid,
                 clock.gridGeneration,
-                clock.dancePermitted
+                clock.dancePermitted,
+                pushedArousal,
+                songResetPending
             )
         }
+        if resetSong { choreographer.resetSong() }
+        choreographer.setSongArousal(arousal)
         let joints = choreographer.advance(
             deltaTime: Double(deltaTime),
             beat: beat,
             grid: grid,
             gridGeneration: generation,
-            dancePermitted: permitted
+            dancePermitted: permitted,
+            bass: Double(features.bassAtt)
         )
         lastJoints = joints
         lastBeat = beat
