@@ -177,6 +177,12 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // heuristic cannot see it. The Filigree / Mitosis / Cytokinesis /
                                      // Cymatic Resonance / Skein / Lumen precedent exactly. L4 is
                                      // manual and awaits Matt's M7. WL.2, certified: false.
+    "Fireflies":            false,   // full; FF.1 is BEHAVIOUR ONLY — the world is the FF.0 spike's
+                                     // placeholder and the light is its two Gaussian stamps, so M1–M4
+                                     // (detail cascade, octaves, materials, deviation primitives) fail
+                                     // by scope, not by defect: FF.2 builds the world and FF.3 the
+                                     // light. M5 silence (the dusk stays lit) and M6 performance pass.
+                                     // certified: false.
     "Stave":                false,   // lightweight; L1 pass (silence renders the ruled field, its haze,
                                      // its cloud and its sparkles — all audio-independent by design),
                                      // L3 pass (0.5 ms tier2 against a 16.6 ms budget), L2 fails BY
