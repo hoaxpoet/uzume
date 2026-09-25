@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-25-140658] BUG-141 — stems on 48/96 kHz local files analysed at the right rate
+
+The stem separator always returns 44.1 kHz stems, but two analyzers read them at the file's rate. The local-file stem series (what shaders receive) reported every frequency ×1.088 on 48 kHz files and ×2.18 on 96 kHz: vocal pitch sharp by ~1.5 semitones or an octave, and per-stem band splits drawn in the wrong place. The prepared `stemEnergyBalance` was also warmed at the wrong frame rate. Both now use the separator's rate. 44.1 kHz files are bit-identical. On 48 kHz files the scorer input moves ≤ 0.01. Cache schema v14 re-analyses affected entries.
+
 ### [dev-2026-09-24-205001] GOLDEN.1 — golden sessions plan against the shipped roster
 
 `GoldenSessionTests` now loads the real scene sidecars instead of a hand-copied May-2026 subset (which still carried Arachne and was missing about 20 scenes). Sessions A–D were regenerated with scoring traces. The `[VL, Membrane ×4]` run BETA.0 recorded was a fixture artifact: on the real roster Membrane never appears. The BUG-133 monopoly does not come back on the seeded production path (7–11 distinct scenes per Session A over 24 seeds). Test-only.

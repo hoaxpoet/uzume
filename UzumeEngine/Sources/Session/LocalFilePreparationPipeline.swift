@@ -225,7 +225,11 @@ public enum LocalFilePreparationPipeline {
                 samples: preview.pcmSamples,
                 sampleRate: preview.sampleRate,
                 separator: separator,
-                analyzer: StemAnalyzer(sampleRate: Float(preview.sampleRate))
+                // BUG-141: the analyzer reads the separator's 44.1 kHz stems, so it must map
+                // bins to Hz at that rate — at the file's rate every band edge and the vocal
+                // pitch were scaled by 48000/44100 on a 48 kHz file.
+                analyzer: StemAnalyzer(
+                    sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate))
             )) ?? .empty
         }
         let elapsed = Date().timeIntervalSince(start)
