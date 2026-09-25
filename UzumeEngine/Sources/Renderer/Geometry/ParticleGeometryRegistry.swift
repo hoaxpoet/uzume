@@ -37,6 +37,7 @@ public enum ParticleGeometryRegistry {
         "Witchlight",
         "Meniscus",
         "Stave",
+        "Fireflies",
         // Alfvén's "particles" pass draws no particles: `AlfvenSolver` is a
         // pseudo-spectral MHD solver that owns a compute pipeline and renders
         // its own field. It uses the conformer slot because that is the only
