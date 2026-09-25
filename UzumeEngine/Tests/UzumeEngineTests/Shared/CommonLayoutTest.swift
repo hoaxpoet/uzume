@@ -64,9 +64,10 @@ struct CommonLayoutTest {
         return nil
     }()
 
-    /// Extract the `float` field names of `struct FeatureVector`, in declaration order.
-    private static func mslFields(of source: String) -> [String] {
-        guard let start = source.range(of: "struct FeatureVector {"),
+    /// Extract the `float` field names of an MSL struct (default `FeatureVector`), in
+    /// declaration order.
+    private static func mslFields(of source: String, struct name: String = "FeatureVector") -> [String] {
+        guard let start = source.range(of: "struct \(name) {"),
               let end = source.range(of: "};", range: start.upperBound..<source.endIndex)
         else { return [] }
         return source[start.upperBound..<end.lowerBound]
@@ -74,12 +75,17 @@ struct CommonLayoutTest {
             // Strip trailing `//` comments FIRST — several declarations carry them, and a
             // parser that drops those lines invents a divergence that is not there.
             .map { line -> String in
-                let code = line.components(separatedBy: "//").first ?? String(line)
-                return code.trimmingCharacters(in: .whitespaces)
+                line.components(separatedBy: "//").first ?? String(line)
             }
-            .filter { $0.hasPrefix("float ") && $0.hasSuffix(";") }
-            .flatMap { line -> [String] in
-                line.dropFirst("float ".count).dropLast()
+            .joined(separator: " ")
+            // Split on STATEMENTS, not lines: `StemFeatures` declares two floats per line
+            // (`float strings_activity; float strings_activity_dev;`), which a per-line
+            // parser reads as one mangled name (BC.1).
+            .split(separator: ";")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("float ") }
+            .flatMap { stmt -> [String] in
+                stmt.dropFirst("float ".count)
                     .split(separator: ",")
                     .map { $0.trimmingCharacters(in: .whitespaces) }
             }
@@ -143,6 +149,37 @@ struct CommonLayoutTest {
             silently corrupts one of them. First difference: \
             \(zip(commonFields, preambleFields).first { $0 != $1 }.map { "\($0) vs \($1)" } ?? "length")
             """)
+    }
+
+    /// BC.1 — the same order-is-the-contract gate for `StemFeatures` (buffer(3)), which had
+    /// none. Both MSL sites must declare the same 64 floats in the same order, and the
+    /// first reclaimed pad, `beat_clarity01`, must sit at float 56 (index 55) — exactly
+    /// where Swift writes `beatClarity01`. A field that lands one slot off on either side
+    /// reads a neighbour's value with no error anywhere.
+    @Test func mslStemFeatures_matchesSwiftAndAgreesAcrossBothSites() throws {
+        guard let root = Self.repoRoot else {
+            print("CommonLayoutTest: not a source checkout — skipping MSL parity")
+            return
+        }
+        let common = try #require(try? String(contentsOf: root.appendingPathComponent(
+            "UzumeEngine/Sources/Renderer/Shaders/Common.metal"), encoding: .utf8),
+            "Common.metal unreadable in a source checkout — never a pass")
+        let preamble = try #require(try? String(contentsOf: root.appendingPathComponent(
+            "UzumeEngine/Sources/Presets/PresetLoader+Preamble.swift"), encoding: .utf8),
+            "PresetLoader+Preamble.swift unreadable in a source checkout — never a pass")
+        let commonFields = Self.mslFields(of: common, struct: "StemFeatures")
+        let preambleFields = Self.mslFields(of: preamble, struct: "StemFeatures")
+
+        #expect(commonFields.count * 4 == MemoryLayout<StemFeatures>.size,
+                "Common.metal StemFeatures is \(commonFields.count) floats; Swift is \(MemoryLayout<StemFeatures>.size / 4)")
+        #expect(commonFields == preambleFields, """
+            The two MSL StemFeatures declarations disagree. First difference: \
+            \(zip(commonFields, preambleFields).first { $0 != $1 }.map { "\($0) vs \($1)" } ?? "length")
+            """)
+        #expect(commonFields.firstIndex(of: "beat_clarity01") == 55,
+                "beat_clarity01 must be float 56 (index 55) in MSL")
+        #expect(MemoryLayout<StemFeatures>.offset(of: \StemFeatures.beatClarity01) == 55 * 4,
+                "Swift beatClarity01 must sit at byte 220 to match MSL")
     }
 
     // MARK: - Prose parity (BUG-138)

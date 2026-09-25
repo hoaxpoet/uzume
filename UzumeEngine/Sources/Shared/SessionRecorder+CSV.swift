@@ -152,7 +152,8 @@ extension SessionRecorder {
         otherOnsetRate,otherCentroid,otherAttackRatio,otherEnergySlope,\
         vocalsPitchHz,vocalsPitchConfidence,\
         stringsActivity,stringsActivityDev,brassActivity,brassActivityDev,\
-        woodwindsActivity,woodwindsActivityDev,percussionActivity,percussionActivityDev
+        woodwindsActivity,woodwindsActivityDev,percussionActivity,percussionActivityDev,\
+        beatClarity01
 
         """
 
@@ -317,12 +318,14 @@ extension SessionRecorder {
         // IFC.4 (D-177) — per-family instrument activity (smoothed + D-026 dev).
         // The diagnostic artifact for the family-capture pipeline. New columns
         // at the END (positional parsers depend on the existing layout).
-        let family = String(format: ",%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",
+        let family = String(format: ",%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f",
                             stems.stringsActivity, stems.stringsActivityDev,
                             stems.brassActivity, stems.brassActivityDev,
                             stems.woodwindsActivity, stems.woodwindsActivityDev,
                             stems.percussionActivity, stems.percussionActivityDev)
-        return base + dev + rich + pitch + family
+        // BC.1 — track-scoped beat clarity (1 steady / 0 irregular / 0.5 unknown), appended.
+        let clarity = String(format: ",%.2f\n", stems.beatClarity01)
+        return base + dev + rich + pitch + family + clarity
     }
     // swiftlint:enable multiline_arguments
 }

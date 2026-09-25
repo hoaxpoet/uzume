@@ -138,6 +138,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-254 | Accepted | **Tier-2-first flagship scenes are allowed** (BETA.0, Matt 2026-09-24) |
 | D-255 | Accepted | **The beta scene programme (Phase BETA) supersedes Phase PR**, the 2026-09-04 remediation (BETA.0, Matt 2026-09-24) |
 | D-256 | Accepted | **50 certified scenes is a goal, not a floor; the quality bar governs** (BETA.0, Matt 2026-09-24) |
+| D-257 | Accepted | **Beat clarity reaches the GPU as one track-scoped float** (`StemFeatures.beat_clarity01`, 1 steady / 0 irregular / 0.5 unknown, from the D-154 flag); **Fireflies maps unknown to free** and lives in the **dusk meadow** (BC.1 + FF.0, Matt 2026-09-24) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6000,3 +6001,36 @@ bar, so the window attempts 11 originals and expects 8–10 to certify (a beta r
 50 remains the post-beta goal. No scene certifies to hit a count.
 
 **References.** Slate §00 (decision 6 and the October 15 plan).
+
+## D-257: Beat clarity reaches the GPU; Fireflies maps unknown to free (BC.1 + FF.0)
+
+**Date:** 2026-09-24 · **Increments:** FF.0 (the need), BC.1 (the carrier) · **Status:** Accepted
+
+**The need.** FF.0 (the Fireflies look-spike, `docs/presets/fireflies_spike/README.md` §2) needed a
+shader to know how clear a track's beat is, so a swarm can entrain to the grid as strongly as the beat
+can be trusted. No existing field carries it, measured on six production-chain captures: `pulse_amp01`
+is a silence gate (0.91–0.99 on all six, beatless Warszawa included), a grid is installed on every track
+(Beat This! gives Warszawa 54.5 BPM), the D-210 bar decline is off by default and never fired, and
+drum-stem energy does not separate Warszawa from B.O.B. `assessBeatIrregularity` computed the right
+signal but it reached only the planner.
+
+**The carrier (BC.1).** One float in `StemFeatures`, reclaimed from `_pad14` (float 56):
+**1 = steady, 0 = irregular, 0.5 = unknown** — the D-154 `TrackProfile.beatIrregular` flag
+(`StemFeatures.beatClarity01(beatIrregular:)`). It is track-scoped like `cachedBassProportion`:
+written by `RenderPipeline.setBeatClarity(beatIrregular:)` on every `resetStemPipeline` call (with
+`nil` for an uncached or unidentified track), reset to unknown in `clearSessionScopedSurfaces()` on
+both session-entry paths (the BUG-024 both-paths rule), and preserved across live stem pushes. It is
+recorded as the `beatClarity01` tail column of `stems.csv`; a replayed capture that predates the column
+reads **unknown, never 0**. It ships alone, not bundled with a scene (slate §00).
+
+**Matt's calls on the scene (2026-09-24),** verbatim: *"A, and unknown stays free."* — Fireflies lives
+in the **dusk meadow with a tree line** (option A), and a track whose clarity is unknown (Warszawa: no
+drums, so no drums-stem tempo) behaves as **free** (K = 0). The mapping is the scene's; the float's
+three-value contract is unchanged, so a future consumer can read unknown differently. FF.0 passed **on
+condition** that fidelity work is scoped (*"the scene looked cheap and quickly produced, like a sketch
+vs. a detailed rendering"*) — scoped as FF.R → FF.1–FF.4 in the spike README §7.
+
+**Known limit.** The flag is a 30 s-window estimate and flips on Pyramid Song (47.7 % disagreement in
+June, 0.099 in the census). The carrier transports the flag faithfully; it does not make the flag right.
+
+**References.** `docs/presets/fireflies_spike/README.md` §2, §6, §7; D-154; D-210; `docs/AUDIO_CONTRACT.md` §1.3.

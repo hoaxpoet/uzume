@@ -1601,6 +1601,34 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BC.1 — beat clarity reaches the GPU ✅ (2026-09-24, D-257)
+
+**Done-when:** the D-154 beat-regularity flag reaches every shader as one track-scoped float
+(`StemFeatures.beat_clarity01`: 1 steady / 0 irregular / 0.5 unknown). It is written at every track
+change, reset to unknown at session boundaries on both entry paths, and preserved across live stem
+pushes. It is gated and ships alone: no scene reads it yet, and Fireflies FF.1 will be the first.
+
+**Delivered.**
+- **The slot:** float 56, reclaimed from `_pad14` in Swift and in both MSL sites.
+- **Writes:** `RenderPipeline.setBeatClarity(beatIrregular:)` is called from `resetStemPipeline` on
+  every call, identity or not, and from `clearSessionScopedSurfaces()`, which now also clears
+  `currentTrackBeatIrregular`.
+- **Recording and replay:**
+  - `stems.csv` gains a `beatClarity01` tail column.
+  - `SessionReplayHarness` replays a capture older than the column as **unknown, not 0**.
+  - The route-coverage gate lists the field as carried.
+  - `FixtureSessionCaptureGenerator` records unknown, since it has no `TrackProfile`.
+- **New gate:** `CommonLayoutTest` had MSL order parity for `FeatureVector` only. It now checks
+  `StemFeatures` across both MSL sites and pins `beat_clarity01` to float index 55 (Swift byte offset
+  220). Its parser splits statements rather than lines, because `StemFeatures` declares two floats per
+  line. Breaking the preamble on purpose made it fail.
+- **The split:** `StemFeatures.swift` sat at 399 of its 400-line cap, so its `Codable` extension moved
+  unchanged into `StemFeatures+Codable.swift`.
+- **Safety:** old stem-series cache entries (raw memory dumps, stride unchanged at 256) still load with 0
+  in the slot. That's harmless, because every series frame reaches the GPU through `setStemFeatures`,
+  which keeps the installed value. Every existing shader is byte-identical, since the slot was padding
+  and nothing reads it yet.
+
 ### Increment GOLDEN.1 — golden sessions plan against the shipped roster ✅ (2026-09-24)
 
 **Done-when:** `GoldenSessionTests.makeRealCatalog()` loads the real sidecars instead of a hand
