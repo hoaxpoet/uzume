@@ -522,6 +522,10 @@ struct MultiPassRenderHarness {
     /// which leaves the swarm free. The `realSpectrum` injection precedent.
     nonisolated(unsafe) static var firefliesGridBPM: [Float]?
 
+    /// FF.2 — shifts the Fireflies camera drift's clock (`FirefliesGeometry.cameraTimeOffset`) so a
+    /// still can show the same moment from a drifted camera. 0 = production.
+    nonisolated(unsafe) static var firefliesCameraTimeOffset: Float = 0
+
     /// Fireflies (FF.1). Mirrors `RenderPipeline.encodePresetVisualization` on the direct path:
     /// the world fragment through the preset's own compiled pipeline, then the swarm sprites
     /// into the same encoder. `settle` frames advance the swarm without capture.
@@ -535,6 +539,8 @@ struct MultiPassRenderHarness {
         let history = SpectralHistoryBuffer(device: ctx.device)
         let geo = try FirefliesGeometry(device: ctx.device, library: lib.library, beatGrid: history,
                                         pixelFormat: ctx.pixelFormat)
+        geo.ensureAllocated(width: width, height: height)
+        geo.cameraTimeOffset = Self.firefliesCameraTimeOffset
         let aspect = Float(width) / Float(height)
         let bpm = Self.firefliesGridBPM
         func frame(_ i: Int) -> FeatureVector {
@@ -552,6 +558,8 @@ struct MultiPassRenderHarness {
             var f = frame(settle + i)
             enc.setRenderPipelineState(preset.pipelineState)
             enc.setFragmentBytes(&f, length: MemoryLayout<FeatureVector>.size, index: 0)
+            // FF.2 — the world camera at slot 6, as `bindFirefliesRuntime` binds it in the app.
+            enc.setFragmentBuffer(geo.worldBuffer, offset: 0, index: 6)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             geo.render(encoder: enc, features: f)
         } update: { i, cmd in

@@ -106,6 +106,42 @@ struct FirefliesRenderTests {
         }
     }
 
+    /// FF.2 Task 3 — the look still. DYC's locked-unison peak (FF.1's films: near frame 1221) at
+    /// 1920×1080 through the real draw path, once from the drift camera ("a") and once at the
+    /// same moment with the camera clock shifted half a sideways period ("b") to show the
+    /// parallax. Writes `fireflies_{a,b}_f<frame>.png` for frames 1212–1231 to
+    /// `FIREFLIES_STILL_OUT`, plus each frame's mean luma so the unison peak can be picked.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_STILL_OUT"] != nil))
+    func lookStills() throws {
+        let out = URL(fileURLWithPath: ProcessInfo.processInfo.environment["FIREFLIES_STILL_OUT"] ?? "")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let drive = try FirefliesDrive(directory: FirefliesSpikeParityProbe.root
+            .appendingPathComponent("sessions/fixturegen-01_Dance_Yrself_Clean"))
+        let window = 1212..<1232
+        let features = Array(drive.features.prefix(window.upperBound))
+        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
+        defer {
+            MultiPassRenderHarness.firefliesGridBPM = nil
+            MultiPassRenderHarness.firefliesCameraTimeOffset = 0
+        }
+        for (tag, offset) in [("a", Float(0)), ("b", Float(23.5))] {
+            MultiPassRenderHarness.firefliesCameraTimeOffset = offset
+            var index = 0
+            let luma = try MultiPassRenderHarness(width: 1920, height: 1080).render(
+                preset: "Fireflies", features: features, stems: Self.stems(features.count, clarity: 1)
+            ) { bgra -> Float in
+                defer { index += 1 }
+                guard window.contains(index) else { return 0 }
+                Self.writePNG(bgra, width: 1920, height: 1080,
+                              to: out.appendingPathComponent("fireflies_\(tag)_f\(index).png"))
+                return Self.meanLuma(bgra)
+            }
+            for frame in window {
+                print(String(format: "[fireflies-still] %@ frame %d mean luma %.4f", tag, frame, luma[frame]))
+            }
+        }
+    }
+
     static func writePNG(_ bgra: [UInt8], width: Int, height: Int, to url: URL) {
         let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue
                                 | CGBitmapInfo.byteOrder32Little.rawValue)
