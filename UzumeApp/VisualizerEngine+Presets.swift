@@ -111,6 +111,8 @@ extension VisualizerEngine {
         // KAG.2: forget the playback clock's history so the new track's first frame resyncs. The
         // grid is NOT cleared here — on the local-file path the new track's grid is pushed BEFORE
         // this runs; the grid push itself fades the dancer to the sway until the next bar line.
+        // KAG.3: also forgets the song's energy distribution; the song arousal is written by
+        // `resetStemPipeline` beside the grid, not here.
         (kaguraGeometry as? KaguraDancer)?.reset()
         // MEN.2a (`MENISCUS_PLAN.md` §4, track-change row): the surface settles back to
         // its resting state and the camera returns to the resting attitude, so a new
