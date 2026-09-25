@@ -1631,10 +1631,15 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG140.2 — the beat-irregularity gate measures the tempo it means ✅ (2026-09-25; live check passed)
+
+**Matt's option A** (fix the measurement, keep the 10 % rule). **Delivered:** the D-154 gate compares `octaveFoldedMedianBPM` of each grid's beats instead of `BeatGrid.bpm` (`assessBeatIrregularity(grid:drums:)`, used by `StemCache.beatIrregular` and CorpusCensusRunner). The drums grid is analysed at the separator's output rate (44.1 kHz). `PersistentStemCache` schema is v15 (BUG-141 took v14). The census harness separates the whole window. `computeBPM`/`BeatGrid.bpm` are untouched, so there is **no behavioural change to beat sync**. **Measured** (601-track stratified re-run + 150 duplicate pairs): corpus-est flag rate 25.2 % → 12.0 %; copies disagree 34/150 → 6/150; 12 new flags, 3 of them look false. Superstition/Penny Lane are regular; Pyramid Song is still flagged in production. Plain median (BUG140.1's proposal) measured insufficient; the octave fold is what clears the motivating tracks. D-154 amended.
+**Done-when:** ✅ tests + corpus re-run + production-path check (KNOWN_ISSUES BUG-140). ✅ Manual: Matt, session `2026-09-25T14-29-08Z` — *"Membrane is locked on Superstition … looks great!"* (`beatClarity01` = 1.00 throughout, on this branch's pre-renumber v14). **Follow-up:** the stem warm-up sample-rate bug found here became BUG-141, merged #271.
+
 ### Increment BUG141.1 — stem analysis at the separator's rate, not the file's ✅ (2026-09-25)
 
 **Delivered.** BUG-141 was found during BUG140.2 and filed and fixed in one P2 increment. `LocalFilePreparationPipeline`'s stem-series `StemAnalyzer` and `analyzePreview`'s warmup fps both used the file's rate, though the stems are 44.1 kHz. Both now use `separator.outputSampleRate`. Cache schema 13 → 14. Real-file A/B (Release `PrepTimingRunner`): the 44.1 kHz control is bit-identical. On 48 kHz, vocal pitch drops 7–10 % to true and the scorer input moves ≤ 0.01. On 96 kHz, pitch halves to true and low bands move ×2–3.
-**Done-when:** ✅ two wiring tests, fail-before confirmed; ✅ real-file before/after; ✅ KNOWN_ISSUES + release notes. **Open:** schema-version collision with `claude/bug140-2` (both take v14; the second to merge goes to v15); optional manual check on a 96 kHz file.
+**Done-when:** ✅ two wiring tests, fail-before confirmed; ✅ real-file before/after; ✅ KNOWN_ISSUES + release notes. Merged #271 (`9fee33ae`); BUG140.2 took v15. **Open:** optional manual check on a 96 kHz file.
 
 ### Increment BUG140.1 — why the beat-irregularity gate flags Superstition, diagnosed ✅ (2026-09-24)
 
