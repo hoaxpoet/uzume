@@ -61,6 +61,9 @@ xcodebuild -scheme UzumeApp -destination 'platform=macOS' build
 # Package tests (UzumeEngine SPM target)
 swift test --package-path UzumeEngine
 
+# Package tests OPTIMIZED (for quoting Release numbers; testable imports must be re-enabled under -c release)
+swift test -c release --enable-testable-imports --package-path UzumeEngine
+
 # App tests (app test target only — engine tests run via swift test above)
 xcodebuild -scheme UzumeApp -destination 'platform=macOS' test
 

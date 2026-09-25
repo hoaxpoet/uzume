@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment TESTREL.1 — the engine suite runs optimized ✅ (2026-09-25)
+
+**Delivered.** `swift test -c release --enable-testable-imports --package-path UzumeEngine` now builds and runs the whole suite, so test-derived numbers can be quoted in Release (CLAUDE.md §Build & Test). Two blockers: (1) `SystemAudioCapture.seedTapResourcesForTesting` was `#if DEBUG`, so `SystemAudioCaptureTeardownTests` did not compile optimized — the gate is dropped (`internal` already confines it to `@testable`). (2) Under -O, `PresetSessionReplay`'s async `@main` emitted a weak specialized thunk (`$sIetH_yts5Error_pIegHrzo_TR10async_MainTf3npf_n`) with the same name as the test runner's; the linker coalesced them and the runner's `main` ran the replay CLI ("Executed 0 tests" + its usage). Its `run()` never awaited, so it is now a sync `ParsableCommand`. Recipe in RUNBOOK §Build and Test.
+**Done-when:** ✅ full engine suite green in Debug (2006 Swift Testing / 214 XCTest, 274 s) and optimized (same counts, 63 s). **Caveat:** `--enable-testable-imports` compiles with `-enable-testing`, which inhibits some optimization — near-Release, not the shipped app's exact codegen. Any future test-linked executable must keep a sync `@main`.
+
 ### Increment FF.1 — Fireflies engine port at spike fidelity ✅ (2026-09-25, merged #273)
 
 **Done-when:** the FF.0 swarm runs in the engine and its coherence R(t) and on-beat-vs-true-grid
