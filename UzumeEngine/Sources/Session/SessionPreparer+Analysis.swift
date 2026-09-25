@@ -85,10 +85,12 @@ extension SessionPreparer {
         let stemWaveforms = result.stemWaveforms
 
         // Step 3: Multi-frame AGC warmup → StemFeatures snapshot.
+        // BUG-141: the stems are in the SEPARATOR's time base (44.1 kHz), not the preview's.
+        // At the file's rate a 48 kHz file stepped the warmup at 46.9 fps through 43.1 fps audio.
         let stemFeatures = probe.measure(PrepStage.stemWarmup) {
             warmUpAndAnalyze(
                 stemWaveforms: stemWaveforms,
-                sampleRate: Float(preview.sampleRate),
+                sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate),
                 analyzer: analyzer
             )
         }
@@ -106,7 +108,9 @@ extension SessionPreparer {
         let (beatGrid, drumsBeatGrid) = probe.measure(PrepStage.beatGrid) {
             computeBeatGrids(
                 preview: preview,
-                stemWaveforms: stemWaveforms,
+                drumsStem: stemWaveforms.count > 1
+                    ? (stemWaveforms[1], Double(separator.outputSampleRate ?? Float(preview.sampleRate)))
+                    : nil,
                 beatGridAnalyzer: beatGridAnalyzer,
                 prefetchedProfile: prefetchedProfile,
                 wholeTrackAudio: wholeTrackAudio
@@ -161,7 +165,7 @@ extension SessionPreparer {
     /// across calls, no re-init). `nil` analyzer → both `.empty`.
     nonisolated private static func computeBeatGrids(
         preview: PreviewAudio,
-        stemWaveforms: [[Float]],
+        drumsStem: (samples: [Float], sampleRate: Double)?,
         beatGridAnalyzer: (any BeatGridAnalyzing)?,
         prefetchedProfile: PreFetchedTrackProfile?,
         wholeTrackAudio: Bool
@@ -186,13 +190,13 @@ extension SessionPreparer {
         }
 
         let drumsBeatGrid: BeatGrid
-        if let gridAnalyzer = beatGridAnalyzer, stemWaveforms.count > 1 {
-            // BUG-140: stems come back at the separator's model rate, not the preview's.
-            // Passing `preview.sampleRate` scaled every 48 kHz local file's drums tempo
-            // by 48000/44100 = 1.088 (and a 96 kHz file's by 2.18).
+        if let gridAnalyzer = beatGridAnalyzer, let drumsStem {
+            // BUG-140: stems come back at the separator's output rate (44.1 kHz in
+            // production), not the preview's. Passing `preview.sampleRate` scaled every
+            // 48 kHz local file's drums tempo by 48000/44100 = 1.088 (96 kHz: 2.18).
             drumsBeatGrid = gridAnalyzer.analyzeBeatGrid(
-                samples: stemWaveforms[1],
-                sampleRate: Double(StemSeparator.modelSampleRate),
+                samples: drumsStem.samples,
+                sampleRate: drumsStem.sampleRate,
                 wholeTrack: wholeTrackAudio
             )
         } else {

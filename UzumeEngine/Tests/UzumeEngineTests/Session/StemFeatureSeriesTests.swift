@@ -310,4 +310,60 @@ struct StemFeatureSeriesTests {
         let covered = Double(at480.0) * at480.1
         #expect(abs(covered - 6.0) < 0.3, "series covers \(covered) s, expected ~6 s")
     }
+
+    // MARK: - Analyzer rate (BUG-141)
+
+    /// The local-file sweep builds its own `StemAnalyzer`, and that analyzer reads the
+    /// separator's 44.1 kHz stems — so its bin→Hz map must be at 44.1 kHz whatever the file's
+    /// rate. At the file's rate a 48 kHz file's 220 Hz vocal read as ~239 Hz, and every band
+    /// edge moved by the same 1.088.
+    @Test("The local-file sweep analyses the stems at the separator's rate, not the file's")
+    func localFileSweep_analyzerUsesSeparatorRate() throws {
+        let fileRate = 48_000
+        let total = Int(8.0 * Double(fileRate))
+        let tone = (0..<total).map { i in
+            Float(0.9 * sin(2 * Double.pi * 220 * Double(i) / Double(fileRate)))
+        }
+        let preview = PreviewAudio(
+            trackIdentity: TrackIdentity(title: "t", artist: "a", spotifyID: "test:bug141"),
+            pcmSamples: tone, sampleRate: fileRate, duration: 8.0)
+        let series = LocalFilePreparationPipeline.analyzeStemSeriesForLocalFile(
+            preview: preview,
+            separator: ResamplingWindowSeparator(windowSamples: Int(10.0 * 44_100), modelRate: 44_100),
+            filename: "t", recorder: nil, probe: .disabled)
+        let pitches = series.frames.dropFirst(8).map(\.vocalsPitchHz).filter { $0 > 0 }
+        #expect(!pitches.isEmpty, "no voiced frames — the tone never reached the pitch tracker")
+        let median = pitches.sorted()[pitches.count / 2]
+        #expect(abs(median - 220) < 5, "220 Hz tone read as \(median) Hz (48000/44100 × 220 = 239.5)")
+    }
+
+    /// `analyzePreview`'s AGC warmup steps through the separated stems 1024 samples at a time,
+    /// so its `fps` must be the STEMS' rate over 1024 — the separator's, not the preview's.
+    @Test("analyzePreview warms the analyzer at the separator's frame rate, not the file's")
+    func analyzePreview_warmupUsesSeparatorRate() throws {
+        let fileRate = 48_000
+        let pcm = [Float](repeating: 0.1, count: fileRate * 2)
+        let preview = PreviewAudio(
+            trackIdentity: TrackIdentity(title: "t", artist: "a", spotifyID: "test:bug141"),
+            pcmSamples: pcm, sampleRate: fileRate, duration: 2.0)
+        let analyzer = FPSRecordingAnalyzer()
+        _ = try SessionPreparer.analyzePreview(
+            preview,
+            separator: ResamplingWindowSeparator(windowSamples: 2 * 44_100, modelRate: 44_100),
+            analyzer: analyzer,
+            classifier: MockMoodClassifier())
+        #expect(!analyzer.fps.isEmpty)
+        #expect(Set(analyzer.fps) == [Float(44_100) / 1024], "got \(Set(analyzer.fps))")
+    }
+}
+
+// MARK: - FPSRecordingAnalyzer (BUG-141)
+
+private final class FPSRecordingAnalyzer: StemAnalyzing, @unchecked Sendable {
+    var fps: [Float] = []
+    func analyze(stemWaveforms: [[Float]], fps: Float) -> StemFeatures {
+        self.fps.append(fps)
+        return .zero
+    }
+    func reset() {}
 }

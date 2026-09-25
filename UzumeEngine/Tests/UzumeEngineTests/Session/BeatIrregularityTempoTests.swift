@@ -107,7 +107,21 @@ struct BeatIrregularityTempoTests {
         }
     }
 
-    @Test("the drums grid is analysed at the separator's model rate, not the file's")
+    /// A separator that, like the production one, returns stems at 44.1 kHz whatever
+    /// rate it was handed (`FakeStemSeparator` echoes the caller's time base instead).
+    @available(macOS 14.2, *)
+    private final class ModelRateSeparator: StemSeparating, @unchecked Sendable {
+        let inner: FakeStemSeparator
+        init(_ inner: FakeStemSeparator) { self.inner = inner }
+        var stemLabels: [String] { inner.stemLabels }
+        var stemBuffers: [UMABuffer<Float>] { inner.stemBuffers }
+        var outputSampleRate: Float? { StemSeparator.modelSampleRate }
+        func separate(audio: [Float], channelCount: Int, sampleRate: Float) throws -> StemSeparationResult {
+            try inner.separate(audio: audio, channelCount: channelCount, sampleRate: sampleRate)
+        }
+    }
+
+    @Test("the drums grid is analysed at the separator's output rate, not the file's")
     func drumsGridUsesModelRate() throws {
         guard #available(macOS 14.2, *) else { return }
         guard let device = MTLCreateSystemDefaultDevice() else { return }
@@ -120,7 +134,7 @@ struct BeatIrregularityTempoTests {
 
         _ = try SessionPreparer.analyzePreview(
             preview,
-            separator: try FakeStemSeparator(device: device, bufferCapacity: pcm.count),
+            separator: ModelRateSeparator(try FakeStemSeparator(device: device, bufferCapacity: pcm.count)),
             analyzer: StemAnalyzer(sampleRate: Float(fileRate)),
             classifier: MockMoodClassifier(),
             beatGridAnalyzer: analyzer)
