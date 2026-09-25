@@ -300,6 +300,10 @@ Below is why it reads as a sketch, and the work that turns it into a rendering.
 
 ### 7.2 The bar, stated up front
 
+> ⚠ **Superseded 2026-09-25 by D-258.** After FF.1, Matt ruled out photographic and chose a stylized
+> screenprint rendered from a real 3D scene (Daniel Danger's night prints, blue palette). The bar below
+> is kept as the record of what FF.0 proposed; it no longer governs FF.2/FF.3.
+
 **A matte-painting-quality dusk, not photoreal grass.** Layered silhouettes, volumetric mist and
 lens-like firefly light are established fragment-shader craft, and the engine already ships them:
 
