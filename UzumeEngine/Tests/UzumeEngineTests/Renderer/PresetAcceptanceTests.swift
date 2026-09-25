@@ -102,6 +102,11 @@ struct PresetAcceptanceTests {
         // (drawWithGlaze); the standalone `glaze_fragment` is intentionally black. Production
         // coverage: GlazeMVWarpAccumulationTest.
         guard preset.descriptor.name != "Glaze" else { return }
+        // Kagura (KAG.2): the dancer is `KaguraDancer`'s particles pass; the standalone
+        // `kagura_ground_fragment` is the intentionally near-black ground it composites over.
+        // Coverage: KaguraPulseLockReplayTests, KaguraMotionSequenceTests and the
+        // MultiPassRenderHarness "Kagura" case (frame budget, flash safety).
+        guard preset.descriptor.name != "Kagura" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)
@@ -141,6 +146,11 @@ struct PresetAcceptanceTests {
         // (drawWithGlaze); the standalone `glaze_fragment` is intentionally black. Production
         // coverage: GlazeMVWarpAccumulationTest.
         guard preset.descriptor.name != "Glaze" else { return }
+        // Kagura (KAG.2): the dancer is `KaguraDancer`'s particles pass; the standalone
+        // `kagura_ground_fragment` is the intentionally near-black ground it composites over.
+        // Coverage: KaguraPulseLockReplayTests, KaguraMotionSequenceTests and the
+        // MultiPassRenderHarness "Kagura" case (frame budget, flash safety).
+        guard preset.descriptor.name != "Kagura" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)
@@ -279,6 +289,9 @@ struct PresetAcceptanceTests {
         // cover it), so the fragment-alone render is exempted here. Multi-frame coverage:
         // RicercarEchoWiringTests + MultiPassRenderHarness's "Ricercar" case (frame-budget, flash-safety).
         guard preset.descriptor.name != "Ricercar" else { return }
+        // Kagura (KAG.2): same as Ricercar — the readable content is `KaguraDancer`'s points and
+        // trails (particles pass) over the near-black `kagura_ground_fragment`.
+        guard preset.descriptor.name != "Kagura" else { return }
         // Cytokinesis (MITOSIS-G2.1): same as Mitosis — the readable content is the
         // `MitosisGen2Geometry` cell field; the standalone `mitosisgen2_ground_fragment`
         // is the intentionally flat dark ground (this fragment-only harness sees only it →
