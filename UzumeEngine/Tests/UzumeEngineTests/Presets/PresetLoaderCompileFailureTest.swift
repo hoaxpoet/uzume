@@ -137,8 +137,12 @@ struct PresetLoaderCompileFailureTest {
     /// the loaded roster, so it is the arbiter, not this arithmetic.)
     /// 32 → 31 at ROOTCHOIR-RETIRE.1 (Root Choir retired after the merged live build
     /// failed its selected Liquid Script motion oracle; BUG-128 / D-249.)
+    /// 30 → 31 at KAG.2 (Kagura, the point-light dancer; `feedback+particles` via `KaguraDancer`,
+    /// uncertified, so the planner does not pick it — KAGURA_DESIGN §11.)
     /// 30 → 31 at FF.1 (Fireflies, the `particles`-only pulse-coupled swarm; certified: false).
-    static let expectedProductionPresetCount = 31
+    /// 31 → 32 when KAG.2 and FF.1 merged: each branch counted 30 → 31 on its own; with both
+    /// presets in the roster the gate counts 32.
+    static let expectedProductionPresetCount = 32
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

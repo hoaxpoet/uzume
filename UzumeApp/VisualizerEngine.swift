@@ -335,6 +335,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// CPU wave field serialized into one continuous path (D-097, MEN.2a).
     var meniscusGeometry: (any ParticleGeometry)?
 
+    /// The point-light dancer for the Kagura preset — `KaguraDancer` (D-097, KAG.2). Fed the
+    /// cached grid on every install (`installBeatGrid`) and the playback clock by its tick.
+    var kaguraGeometry: (any ParticleGeometry)?
+
     /// Fireflies preset (FF.1) — `FirefliesGeometry`, 600 pulse-coupled fireflies (D-097).
     var firefliesGeometry: (any ParticleGeometry)?
 
@@ -993,6 +997,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         )
         self.meniscusGeometry = Self.makeMeniscusGeometry(
             context: ctx, library: lib, spectrum: fft.magnitudeBuffer)
+        self.kaguraGeometry = Self.makeKaguraGeometry(context: ctx, library: lib)
         self.moodClassifier = classifier
         self.stemAnalyzer = analyzer
         self.stemSeparator = sep
@@ -1424,6 +1429,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             "Stave": staveGeometry,
             "Fireflies": firefliesGeometry,
             "Alfvén": alfvenSolver,
+            "Kagura": kaguraGeometry,
         ]
         return table[name].flatMap { $0 }
     }
@@ -1470,6 +1476,24 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         }
         logger.info("Witchlight created: \(WitchlightConfiguration().beadCapacity)-bead harmonic stroke")
         return stroke
+    }
+
+    /// Build the point-light dancer for the Kagura preset (`KaguraDancer` +
+    /// `Renderer/Shaders/Kagura.metal`, KAG.2). Returns `any ParticleGeometry` (D-097, siblings
+    /// not subclasses). Decodes the bundled clip library (`KaguraClipLibrary.shared()`, KAG.1).
+    private static func makeKaguraGeometry(
+        context: MetalContext,
+        library: Renderer.ShaderLibrary
+    ) -> (any ParticleGeometry)? {
+        do {
+            let dancer = try KaguraDancer(
+                device: context.device, library: library.library, pixelFormat: context.pixelFormat)
+            logger.info("Kagura created: point-light dancer, twist (KAG.2)")
+            return dancer
+        } catch {
+            logger.error("Kagura geometry failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// Build the pulse-coupled swarm for the Fireflies preset (`FirefliesGeometry` +
