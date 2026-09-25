@@ -139,6 +139,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-255 | Accepted | **The beta scene programme (Phase BETA) supersedes Phase PR**, the 2026-09-04 remediation (BETA.0, Matt 2026-09-24) |
 | D-256 | Accepted | **50 certified scenes is a goal, not a floor; the quality bar governs** (BETA.0, Matt 2026-09-24) |
 | D-257 | Accepted | **Beat clarity reaches the GPU as one track-scoped float** (`StemFeatures.beat_clarity01`, 1 steady / 0 irregular / 0.5 unknown, from the D-154 flag); **Fireflies maps unknown to free** and lives in the **dusk meadow** (BC.1 + FF.0, Matt 2026-09-24) |
+| D-258 | Accepted | **Fireflies' look is a stylized screenprint rendered from a real 3D scene** — Daniel Danger's night prints, blue palette, hero `07`; supersedes FF.0's photographic / matte-painting bar (FF.R2, Matt 2026-09-25) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6036,3 +6037,44 @@ vs. a detailed rendering"*) — scoped as FF.R → FF.1–FF.4 in the spike READ
 June, 0.099 in the census). The carrier transports the flag faithfully; it does not make the flag right.
 
 **References.** `docs/presets/fireflies_spike/README.md` §2, §6, §7; D-154; D-210; `docs/AUDIO_CONTRACT.md` §1.3.
+
+## D-258: Fireflies' look is a stylized screenprint rendered from a real 3D scene (FF.R2)
+
+**Date:** 2026-09-25 · **Increment:** FF.R2 · **Status:** Accepted · **Supersedes:** the fidelity bar
+in `docs/presets/fireflies_spike/README.md` §7.2 (a photographic, matte-painting-quality dusk).
+
+**What happened.** FF.1 ported the swarm at spike fidelity and Matt judged the look: *"the design still
+looks like shit"*; the tree line and flat ground read cheapest, *"but really the look of the whole scene
+is problematic."* Asked what he pictures: *"i'm not looking for photographic, i'm looking for something
+more stylized but still 3D. it's not enough to put fireflies over a static painting."* Game-style
+anchors failed as a vocabulary (he did not know them; one was *"too bright"* for the fireflies to read,
+another *"too dark without much nature"*). His own anchor: *"if you can find daniel danger posters,
+this would be closer to my ideal illustrated style for this preset."* He kept all nine candidates, chose
+the **blue palette**, and chose **`07` as hero** (2026-09-25).
+
+**The decision.**
+1. **The world is a real 3D scene**, not a 2.5-D backdrop: receding ground, trees at several depths,
+   volumetric mist, the fireflies placed in that space (parallax, occlusion, near/far size) and a slow
+   camera drift. The spike's layered-painting approach is retired for the world.
+2. **It is drawn as a screenprint** (non-photorealistic rendering): one blue ink family plus near-black;
+   texture from fine hatched line density, not flat fills; value carries depth (distance and sky
+   lightest, foreground silhouette darkest).
+3. **The fireflies play the part his lit windows and streetlights play**: the only warm colour and the
+   brightest points in the frame — a near-white core with a coloured bloom that lights only its
+   immediate surroundings.
+
+**Why not photographic.** It was offered by Matt as acceptable if easier. It is not easier: photographic
+grass, foliage and mist generated live at 60 fps beside 600 lights is beyond a credible bar, and
+near-miss photorealism reads as cheap fastest. A stylized look wins on consistency and restraint.
+
+**Constraints.** The nine prints are commercial art: they stay local
+(`~/Documents/uzume_spikes/fireflies/references_danger/`), are never committed, never reproduced or
+traced, and the artist is not named in any public copy. The repo records their titles and what each is
+the reference FOR (`docs/VISUAL_REFERENCES/fireflies/README.md` §FF.R2). The FF.R photographs keep only
+a composition role (meadow, tree line on the horizon, mist in the low ground).
+
+**Known risk.** The density and hand quality of his line work. Intricate branching and grass edges are
+reachable (the engine already grows branching trees for Fractal Tree); a hand-cut screenprint quality is
+not promised. FF.2's first artifact is one 3D still beside `07`, before anything else is built.
+
+**References.** D-257; `docs/VISUAL_REFERENCES/fireflies/README.md`; FF.0 README §7.

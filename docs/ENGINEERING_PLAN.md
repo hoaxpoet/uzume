@@ -248,13 +248,15 @@ recorded in their own rows as they land.
 | **FF.0** look-spike | ✅ 2026-09-24. **Passed on condition** (Matt): *"only if there is future optimization work scoped, because the scene looked cheap … like a sketch vs. a detailed rendering."* Setting **A, the dusk meadow**; **unknown beat clarity stays free**. | The swarm locks to the beat on clear-beat tracks (DYC +0.86 on-beat), stays free at K = 0, the half-beat decoy separates (−0.85), and max Δ luma/frame is 0.015 (gate 0.05). [`docs/presets/fireflies_spike/README.md`](presets/fireflies_spike/README.md) |
 | **FF.R** references | ✅ 2026-09-24. Matt's pick of 9 (*"keep the 9"*); hero `01_macro_afterglow_meadow_treeline.jpg` | 8–12 curated references in `docs/VISUAL_REFERENCES/fireflies/`, **Matt picks the set before any look work** |
 | **BC.1** beat-clarity float (infra, ships alone) | ✅ 2026-09-24 on its own branch `claude/bc-1` (its decision entry lands with that branch; closeout ALL GREEN) | A `StemFeatures._pad14` slot: 1 steady / 0 irregular / 0.5 unknown, written at track change and cleared at session boundaries on both paths |
-| **FF.1** engine port at spike fidelity | ⏳ | Coherence curves match the spike's on the same captures within ±0.1; flash safety measured in the real pipeline |
-| **FF.2** the world | ⏳ | Layered tree line, sky, grass, volumetric mist at ≥ 4 detail scales and ≥ 3 materials; `compare_render.sh` against FF.R; Release frame budget |
-| **FF.3** the light | ⏳ | Firefly bokeh, scatter into the mist, grass occlusion, bloom/ACES/grain; flash safety re-measured; 60 fps at 1080p in Release |
+| **FF.1** engine port at spike fidelity | ✅ 2026-09-25, merged #273 (`8c53f9e4`). Matt's read of the result: the look *"still looks like shit"* — expected at spike fidelity, and it triggered FF.R2. `FirefliesSwarm` (CPU model) + `FirefliesGeometry` (instanced core+halo sprites) + placeholder world; `certified: false`, `exclude_from_cycling: true` until FF.3. **Parity:** engine vs spike seed-means (20 seeds each, 25–30 s) — DYC R 0.972/0.968, on-beat +0.843/+0.843; Pyramid 0.975/0.972, +0.812/+0.839; Warszawa (unknown→free) 0.196/0.179, +0.007/−0.007; Teardrop 0.137/0.140, −0.008/−0.006. **Flash (1080p, real draw path):** max Δ frame-mean luma ≤ 0.011 (gate 0.05), per-second range ≤ 0.024. **Tempo:** the swarm reads the installed grid's BPM from `SpectralHistoryBuffer` slot 2418 — three measured-tempo estimators failed first (see `FirefliesSwarm.installTempo`). **CPU:** 0.28 ms/frame at `-O` (advance + upload, `swiftc -O`, M2 Pro), 5.1 ms at `-Onone` after a uniform-grid neighbour search replaced the O(N²) scan (79 ms `-Onone` before, which the Debug frame-budget gate flagged at 15× median). | Coherence curves match the spike's on the same captures within ±0.1; flash safety measured in the real pipeline |
+| **FF.R2** style references | ✅ 2026-09-25 (D-258). Matt: *"not looking for photographic… more stylized but still 3D"*, anchored on Daniel Danger's screenprints; kept all 9, **blue palette, hero `07`**. Prints are local-only (commercial art, never committed) | Style rules + per-print "for" notes in `docs/VISUAL_REFERENCES/fireflies/README.md` §FF.R2; the FF.R photos demoted to composition only |
+| **FF.2** the world | ⏳ | **First artifact: one 3D still beside FF.R2 `07`, before anything else is built** — Matt accepts or rejects the direction there. Then a real 3D meadow (receding ground, trees at several depths, volumetric mist, slow camera drift, fireflies placed in depth) drawn as a screenprint: one blue ink family + near-black, hatched line texture, value carries depth. Compare against the local FF.R2 set (compare_render reads only the repo folder — solve locally, never by committing the prints); motion gate; Release frame budget at 1080p |
+| **FF.3** the light | ⏳ | The fireflies as the scene's only warm lights, the way FF.R2 `09`/`07` draw light: near-white core, coloured bloom, lighting only the grass and mist right around them; occlusion by grass and trees; flash safety re-measured (a bloom enlarges each flash, D-157); 60 fps at 1080p in Release |
 | **FF.4** M7 + cert | ⏳ | Matt's M7 on the beta playlist; rewatch checks R1–R5 on the real pipeline |
 
-The fidelity bar is a matte-painting-quality dusk, not photoreal grass (README §7.2). If FF.2/FF.3 do not
-reach the reference bar by the October 11 cutoff, Fireflies ships after the beta rather than as a sketch.
+The bar is a stylized screenprint rendered from a real 3D scene (D-258, superseding the FF.0 README §7.2
+matte-painting bar). If FF.2/FF.3 do not reach it by the October 11 cutoff, Fireflies ships after the
+beta rather than as a sketch.
 
 ### Lane 4 · Kagura (slate A3)
 
@@ -1630,6 +1632,44 @@ and think the ball has a personality."* That is the preset working; it is not to
 only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
+
+### Increment FF.1 — Fireflies engine port at spike fidelity ✅ (2026-09-25, merged #273)
+
+**Done-when:** the FF.0 swarm runs in the engine and its coherence R(t) and on-beat-vs-true-grid
+curves match the spike's on the spike's four captures within ±0.1 over 25–30 s; flash safety is
+measured in the real draw path. Behaviour only — the world is the spike's placeholder (FF.2) and the
+light is the spike's two Gaussian stamps (FF.3).
+
+**Delivered.**
+- `FirefliesSwarm` (CPU model, a port of `fireflies_spike.py`), `FirefliesGeometry` (instanced
+  core+halo sprites sized in frame heights), `Presets/Shaders/Fireflies.{metal,json}` (placeholder
+  dusk; `passes: ["particles"]`, so `drawDirect` draws world then sprites), registry + app wiring.
+- K = clamp(2 · `stems.beatClarity01` − 1, 0, 1): steady 1, unknown and irregular free (D-257).
+- **The tempo is the installed grid's**, read from `SpectralHistoryBuffer` slot 2418. Three measured
+  estimators failed first; the record is in `FirefliesSwarm.installTempo`. Unbundled: given the
+  spike's `grid_bpm` from t = 0 the engine reproduces the spike, so the port itself is faithful and
+  every earlier gap was the tempo source.
+
+**Evidence.** Parity is gated on the seed DISTRIBUTION (20 seeds each side), because a free swarm's R
+spans 0.07–0.34 across the spike's own seeds; the literal seed-7-vs-`*_metrics.csv` comparison is
+printed too. Engine / spike means at 25–30 s: DYC R 0.972 / 0.968, on-beat +0.843 / +0.843; Pyramid
+0.975 / 0.972, +0.812 / +0.839; Warszawa 0.196 / 0.179, +0.007 / −0.007; Teardrop 0.137 / 0.140,
+−0.008 / −0.006. On the clear-beat tracks the engine traces the spike's curves across the whole 30 s,
+not only the window (overlay plot: `docs/presets/fireflies_spike/plot_parity.py`). Stepping a 60 fps
+render off the 43 Hz captures gives the same numbers. Flash, 1920×1080, real draw path: max Δ
+frame-mean luma ≤ 0.011 on all four (gate 0.05), per-second range ≤ 0.024. Motion gate: unison-flash
+spikes on the clear-beat films (DYC 449, Pyramid 249; spike 295 / 180), none on the free ones, max
+inter-frame change ≤ 2.3/255, no jitter.
+CPU per frame for 600 fireflies (advance + upload, M2 Pro): 0.28 ms at `-O`, 5.1 ms at `-Onone`. The first cut used an O(N²) neighbour scan — 0.60 ms at `-O` but 79 ms at `-Onone`, which the Debug-built `PresetFrameBudgetTests` measured at 15× the roster median; a uniform grid (identical neighbour sets, bit-identical parity) fixed both.
+
+**Rotation (a sketch must not reach a listener).** Uncertified presets are hard-excluded from the
+planner and reactive scoring by default (`PresetScorer`), but two paths still reach one: manual
+next/previous cycling (`PresetLoader.cyclableIndex` checks only `exclude_from_cycling`), and the
+user-visible Settings toggle "Show uncertified scenes". Fireflies sets `exclude_from_cycling: true`,
+which closes the first. The toggle stays an explicit opt-in whose own copy says it reveals scenes that
+"haven't passed quality review". Closing that too would take `is_diagnostic`, which marks an
+operational tool rather than a scene (D-074) and so misdescribes it; not used. Remove
+`exclude_from_cycling` at FF.4.
 
 ### Increment BUG140.2 — the beat-irregularity gate measures the tempo it means ✅ (2026-09-25; live check passed)
 
