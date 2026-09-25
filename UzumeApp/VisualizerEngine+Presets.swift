@@ -576,6 +576,7 @@ extension VisualizerEngine {
         case "Lumen Mosaic": bindLumenMosaicRuntime(desc)
         case "Witchlight":  bindWitchlightRuntime(desc)
         case "Kagura":      bindKaguraRuntime(desc)
+        case "Fireflies":   bindFirefliesRuntime(desc)
         // Cymatic Resonance (CR.2) is a `feedback+particles` preset — its runtime is
         // the CymaticSandGeometry, wired via the `.particles` pass through
         // resolveParticleGeometry, not a slot-6 state binding.
@@ -608,6 +609,18 @@ extension VisualizerEngine {
             let drift = self?.beatSyncLock.withLock { self?.latestBeatSyncSnapshot.driftMs ?? 0 } ?? 0
             stroke?.path.ingestBeatDrift(milliseconds: drift)
         }
+    }
+
+    private func bindFirefliesRuntime(_ desc: PresetDescriptor) {
+        // FF.2 — the world fragment casts its rays through the SAME camera the geometry projects
+        // the branches and the fireflies with (`FirefliesWorld`), so it reads that camera at
+        // slot 6. No tick: `FirefliesGeometry.update` writes the buffer every frame, before the
+        // draw (the Nebula slot-6 precedent, fed by the geometry instead of a tick).
+        guard let fireflies = firefliesGeometry as? FirefliesGeometry else {
+            logger.error("FirefliesGeometry missing for preset '\(desc.name)' — world camera unbound")
+            return
+        }
+        pipeline.setDirectPresetFragmentBuffer(fireflies.worldBuffer)
     }
 
     private func bindKaguraRuntime(_ desc: PresetDescriptor) {
