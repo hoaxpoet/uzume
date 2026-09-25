@@ -4,7 +4,8 @@
 **FF.2 (the world) next** · FF.3 (the light) · FF.4 (M7 + certification). `certified: false`,
 `exclude_from_cycling: true` until FF.3.
 
-This document consolidates what is already decided; it adds no decision Matt has not made. Sources:
+This document consolidates what is already decided; it adds no decision Matt has not made. (The one
+question it first left open, §4.3, Matt answered: "B".) Sources:
 the FF.0 spike README (`docs/presets/fireflies_spike/README.md`, the behaviour), D-257 (beat clarity,
 setting A), D-258 (the look), and `docs/VISUAL_REFERENCES/fireflies/README.md` (§FF.R2 is the style,
 the FF.R photographs are composition only).
@@ -79,8 +80,9 @@ Ambient motion independent of the swarm: wind moving through the grass, mist dri
 drift. At near-silence it **coasts** (continues, calmer), per the per-preset silence doctrine; it never
 freezes and never goes black (D-037).
 
-⚠ **Open (DECISION-NEEDED in the FF.2 prompt):** whether that world motion also breathes with the
-music's slow energy (§5 row 3), or stays purely ambient.
+**Decided (Matt, 2026-09-25: "B"; D-258 addendum):** the world motion also **breathes with the
+music's slow energy** — the wind stirs the grass and the mist moves more in louder, fuller passages,
+swelling over several seconds, never pulsing on the beat (§5 row 3).
 
 ## 5. Audio routing (one primitive per layer, FA #67)
 
@@ -88,10 +90,10 @@ music's slow energy (§5 row 3), or stays purely ambient.
 |---|---|---|---|
 | Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. |
 | Swarm visibility | `near_silent01` | ~1.5 s | Built (FF.1). Gated in `FirefliesSwarmTests`. |
-| World breath (wind, mist) | a slow continuous deviation primitive (D-026), heavily smoothed — never beat-rate | several seconds | **Open — Matt's call.** If adopted, declared in `audio_routes` and gated. |
+| World breath (wind, mist) | a slow continuous deviation primitive (D-026), heavily smoothed — never beat-rate | several seconds | **Decided: yes** (Matt, "B", 2026-09-25). Built in FF.2; declared in `audio_routes` and gated. |
 
-The beat belongs to the fireflies alone; the world, if it listens at all, listens on a much slower
-timescale, so the two never fight.
+The beat belongs to the fireflies alone; the world listens only on a much slower timescale, so the two
+never fight — and a free track (irregular or unknown beat) still has a visible connection to the music.
 
 ## 6. Constraints
 - **One paradigm (D-029):** a world pass plus the `particles` swarm, as today; FF.2 does not bolt a

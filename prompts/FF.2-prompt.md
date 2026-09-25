@@ -137,7 +137,6 @@ removing `exclude_from_cycling`.
    - the sheet;
    - the two frames;
    - the verdict table;
-   - the DECISION-NEEDED block below, if he hasn't answered it.
 
    Ask one question: *does this direction clear the bar for the world?* **Stop and wait.**
    - **Reject** or "not yet": record his words and what you now believe is wrong in one sentence. Revise
@@ -151,7 +150,7 @@ removing `exclude_from_cycling`.
    - the ambient life of §4.3 (wind in the grass, drifting mist, the camera drift);
    - coasting at near-silence, never black (D-037).
 
-   If Matt chose the "world breathes" option:
+   **The world breathes with the music (Matt chose B, D-258 addendum):**
    - drive it from one slow, heavily smoothed deviation primitive (D-026), never at beat rate;
    - declare it in `audio_routes`, add the `SessionReplayHarness`/drive column if missing, and keep
      `RouteCoverageTests` green;
@@ -255,7 +254,7 @@ Add:
 - the rubric result;
 - a one-line statement of which dispatch path the render tests exercised.
 
-## DECISION-NEEDED (ask at Task 4 if Matt has not already answered)
+## DECISION — RESOLVED before the session (Matt, 2026-09-25: "B")
 
 **Should the world itself respond to the music, or only the fireflies?**
 
@@ -267,4 +266,4 @@ Add:
   stays the fireflies' alone. Every track, including the free ones, gets a visible connection to the
   music.
 
-**Recommendation: B**: free tracks otherwise have no musical connection. **Default if no reply: B.**
+**Matt chose B.** Build it in Task 5. Do not ask again.
