@@ -227,7 +227,10 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       stems are at the separator's 44.1 kHz, so every non-44.1 kHz
     ///                       v13/v14 entry holds a time-scaled drums grid (48 kHz: tempo x1.088) that
     ///                       feeds the D-154 beat-irregularity gate. Data again — re-analyse.
-    public static let currentSchemaVersion: Int = 15
+    ///   v16 (KAG.3) — adds `TrackProfile.songArousal`, the song-level arousal Kagura picks its
+    ///                       dances from. v15 entries decode with it nil, which would dance every
+    ///                       cached local file at the neutral middle energy, silently — re-analyse.
+    public static let currentSchemaVersion: Int = 16
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

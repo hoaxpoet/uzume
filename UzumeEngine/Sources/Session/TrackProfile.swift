@@ -25,6 +25,14 @@ public struct TrackProfile: Sendable, Codable {
     /// Emotional state (valence × arousal) from the mood classifier.
     public var mood: EmotionalState
 
+    /// The song's typical arousal (KAG.3): the median of the mood classifier's per-frame arousal
+    /// over the analysed audio, after its first sixth (the classifier's warm-up; the KAG.0 spike's
+    /// `load_session` rule). `mood` is the classifier's state at the LAST frame — with a 0.7 s
+    /// output window, the song's final second or two — so it is not a song-level value.
+    /// Whole file on the local-file path, the 30 s preview on streaming. `nil` for profiles
+    /// written before schema v16 or with no classified frames.
+    public var songArousal: Float?
+
     /// Average normalized spectral centroid across the preview (0–1).
     public var spectralCentroidAvg: Float
 
@@ -55,6 +63,7 @@ public struct TrackProfile: Sendable, Codable {
         bpm: Float? = nil,
         key: String? = nil,
         mood: EmotionalState = .neutral,
+        songArousal: Float? = nil,
         spectralCentroidAvg: Float = 0,
         genreTags: [String] = [],
         stemEnergyBalance: StemFeatures = .zero,
@@ -64,11 +73,23 @@ public struct TrackProfile: Sendable, Codable {
         self.bpm = bpm
         self.key = key
         self.mood = mood
+        self.songArousal = songArousal
         self.spectralCentroidAvg = spectralCentroidAvg
         self.genreTags = genreTags
         self.stemEnergyBalance = stemEnergyBalance
         self.estimatedSectionCount = estimatedSectionCount
         self.beatIrregular = beatIrregular
+    }
+
+    // MARK: - Song arousal
+
+    /// `songArousal` from a per-frame arousal trace: the median after the first sixth.
+    /// `nil` for an empty trace.
+    public static func songArousal(perFrame trace: [Float]) -> Float? {
+        guard !trace.isEmpty else { return nil }
+        let settled = trace[(trace.count / 6)...].sorted()
+        let mid = settled.count / 2
+        return settled.count % 2 == 1 ? settled[mid] : (settled[mid - 1] + settled[mid]) / 2
     }
 
     // MARK: - Defaults

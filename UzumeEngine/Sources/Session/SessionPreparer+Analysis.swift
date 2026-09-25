@@ -16,6 +16,7 @@ private struct MIRAnalysisResult {
     var bpm: Float?
     var key: String?
     var mood: EmotionalState
+    var songArousal: Float?
     var centroidAvg: Float
     var sectionCount: Int
 }
@@ -134,6 +135,7 @@ extension SessionPreparer {
             bpm: mir.bpm,
             key: mir.key,
             mood: mir.mood,
+            songArousal: mir.songArousal,
             spectralCentroidAvg: mir.centroidAvg,
             genreTags: [],
             stemEnergyBalance: stemFeatures,
@@ -277,7 +279,7 @@ extension SessionPreparer {
         // FFTMagnitudeKernel — byte-identical to the live FFTProcessor (BUG-066 / MOOD-FLUX.3).
         guard let fft = try? FFTMagnitudeKernel(fftSize: fftSize) else {
             return MIRAnalysisResult(
-                bpm: nil, key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0
+                bpm: nil, key: nil, mood: .neutral, songArousal: nil, centroidAvg: 0, sectionCount: 0
             )
         }
 
@@ -288,6 +290,7 @@ extension SessionPreparer {
         var centroidSum: Float = 0
         var frameCount = 0
         var moodAccumulator = MoodFeatureAccumulator()   // DYN.7
+        var arousalTrace: [Float] = []   // KAG.3 — per-frame arousal for `songArousal`
         var offset = 0
 
         while offset + fftSize <= samples.count {
@@ -324,7 +327,9 @@ extension SessionPreparer {
             // Classify every frame, as live does. The output window is wall-clock now, so
             // the cadence no longer sets the smoothing — it only sets the cost, and the
             // forward pass is a 10→64→32→16→2 MLP over a 30 s window.
-            _ = try? classifier.classify(features: smoothed, deltaTime: dt)
+            if let state = try? classifier.classify(features: smoothed, deltaTime: dt) {
+                arousalTrace.append(state.arousal)
+            }
 
             offset += fftSize
         }
@@ -345,6 +350,7 @@ extension SessionPreparer {
             bpm: mir.stableBPM,
             key: mir.stableKey,
             mood: classifier.currentState,
+            songArousal: TrackProfile.songArousal(perFrame: arousalTrace),
             centroidAvg: centroidAvg,
             sectionCount: sectionCount
         )

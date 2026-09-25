@@ -141,13 +141,22 @@ struct PrepTimingRunner: AsyncParsableCommand {
     ) async throws {
         let name = url.lastPathComponent
         let started = Date()
+        var profileNote = ""
         if let previewSeconds {
             try worker.runPreviewControl(url: url, seconds: previewSeconds, sink: sink)
-        } else {
-            _ = await LocalFilePreparationPipeline.run(inputs: worker.inputs(for: url, sink: sink))
+        } else if let result = await LocalFilePreparationPipeline.run(inputs: worker.inputs(for: url, sink: sink)) {
+            // KAG.3 — the profile values Kagura reads (`songArousal`, grid BPM), and the final `mood`.
+            let profile = result.cached.trackProfile
+            profileNote = String(
+                format: "  songArousal %.3f  final arousal %.3f valence %.3f grid %.1f BPM",
+                profile.songArousal ?? .nan,
+                profile.mood.arousal,
+                profile.mood.valence,
+                result.cached.beatGrid.bpm
+            )
         }
         let elapsed = Date().timeIntervalSince(started)
-        note(String(format: "  [%d/%d] %@  %.1f s", index + 1, total, name, elapsed))
+        note(String(format: "  [%d/%d] %@  %.1f s", index + 1, total, name, elapsed) + profileNote)
     }
 
     /// Concurrency is a MEASUREMENT here, never a pipeline change: the shipping
