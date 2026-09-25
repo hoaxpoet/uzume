@@ -208,14 +208,14 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
 
         // Irregularity — record the continuous evidence AND the production boolean.
         let gridBPM = grid.bpm > 0 ? grid.bpm : nil
-        let folded = (gridBPM != nil && drumsBPM != nil)
-            ? foldedBPMDisagreement(grid.bpm, drumsGrid.bpm)
-            : nil
-        let irregular = assessBeatIrregularity(
-            gridBPM: grid.bpm,
-            drumsBPM: drumsGrid.bpm,
-            barConfidence: grid.barConfidence
-        )
+        // The gate's own tempos (BUG-140: octave-folded median, not `bpm`), so the
+        // folded/irregular columns match production. grid_bpm/drums_bpm stay raw `bpm`.
+        let folded = octaveFoldedMedianBPM(beats: grid.beats).flatMap { gridTempo in
+            octaveFoldedMedianBPM(beats: drumsGrid.beats).flatMap {
+                foldedBPMDisagreement(gridTempo, $0)
+            }
+        }
+        let irregular = assessBeatIrregularity(grid: grid, drums: drumsGrid)
 
         // MIR + mood at native rate.
         let mir = runMIR(samples: window, sampleRate: rate)
@@ -265,7 +265,7 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         try? data.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
     }
 
-    /// Separate the window's first ~10 s, take the drums stem BY VALUE from
+    /// Separate the window's first ~10 s (at the model rate), take the drums stem BY VALUE from
     /// stemWaveforms (CLEAN.1.2/BUG-031: never the separator's shared buffers;
     /// index 1 = drums in [vocals, drums, bass, other]), and run the same Beat
     /// This! path on it.
@@ -275,9 +275,11 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         beatGrid: DefaultBeatGridAnalyzer,
         separator: StemSeparator
     ) throws -> BeatGrid {
-        let stemCount = min(window.count, StemSeparator.requiredMonoSamples)
+        // Pass the whole window: the separator resamples to its model rate and THEN
+        // truncates. Cutting `requiredMonoSamples` at the native rate first gave a
+        // 96 kHz file 4.6 s of drums instead of production's 10 s (BUG-140).
         let stemResult = try separator.separate(
-            audio: Array(window[0..<stemCount]),
+            audio: window,
             channelCount: 1,
             sampleRate: nativeRate
         )

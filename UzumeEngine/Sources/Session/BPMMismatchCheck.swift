@@ -15,6 +15,7 @@
 // LiveBeatDriftTracker continues to compare against the offline BeatGrid
 // (CachedTrackData.beatGrid). That is intentional — see BUG-008.2 prompt.
 
+import DSP
 import Foundation
 
 // MARK: - ThreeWayBPMReading
@@ -220,6 +221,52 @@ public func assessBeatIrregularity(
     if disagreement > foldedDisagreementThreshold { return true }
     if barConfidence < barConfidenceFloor { return true }
     return false
+}
+
+/// `assessBeatIrregularity` on the grids themselves — the production gate (StemCache)
+/// and the CENSUS harness both call this, so they measure the same thing.
+///
+/// **BUG-140:** the tempos compared are `octaveFoldedMedianBPM` of each grid's beats,
+/// NOT `BeatGrid.bpm`. `bpm` is `computeBPM`'s mean of IOIs across a full octave, so a
+/// drums grid that reads eighths for part of the window and quarters for the rest
+/// averages to a tempo describing neither (Superstition: 138 against a 98.5 grid).
+public func assessBeatIrregularity(grid: BeatGrid, drums: BeatGrid?) -> Bool? {
+    assessBeatIrregularity(
+        gridBPM: octaveFoldedMedianBPM(beats: grid.beats) ?? 0,
+        drumsBPM: drums.flatMap { octaveFoldedMedianBPM(beats: $0.beats) } ?? 0,
+        barConfidence: grid.barConfidence
+    )
+}
+
+/// The tempo a beat list is at, robust to the list switching metrical level.
+///
+/// Every inter-beat interval is folded by factors of 2 onto the octave of the median
+/// interval, then the median of the folded set is taken. An eighth-note stretch and a
+/// quarter-note stretch then agree instead of averaging to a non-octave tempo (BUG-140).
+/// The reported octave is the median interval's, which is arbitrary — callers compare
+/// through `foldedBPMDisagreement`, which ignores octaves anyway.
+///
+/// - Returns: BPM, or `nil` for fewer than 4 beats (the same floor as `computeBPM`).
+public func octaveFoldedMedianBPM(beats: [Double]) -> Double? {
+    guard beats.count >= 4 else { return nil }
+    let iois = zip(beats, beats.dropFirst()).map { $1 - $0 }.filter { $0 > 0 }
+    guard let reference = median(iois), reference > 0 else { return nil }
+    let root2 = 2.0.squareRoot()
+    let folded = iois.map { ioi -> Double in
+        var value = ioi
+        while value > reference * root2 { value /= 2 }
+        while value < reference / root2 { value *= 2 }
+        return value
+    }
+    guard let period = median(folded), period > 0 else { return nil }
+    return 60.0 / period
+}
+
+private func median(_ values: [Double]) -> Double? {
+    guard !values.isEmpty else { return nil }
+    let sorted = values.sorted()
+    let mid = sorted.count / 2
+    return sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
 }
 
 /// Octave-folded disagreement between two BPM values, in `[0, 1)`.
