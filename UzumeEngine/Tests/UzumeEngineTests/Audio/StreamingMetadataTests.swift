@@ -18,6 +18,30 @@ private final class AtomicValue<T: Sendable>: @unchecked Sendable {
     }
 }
 
+/// Parks a `nowPlayingReader` call until the test releases it (BUG-142).
+private actor ReaderGate {
+    private var parked: CheckedContinuation<Void, Never>?
+    private var parkedWaiter: CheckedContinuation<Void, Never>?
+
+    func park() async {
+        await withCheckedContinuation { continuation in
+            parked = continuation
+            parkedWaiter?.resume()
+            parkedWaiter = nil
+        }
+    }
+
+    func waitUntilParked() async {
+        if parked != nil { return }
+        await withCheckedContinuation { parkedWaiter = $0 }
+    }
+
+    func release() {
+        parked?.resume()
+        parked = nil
+    }
+}
+
 @Suite("StreamingMetadata")
 struct StreamingMetadataTests {
 
@@ -115,6 +139,32 @@ struct StreamingMetadataTests {
         #expect(events.value.count == 2)
         #expect(events.value[1].previous?.title == "Track A")
         #expect(events.value[1].current.title == "Track B")
+    }
+
+    /// BUG-142: a poll in flight when `stopObserving()` runs must not fire an
+    /// event or repopulate `currentTrack` once it resumes.
+    @Test func stopObserving_whilePollInFlight_firesNoEvent() async {
+        let metadata = StreamingMetadata(pollInterval: .milliseconds(50))
+        let callCount = AtomicValue(0)
+        let gate = ReaderGate()
+        let info = makeInfo(title: "Track A", artist: "Artist A")
+        metadata.nowPlayingReader = {
+            await gate.park()
+            return info
+        }
+        metadata.onTrackChange = { _ in
+            callCount.value += 1
+        }
+
+        metadata.startObserving()
+        await gate.waitUntilParked()
+        let poll = metadata.pollingTask
+        metadata.stopObserving()
+        await gate.release()
+        await poll?.value
+
+        #expect(callCount.value == 0)
+        #expect(metadata.currentTrack == nil)
     }
 
     @Test func noNowPlaying_returnsNilMetadata() async throws {

@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-25-170143] BUG-142 — no track-change event after streaming metadata stops
+
+A Now Playing poll that was still waiting on Music/Spotify when observation stopped fired a track-change event (with no previous track) afterwards, and set `currentTrack` again. This showed up as an intermittent CI failure (3 events where the test expected 2). A generation counter bumped under the lock at stop now makes a stale poll drop its result. A deterministic test parks the reader across a stop; it failed every time before the fix. Test sleep budgets are unchanged.
+
 ### [dev-2026-09-25-140918] BUG140.2 — the beat-irregularity gate stops flagging steady songs
 
 Songs like Superstition and Penny Lane were marked "no steady beat", which hard-excludes `requires_regular_beat` scenes (Membrane; Kagura planned) and sets `beat_clarity01` to 0 for Fireflies. The gate compared a drums-stem tempo that `computeBPM` averaged across eighth- and quarter-note levels, and on local files that tempo was also scaled by the file's sample rate (48 kHz ×1.088). The gate now compares the octave-folded median beat interval of each grid, with the drums grid at 44.1 kHz. The 10 % rule is unchanged (Matt's option A). Estimated share of the library flagged: 25.2 % → 12.0 %. Duplicate recordings whose two copies disagree: 34/150 → 6/150. Pyramid Song is still excluded. **Local files re-analyse once** (stem cache schema v15). No change to beat sync: `BeatGrid.bpm` and the full-mix grid are untouched. Live check passed: Matt, *"Membrane is locked on Superstition … looks great!"*
