@@ -1,7 +1,8 @@
 # Fireflies — Design
 
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
-**FF.2 (the world) next** · FF.3 (the light) · FF.4 (M7 + certification). `certified: false`,
+FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
+**FF.3 (the light) next** · FF.4 (M7 + certification). `certified: false`,
 `exclude_from_cycling: true` until FF.3.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
@@ -90,7 +91,7 @@ swelling over several seconds, never pulsing on the beat (§5 row 3).
 |---|---|---|---|
 | Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. |
 | Swarm visibility | `near_silent01` | ~1.5 s | Built (FF.1). Gated in `FirefliesSwarmTests`. |
-| World breath (wind, mist) | a slow continuous deviation primitive (D-026), heavily smoothed — never beat-rate | several seconds | **Decided: yes** (Matt, "B", 2026-09-25). Built in FF.2; declared in `audio_routes` and gated. |
+| World breath (wind in grass and trees, mist drift) | `bassAttRel` → 4 s EMA → 0.5 + 0.5·tanh(4x) (`FirefliesWorld.advance`); sets wind speed and sway (∝ breath²) and mist speed, all integrated so nothing lurches — never beat-rate | several seconds | Built (FF.2); route `world_breath`, green in `RouteCoverageTests`. Chosen over `midAttRel`/`trebAttRel`: the only one of the three whose slow average moves on all four parity captures. Visible, measured with the camera held still (`FirefliesRenderTests.breathIsVisible`): tree-crown motion 3.4× (DYC) / 1.7× (Pyramid) in full vs quiet passages. Matt, at the FF.2 still: *"might want to consider having the trees move based on musical input"* — the trees sway on this route. |
 
 The beat belongs to the fireflies alone; the world listens only on a much slower timescale, so the two
 never fight — and a free track (irregular or unknown beat) still has a visible connection to the music.
