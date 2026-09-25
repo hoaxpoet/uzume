@@ -72,7 +72,7 @@ let package = Package(
             name: "Renderer",
             dependencies: ["Shared"],
             path: "Sources/Renderer",
-            resources: [.copy("Shaders"), .copy("Resources/Fonts")]
+            resources: [.copy("Shaders"), .copy("Resources/Fonts"), .copy("Resources/Kagura")]
         ),
         .target(
             name: "Presets",

@@ -89,14 +89,14 @@ located by motion signature and confirmed in trail renders [§5, §7, §8].
 - The pulse events (seconds), the pulse period, the allowed metrical levels and the vigor.
 
 The clips are already turned to a common three-quarter facing (`face_camera`) and re-centred. That is about
-**0.3 MB for all eleven clips**: one `kagura_clips.bin` plus a `kagura_clips.json` manifest.
+**0.46 MB for all ten clips** (KAG.1 measured 459 KB; the sway clip is the longest): one `kagura_clips.bin` plus a `kagura_clips.json` manifest.
 
 **Where it lives.** Kagura would be the first scene that ships a non-shader data file [engine survey]. It
 goes in the **Renderer** target, as `Sources/Renderer/Resources/Kagura/` with a `.copy("Resources/Kagura")`
 entry beside the existing `Resources/Fonts`, and loads through Renderer's `Bundle.module`. It belongs there
 because the consumer, `KaguraDancer: ParticleGeometry`, lives in `Renderer/Geometry`, and Renderer and
 Presets are sibling targets (both depend only on `Shared`), so Renderer cannot read a Presets resource. The
-file is **tracked in git**: at about 0.3 MB it is far from the ML-weights case (167 MB, shipped as a Release
+file is **tracked in git**: at about 0.46 MB it is far from the ML-weights case (167 MB, shipped as a Release
 asset), and the repo bans LFS for `*.bin` (CLEAN.5.8).
 
 **Reproducibility.** The raw ASF/AMC files never enter git. `tools/kagura/bake_clips.py` (promoted from the
@@ -251,7 +251,7 @@ This follows the Audio Data Hierarchy:
 | R1 legible | **Metric yes; eye unproven.** On the decoy, the true grid puts 100 % of twist and cabbage pulse events on the beat, and the half-beat shift puts 100 % on the "and". I could not tell the panels apart in stills. **This is the M7 question.** |
 | R2 per-track identity | **Passes on tested pairs.** Calm against energetic songs get different repertoires and a visibly different density of trails (Olive Drab / Billie Jean). The contrast is milder for Teardrop / B.O.B. [§9, §10] |
 | R3 arc | Energy-driven dance choice gives a song's quiet and loud stretches different dances. Not tested over whole tracks. |
-| R4 novelty | Character (captured human motion). **Ceiling: eleven clips of 4.5–12 s.** Repetition within a long song is likely. |
+| R4 novelty | Character (captured human motion). **Ceiling: ten clips of 4.5–12 s.** Repetition within a long song is likely. |
 | R5 restraint | The motion gate shows 0 spikes on the energetic films. Calm films show 30–44, all from the macarena's fast gestures against a near-still median, which is not a pop. There are no flashes. |
 
 ## 11. Increment plan
@@ -282,5 +282,5 @@ This follows the Audio Data Hierarchy:
 - **Macarena's early arms.** Judge live whether they read as anticipation or as early (§12).
 - **R1.** Whether the beat lock is visible live with audio. This is the M7 question the whole concept rests
   on.
-- **Library size (R4).** Eleven clips will repeat within a long song. Growing the library means more CMU
+- **Library size (R4).** Ten clips will repeat within a long song. Growing the library means more CMU
   windows or a second source, and every one must be watched in motion before it ships.
