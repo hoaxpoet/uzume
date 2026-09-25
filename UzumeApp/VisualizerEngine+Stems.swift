@@ -622,6 +622,9 @@ extension VisualizerEngine {
         // cache is reachable (MainActor). Consumed by the reactive evaluate off
         // the analysis path. nil (uncached / no identity) = permissive.
         currentTrackBeatIrregular = identity.flatMap { stemCache?.beatIrregular(for: $0) }
+        // BC.1 — the same flag, to the GPU (`StemFeatures.beatClarity01`). Written on EVERY
+        // call, identity or not, so no track inherits the previous one's value.
+        pipeline.setBeatClarity(beatIrregular: currentTrackBeatIrregular)
 
         // Clear the per-frame analyzer's source waveforms so stems don't
         // leak across tracks. Next separation will repopulate them.

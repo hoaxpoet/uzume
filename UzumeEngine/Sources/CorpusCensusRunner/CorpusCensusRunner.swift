@@ -204,6 +204,7 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         )
         let drumsBPM: Double? = drumsGrid.bpm > 0 ? drumsGrid.bpm : nil
         timer.mark("drums")
+        dumpBeatsIfRequested(relpath: relpath, grid: grid, drumsGrid: drumsGrid)
 
         // Irregularity — record the continuous evidence AND the production boolean.
         let gridBPM = grid.bpm > 0 ? grid.bpm : nil
@@ -247,6 +248,21 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
             timer.mark("dual")
         }
         return TrackAnalysis(row: row, extras: extras, stages: timer.summary())
+    }
+
+    /// `CENSUS_DUMP_BEATS=<dir>`: write both grids' beat times (one JSON per track)
+    /// so a flagged `folded_disagreement` can be traced to the IOIs behind it
+    /// (BUG-140 diagnosis). Unset → no-op.
+    private func dumpBeatsIfRequested(relpath: String, grid: BeatGrid, drumsGrid: BeatGrid) {
+        guard let dir = ProcessInfo.processInfo.environment["CENSUS_DUMP_BEATS"] else { return }
+        let name = relpath.replacingOccurrences(of: "/", with: "__") + ".json"
+        let payload: [String: Any] = [
+            "relpath": relpath,
+            "grid_bpm": grid.bpm, "grid_beats": grid.beats, "grid_downbeats": grid.downbeats,
+            "drums_bpm": drumsGrid.bpm, "drums_beats": drumsGrid.beats, "drums_downbeats": drumsGrid.downbeats
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        try? data.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
     }
 
     /// Separate the window's first ~10 s, take the drums stem BY VALUE from

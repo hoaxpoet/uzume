@@ -59,6 +59,7 @@ reads" are not reads — see the entry.)*
 | DEAD-003 | P3 · recorded, and the code deleted (DS.3, 2026-09-01) | app.view / dead-affordance | **`FullScreenErrorView` was written as a reusable §9.1/§9.2 blocking surface and never acquired a consumer.** Zero construction sites anywhere in `UzumeApp`; the only non-doc references were its own declaration and its path in `DynamicTypeRegressionTests.viewFiles`. It duplicated `PreparationFailureView` almost verbatim — same body, icon, text block, actions, headline, and the same two severity switches — so for its whole life the app carried two copies of a blocking-failure layout and shipped one. **Deleted at DS.3** as part of the `RecoveryScreen` consolidation, which is why this is recorded as history rather than as open work: there was no behaviour to preserve because there was never any behaviour. Detail below |
 | DEAD-001 | P3 · recorded not fixed (DS.2, 2026-09-01) | app.viewmodel / dead-code | **`ConnectorPickerViewModel.localFolderEnabled` is dead, and the comment above it claims a v1 gate the shipped build does not have.** Three hits, no reader: the declaration, the comment, and the test asserting its `false`. The view has enabled the local-folder tile unconditionally since GAP A (2026-05-28), and `ENABLE_LOCAL_FOLDER_CONNECTOR` — which the comment blames — gates a different thing entirely (the v2 playlist-connector scaffold in `UzumeEngine`, set in no xcconfig, not on the local-source path that ships). Left in place deliberately: deleting a property whose `false` a test asserts is a behaviour change wearing a cleanup costume, and it belongs with the connector-capability work, not a presentation increment. Pairs with the still-open **CA.3-FU-2**. Detail below |
 | BUG-106 | P2 · **FIXED + LIVE-CONFIRMED 2026-08-26 (BUG106.1)** — `ml_forced=0` across a 25 ms/frame 4K session; only the felt half (Matt's eye on stem timing / new stutter) is outstanding | ml.dispatch / calibration | **`MLDispatchScheduler`'s budget is a hardcoded 14/16 ms with no resolution term, so at 4K the gate can never open.** `recentMaxFrameMs` is the WORST frame of the window and 4K's median was 17.6 ms in BUG-100's own session, so every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires — against a 2.0 s stem period. Jank avoidance never happens and stems run ~a period late at 4K. ⚠ **Not** BUG-100's mechanism: the PERF.15 VL session was flat across 172 s at 4K while permanently over the same budget. Needs Matt's call between "stems on time" and "jank-free" at 4K. |
+| BUG-140 | P2 · **DIAGNOSED 2026-09-24 (BUG140.1)** — no fix; estimator change awaits Matt | dsp.beat / orchestrator | **The D-154 beat-irregularity gate flags steady songs (Superstition, Penny Lane): the drums-grid BPM it compares averages two octaves, and on local files is also scaled by the wrong sample rate.** Corpus-estimated flag rate 28 %; 42 % of flagged duplicate recordings are unflagged in their other copy. |
 | BUG-134 | P2 · **BUG134.1 + BUG134.2 landed**; residual 14.6 % pending M7 | dsp.beat | **Cached BeatGrids carry two tempo octaves inside one track, and `computeBPM` averages them into a BPM describing neither.** Reopened by Matt on the rate-divergence premise; investigating **falsified that framing** — `beatPhase01` faithfully tracks the grid's real local interval and is innocent. The defect is the grid: *Ready to Start* has 402 intervals at 314 ms (191 BPM) and 198 at 637 ms (94 BPM), ratio 2.03x, and a scene locked to it fires every third strike twice as late. Two faults hide each other — `computeBPM`'s inlier window is a FULL OCTAVE wide so both clusters are admitted (verified: mean = 154.31, the exact cached value), and `halvingOctaveCorrected()` gates on that summary, so the bad number suppresses the correction for the bad grid. 50 cached grids: 8 bimodal, 32 with dropped beats, 201 recoverable, `grid.bpm` error up to +53.7 %. **Fixed:** isolated dropped beats filled (BUG134.1). **Open:** contiguous half-time runs, which are indistinguishable in the beat list from a genuine half-time section — needs AUDIO-referenced verification, a changed premise requiring sign-off per the beat-sync two-strikes rule. Detail below |
 | BUG-135 | P3 · OPEN — **left alone on Matt's call 2026-09-14** | dsp.beat | **The grid's bar position cannot be confirmed to be the true musical downbeat.** Attempted on `2026-09-14T18-14-07Z` (verdict clean): `bassDev` is the only signal with real separation (bar-position 2, 1.33× lead) and it cannot distinguish beat 1 from beat 3, since a kick commonly plays both; `harmonic_flux`, `spectral_surge` and `spectralFlux` each pick a *different* position and spread only ~2 %, i.e. no bar-position discrimination at all. The recorded feature set cannot answer the question. Deliberately not chased: automated cold-start downbeat-phase derivation was falsified across six iterations and retired at Matt's Choice A (2026-05-25), marked *do not iterate*. Consequence is bounded — Membrane's 1.00/0.22/0.52/0.22 accent means a half-bar error swaps the strong and secondary beats, leaving a hard strike every four with a medium between, displaced but intact. Matt, shown the measurement: *leave it*. Detail below |
 | BUG-131 | **P1** · **FOUND + FIXED 2026-09-11, same session it was introduced** | audio.playback / concurrency | **The playhead analysis clock killed the process when a tick raced session teardown.** `PlayheadAnalysisClock.stop()` called `DispatchSourceTimer.cancel()`, which prevents FUTURE handlers but does NOT wait for one already running. The tick reads `AVAudioPlayerNode.lastRenderTime`, and AVFAudio asserts `_engine != nil` inside it — so a tick racing `teardownAVFoundation` reached a player whose engine had just been released and threw `com.apple.coreaudio.avfaudio: 'required condition is false: _engine != nil'`, an Objective-C exception no Swift `catch` can intercept. **Every track change and every session stop is a teardown**, so this was live on the local-file path from BUG087.4 onward. Introduced by me at BUG087.4 and shipped: the full suite was green on the BUG087.4, BUG087.5 and PR.24 runs, because it is a race. Detail below |
@@ -318,6 +319,71 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+### BUG-140 — the D-154 beat-irregularity gate flags steady songs; its drums-grid BPM is an octave average (2026-09-24)
+
+**Severity:** P2 · **Domain:** `dsp.beat` / `orchestrator` · **Failure class:** `algorithm` (primary) + `sample-rate` (local-file path) · **Status:** Diagnosed (BUG140.1), no fix · **Related:** D-154, BUG-134 (same `computeBPM` fault, other consumer), PR.26 (Membrane declares `requires_regular_beat`), BC.1 / D-257 (the same flag reaches every shader as `StemFeatures.beat_clarity01`; Fireflies FF.1 is its first reader, so false flags reach it too), KAG.0h
+
+#### Expected / actual
+
+**Expected:** `assessBeatIrregularity` returns `true` only for songs without a steady beat (Pyramid Song, jazz tempo flux), so `requires_regular_beat` presets (Membrane; Kagura planned) are kept off those and nothing else.
+**Actual:** Superstition (Talking Book FLAC) is flagged in the CENSUS run — grid 98.53, drums 138.25, fold 0.403 — though KAG.0h's production captures show a full-mix grid of 100–103 BPM with beat-interval CV 0.018–0.026, same as clearly regular songs. The MP3 copy of the same recording reads drums 97.40, fold 0.015, unflagged. Penny Lane (stereo FLAC) is flagged; the mono FLAC (111.34) and MP3 (227.85, clean octave) are not.
+
+#### Root cause 1 — `computeBPM` averages across octaves (all paths)
+
+`BeatGridResolver.computeBPM` returns the mean of every IOI inside `[0.5×, 2×]` the median — a full octave wide. When Beat This! on the separated drums stem reads part of the window at the eighth-note level and part at the quarter, the mean lands between them: a BPM describing neither. This is BUG-134's fault 1; BUG134.1/.2 corrected the full-mix grid's *beats* but `computeBPM` itself still averages, and the D-154 gate reads `drumsBeatGrid.bpm` straight from it.
+
+Beat dumps (`CENSUS_DUMP_BEATS`, this increment):
+
+```
+Superstition FLAC  drums IOIs  0.30 0.32 0.32 0.30 0.28 0.34 | 0.62 0.62 0.60 0.64   -> mean 0.434 s = 138.25
+Superstition MP3   drums IOIs  0.62 x15 (all quarter)                                 -> 97.40
+Penny Lane stereo  drums IOIs  ~0.27 x16 | ~0.54 x9                                   -> 162.69
+```
+
+So 138/98.5 = 1.40 is **not a metrical ratio** — it is a weighted average of 1× and 2×. The corpus agrees: folded ratios of flagged tracks smear uniformly across 1.1–1.9, with **no excess at 4:3 or 3:2** (±2 % bands: 543 at 4:3 vs 528 at a control band 1.413; 483 at 3:2 vs 435 at 1.58). An octave average can produce any ratio in (1, 2), which is exactly that flat smear.
+
+#### Root cause 2 — local files: the drums grid is analysed at the wrong sample rate
+
+`SessionPreparer.computeBeatGrids` runs the drums grid with `sampleRate: preview.sampleRate`, but `StemSeparator` resamples to 44.1 kHz before separating, so `stemWaveforms` are always 44.1 kHz. Local-file previews keep the file's native rate, so the drums BPM is scaled by `nativeRate / 44100`. Measured through the shipping `LocalFilePreparationPipeline` (PrepTimingRunner, scratch cache):
+
+| file | rate | production grid / drums | fold | note |
+|---|---|---|---|---|
+| !!! — There's No Fucking Rules, Dude | 48 k | 92.20 / **97.45** | 0.057 | census drums 89.55; 97.45/89.55 = **1.088 = 48000/44100** |
+| Superstition FLAC | 96 k | 101.41 / **413.17** | 0.019 | drums beats end at 4.58 s of a 10 s stem; unflagged **by luck** |
+| Superstition MP3 | 44.1 k | 101.71 / 97.40 | 0.044 | correct |
+| Penny Lane stereo FLAC | 44.1 k | 113.31 / 162.69 | 0.436 | flagged — root cause 1 |
+
+Every 48 kHz local file (~11 % of the corpus) therefore starts with an unearned 8.8 % disagreement against a 10 % threshold. Streaming previews are unaffected if they arrive at 44.1 kHz (not verified here). The CENSUS harness passes the model rate correctly but has its own quirk: it truncates to `requiredMonoSamples` at the **native** rate before separating, so 96 kHz files get a 4.6 s drums window instead of 10 s — which is why the census Superstition row differs from production.
+
+#### Corpus prevalence
+
+- CENSUS full run (July, 24,350 tracks with both grids): **34 %** flagged; fold > 0.10 accounts for 8,001, bar-confidence < 0.2 alone for 297.
+- **Duplicate-recording test:** 1,309 same-artist/same-title pairs whose full-mix grids agree within 1.5 %; 449 flagged in at least one copy; **189 (42 %) flagged in only one copy.** A gate measuring the song would agree across copies.
+- Pyramid Song — D-154's canonical catch — is **not** flagged in the census (FLAC fold 0.099, MP3 0.072, bar 0.31).
+- The flag also drifts with unrelated code: re-running today reproduced only 529/602 of July's flags (BUG134.2's audio-octave correction now also runs on the drums grid).
+
+#### Candidate fixes, measured (602-track stratified sample re-run with beat dumps, today's code; corpus-weighted)
+
+| variant | corpus-est flag rate | flags whose full-mix grid is steady (CV < 0.05) | Pyramid | D-154 catches |
+|---|---|---|---|---|
+| current (mean of inliers) | 27.7 % | 26 % | unflagged | pinned rows hold |
+| **median IOI for both grids** | **17.1 %** | 17 % | unflagged | not testable from pinned BPMs (needs beats) |
+| + fold 3:2 and 4:3 (on BPM pairs) | 15.1 % (census) | — | pinned D-154 row stays flagged | **Mingus un-flagged** (1.489 ≈ 3:2) |
+
+Median un-flags 143/327 of today's flagged sample, newly flags 7/275 regular ones. Ratio folding has no metrical basis in the data (no peak) and loses a calibration catch; **rejected.** Full-mix grid IOI CV alone is not a clean replacement either (flags an estimated 34 %: BUG-134 bimodal grids and dropped beats inflate it).
+
+#### Verification criteria (for the fix increment, written before it)
+
+1. Unit: `computeBPM` on the Superstition-FLAC IOI sequence above returns the quarter or the eighth level (97–100 or 194–200), not 138; the drums grid path gets 44.1 kHz regardless of `preview.sampleRate` (48 k and 96 k fixtures).
+2. `BeatRegularityExclusionTests` catalog rows still hold (they pin BPMs, so root-cause-2 and estimator changes must not silently move them).
+3. Re-run the 602-track sample: flag rate and duplicate-pair disagreement both fall; list every newly flagged track.
+4. **BeatBench before/after, all five suites** — `computeBPM` feeds `grid.bpm`, the halving gate, and meter fallbacks, so changing it is a behavioural beat-sync change.
+5. Manual: Membrane on Superstition (local FLAC + MP3) is eligible and reads as locked; Pyramid Song stays excluded if Matt still wants it excluded.
+
+#### Artifacts
+
+Not committed (regenerable, ~40 min for the sample). Beat dumps: `CENSUS_DUMP_BEATS=<dir> CorpusCensusRunner …`. Production grids: PrepTimingRunner into a scratch `--cache`, read `metadata.json` `beatGrid` / `drumsBeatGrid`.
 
 ### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
 

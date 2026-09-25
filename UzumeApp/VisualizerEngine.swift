@@ -1244,6 +1244,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         }
         livePlannedSession = nil
         reactiveSessionStart = nil
+        // BC.1 — the track-scoped beat regularity and its GPU copy, cleared together
+        // (the both-paths rule): a new session starts unknown, not with the last track's.
+        currentTrackBeatIrregular = nil
+        pipeline.setBeatClarity(beatIrregular: nil)
     }
 
     /// BUG-012 instrumentation — record VisualizerEngine teardown. If a crash
