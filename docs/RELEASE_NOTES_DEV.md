@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-25-140918] BUG140.2 — the beat-irregularity gate stops flagging steady songs
+
+Songs like Superstition and Penny Lane were marked "no steady beat", which hard-excludes `requires_regular_beat` scenes (Membrane; Kagura planned) and sets `beat_clarity01` to 0 for Fireflies. The gate compared a drums-stem tempo that `computeBPM` averaged across eighth- and quarter-note levels, and on local files that tempo was also scaled by the file's sample rate (48 kHz ×1.088). The gate now compares the octave-folded median beat interval of each grid, with the drums grid at 44.1 kHz. The 10 % rule is unchanged (Matt's option A). Estimated share of the library flagged: 25.2 % → 12.0 %. Duplicate recordings whose two copies disagree: 34/150 → 6/150. Pyramid Song is still excluded. **Local files re-analyse once** (stem cache schema v14). No change to beat sync: `BeatGrid.bpm` and the full-mix grid are untouched. Manual check outstanding: Membrane on Superstition.
+
 ### [dev-2026-09-24-205001] GOLDEN.1 — golden sessions plan against the shipped roster
 
 `GoldenSessionTests` now loads the real scene sidecars instead of a hand-copied May-2026 subset (which still carried Arachne and was missing about 20 scenes). Sessions A–D were regenerated with scoring traces. The `[VL, Membrane ×4]` run BETA.0 recorded was a fixture artifact: on the real roster Membrane never appears. The BUG-133 monopoly does not come back on the seeded production path (7–11 distinct scenes per Session A over 24 seeds). Test-only.
