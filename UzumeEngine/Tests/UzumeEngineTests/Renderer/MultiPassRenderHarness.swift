@@ -73,7 +73,11 @@ struct MultiPassRenderHarness {
         // the shape `uncoveredPresets` predicted. Its cost scales with the number of ALIVE
         // waves (the fragment loops `wave_count`, capped at 32), so it is warmed before the
         // timed frames for the same reason Skein is — PERF.17.
-        "Gossamer"
+        "Gossamer",
+        // FF.1 — Fireflies: the `particles`-only shape (no feedback), which production draws
+        // through `drawDirect` → `encodePresetVisualization`: world fragment, then the sprites
+        // into the same encoder.
+        "Fireflies"
     ]
 
     /// Render `presetName` over `features`/`stems` (row-aligned), returning `reduce(bgra)`
@@ -93,6 +97,7 @@ struct MultiPassRenderHarness {
         case "Meniscus":     return try renderMeniscus(features, stems, settle: settle, reduce)
         case "Ricercar":     return try renderRicercar(features, stems, settle: settle, reduce)
         case "Stave":        return try renderStave(features, stems, settle: settle, reduce)
+        case "Fireflies":    return try renderFireflies(features, stems, settle: settle, reduce)
         case "Alfvén":       return try renderAlfven(features, stems, reduce)
         case "Mitosis":      return try renderMitosis(features, stems, reduce)
         case "Cytokinesis":  return try renderCytokinesis(features, stems, reduce)
@@ -459,6 +464,48 @@ struct MultiPassRenderHarness {
                                           configuration: MitosisGen2Configuration(), pixelFormat: ctx.pixelFormat)
         return try particleLoop(ctx, drive, stems, reduce) { i, enc in geo.render(encoder: enc, features: drive[i]) }
             update: { i, cmd in geo.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
+    }
+
+    /// FF.1 — the installed grid's BPM per frame for the Fireflies path (production publishes it
+    /// in `SpectralHistoryBuffer` slot 2418; `FeatureVector` does not carry it). Nil = no grid,
+    /// which leaves the swarm free. The `realSpectrum` injection precedent.
+    nonisolated(unsafe) static var firefliesGridBPM: [Float]?
+
+    /// Fireflies (FF.1). Mirrors `RenderPipeline.encodePresetVisualization` on the direct path:
+    /// the world fragment through the preset's own compiled pipeline, then the swarm sprites
+    /// into the same encoder. `settle` frames advance the swarm without capture.
+    private func renderFireflies<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+                                    settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Fireflies" }) else {
+            throw HarnessError.presetNotFound("Fireflies")
+        }
+        let history = SpectralHistoryBuffer(device: ctx.device)
+        let geo = try FirefliesGeometry(device: ctx.device, library: lib.library, beatGrid: history,
+                                        pixelFormat: ctx.pixelFormat)
+        let aspect = Float(width) / Float(height)
+        let bpm = Self.firefliesGridBPM
+        func frame(_ i: Int) -> FeatureVector {
+            if let bpm, !bpm.isEmpty {
+                history.updateBeatGridData(relativeBeatTimes: [], bpm: bpm[i % bpm.count], lockState: 0, sessionMode: 0)
+            }
+            var f = drive[i % drive.count]; f.aspectRatio = aspect; return f
+        }
+        for i in 0..<settle {
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { continue }
+            geo.update(features: frame(i), stemFeatures: stems[i % stems.count], commandBuffer: cmd)
+            cmd.commit(); cmd.waitUntilCompleted()
+        }
+        return try particleLoop(ctx, drive, stems, reduce) { i, enc in
+            var f = frame(settle + i)
+            enc.setRenderPipelineState(preset.pipelineState)
+            enc.setFragmentBytes(&f, length: MemoryLayout<FeatureVector>.size, index: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            geo.render(encoder: enc, features: f)
+        } update: { i, cmd in
+            geo.update(features: frame(settle + i), stemFeatures: stems[(settle + i) % stems.count], commandBuffer: cmd)
+        }
     }
 
     /// Shared update→render→reduce loop for the geometry-driven particle presets.

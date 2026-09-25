@@ -335,6 +335,9 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// CPU wave field serialized into one continuous path (D-097, MEN.2a).
     var meniscusGeometry: (any ParticleGeometry)?
 
+    /// Fireflies preset (FF.1) — `FirefliesGeometry`, 600 pulse-coupled fireflies (D-097).
+    var firefliesGeometry: (any ParticleGeometry)?
+
     /// Shader library for creating post-process chains on preset switch.
     let shaderLibrary: Renderer.ShaderLibrary
 
@@ -980,6 +983,8 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         self.ricercarGeometry = Self.makeRicercarGeometry(context: ctx, library: lib)
         self.cymaticSandGeometry = Self.makeCymaticSandGeometry(context: ctx, library: lib)
         self.witchlightGeometry = Self.makeWitchlightGeometry(context: ctx, library: lib)
+        self.firefliesGeometry = Self.makeFirefliesGeometry(
+            context: ctx, library: lib, beatGrid: pipe.spectralHistory)
         self.staveGeometry = Self.makeStaveGeometry(
             context: ctx,
             library: lib,
@@ -1417,6 +1422,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             "Witchlight": witchlightGeometry,
             "Meniscus": meniscusGeometry,
             "Stave": staveGeometry,
+            "Fireflies": firefliesGeometry,
             "Alfvén": alfvenSolver,
         ]
         return table[name].flatMap { $0 }
@@ -1464,6 +1470,30 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         }
         logger.info("Witchlight created: \(WitchlightConfiguration().beadCapacity)-bead harmonic stroke")
         return stroke
+    }
+
+    /// Build the pulse-coupled swarm for the Fireflies preset (`FirefliesGeometry` +
+    /// `FirefliesSwarm` + `Renderer/Shaders/Fireflies.metal`, FF.1). Returns
+    /// `any ParticleGeometry` (D-097, siblings not subclasses).
+    ///
+    /// Takes the pipeline's `SpectralHistoryBuffer` — the swarm reads the installed grid's BPM
+    /// from it (slot 2418), because `FeatureVector` carries no tempo. The Stave / Meniscus
+    /// precedent of handing a geometry an existing engine buffer.
+    private static func makeFirefliesGeometry(
+        context: MetalContext,
+        library: Renderer.ShaderLibrary,
+        beatGrid: SpectralHistoryBuffer
+    ) -> (any ParticleGeometry)? {
+        guard let swarm = try? FirefliesGeometry(
+            device: context.device,
+            library: library.library,
+            beatGrid: beatGrid,
+            pixelFormat: context.pixelFormat
+        ) else {
+            return nil
+        }
+        logger.info("Fireflies created: \(FirefliesSwarm.count) pulse-coupled fireflies")
+        return swarm
     }
 
     /// Build the spectral dispersion for the Stave preset (`StaveTrace` +
