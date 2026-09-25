@@ -1,11 +1,55 @@
 # Fireflies — Visual References
 
 **Family:** `particles` &nbsp;·&nbsp; **Passes:** `direct` world + `particles` swarm (planned, FF.1–FF.3) &nbsp;·&nbsp; **Rubric:** full
-**Last curated:** 2026-09-24 (FF.R), Matt's pick: *"keep the 9"*.
-**Curation role:** the fidelity target for FF.2 (the world) and FF.3 (the light). No look work starts
-before this set (FF.0 README §7.3).
+**Last curated:** 2026-09-25 (FF.R2: style set, 9 local-only prints, hero `07`, blue — D-258); 2026-09-24 (FF.R: 9 photographs, now composition-only).
+**Curation role:** ⚠ **the STYLE is now set by §FF.R2 below (D-258).** The nine photographs further
+down keep a composition role only — meadow, tree line on the horizon, mist in the low ground. They no
+longer define the look, and the photographic / matte-painting bar they were chosen for is superseded.
 
 ---
+
+## FF.R2 — the style (D-258, Matt 2026-09-25)
+
+**Direction:** a **stylized screenprint rendered from a real 3D scene.** Matt: *"not looking for
+photographic… something more stylized but still 3D. it's not enough to put fireflies over a static
+painting"*, and *"daniel danger posters… closer to my ideal illustrated style for this preset."*
+**Palette: blue** (one blue ink family plus near-black; the fireflies are the only warm colour).
+**Hero: `07`.** Matt kept all nine.
+
+**The images are LOCAL ONLY:** Daniel Danger's screenprints are commercial art, saved at 1500 px from his
+own portfolio to `~/Documents/uzume_spikes/fireflies/references_danger/` (with a contact sheet and
+notes). **Never commit them, never reproduce or trace a specific print, and never name him in public
+copy.** We take the traits below, not the images.
+
+### The style, as rules (shared by all nine)
+- **Ink, not paint:** one hue family plus near-black, a screenprint's few inks — not a full palette.
+- **Line, not fill:** texture comes from the density of fine hatched lines; almost nothing is flat.
+- **Value is depth:** the far distance and the sky are lightest, the foreground silhouette darkest.
+- **Lights are the event:** each light source is the brightest thing in the frame — a near-white core,
+  a coloured bloom, and light only on what is right around it. **This is the fireflies' job.**
+
+### Per print — what it is the reference FOR
+| # | Title | Mandatory — learn this | Actively disregard |
+|---|---|---|---|
+| `07` **HERO** | *"to my only daughter…"* | Deep-blue night, bare trees in silhouette, a ground you can still read, and one glowing figure lighting only its surroundings — the closest composition to ours | The house |
+| `03` | *"it became about the horizon"* | **The tree line:** very fine, intricate branching against a pale sky | The building, the violet |
+| `06` | *"we speak in ninth grade form…"* | Many tiny specks of light over layered distance in one palette — the nearest analogue to a firefly field | The town, the snow |
+| `09` | *"i am a rabbit out of room…"* | How a point light reads in this style: hot core, halo, starburst, against blue-black | The street, the figures |
+| `04` | *"let it be known there is a fountain"* | A glow as the only light source in dark woods; light falls only where the glow is | The buses, the violet |
+| `01` | *"if we go, we go together"* | Dark near frame around a bright, misty distance: depth by value alone | The arch, the lettering |
+| `05` | *"wrangell"* | Layered hills in one ink family — aerial perspective without new colours | The buildings, the snow |
+| `02` | *"when do we see the results…"* | Dense woods: trunks at many depths, canopy detail, glow behind | **The warm palette** (blue was chosen) |
+| `08` | *The Jungle Book* | Dense foliage texture on a huge tree | **The green palette**, the title, the snake |
+
+### Anti-references (FF.R2)
+- **Photographic** anything (Matt, 2026-09-25).
+- **Fireflies over a static painting:** the FF.0/FF.1 placeholder — a flat backdrop with dots on top.
+- **Too bright to see the fireflies** (Matt's read of a flat daylight-coloured stylized landscape), and
+  **too dark to see nature** (his read of a near-empty night scene).
+
+---
+
+## FF.R — the original photo set (composition only since D-258)
 
 ## The concept these images serve
 
@@ -14,8 +58,9 @@ clear.* They blink at random at the top of a track, relay flashes neighbour to n
 onto the beat within about 15 s on a clear beat. They stay free on an irregular or unknown one
 (`stems.beat_clarity01`, from BC.1; unknown maps to free).
 
-**Setting: A, the dusk meadow with a tree line** (Matt, 2026-09-24). **The bar** (FF.0 §7.2): a
-matte-painting-quality dusk, not photoreal grass.
+**Setting: A, the dusk meadow with a tree line** (Matt, 2026-09-24). ~~**The bar** (FF.0 §7.2): a
+matte-painting-quality dusk, not photoreal grass.~~ **Superseded by D-258:** a stylized screenprint
+rendered from a real 3D scene (§FF.R2 above).
 
 **Why these images, not the spike.** FF.0 passed on condition. Matt: *"the scene looked cheap and
 quickly produced, like a sketch vs. a detailed rendering."* Every row below names a specific way the
@@ -40,7 +85,7 @@ and the traits that must be **actively disregarded**.
 | `08_micro_grass_seedheads_silhouette.jpg` | micro | **Foreground grass:** thin blades and branching seed heads in silhouette against a lighter sky. These go at the bottom edge, in front of the mist. | The bush at the right | The daylight blue sky |
 | `09_anti_composite_light_pollution.jpg` | **anti** | NOT this: a stacked composite. Flashlight streaks, artificial light, busy colour, and trails everywhere. | — | — |
 
-**Hero:** `01`. Put the render next to it first, as gate zero ([`SHADER_CRAFT.md` §2.3]).
+**Hero (composition only since D-258):** `01`. **The style hero is FF.R2 `07`** (local-only) — put every render next to it first, as gate zero ([`SHADER_CRAFT.md` §2.3]). ⚠ `Scripts/compare_render.sh` only reads this folder, so it cannot show `07`; composite against `~/Documents/uzume_spikes/fireflies/references_danger/` until FF.2 solves that locally (never by committing the prints).
 
 **Known gaps in the set:**
 - **Out-of-focus firefly blur discs:** no free-licensed photograph exists. Use the motion reference
@@ -62,7 +107,7 @@ and the traits that must be **actively disregarded**.
 - [ ] **Audio reactivity:** beat-grid nudge × `stems.beat_clarity01` (unknown → 0). Mutual relay is internal. `near_silent01` fades the swarm to stragglers.
 - [ ] **Silence fallback:** the dusk world stays lit, with a few stragglers. Never black (D-037).
 - [ ] **Performance ceiling:** 60 fps at 1080p in Release, measured at FF.3
-- [ ] **Hero reference image:** `01_macro_afterglow_meadow_treeline.jpg`
+- [ ] **Hero reference image:** FF.R2 `07` (style, local-only); `01_macro_afterglow_meadow_treeline.jpg` (composition)
 
 ## Expected traits (per §12.2)
 
