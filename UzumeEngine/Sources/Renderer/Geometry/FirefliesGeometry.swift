@@ -64,6 +64,11 @@ public final class FirefliesGeometry: ParticleGeometry, @unchecked Sendable {
         get { world.cameraTimeOffset }
         set { world.cameraTimeOffset = newValue }
     }
+    /// Harness-only: hold the camera at its rest pose so the wind can be measured alone.
+    public var freezeCamera: Bool {
+        get { world.freezeCamera }
+        set { world.freezeCamera = newValue }
+    }
 
     /// Metres of distance per unit of FF.1's 2.5-D depth (1 near … 9 far → 3 … 27 m).
     static let metresPerDepth: Float = 3
@@ -148,7 +153,7 @@ public final class FirefliesGeometry: ParticleGeometry, @unchecked Sendable {
         let bpm = beatGrid?.readOverlayState().bpm ?? 0
         swarm.advance(features: features, clarity: stemFeatures.beatClarity01, gridBPM: bpm)
         if features.aspectRatio > 0 { aspect = features.aspectRatio }
-        world.advance(dt: min(max(features.deltaTime, 0), 0.1), aspect: aspect)
+        world.advance(dt: min(max(features.deltaTime, 0), 0.1), aspect: aspect, bassAttRel: features.bassAttRel)
         writeWorld()
         upload()
     }

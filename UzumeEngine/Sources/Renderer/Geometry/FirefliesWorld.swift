@@ -24,8 +24,8 @@ import simd
 
 // MARK: - GPU mirrors
 
-/// 64 bytes — mirrors `FFWorld` in `Presets/Shaders/Fireflies.metal` and `FFCam` in
-/// `Renderer/Shaders/Fireflies.metal`. `w` lanes carry scalars so the layout is four float4s.
+/// 80 bytes — mirrors `FFWorld` in `Presets/Shaders/Fireflies.metal` and `FFCam` in
+/// `Renderer/Shaders/Fireflies.metal`. `w` lanes carry scalars so the layout is five float4s.
 public struct FFWorldGPU {
     /// xyz camera position, w = tan(half vertical FOV).
     public var camPos = SIMD4<Float>(0, 0, 0, 0)
@@ -33,15 +33,18 @@ public struct FFWorldGPU {
     public var right = SIMD4<Float>(0, 0, 0, 0)
     /// xyz up, w = world time in seconds (never resets on a track change).
     public var up = SIMD4<Float>(0, 0, 0, 0)
-    /// xyz forward, w = world breath 0…1 (FF.2 Task 5; 0 until then).
+    /// xyz forward, w = world breath 0…1.
     public var forward = SIMD4<Float>(0, 0, 0, 0)
+    /// x = wind phase (s), y = mist drift (m), zw unused. Both are INTEGRATED on the CPU so a
+    /// change of breath changes their speed, never their position — no lurch.
+    public var motion = SIMD4<Float>(0, 0, 0, 0)
 }
 
 /// 48 bytes — one branch segment; mirrors `FFBranch` in `Renderer/Shaders/Fireflies.metal`.
 struct FFBranchGPU {
     var p0r0: SIMD4<Float>     // start xyz, start radius
     var p1r1: SIMD4<Float>     // end xyz, end radius
-    var sway: SIMD4<Float>     // x = sway weight at start, y = at end, zw unused
+    var sway: SIMD4<Float>     // x = sway weight at start, y = at end, z = ink (0 = by depth), w unused
 }
 
 // MARK: - Camera
@@ -90,13 +93,14 @@ public struct FFCamera: Sendable {
         FFWorldGPU(camPos: SIMD4(position, tanHalfFovY),
                    right: SIMD4(right, aspect),
                    up: SIMD4(up, 0),
-                   forward: SIMD4(forward, 0))
+                   forward: SIMD4(forward, 0),
+                   motion: .zero)
     }
 }
 
 // MARK: - FirefliesWorld
 
-/// The camera drift and the static branch skeletons. Not thread-safe: advanced and read on the
+/// The camera drift, the breath, and the static branch skeletons (trees and foreground grass). Not thread-safe: advanced and read on the
 /// render thread only, via `FirefliesGeometry`.
 final class FirefliesWorld {
 
@@ -106,7 +110,16 @@ final class FirefliesWorld {
     /// Added to `time` for the camera only — harness stills show the same moment from a drifted
     /// camera (FF.2 Task 3 frame 2). 0 in production.
     var cameraTimeOffset: Float = 0
+    /// Harness-only: hold the camera still so the wind's own motion can be measured. false in
+    /// production.
+    var freezeCamera = false
     private(set) var camera = FFCamera(offset: .zero, yaw: 0, aspect: 16.0 / 9.0)
+    /// The world's breath, 0…1 (0.5 = the track's usual level): the one audio route the world
+    /// has (FIREFLIES_DESIGN §4.3, Matt's "B"). See `advance`.
+    private(set) var breath: Float = 0.5
+    private var breathEMA: Float = 0
+    private var windPhase: Float = 0
+    private var mistDrift: Float = 0
     /// The fixed camera the swarm's screen-space coupling domain is unprojected through.
     private(set) var restCamera = FFCamera(offset: .zero, yaw: 0, aspect: 16.0 / 9.0)
     let branches: [FFBranchGPU]
@@ -121,8 +134,26 @@ final class FirefliesWorld {
     /// repeats. Amplitudes: ±1.1 m sideways, ±0.6 m in depth, ±0.12 m in height, ±1° of yaw;
     /// enough that the near tree slides across the far tree line, never enough to break the
     /// composition of §4.1.
-    func advance(dt: Float, aspect: Float) {
+    ///
+    /// THE BREATH (Matt, 2026-09-25: "B"): `bassAttRel` — the smoothed bass deviation (D-026) —
+    /// averaged again over τ = 4 s, so it swells over several seconds and can never pulse on
+    /// the beat (the beat is the fireflies' alone, FA #67). It is soft-saturated,
+    /// 0.5 + 0.5·tanh(4·x), because its span differs ~10× between tracks (4 s EMA p5–p95 on the
+    /// parity captures: DYC 0.31, Pyramid Song 0.14, Warszawa 0.09, Teardrop 0.03) and a p99 is
+    /// not a constant. At silence it sinks toward 0 and the world COASTS: the wind and mist slow
+    /// but never stop (D-037, the per-preset silence doctrine). `bassAttRel` was chosen over
+    /// `midAttRel` / `trebAttRel` because it is the only one that moves on all four captures.
+    func advance(dt: Float, aspect: Float, bassAttRel: Float) {
         time += dt
+        breathEMA += (bassAttRel - breathEMA) * (1 - exp(-dt / 4))
+        breath = 0.5 + 0.5 * tanh(4 * breathEMA)
+        // The breath sets how FAST the wind and the mist move (here) and how FAR the wind leans
+        // the grass and sways the trees (the shaders, ∝ breath²). Ranges chosen so a quiet →
+        // full passage roughly triples the sway (FF.2 measured the first, linear mapping as
+        // invisible under the camera drift).
+        windPhase += dt * (0.4 + 1.2 * breath)
+        mistDrift += dt * (0.2 + 1.6 * breath)
+        if freezeCamera { return }
         let clock = time + cameraTimeOffset
         let tau = 2 * Float.pi
         let offset = SIMD3<Float>(1.1 * sin(tau * clock / 47),
@@ -136,6 +167,8 @@ final class FirefliesWorld {
     var gpu: FFWorldGPU {
         var out = camera.gpu
         out.up.w = time
+        out.forward.w = breath
+        out.motion = SIMD4(windPhase, mistDrift, 0, 0)
         return out
     }
 
@@ -178,6 +211,49 @@ final class FirefliesWorld {
         }
         // The near tree, left, reaching out of the top of the frame.
         tree(SIMD3(-6.5, 0, 12), height: 6, trunkRadius: 0.42, levels: 8)
+        out += plantForeground(seed: seed)
+        return out
+    }
+
+    /// The bottom edge (§4.1): tall grass stalks and seed heads 3.5–7 m away. They stand on the
+    /// darkest ground in the frame, so a near-black silhouette vanishes there (FF.2 still, round
+    /// 6); `07` draws its foreground grass as LIGHT cut lines on that dark ground, and so do we —
+    /// stalks in ink 2, seed heads in ink 3, catching the sky. The ground around them stays the
+    /// darkest value, so value still runs near → far, dark → pale.
+    /// Stalks curve as they rise; about one in four carries a seed head of fine splayed awns.
+    /// The whole stalk sways with the wind, weighted by height; the root never moves.
+    static func plantForeground(seed: UInt64) -> [FFBranchGPU] {
+        var rng = SplitMix64(seed: seed ^ 0xF0F0_F0F0)
+        var out: [FFBranchGPU] = []
+        for _ in 0..<1100 {
+            let zPos = 3.5 + 3.5 * rng.unit()
+            let reach = 0.75 * zPos + 1.6                        // frame half-width + drift
+            let xPos = (2 * rng.unit() - 1) * reach
+            let height = (0.4 + 0.5 * rng.unit()) * (rng.unit() < 0.15 ? 1.4 : 1)
+            var point = SIMD3<Float>(xPos, 0, zPos)
+            var dir = simd_normalize(SIMD3<Float>(0.25 * rng.gaussian(), 1, 0.15 * rng.gaussian()))
+            let curve = SIMD3<Float>(0.12 * rng.gaussian(), 0, 0.05 * rng.gaussian())
+            let pieces = 4
+            for piece in 0..<pieces {
+                let (from, to) = (Float(piece) / Float(pieces), Float(piece + 1) / Float(pieces))
+                dir = simd_normalize(dir + curve)
+                let next = point + dir * (height / Float(pieces))
+                out.append(FFBranchGPU(p0r0: SIMD4(point, 0.006 - 0.0045 * from),
+                                       p1r1: SIMD4(next, 0.006 - 0.0045 * to),
+                                       sway: SIMD4(0.5 * from * from, 0.5 * to * to, 2, 0)))
+                point = next
+            }
+            guard rng.unit() < 0.25 else { continue }
+            // Seed head: 5–8 awns splayed up and out from the tip.
+            let awns = 5 + Int(rng.unit() * 4)
+            for _ in 0..<awns {
+                let awn = simd_normalize(dir + 0.9 * randomUnit(&rng) + SIMD3(0, 0.4, 0))
+                let length = 0.03 + 0.05 * rng.unit()
+                out.append(FFBranchGPU(p0r0: SIMD4(point, 0.0025),
+                                       p1r1: SIMD4(point + awn * length, 0.0012),
+                                       sway: SIMD4(0.5, 0.55, 3, 0)))
+            }
+        }
         return out
     }
 
@@ -208,7 +284,9 @@ final class FirefliesWorld {
         mutating func branch(_ shoot: Shoot) {
             let depthFrac = Float(shoot.level) / Float(levels)
             let endRadius = shoot.radius * 0.8
-            let tipSway = min(1, shoot.sway + 0.12 + 0.2 * depthFrac)
+            // Sway accrues with the SQUARE of depth: twigs move, limbs barely (a linear ramp bent
+            // the near tree's big limbs ~20 px at full breath — a gale, not a night breeze).
+            let tipSway = min(1, shoot.sway + 0.02 + 0.25 * depthFrac * depthFrac)
             var point = shoot.start, dir = shoot.dir
             let pieces = 3
             for piece in 0..<pieces {

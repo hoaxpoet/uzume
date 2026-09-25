@@ -83,12 +83,13 @@ struct FFCam {
     float4 right;          // xyz, w = aspect
     float4 up;             // xyz, w = world time (s)
     float4 fwd;            // xyz, w = world breath 0…1
+    float4 motion;         // x wind phase (s), y mist drift (m)
 };
 
 struct FFBranch {
     float4 p0r0;           // start xyz, radius (m)
     float4 p1r1;           // end xyz, radius (m)
-    float4 sway;           // x start weight, y end weight
+    float4 sway;           // x start weight, y end weight, z ink (0 = by depth)
 };
 
 struct FFBranchOut {
@@ -112,10 +113,11 @@ static inline float3 ff_ink(int i) {
 static inline float ff_depth_tone(float dist) { return 3.4 * (1.0 - exp(-dist / 90.0)); }
 
 /// Wind: a slow travelling sway plus a faster flutter, scaled by the segment's sway weight
-/// (0 at the trunk base, 1 at the twigs) and by the breath (FF.2 Task 5).
+/// (0 at the trunk base, 1 at the twigs) and by the breath. `t` is the integrated wind phase.
 static inline float3 ff_wind(float3 p, float weight, float t, float breath) {
     float gust = sin(0.55 * t + 0.045 * p.x + 0.03 * p.z) * 0.6 + sin(1.7 * t + 0.21 * p.x) * 0.25;
-    return float3(gust, 0.0, 0.35 * gust) * weight * (0.18 + 0.30 * breath);
+    // Squared, so the swell reads: breath 0.1 (silence) → 0.03 m, 0.5 → 0.14 m, 0.9 → 0.39 m.
+    return float3(gust, 0.0, 0.35 * gust) * weight * (0.03 + 0.45 * breath * breath);
 }
 
 vertex FFBranchOut fireflies_branch_vertex(
@@ -126,7 +128,7 @@ vertex FFBranchOut fireflies_branch_vertex(
     constant float2&     viewport [[buffer(2)]])
 {
     FFBranch b = branches[iid];
-    float t = cam.up.w, breath = cam.fwd.w;
+    float t = cam.motion.x, breath = cam.fwd.w;
     float tan_y = cam.cam_pos.w, aspect = cam.right.w;
     float3 p0 = b.p0r0.xyz + ff_wind(b.p0r0.xyz, b.sway.x, t, breath);
     float3 p1 = b.p1r1.xyz + ff_wind(b.p1r1.xyz, b.sway.y, t, breath);
@@ -162,7 +164,7 @@ vertex FFBranchOut fireflies_branch_vertex(
     out.half_w = w;
     out.alpha = at_end ? a1 : a0;
     float tone = ff_depth_tone(at_end ? z1 : z0);
-    out.color = ff_ink(int(floor(tone + 0.5)));
+    out.color = ff_ink(b.sway.z > 0.0 ? int(b.sway.z) : int(floor(tone + 0.5)));
     return out;
 }
 
