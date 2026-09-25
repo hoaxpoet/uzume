@@ -4,21 +4,22 @@
 // Pure and GPU-free, so `KaguraDancerTests` can drive it frame by frame. Ported from the KAG.0
 // spike (`docs/presets/kagura_spike/kagura.py`, `build_dancer`), which is the behavioural oracle:
 //
-// - **Warp (KAGURA_DESIGN §5).** Pulse position `u = (p − p0) / m`, clip time
+// - **Warp (KAGURA_DESIGN §5).** Pulse position `u = 1 + (p − (p0 − 2)) / m`, clip time
 //   `c = clip.clipTime(atPulse: u)`, pose `clip.pose(at: c)`. `p0` is the bar line the clip
-//   entered on, so the clip's first pulse lands on that beat and every later pulse on an integer
-//   beat after it; the pulse map spreads the phase correction across each beat (never a jump).
+//   entered on; beat p0 − 2 pins the clip's second pulse (spike `warp_map(..., start_event=1)` on
+//   beats from t0 − 2), so a clip enters 1 + 2/m pulses in. KAG.2 entered on the first pulse: the
+//   gesture dances then landed up to 13 points off the spike's pulse lock (KAG.3, Matt's option A).
 // - **Level `m`** is `choose_level`: the allowed level whose playback rate is closest to 1. The
 //   twist's allowed set excludes ×½ (Matt: never two turns per beat).
-// - **Clip changes** on a bar line, at most every 4 bars, sooner if the clip's pulse map would run
-//   out before the crossfade beat after the cut. The two twist clips alternate. With no bar
-//   information the bar lines are every 4 beats (D-210).
+// - **Clip changes** on a bar line: the last one within 4 bars (+ ½ beat) that is at least ½ beat
+//   before the clip's pulses run out; if none fits, the next bar line, the clip playing on to its
+//   own end meanwhile (spike `build_dancer`: `limit`, `ok`, `nxt`). Each dance alternates its
+//   clips. With no bar information the bar lines are every 4 beats (D-210).
 // - **Handoff.** One-beat smoothstep crossfade; the incoming clip is offset so the midpoint of its
 //   ankles matches the outgoing clip's at the cut. The camera never moves.
-// - **Sway.** Clip `sway`, unwarped, ping-pong (a modulo wrap teleports the figure — the spike's
-//   frame-339 pop). It plays with no grid and, on the streaming path, until the drift tracker
-//   reports lock; it joins and leaves the dance at a bar line with the same crossfade, and its
-//   clock never stops, so it never freezes.
+// - **Sway.** Clip `sway`, unwarped, ping-pong (a modulo wrap teleports the figure). It plays with
+//   no grid and, streaming, until the drift tracker locks; it joins and leaves at a bar line with
+//   the same crossfade, and its clock never stops, so it never freezes.
 // - **Framing — the causal leash.** The spike's leash subtracts a ZERO-PHASE Gaussian (σ 2 s) of
 //   the pelvis floor path, which needs the future. Here the clips are already centred on their
 //   mean pelvis (KAG.1 bake), so the only thing that walks the figure out of frame is the
@@ -67,12 +68,15 @@ public struct KaguraChoreographer: Sendable {
         case dance(clip: Int, entry: Double, level: Double, offset: SIMD2<Float>)
         /// The unwarped sway, sampled on `swayClock`.
         case sway(offset: SIMD2<Float>)
+        /// A pose held still: what was on screen when a fade had to start inside another fade.
+        case held(joints: [SIMD3<Float>])
 
         var isDance: Bool { if case .dance = self { return true } else { return false } }
 
         var offset: SIMD2<Float> {
             switch self {
             case .dance(_, _, _, let offset), .sway(let offset): return offset
+            case .held: return .zero
             }
         }
 
@@ -81,6 +85,7 @@ public struct KaguraChoreographer: Sendable {
             case let .dance(clip, entry, level, _):
                 return .dance(clip: clip, entry: entry, level: level, offset: offset)
             case .sway: return .sway(offset: offset)
+            case .held: return self
             }
         }
     }
@@ -125,6 +130,8 @@ public struct KaguraChoreographer: Sendable {
     var songArousal: Double?
     /// Render seconds the beat position has not advanced.
     private var stalled: Double = 0
+    /// The last pose `pose(at:)` returned (before arm reach).
+    private var lastPose: [SIMD3<Float>] = []
     /// Seconds of sway playback. Always advances, whatever the dancer is doing.
     private var swayClock: Double = 0
     /// Last beat position seen, and beats per second, for a dance fading out after its grid went.
@@ -178,13 +185,6 @@ public struct KaguraChoreographer: Sendable {
         ]
     }
 
-    // MARK: Level
-
-    /// `choose_level`: the level (grid beats per pulse) whose playback rate is closest to 1.
-    public static func chooseLevel(pulsePeriod: Double, beatPeriod: Double, levels: [Double]) -> Double {
-        levels.min { abs(log(pulsePeriod / ($0 * beatPeriod))) < abs(log(pulsePeriod / ($1 * beatPeriod))) } ?? 1
-    }
-
     // MARK: Advance
 
     /// Advance one render frame and return the joints (library order, metres).
@@ -223,6 +223,11 @@ public struct KaguraChoreographer: Sendable {
         if let grid, let beat {
             safetyNet.advance(beat: beat, grid: grid)
             let resting = safetyNet.irregular || energy.isSilent(forLast: Self.barSeconds(grid))
+            if stalled >= Self.stallSeconds, case let .beats(start) = fade {
+                // A bar-line crossfade counts beats, which have stopped: finish it in render time.
+                let rate = beatsPerSecond
+                fade = .seconds(elapsed: (beat - start) / rate, duration: 1 / rate, outgoingBeat: beat, rate: rate)
+            }
             if stalled >= Self.stallSeconds && current.isDance && fade == nil {
                 fadeToSway()   // a stopped clock never reaches a bar line
             }
@@ -247,14 +252,15 @@ public struct KaguraChoreographer: Sendable {
         fadeToSway()
     }
 
-    /// Fade from the dance to the sway over one nominal beat of render time.
-    /// ponytail: a change inside a one-beat bar-line fade drops that fade's outgoing pose (a small
-    /// pop); it needs a grid replaced within that exact beat. Blend three poses if seen.
+    /// Fade from the dance to the sway over one nominal beat of render time. Inside another fade the
+    /// outgoing side is the pose on screen, held still — dropping that fade's outgoing clip popped
+    /// 0.14 m when a grid was replaced within a bar-line crossfade (KAG.3, first seen).
     private mutating func fadeToSway() {
         nextCut = nil
-        let outgoing = displayed(current, beat: lastBeat)
+        let leaving = previous == nil ? current : .held(joints: lastPose)
+        let outgoing = displayed(leaving, beat: lastBeat)
         let target = Segment.sway(offset: feet(rawSway()) - feet(outgoing))
-        previous = current
+        previous = leaving
         current = target
         fade = .seconds(elapsed: 0, duration: 1 / beatsPerSecond, outgoingBeat: lastBeat, rate: beatsPerSecond)
     }
@@ -274,21 +280,24 @@ public struct KaguraChoreographer: Sendable {
         }
     }
 
-    /// The last bar line within `maxBarsPerClip` bars of `entry` at which the clip still covers
+    /// The spike's cut: the last bar line after `entry + ½` and within `maxBarsPerClip` bars (+ ½ beat)
+    /// that is no later than ½ beat before the clip's last pulse; the next bar line if none is.
     /// the crossfade beat after the cut; a beat before its pulse map runs out if no bar line fits.
     private func plannedDanceCut(clip: Int, entry: Double, level: Double, grid: KaguraGrid) -> Cut {
-        let span = dances[clip].pulseSpan
-        let fits = { (cut: Int) in (Double(cut) + 1 - entry) / level <= span }
+        // The beat at which the warp reaches the clip's last pulse (spike `tt[-1]`).
+        let covered = entry + (dances[clip].pulseSpan - Self.entryPulse(level: level)) * level
+        let first = grid.nextBarLine(after: entry + 0.5)
         var best: Int?
-        var line = Double(entry)
-        for _ in 0..<Self.maxBarsPerClip {
-            let next = grid.nextBarLine(after: line)
-            if fits(next) { best = next }
-            line = Double(next)
+        var line = first
+        for _ in 0..<Self.maxBarsPerClip where Double(line) <= covered - 0.5 {
+            best = line
+            line = grid.nextBarLine(after: Double(line))
         }
-        let fallback = Int(entry) + max(1, Int(floor(span * level)) - 1)
-        return Cut(beat: best ?? fallback, toDance: true)
+        return Cut(beat: best ?? first, toDance: true)
     }
+
+    /// Pulses into a clip at the bar line it enters on: the spike pins beat `p0 − 2` to pulse 1.
+    static func entryPulse(level: Double) -> Double { 1 + 2 / level }
 
     private mutating func perform(_ cut: Cut, grid: KaguraGrid, beat: Double) {
         guard fade == nil else {
@@ -313,7 +322,7 @@ public struct KaguraChoreographer: Sendable {
                 beatPeriod: grid.beatPeriod,
                 levels: clip.allowedLevels)
             chosenLevels.append(level)
-            let raw = clip.pose(at: clip.clipTime(atPulse: 0))
+            let raw = clip.pose(at: clip.clipTime(atPulse: Self.entryPulse(level: level)))
             incoming = .dance(clip: index, entry: entry, level: level, offset: feet(raw) - feet(outgoing))
             nextCut = plannedDanceCut(clip: index, entry: entry, level: level, grid: grid)
         } else {
@@ -343,10 +352,11 @@ public struct KaguraChoreographer: Sendable {
         }
         if weight >= 1 { fade = nil; previous = nil }
         let incoming = displayed(current, beat: beat)
-        guard let previous else { return incoming }
+        guard let previous else { lastPose = incoming; return incoming }
         let outgoing = displayed(previous, beat: outgoingBeat)
         let blend = Float(weight * weight * (3 - 2 * weight))
-        return zip(outgoing, incoming).map { simd_mix($0, $1, SIMD3(repeating: blend)) }
+        lastPose = zip(outgoing, incoming).map { simd_mix($0, $1, SIMD3(repeating: blend)) }
+        return lastPose
     }
 
     /// A segment's joints at `beat`, minus its handoff offset (floor plane only).
@@ -354,10 +364,12 @@ public struct KaguraChoreographer: Sendable {
         let raw: [SIMD3<Float>]
         switch segment {
         case let .dance(clip, entry, level, _):
-            let pulse = ((beat ?? entry) - entry) / level
+            let pulse = ((beat ?? entry) - entry) / level + Self.entryPulse(level: level)
             raw = dances[clip].pose(at: dances[clip].clipTime(atPulse: pulse))
         case .sway:
             raw = rawSway()
+        case .held(let joints):
+            raw = joints
         }
         let offset = segment.offset
         return raw.map { SIMD3($0.x - offset.x, $0.y, $0.z - offset.y) }

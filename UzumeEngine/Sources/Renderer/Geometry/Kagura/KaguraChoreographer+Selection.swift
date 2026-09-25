@@ -28,6 +28,11 @@ extension KaguraChoreographer {
 
 extension KaguraChoreographer {
 
+    /// `choose_level`: the level (grid beats per pulse) whose playback rate is closest to 1.
+    public static func chooseLevel(pulsePeriod: Double, beatPeriod: Double, levels: [Double]) -> Double {
+        levels.min { abs(log(pulsePeriod / ($0 * beatPeriod))) < abs(log(pulsePeriod / ($1 * beatPeriod))) } ?? 1
+    }
+
     /// The song's arousal (`TrackProfile.songArousal`), or `nil` while unknown — the repertoire then
     /// uses the middle energy, and re-picks at the next clip change once it arrives (§6).
     public mutating func setSongArousal(_ arousal: Double?) { songArousal = arousal }
