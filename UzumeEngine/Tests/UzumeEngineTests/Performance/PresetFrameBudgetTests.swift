@@ -153,7 +153,11 @@ struct PresetFrameBudgetTests {
         "Mitosis": 4.49,
         "Spectral Cartograph": 4.31,
         "Fractal Tree": 3.84,
-        "Dragon Bloom": 3.56
+        "Dragon Bloom": 3.56,
+        // KAG.2 — first recorded cost 2.94 ms (0.5x median, 2026-09-25, Debug harness with readback,
+        // another session's suite running). In Release with no readback, timed from command-buffer
+        // timestamps at 1920x1080: 0.216 ms GPU median (p95 0.297), 0.018 ms CPU encode.
+        "Kagura": 2.94
     ]
 
     /// Presets `MultiPassRenderHarness` cannot drive. Named, printed, and NOT counted as passing.

@@ -74,6 +74,9 @@ struct MultiPassRenderHarness {
         // waves (the fragment loops `wave_count`, capped at 32), so it is warmed before the
         // timed frames for the same reason Skein is — PERF.17.
         "Gossamer",
+        // KAG.2 — the point-light dancer: a CPU choreography plus a geometry-owned trail and
+        // composite target (the Ricercar shape), wired at authoring time, not certification.
+        "Kagura",
         // FF.1 — Fireflies: the `particles`-only shape (no feedback), which production draws
         // through `drawDirect` → `encodePresetVisualization`: world fragment, then the sprites
         // into the same encoder.
@@ -96,6 +99,7 @@ struct MultiPassRenderHarness {
         case "Witchlight":   return try renderWitchlight(features, stems, settle: settle, reduce)
         case "Meniscus":     return try renderMeniscus(features, stems, settle: settle, reduce)
         case "Ricercar":     return try renderRicercar(features, stems, settle: settle, reduce)
+        case "Kagura":       return try renderKagura(features, stems, settle: settle, reduce)
         case "Stave":        return try renderStave(features, stems, settle: settle, reduce)
         case "Fireflies":    return try renderFireflies(features, stems, settle: settle, reduce)
         case "Alfvén":       return try renderAlfven(features, stems, reduce)
@@ -339,6 +343,53 @@ struct MultiPassRenderHarness {
             let rpd = clearRPD(tex)
             guard let enc = cmd.makeRenderCommandEncoder(descriptor: rpd) else { continue }
             geo.render(encoder: enc, features: features)
+            enc.endEncoding()
+            try commit(cmd, tex, into: &pixels)
+            out.append(reduce(pixels))
+        }
+        return out
+    }
+
+    /// Kagura (KAG.2) mirrors `RenderPipeline.drawParticleMode` like Ricercar: `update` (the
+    /// choreography, then the trail and composite passes) inside the command buffer, then
+    /// `render` (the shoulder) into the output. Its whole response is the dance, and the dance
+    /// needs a GRID and a CLOCK that no `FeatureVector` carries — so this installs a steady
+    /// 120 BPM 4/4 grid and pushes the playback clock from `features.time` after each update,
+    /// exactly as the app's tick does. Without them the dancer sways, which is not the case the
+    /// flash and frame-budget gates exist to measure.
+    private func renderKagura<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+                                 settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat)
+        dancer.ensureAllocated(width: width, height: height)
+        let span = Double(drive.last?.time ?? 0) + Double(settle) / 60 + 30
+        let beats = (0..<Int(span * 2)).map { Double($0) * 0.5 }
+        dancer.setGrid(KaguraGrid(beats: beats, downbeats: stride(from: 0, to: beats.count, by: 4).map { beats[$0] },
+                                  beatsPerBar: 4, hasBarInformation: true), streaming: false)
+
+        let tex = try makeOutputTexture(ctx)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        var clock = 0.0
+        func step(_ features: FeatureVector, _ stem: StemFeatures, _ cmd: MTLCommandBuffer) {
+            var frame = features
+            clock += Double(frame.deltaTime > 0 ? frame.deltaTime : 1 / 60)
+            frame.time = Float(clock)   // monotone across the settle + tiled drive
+            dancer.update(features: frame, stemFeatures: stem, commandBuffer: cmd)
+            dancer.ingestClock(playbackSeconds: clock, renderTime: clock, lockState: 0)
+        }
+        for i in 0..<settle {
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { continue }
+            step(drive[i % drive.count], stems[i % stems.count], cmd)
+            cmd.commit(); cmd.waitUntilCompleted()
+        }
+        var out: [T] = []
+        out.reserveCapacity(drive.count)
+        for i in 0..<drive.count {
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { continue }
+            step(drive[i], stems[i], cmd)
+            guard let enc = cmd.makeRenderCommandEncoder(descriptor: clearRPD(tex)) else { continue }
+            dancer.render(encoder: enc, features: drive[i])
             enc.endEncoding()
             try commit(cmd, tex, into: &pixels)
             out.append(reduce(pixels))

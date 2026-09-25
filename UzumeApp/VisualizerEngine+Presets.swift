@@ -4,6 +4,7 @@
 import Audio
 import Combine
 import CoreGraphics
+import DSP
 import Foundation
 import Metal
 import os.log
@@ -107,6 +108,10 @@ extension VisualizerEngine {
             // dHashes and QG.5 bands all need byte-identical output for identical input.
             witchlightPath.setSessionFraming(Float.random(in: 0..<1))
         }
+        // KAG.2: forget the playback clock's history so the new track's first frame resyncs. The
+        // grid is NOT cleared here — on the local-file path the new track's grid is pushed BEFORE
+        // this runs; the grid push itself fades the dancer to the sway until the next bar line.
+        (kaguraGeometry as? KaguraDancer)?.reset()
         // MEN.2a (`MENISCUS_PLAN.md` §4, track-change row): the surface settles back to
         // its resting state and the camera returns to the resting attitude, so a new
         // track does not inherit the previous one's live ripples.
@@ -570,6 +575,7 @@ extension VisualizerEngine {
         case "Nimbus":      bindNimbusRuntime(desc)
         case "Lumen Mosaic": bindLumenMosaicRuntime(desc)
         case "Witchlight":  bindWitchlightRuntime(desc)
+        case "Kagura":      bindKaguraRuntime(desc)
         // Cymatic Resonance (CR.2) is a `feedback+particles` preset — its runtime is
         // the CymaticSandGeometry, wired via the `.particles` pass through
         // resolveParticleGeometry, not a slot-6 state binding.
@@ -601,6 +607,68 @@ extension VisualizerEngine {
             // it is a shader, so there is no MSL layout contract to extend.
             let drift = self?.beatSyncLock.withLock { self?.latestBeatSyncSnapshot.driftMs ?? 0 } ?? 0
             stroke?.path.ingestBeatDrift(milliseconds: drift)
+        }
+    }
+
+    private func bindKaguraRuntime(_ desc: PresetDescriptor) {
+        // KAG.2 — NO slot-6 buffer: the dancer's CPU core and trail live in `KaguraDancer`. The tick
+        // exists to push the playback clock, which `ParticleGeometry.update` does not carry
+        // (KAGURA_DESIGN §5: `p(t)` from the grid's beat times and the clock, never from the
+        // stepped `beatPhase01`). Local-file: the playback clock alone (BUG-087). Streaming: the
+        // clock plus the drift tracker's drift, and its lock state gates the dance (§3a).
+        //
+        // Ordering: this tick fires AFTER `particles?.update(...)` (RenderPipeline+Draw), so the
+        // push is stamped with this frame's render time and `KaguraBeatClock` extrapolates it to
+        // the next frame's — the dancer is never a frame late.
+        guard let dancer = kaguraGeometry as? KaguraDancer else {
+            logger.error("KaguraDancer geometry missing for preset '\(desc.name)' — the dancer will not move")
+            return
+        }
+        dancer.restart()
+        pipeline.setMeshPresetTick { [weak self, weak dancer] features, _ in
+            guard let self, let dancer else { return }
+            let playback = self.stemSeriesLock.withLock { self.latestRawPlaybackSeconds }
+            let beat = self.beatSyncLock.withLock { self.latestBeatSyncSnapshot }
+            dancer.ingestClock(
+                playbackSeconds: playback,
+                driftSeconds: Double(beat.driftMs) / 1000,
+                renderTime: Double(features.time),
+                lockState: beat.lockState
+            )
+        }
+    }
+
+    /// Install (or clear) the track's cached grid everywhere it is consumed: the MIR pipeline's drift
+    /// tracker AND Kagura's geometry (KAG.2). Every install site on both paths goes through here
+    /// (VisualizerEngine+Stems), so none can update one and forget the other.
+    func installBeatGrid(_ grid: BeatGrid?, initialDriftMs: Double? = nil) {
+        if let initialDriftMs {
+            mirPipeline.setBeatGrid(grid, initialDriftMs: initialDriftMs)
+        } else {
+            mirPipeline.setBeatGrid(grid)
+        }
+        pushKaguraGrid(grid)
+    }
+
+    /// KAG.2 — copy a grid install (or clear) into Kagura's geometry, whether or not Kagura is
+    /// active, so activating it mid-track finds the track's grid already in place.
+    ///
+    /// The path (local file or streaming) is read on the main actor, where `sessionManager` lives;
+    /// `resetStemPipeline` is not isolated, and the audio router's mode is nil at the local-file
+    /// install moment (between stop and start). A one-runloop hop is harmless: the per-track
+    /// reset never touches the grid, so the order of the two does not matter.
+    private func pushKaguraGrid(_ grid: BeatGrid?) {
+        guard let dancer = kaguraGeometry as? KaguraDancer else { return }
+        let plain = grid.flatMap {
+            KaguraGrid(
+                beats: $0.beats,
+                downbeats: $0.downbeats,
+                beatsPerBar: $0.beatsPerBar,
+                hasBarInformation: $0.hasBarInformation
+            )
+        }
+        Task { @MainActor [weak self] in
+            dancer.setGrid(plain, streaming: self?.sessionManager.currentSource?.isLocalFile != true)
         }
     }
 
