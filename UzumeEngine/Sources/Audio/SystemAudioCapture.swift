@@ -440,19 +440,19 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         }
     }
 
-    #if DEBUG
     /// BUG-139 gate support. The handles are only ever produced by real CoreAudio
     /// calls that need hardware + Screen Recording, so without this the claim/clear
     /// contract cannot be exercised at all and its gate would assert nothing.
     /// Seeds handles ONLY — never destroy what this sets; `destroyTapResources`
     /// on a fabricated aggregate id would call into the HAL with a bogus handle.
+    /// Deliberately NOT `#if DEBUG`: `internal` already confines it to `@testable`
+    /// importers, and a DEBUG gate broke optimized test builds (`swift test -c release`).
     func seedTapResourcesForTesting(aggregate: AudioDeviceID, tap: AudioObjectID) {
         stateLock.withLock {
             aggregateID = aggregate
             tapID = tap
         }
     }
-    #endif
 
     /// Destroy claimed handles. MUST run with no lock held — every call here can
     /// block on the HAL. `nonisolated static` so it cannot reach instance state
