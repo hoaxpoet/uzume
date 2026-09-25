@@ -241,11 +241,26 @@ honest beta read is about 33–35. The plan, lanes, order and per-entry sources 
 [`docs/presets/BETA_SCENE_SLATE_2026-09-24.md`](presets/BETA_SCENE_SLATE_2026-09-24.md) §00; increments are
 recorded in their own rows as they land.
 
+### Lane 1 · Fireflies (slate D1)
+
+| ID | Status | Done-when |
+|---|---|---|
+| **FF.0** look-spike | ✅ 2026-09-24. **Passed on condition** (Matt): *"only if there is future optimization work scoped, because the scene looked cheap … like a sketch vs. a detailed rendering."* Setting **A, the dusk meadow**; **unknown beat clarity stays free**. | The swarm locks to the beat on clear-beat tracks (DYC +0.86 on-beat), stays free at K = 0, the half-beat decoy separates (−0.85), and max Δ luma/frame is 0.015 (gate 0.05). [`docs/presets/fireflies_spike/README.md`](presets/fireflies_spike/README.md) |
+| **FF.R** references | ✅ 2026-09-24. Matt's pick of 9 (*"keep the 9"*); hero `01_macro_afterglow_meadow_treeline.jpg` | 8–12 curated references in `docs/VISUAL_REFERENCES/fireflies/`, **Matt picks the set before any look work** |
+| **BC.1** beat-clarity float (infra, ships alone) | ✅ 2026-09-24 on its own branch `claude/bc-1` (its decision entry lands with that branch; closeout ALL GREEN) | A `StemFeatures._pad14` slot: 1 steady / 0 irregular / 0.5 unknown, written at track change and cleared at session boundaries on both paths |
+| **FF.1** engine port at spike fidelity | ⏳ | Coherence curves match the spike's on the same captures within ±0.1; flash safety measured in the real pipeline |
+| **FF.2** the world | ⏳ | Layered tree line, sky, grass, volumetric mist at ≥ 4 detail scales and ≥ 3 materials; `compare_render.sh` against FF.R; Release frame budget |
+| **FF.3** the light | ⏳ | Firefly bokeh, scatter into the mist, grass occlusion, bloom/ACES/grain; flash safety re-measured; 60 fps at 1080p in Release |
+| **FF.4** M7 + cert | ⏳ | Matt's M7 on the beta playlist; rewatch checks R1–R5 on the real pipeline |
+
+The fidelity bar is a matte-painting-quality dusk, not photoreal grass (README §7.2). If FF.2/FF.3 do not
+reach the reference bar by the October 11 cutoff, Fireflies ships after the beta rather than as a sketch.
+
 ### Lane 4 · Kagura (slate A3)
 
 | ID | Status | Done-when |
 |---|---|---|
-| **KAG.0** look-spike (+ 0b–0h follow-ups) | ✅ 2026-09-24, on `spike/kag-0` (local). **Matt's calls:** look **B** (dots + trails); in-place dances (salsa travels and smears); **half-time twist** on slow songs; **five dances** (twist, cabbage patch, chicken dance, macarena, Egyptian walk); the song's **tempo and energy pick** a three-dance repertoire and the dance choice **follows the song's energy** (no anti-repeat); energy bands calibrated on the beta playlist; `requires_regular_beat` exclusion plus a grid-regularity sway safety net. | Twist and cabbage pulse events land 100 % within ±⅛ beat; five-dance films 59–73 %; the half-beat decoy moves them wholesale. [`docs/presets/kagura_spike/README.md`](presets/kagura_spike/README.md) §0–§11 |
+| **KAG.0** look-spike (+ 0b–0h follow-ups) | ✅ 2026-09-24, PR hoaxpoet/uzume#268 (`spike/kag-0`). **Matt's calls:** look **B** (dots + trails); in-place dances (salsa travels and smears); **half-time twist** on slow songs; **five dances** (twist, cabbage patch, chicken dance, macarena, Egyptian walk); the song's **tempo and energy pick** a three-dance repertoire and the dance choice **follows the song's energy** (no anti-repeat); energy bands calibrated on the beta playlist; `requires_regular_beat` exclusion plus a grid-regularity sway safety net. | Twist and cabbage pulse events land 100 % within ±⅛ beat; five-dance films 59–73 %; the half-beat decoy moves them wholesale. [`docs/presets/kagura_spike/README.md`](presets/kagura_spike/README.md) §0–§11 |
 | **KAG.D** design doc | ✅ 2026-09-24 | [`docs/presets/KAGURA_DESIGN.md`](presets/KAGURA_DESIGN.md): warp, dance choice, exclusion, look, the shipped clip format, the increment plan, grounding levels |
 | **KAG.1** clip bake + data resource (infra, ships alone) | ⏳ next | `tools/kagura/bake_clips.py`, `Renderer/Resources/Kagura/` (about 0.3 MB, tracked), a Swift loader, `SHA256SUMS`, and the CMU entry in `docs/CREDITS.md`. The loader test decodes every clip |
 | **KAG.2** dancer geometry, one dance | ⏳ | `KaguraDancer: ParticleGeometry` with the warp, trails, sway and cold start, twist only. Still sheet + motion gate; a replay pulse-lock test on the route-coverage captures |
@@ -1615,6 +1630,34 @@ and think the ball has a personality."* That is the preset working; it is not to
 only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
+
+### Increment BC.1 — beat clarity reaches the GPU ✅ (2026-09-24, D-257)
+
+**Done-when:** the D-154 beat-regularity flag reaches every shader as one track-scoped float
+(`StemFeatures.beat_clarity01`: 1 steady / 0 irregular / 0.5 unknown). It is written at every track
+change, reset to unknown at session boundaries on both entry paths, and preserved across live stem
+pushes. It is gated and ships alone: no scene reads it yet, and Fireflies FF.1 will be the first.
+
+**Delivered.**
+- **The slot:** float 56, reclaimed from `_pad14` in Swift and in both MSL sites.
+- **Writes:** `RenderPipeline.setBeatClarity(beatIrregular:)` is called from `resetStemPipeline` on
+  every call, identity or not, and from `clearSessionScopedSurfaces()`, which now also clears
+  `currentTrackBeatIrregular`.
+- **Recording and replay:**
+  - `stems.csv` gains a `beatClarity01` tail column.
+  - `SessionReplayHarness` replays a capture older than the column as **unknown, not 0**.
+  - The route-coverage gate lists the field as carried.
+  - `FixtureSessionCaptureGenerator` records unknown, since it has no `TrackProfile`.
+- **New gate:** `CommonLayoutTest` had MSL order parity for `FeatureVector` only. It now checks
+  `StemFeatures` across both MSL sites and pins `beat_clarity01` to float index 55 (Swift byte offset
+  220). Its parser splits statements rather than lines, because `StemFeatures` declares two floats per
+  line. Breaking the preamble on purpose made it fail.
+- **The split:** `StemFeatures.swift` sat at 399 of its 400-line cap, so its `Codable` extension moved
+  unchanged into `StemFeatures+Codable.swift`.
+- **Safety:** old stem-series cache entries (raw memory dumps, stride unchanged at 256) still load with 0
+  in the slot. That's harmless, because every series frame reaches the GPU through `setStemFeatures`,
+  which keeps the installed value. Every existing shader is byte-identical, since the slot was padding
+  and nothing reads it yet.
 
 ### Increment GOLDEN.1 — golden sessions plan against the shipped roster ✅ (2026-09-24)
 

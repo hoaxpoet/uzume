@@ -224,6 +224,8 @@ extension RenderPipeline {
         stemFeaturesLock.withLock {
             var next = features
             next.cachedBassProportion = latestStemFeatures.cachedBassProportion
+            // BC.1 — track-scoped, same contract: only `setBeatClarity` writes it.
+            next.beatClarity01 = latestStemFeatures.beatClarity01
             // IFC.4 (D-177) — instrument-family activity is Layer 5a (preview-
             // derived), updated by `setInstrumentFamilyActivity` on the analysis
             // frame, NOT by live per-frame stem analysis. Preserve it across the
@@ -275,6 +277,18 @@ extension RenderPipeline {
     public func setCachedBassProportion(_ value: Float) {
         stemFeaturesLock.withLock {
             latestStemFeatures.cachedBassProportion = value
+        }
+    }
+
+    /// BC.1 — install the current track's beat clarity (`StemFeatures.beatClarity01`:
+    /// steady 1 / irregular 0 / unknown 0.5) from the D-154 flag. Called on every track
+    /// change from the app layer's `resetStemPipeline` — with `nil` when the track is
+    /// uncached or unidentified — and with `nil` at each session boundary, so a prior
+    /// track's value can never leak across either. Preserved across all subsequent
+    /// `setStemFeatures(_:)` updates until the next call. Thread-safe.
+    public func setBeatClarity(beatIrregular: Bool?) {
+        stemFeaturesLock.withLock {
+            latestStemFeatures.beatClarity01 = StemFeatures.beatClarity01(beatIrregular: beatIrregular)
         }
     }
 
