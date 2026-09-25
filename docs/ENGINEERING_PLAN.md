@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment TESTREL.1 — the engine suite runs optimized ✅ (2026-09-25)
+
+**Delivered.** `swift test -c release --enable-testable-imports --package-path UzumeEngine` now builds and runs the whole suite, so test-derived numbers can be quoted in Release (CLAUDE.md §Build & Test). Two blockers: (1) `SystemAudioCapture.seedTapResourcesForTesting` was `#if DEBUG`, so `SystemAudioCaptureTeardownTests` did not compile optimized — the gate is dropped (`internal` already confines it to `@testable`). (2) Under -O, `PresetSessionReplay`'s async `@main` emitted a weak specialized thunk (`$sIetH_yts5Error_pIegHrzo_TR10async_MainTf3npf_n`) with the same name as the test runner's; the linker coalesced them and the runner's `main` ran the replay CLI ("Executed 0 tests" + its usage). Its `run()` never awaited, so it is now a sync `ParsableCommand`. Recipe in RUNBOOK §Build and Test.
+**Done-when:** ✅ full engine suite green in Debug (2006 Swift Testing / 214 XCTest, 274 s) and optimized (same counts, 63 s). **Caveat:** `--enable-testable-imports` compiles with `-enable-testing`, which inhibits some optimization — near-Release, not the shipped app's exact codegen. Any future test-linked executable must keep a sync `@main`.
+
 ### Increment FF.1 — Fireflies engine port at spike fidelity ✅ (2026-09-25, merged #273)
 
 **Done-when:** the FF.0 swarm runs in the engine and its coherence R(t) and on-beat-vs-true-grid
@@ -1675,6 +1680,11 @@ operational tool rather than a scene (D-074) and so misdescribes it; not used. R
 
 **Matt's option A** (fix the measurement, keep the 10 % rule). **Delivered:** the D-154 gate compares `octaveFoldedMedianBPM` of each grid's beats instead of `BeatGrid.bpm` (`assessBeatIrregularity(grid:drums:)`, used by `StemCache.beatIrregular` and CorpusCensusRunner). The drums grid is analysed at the separator's output rate (44.1 kHz). `PersistentStemCache` schema is v15 (BUG-141 took v14). The census harness separates the whole window. `computeBPM`/`BeatGrid.bpm` are untouched, so there is **no behavioural change to beat sync**. **Measured** (601-track stratified re-run + 150 duplicate pairs): corpus-est flag rate 25.2 % → 12.0 %; copies disagree 34/150 → 6/150; 12 new flags, 3 of them look false. Superstition/Penny Lane are regular; Pyramid Song is still flagged in production. Plain median (BUG140.1's proposal) measured insufficient; the octave fold is what clears the motivating tracks. D-154 amended.
 **Done-when:** ✅ tests + corpus re-run + production-path check (KNOWN_ISSUES BUG-140). ✅ Manual: Matt, session `2026-09-25T14-29-08Z` — *"Membrane is locked on Superstition … looks great!"* (`beatClarity01` = 1.00 throughout, on this branch's pre-renumber v14). **Follow-up:** the stem warm-up sample-rate bug found here became BUG-141, merged #271.
+
+### Increment BUG142.1 — a stale Now Playing poll no longer fires after stop ✅ (2026-09-25)
+
+**Delivered.** BUG-142 was filed from the intermittent CI failure of `trackChange_secondTrack_hasPrevious` (run 36162100751) and fixed in one P2 increment. `StreamingMetadata` gains a `generation` counter bumped under `lock` in `stopObserving()`. A poll writes state or fires only if its generation is still current, checked inside the locked compare. `pollingTask` is `private(set)` so the test can await it.
+**Done-when:** ✅ deterministic reproducer (`stopObserving_whilePollInFlight_firesNoEvent`), fail-before confirmed; ✅ StreamingMetadata suite + full engine suite + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No sleep budgets widened.
 
 ### Increment BUG141.1 — stem analysis at the separator's rate, not the file's ✅ (2026-09-25)
 

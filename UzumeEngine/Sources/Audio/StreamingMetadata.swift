@@ -146,9 +146,12 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
 
     // MARK: - State
 
-    private var pollingTask: Task<Void, Never>?
+    private(set) var pollingTask: Task<Void, Never>?
     private var _currentTrack: TrackMetadata?
     private var lastTrackIdentity: String?
+    /// Bumped by every `stopObserving()`. A poll only writes state or fires if
+    /// the generation it started under is still current (BUG-142).
+    private var generation = 0
     private let lock = NSLock()
 
     /// Polling interval.
@@ -179,13 +182,14 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
 
     public func startObserving() {
         stopObserving()
+        let gen = lock.withLock { generation }
 
         pollingTask = Task { [weak self] in
             guard let self else { return }
             logger.info("Started observing Now Playing metadata via AppleScript")
 
             while !Task.isCancelled {
-                await self.pollNowPlaying()
+                await self.pollNowPlaying(generation: gen)
 
                 do {
                     try await Task.sleep(for: self.pollInterval)
@@ -200,6 +204,7 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
         pollingTask?.cancel()
         pollingTask = nil
         lock.withLock {
+            generation &+= 1
             _currentTrack = nil
             lastTrackIdentity = nil
         }
@@ -208,7 +213,9 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
 
     // MARK: - Polling
 
-    private func pollNowPlaying() async {
+    /// A poll whose `generation` is stale (stop ran while `reader()` was
+    /// suspended) discards its result instead of firing across the boundary.
+    private func pollNowPlaying(generation gen: Int) async {
         let info: NowPlayingInfo?
         if let reader = nowPlayingReader {
             info = await reader()
@@ -221,6 +228,7 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
 
         guard let info else {
             lock.withLock {
+                guard generation == gen else { return }
                 _currentTrack = nil
                 lastTrackIdentity = nil
             }
@@ -243,6 +251,7 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
         )
 
         let (shouldFire, previous) = lock.withLock { () -> (Bool, TrackMetadata?) in
+            guard generation == gen else { return (false, nil) }
             let prev = _currentTrack
             let changed = identity != lastTrackIdentity
             _currentTrack = track
