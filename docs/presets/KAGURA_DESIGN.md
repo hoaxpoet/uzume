@@ -167,8 +167,9 @@ These are Matt's calls [§9–§11]:
     `bass_att` on both paths unless it measures a local-file source that reproduces the spike's picks.
 - **The spike's pick looked one bar AHEAD.** `build_dancer` ranks the smoothed bass envelope over the bar
   *after* the change (`t0 … t0 + bar`). The streaming path cannot see the future, and on the local-file path
-  no `bass_att` exists ahead of the playhead. How the build handles this is a product call (KAG.3 prompt,
-  DECISION-NEEDED): pick from the bar just played on both paths, or look ahead where possible.
+  no `bass_att` exists ahead of the playhead. **Matt, 2026-09-25 (option A): the pick reads the bar just
+  played, identically on both paths.** A louder stretch gets the vigorous dance at most one bar late; local
+  files and streaming behave the same, so the local M7 previews streaming. No read-ahead.
 - **The reference is ten songs.** Re-derive it if the playlist changes. It is a constant with provenance,
   not a tuned value.
 

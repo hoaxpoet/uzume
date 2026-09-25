@@ -3,8 +3,8 @@
 **Objective.** After this session Kagura dances all five dances and chooses between them the way Matt
 approved in the spike, and it is ready for his live look:
 - the song's **tempo and arousal pick a three-dance repertoire** at track start (KAGURA_DESIGN §6 items 1–2);
-- at each clip change the **bar-level bass energy picks** the calm, middle or vigorous dance of the three
-  (§6 item 3; the timing rule is the DECISION-NEEDED below);
+- at each clip change the **bar-level bass energy of the bar just played picks** the calm, middle or
+  vigorous dance of the three (§6 item 3; Matt chose this timing, 2026-09-25 — see DECISION below);
 - **arm reach** swells and settles by at most ±25 % with the smoothed bass (§8);
 - the dancer **sways** through beat-irregular stretches (the per-section grid-CV safety net, §7) and through
   **silence** (§3a);
@@ -116,7 +116,8 @@ already carries all five dances with their pulse maps, allowed levels and vigor.
    - The signal: `bass_att` through a 1.5 s EMA (the spike's envelope), per-bar mean, ranked against the
      song's own distribution. A trailing running rank over the last ~60 s, primed from the first bars, on both
      paths (the §6 correction: no whole-track `bass_att` exists).
-   - The window: per DECISION-NEEDED below (default: the bar just played).
+   - The window: **the bar just played**, on both paths (Matt, 2026-09-25, option A). No read-ahead, not even
+     on local files.
    - Terciles pick calm / middle / vigorous within the repertoire, ordered by vigor. Each dance alternates its
      clips. **No anti-repeat or variety term** (Matt: "follow the song's energy").
    - Clip changes keep KAG.2's rules (bar lines, at most 4 bars, sooner if the pulse map runs out; every 4
@@ -294,7 +295,7 @@ Invoke `closeout`: the 8-part report with the verbatim `Scripts/closeout_evidenc
   app tick's push order).
 - **Status:** "pending live M7". The M7 request for Matt (task 11) goes at the end.
 
-## DECISION-NEEDED
+## DECISION (answered — Matt, 2026-09-25: **A**)
 
 **When the music gets louder, should Kagura switch to a more vigorous dance on that bar, or one bar later?**
 
@@ -309,4 +310,4 @@ Invoke `closeout`: the 8-part report with the verbatim `Scripts/closeout_evidenc
 Dance changes come every two to four bars, so under A a change lags the music by at most one of those bars.
 Under B, local files match the approved films more closely.
 
-**Recommendation: A.** **Default if no reply: A.**
+**Matt chose A.** Build the pick from the bar just played, identically on both paths. Do not read ahead.
