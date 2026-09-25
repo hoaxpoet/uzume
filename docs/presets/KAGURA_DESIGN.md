@@ -91,10 +91,13 @@ located by motion signature and confirmed in trail renders [§5, §7, §8].
 The clips are already turned to a common three-quarter facing (`face_camera`) and re-centred. That is about
 **0.3 MB for all eleven clips**: one `kagura_clips.bin` plus a `kagura_clips.json` manifest.
 
-**Where it lives.** Kagura would be the first preset that ships a non-shader data file [engine survey]. It
-goes in a new `.copy` resource directory on the Presets target (`Presets/Data/Kagura/`) and loads through
-`Bundle.module`. It is **tracked in git**: at 0.3 MB it is far from the ML-weights case (167 MB, delivered as
-a Release asset), and the repo bans LFS for `*.bin` (CLEAN.5.8).
+**Where it lives.** Kagura would be the first scene that ships a non-shader data file [engine survey]. It
+goes in the **Renderer** target, as `Sources/Renderer/Resources/Kagura/` with a `.copy("Resources/Kagura")`
+entry beside the existing `Resources/Fonts`, and loads through Renderer's `Bundle.module`. It belongs there
+because the consumer, `KaguraDancer: ParticleGeometry`, lives in `Renderer/Geometry`, and Renderer and
+Presets are sibling targets (both depend only on `Shared`), so Renderer cannot read a Presets resource. The
+file is **tracked in git**: at about 0.3 MB it is far from the ML-weights case (167 MB, shipped as a Release
+asset), and the repo bans LFS for `*.bin` (CLEAN.5.8).
 
 **Reproducibility.** The raw ASF/AMC files never enter git. `tools/kagura/bake_clips.py` (promoted from the
 spike's loader) downloads the listed trials from CMU, verifies their checksums, cuts and turns the windows,
@@ -255,7 +258,7 @@ This follows the Audio Data Hierarchy:
 
 | ID | Type | Scope | Gate |
 |---|---|---|---|
-| **KAG.1** | infrastructure | `tools/kagura/bake_clips.py` (from the spike), the `Presets/Data/Kagura/` resource, `kagura_clips.bin` / `.json` / `SHA256SUMS`, a Swift loader, and the `docs/CREDITS.md` CMU entry. **No scene.** | A loader test decodes every clip and checks joint count, frame rate, pulse table and facing. The bake round-trips against `SHA256SUMS`. |
+| **KAG.1** | infrastructure | `tools/kagura/bake_clips.py` (from the spike), the `Renderer/Resources/Kagura/` resource, `kagura_clips.bin` / `.json` / `SHA256SUMS`, a Swift loader, and the `docs/CREDITS.md` CMU entry. **No scene.** | A loader test decodes every clip and checks joint count, frame rate, pulse table and facing. The bake round-trips against `SHA256SUMS`. |
 | **KAG.2** | preset | `KaguraDancer: ParticleGeometry`: warp (§5), render (§8), trail texture, a **single fixed dance (twist)**, the sway, and cold start. Registry and table entries. **No dance selection.** | Still sheet + motion gate. A replay-driven **pulse-lock test** on the checked-in route-coverage captures (love_rehab, so_what, there_there). Its threshold is set from KAG.2's own first measurement against the spike's ≥ 90 % twist figure, not assumed. |
 | **KAG.3** | preset | Dance selection (§6), arm reach, the §7 safety net per section, the silence rest (§3a), the sidecar with `requires_regular_beat`, and the `audio_routes` manifest. The arousal-source check (§6) comes first. | `RouteCoverageTests` green. Pulse lock per dance. The repertoire table reproduced on the beta playlist. **M7 on the beta playlist (local), then the streaming pass.** |
 | KAG.4 | certification | Rubric (lightweight), reference set, cert gates. | Cert. |
