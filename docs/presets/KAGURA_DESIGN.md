@@ -1,7 +1,8 @@
 # Kagura — Design
 
-**Status:** design written 2026-09-24 from the KAG.0 spike and Matt's calls on it. Implementation not
-started.
+**Status:** design written 2026-09-24 from the KAG.0 spike and Matt's calls on it. KAG.1 (clip resource)
+shipped 2026-09-25; KAG.2 (the twist, the sway, cold start, look B) built 2026-09-25, pending live M7 at
+KAG.3. What the build settled is in §14.
 **Family:** `dancer` (first member) · **Rubric:** `lightweight` · **Paradigm:** particles (a
 `ParticleGeometry` conformer)
 **Name:** from the mythic origin of *kagura*, Ame-no-Uzume's drummed dance
@@ -238,6 +239,10 @@ in KAG.3.
 | Arm reach ±25 % | `bass_att`, 1.5 s EMA, song-normalised, soft-saturated | `continuous` | ~1.5 s |
 | Sway fallback | grid inter-beat-interval CV over the last 16 beats; lock state (streaming) | `structural` | sections |
 
+**Schema note (KAG.2).** The QG.1 route schema (`PresetDescriptor` `audio_routes` kinds) has **no `grid`
+kind** — only `continuous`, `accent`, `structural` and `gate`. The table above assumed one. KAG.3 must choose
+how the grid-driven rows are declared (or bring a schema change to Matt); KAG.2 declares no routes.
+
 This follows the Audio Data Hierarchy:
 - Beat-locked motion runs only on the cached grid, never on raw onsets.
 - Beat-irregular tracks are excluded (D-154).
@@ -275,7 +280,7 @@ This follows the Audio Data Hierarchy:
 | Grid-CV safety net | **1 — spike**, 61 captures | Per-window in the spike; per-section is unbuilt. |
 | Silence rest | **3 — design assertion** | Not exercised in the spike. M7. |
 | Streaming path | **3 — unmeasured** | The spike was local-file-equivalent only. Drift-tracker lock and preview-based arousal are untested for this scene. |
-| 60 fps at 1080p | **2 — trivially small, unmeasured** | 15 instances plus one trail texture. Measure in Release per CLAUDE.md. |
+| 60 fps at 1080p | **1 — measured (KAG.2)** | Release (`swift build -c release`), 1920×1080, no readback: 0.216 ms GPU median, p95 0.297; 0.018 ms CPU. Debug harness with readback: 2.94 ms, 0.5× the roster median. |
 
 ## 13. Open items for Matt (none block KAG.1)
 
@@ -284,3 +289,56 @@ This follows the Audio Data Hierarchy:
   on.
 - **Library size (R4).** Ten clips will repeat within a long song. Growing the library means more CMU
   windows or a second source, and every one must be watched in motion before it ships.
+
+## 14. What the build settled (KAG.2)
+
+**How `p(t)` is sourced** (`KaguraBeatClock`). The app copies the grid in as plain data (`KaguraGrid`) at
+every `setBeatGrid` site on both paths, and a stateful tick pushes the playback clock every frame.
+- *Local file:* `MIRPipeline.elapsedSeconds` alone (BUG-087). `PlaybackClockSmoother` was **not** live on this
+  path without a stem series (`publishStemSeriesFrame` returns before sampling it), so Kagura runs its own.
+- *Streaming:* `elapsedSeconds + drift`, the same sum the drift tracker's relative beat times use; the
+  dancer sways until `lockState ≥ 1` (§3a).
+- The push goes through the smoother and then a render-rate phase lock (advance 1 s per render second,
+  correct 10 % toward the smoothed reading per frame). The smoother alone first sees each coarse tick up
+  to a frame late: on the 43 Hz captures its per-frame steps ranged 0.38–1.5× nominal. With the lock:
+  0.89–1.10×.
+- **The one-frame lag.** The tick runs after `particles.update`, so each push is stamped with the render
+  clock and extrapolated in `update`. Measured lag against the true playback position: 6.9 ms mean,
+  8.6 ms max (half a frame is the discovery delay of the coarse clock, not the tick order).
+
+**The causal leash.** The spike's leash is a zero-phase Gaussian (σ 2 s) of the pelvis floor path, which
+needs the future. The clips are already centred on their mean pelvis (KAG.1), so the only drift is the
+handoff offsets accumulating. Each offset decays to zero with τ = 2 s. Foot-slide against the spike on
+the same three captures (the spike's own `foot_slide`, 30 fps):
+
+| Capture | Build overall / outside / inside crossfades (cm/s) | Spike overall / outside / inside |
+|---|---|---|
+| love_rehab | 21.9 / 21.8 / 22.6 | 21.3 / 21.0 / 22.0 |
+| so_what | 25.2 / 25.1 / 26.3 | 32.2 / 29.2 / 38.9 |
+| there_there | 23.1 / 23.3 / 21.4 | 26.0 / 25.4 / 28.8 |
+
+The pelvis wanders more than under the spike's leash: x reaches 0.17–0.18 m (0.27 m on one decoy run)
+against ±0.09 m, because a causal decay recentres after the handoff rather than before it. Over five
+minutes at 120 BPM it stays inside ±0.23 m.
+
+**Pulse lock** (`KaguraPulseLockReplayTests`, the spike's detector on the dancer's output): 100 % within
+±⅛ beat on love_rehab / so_what / there_there (n 44 / 51 / 48, chance 25 %); the +½-beat decoy 0 % on
+the beat, 100 % on the "and". The spike on the same captures: 100 % (n 40 / 43 / 43) and the same decoy
+split. The assertion is 95 %.
+
+**Two trail defects the frame-rate test found** (`KaguraTrailDecayTests`), both fixed before the look was
+judged:
+- A frame's segment lands after that frame's decay, so it is under-decayed by half a frame (+6.6 % trail
+  energy at 30 fps against 60, −3.6 % at 120). The deposit is scaled by the frame's own `1 − decay` and
+  normalised to the spike's 30 fps frame, which keeps the spike's brightness.
+- Joint positions in a shared per-frame buffer handed every in-flight frame the newest segment, so the
+  trail was one dash per joint. They go through `setVertexBytes`.
+
+**Frame cost.** Release (`swift build -c release`, a throwaway timing package: `swift test -c release` does not
+run in this package — see the KAG.2 closeout), 1920×1080, no readback: 0.216 ms GPU median (p95 0.297),
+0.018 ms CPU encode; Ricercar through the same loop 0.480 ms.
+
+**Grid changes mid-dance** (a streaming live analysis replacing the grid, or a track change) fade to the
+sway over one nominal beat, and the dancer rejoins at the new grid's next bar line. Clip changes with the
+bar declined fall on a 4-beat lattice, at most 4 such "bars" apart (the spike's `beats[::bpb]` rule).
+
