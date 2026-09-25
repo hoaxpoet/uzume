@@ -320,6 +320,35 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
+## CMU Graphics Lab Motion Capture Database — Kagura's dance clips
+
+**Used in:** `UzumeEngine/Sources/Renderer/Resources/Kagura/` (`kagura_clips.bin`,
+`kagura_clips.json`, `SHA256SUMS`), decoded by `KaguraClipLibrary` (KAG.1), and baked by
+`tools/kagura/bake_clips.py`.
+
+**Source:** Carnegie Mellon University Graphics Lab, *CMU Graphics Lab Motion Capture
+Database* — http://mocap.cs.cmu.edu/
+
+**Specific artifact:** ASF/AMC trials `05_12`, `15_04`, `15_05`, `18_15`, `20_01` and
+`143_35` (with the subject skeletons `05.asf`, `15.asf`, `18.asf`, `20.asf`, `143.asf`),
+retrieved 2026-09-25. Their SHA-256s are pinned in `tools/kagura/cmu_sources.sha256`.
+
+**What ships:** only derived tracks, never the capture files. For each of ten windows cut
+from those trials: 15 joint positions (the Johansson point-light set) per frame, resampled
+to 60 fps, turned to a common facing, re-centred and stored as float16, plus pulse events
+and a pulse-index map detected from the motion. The raw ASF/AMC files are not in the
+repository; the bake script downloads and verifies them.
+
+**Permission:** the database FAQ states: *"The motion capture data may be copied, modified,
+or redistributed without permission."*
+
+**Requested acknowledgement:**
+
+> The data used in this project was obtained from mocap.cs.cmu.edu.
+> The database was created with funding from NSF EIA-0196217.
+
+---
+
 ## Other dependencies
 
 System frameworks (Apple): Metal, MetalKit, MetalPerformanceShadersGraph,
@@ -340,6 +369,8 @@ If you ship a derivative of Uzume, you must:
 1b. Preserve the CC BY-NC-SA 3.0 notice for nimitz's "Auroras" in
    `AuroraVeil.metal` and in this file, and do not distribute that file
    commercially — it is not MIT.
+1c. Keep the CMU Graphics Lab Motion Capture Database acknowledgement
+   above with Kagura's bundled clip data.
 2. Make this `CREDITS.md` (or an equivalent compilation of the
    notices) reachable from a user-visible surface — e.g. an "About"
    panel — alongside license text or hyperlinks.
