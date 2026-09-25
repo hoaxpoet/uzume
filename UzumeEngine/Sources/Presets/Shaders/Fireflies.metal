@@ -28,7 +28,10 @@
 // the breath sinks and the wind and mist slow but keep moving — it coasts, never black.
 //
 // buffer(6) is `FFWorldGPU` (FirefliesWorld.swift). A ZEROED buffer (a generic harness that
-// binds a blank slot 6) falls back to the rest camera and `features.time`.
+// binds a blank slot 6) falls back to the rest camera, STILL: wind phase and mist drift 0. It must
+// not animate on `features.time` — the world never reads the harness clock in production, and a
+// fallback that did made `PresetAcceptanceTests`' beat-vs-continuous check measure 2 s of wind
+// as "beat response" (FF.2: 49.5 vs a 47.1 bound, from a fragment that reads no audio at all).
 
 struct FFWorld {
     float4 cam_pos;        // xyz, w = tan(half vertical FOV)
@@ -168,8 +171,8 @@ fragment float4 fireflies_world_fragment(VertexOut in [[stage_in]],
         up = cross(fwd, right);
         tan_y = tan(20.0 * 3.14159265 / 180.0);
         aspect = features.aspect_ratio > 0.0 ? features.aspect_ratio : 16.0 / 9.0;
-        t = features.time;
-        mist_drift = 0.7 * features.time;
+        t = 0.0;
+        mist_drift = 0.0;
         breath = 0.5;
     }
     float2 ndc = float2(in.uv.x * 2.0 - 1.0, 1.0 - in.uv.y * 2.0);
