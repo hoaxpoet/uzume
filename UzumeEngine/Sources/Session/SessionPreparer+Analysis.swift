@@ -85,10 +85,12 @@ extension SessionPreparer {
         let stemWaveforms = result.stemWaveforms
 
         // Step 3: Multi-frame AGC warmup → StemFeatures snapshot.
+        // BUG-141: the stems are in the SEPARATOR's time base (44.1 kHz), not the preview's.
+        // At the file's rate a 48 kHz file stepped the warmup at 46.9 fps through 43.1 fps audio.
         let stemFeatures = probe.measure(PrepStage.stemWarmup) {
             warmUpAndAnalyze(
                 stemWaveforms: stemWaveforms,
-                sampleRate: Float(preview.sampleRate),
+                sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate),
                 analyzer: analyzer
             )
         }
