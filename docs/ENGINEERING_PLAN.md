@@ -1616,6 +1616,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG140.1 — why the beat-irregularity gate flags Superstition, diagnosed ✅ (2026-09-24)
+
+**Delivered (diagnosis only — no behaviour change, no threshold change).** BUG-140 filed with two root causes: (1) the drums-grid BPM the D-154 gate compares comes from `BeatGridResolver.computeBPM`, which averages IOIs across two octaves (BUG-134 fault 1, still unfixed in `computeBPM`), so Superstition's 138.25 is an eighth/quarter average, not a 4:3 or 3:2 relation; (2) on the local-file path the drums grid is analysed at `preview.sampleRate` though stems are 44.1 kHz — every 48 kHz file's drums BPM is scaled ×1.088. Corpus: 34 % flagged (July census), 42 % of flagged duplicate recordings disagree with their other copy; ratio folding rejected (no metrical peak in the data; un-flags Mingus). Median-IOI estimator measured on a 602-track re-run: corpus-est flag rate 27.7 % → 17.1 %. Instrumentation: `CENSUS_DUMP_BEATS=<dir>` on `CorpusCensusRunner`. Also fixed the stale `TrackProfile.beatIrregular` comment (Membrane declares `requires_regular_beat` since PR.26).
+**Done-when:** ✅ KNOWN_ISSUES BUG-140 with artifacts + verification criteria. **Next:** BUG140.2 fix (median estimator + drums-grid sample rate) — awaits Matt's call; needs a BeatBench before/after (all five suites).
+
 ### Increment BC.1 — beat clarity reaches the GPU ✅ (2026-09-24, D-257)
 
 **Done-when:** the D-154 beat-regularity flag reaches every shader as one track-scoped float
