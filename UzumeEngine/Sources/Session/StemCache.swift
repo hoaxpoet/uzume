@@ -221,11 +221,7 @@ public final class StemCache: @unchecked Sendable {
             (storage[identity]?.beatGrid, storage[identity]?.drumsBeatGrid)
         }
         guard let grid else { return nil }
-        return assessBeatIrregularity(
-            gridBPM: grid.bpm,
-            drumsBPM: drums?.bpm ?? 0,
-            barConfidence: grid.barConfidence
-        )
+        return assessBeatIrregularity(grid: grid, drums: drums)
     }
 
     /// Return the full `CachedTrackData` bundle for playback, or nil if uncached.
