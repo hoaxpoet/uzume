@@ -1616,10 +1616,10 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
-### Increment BUG140.2 — the beat-irregularity gate measures the tempo it means ✅ (2026-09-25; manual check outstanding)
+### Increment BUG140.2 — the beat-irregularity gate measures the tempo it means ✅ (2026-09-25; live check passed)
 
 **Matt's option A** (fix the measurement, keep the 10 % rule). **Delivered:** the D-154 gate compares `octaveFoldedMedianBPM` of each grid's beats instead of `BeatGrid.bpm` (`assessBeatIrregularity(grid:drums:)`, used by `StemCache.beatIrregular` and CorpusCensusRunner). The drums grid is analysed at `StemSeparator.modelSampleRate`. `PersistentStemCache` schema is v14. The census harness separates the whole window. `computeBPM`/`BeatGrid.bpm` are untouched, so there is **no behavioural change to beat sync**. **Measured** (601-track stratified re-run + 150 duplicate pairs): corpus-est flag rate 25.2 % → 12.0 %; copies disagree 34/150 → 6/150; 12 new flags, 3 of them look false. Superstition/Penny Lane are regular; Pyramid Song is still flagged in production. Plain median (BUG140.1's proposal) measured insufficient; the octave fold is what clears the motivating tracks. D-154 amended.
-**Done-when:** ✅ tests + corpus re-run + production-path check (KNOWN_ISSUES BUG-140). ⏳ Manual: Membrane on Superstition eligible and locked. **Follow-up filed:** stem warm-up uses the file rate on 44.1 kHz stems (same class, affects `stemEnergyBalance`).
+**Done-when:** ✅ tests + corpus re-run + production-path check (KNOWN_ISSUES BUG-140). ✅ Manual: Matt, session `2026-09-25T14-29-08Z` — *"Membrane is locked on Superstition … looks great!"* (`beatClarity01` = 1.00 throughout, cache v14). **Follow-up filed:** stem warm-up uses the file rate on 44.1 kHz stems (same class, affects `stemEnergyBalance`).
 
 ### Increment BUG140.1 — why the beat-irregularity gate flags Superstition, diagnosed ✅ (2026-09-24)
 
