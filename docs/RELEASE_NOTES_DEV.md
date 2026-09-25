@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-25-214737] BUG-147 — a planner seed reproduces its plan in any process
+
+The seeded planner noise (D-047) hashed preset ids with `String.hashValue`, which Swift randomizes per launch, so the same seed planned differently in every process. Users never saw it, because the app picks a fresh random seed for each plan and each Regenerate. It did mean a logged seed could not be replayed and seeded offline measurements (BUG-144) were not reproducible. The noise now uses FNV-1a over the id's UTF-8 bytes, and the scorer sums stem affinities in sorted order instead of `Set` order. `NearTieSamplingTests.pinnedAcrossProcesses` pins a seeded plan in source. Every nonzero-seed plan changes once; seed 0 is unchanged.
+
 ### [dev-2026-09-25-170143] BUG-142 — no track-change event after streaming metadata stops
 
 A Now Playing poll that was still waiting on Music/Spotify when observation stopped fired a track-change event (with no previous track) afterwards, and set `currentTrack` again. This showed up as an intermittent CI failure (3 events where the test expected 2). A generation counter bumped under the lock at stop now makes a stale poll drop its result. A deterministic test parks the reader across a stop; it failed every time before the fix. Test sleep budgets are unchanged.
