@@ -218,7 +218,11 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       grids covering ~18 % of a track. Same reasoning as v12 in the
     ///                       other direction: a grid is data, and changing the analysis that
     ///                       produces it does not reach anything already cached.
-    public static let currentSchemaVersion: Int = 13
+    ///   v14 (BUG-140) — the drums-stem grid was analysed at the FILE's sample rate though the
+    ///                       stems are at the separator's 44.1 kHz, so every non-44.1 kHz v13
+    ///                       entry holds a time-scaled drums grid (48 kHz: tempo x1.088) that
+    ///                       feeds the D-154 beat-irregularity gate. Data again — re-analyse.
+    public static let currentSchemaVersion: Int = 14
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

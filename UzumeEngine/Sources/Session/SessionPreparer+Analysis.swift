@@ -187,9 +187,12 @@ extension SessionPreparer {
 
         let drumsBeatGrid: BeatGrid
         if let gridAnalyzer = beatGridAnalyzer, stemWaveforms.count > 1 {
+            // BUG-140: stems come back at the separator's model rate, not the preview's.
+            // Passing `preview.sampleRate` scaled every 48 kHz local file's drums tempo
+            // by 48000/44100 = 1.088 (and a 96 kHz file's by 2.18).
             drumsBeatGrid = gridAnalyzer.analyzeBeatGrid(
                 samples: stemWaveforms[1],
-                sampleRate: Double(preview.sampleRate),
+                sampleRate: Double(StemSeparator.modelSampleRate),
                 wholeTrack: wholeTrackAudio
             )
         } else {
