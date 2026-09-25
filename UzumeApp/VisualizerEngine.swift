@@ -335,6 +335,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// CPU wave field serialized into one continuous path (D-097, MEN.2a).
     var meniscusGeometry: (any ParticleGeometry)?
 
+    /// The point-light dancer for the Kagura preset — `KaguraDancer` (D-097, KAG.2). Fed the
+    /// cached grid on every install (`installBeatGrid`) and the playback clock by its tick.
+    var kaguraGeometry: (any ParticleGeometry)?
+
     /// Shader library for creating post-process chains on preset switch.
     let shaderLibrary: Renderer.ShaderLibrary
 
@@ -988,6 +992,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         )
         self.meniscusGeometry = Self.makeMeniscusGeometry(
             context: ctx, library: lib, spectrum: fft.magnitudeBuffer)
+        self.kaguraGeometry = Self.makeKaguraGeometry(context: ctx, library: lib)
         self.moodClassifier = classifier
         self.stemAnalyzer = analyzer
         self.stemSeparator = sep
@@ -1418,6 +1423,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             "Meniscus": meniscusGeometry,
             "Stave": staveGeometry,
             "Alfvén": alfvenSolver,
+            "Kagura": kaguraGeometry,
         ]
         return table[name].flatMap { $0 }
     }
@@ -1464,6 +1470,24 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         }
         logger.info("Witchlight created: \(WitchlightConfiguration().beadCapacity)-bead harmonic stroke")
         return stroke
+    }
+
+    /// Build the point-light dancer for the Kagura preset (`KaguraDancer` +
+    /// `Renderer/Shaders/Kagura.metal`, KAG.2). Returns `any ParticleGeometry` (D-097, siblings
+    /// not subclasses). Decodes the bundled clip library (`KaguraClipLibrary.shared()`, KAG.1).
+    private static func makeKaguraGeometry(
+        context: MetalContext,
+        library: Renderer.ShaderLibrary
+    ) -> (any ParticleGeometry)? {
+        do {
+            let dancer = try KaguraDancer(
+                device: context.device, library: library.library, pixelFormat: context.pixelFormat)
+            logger.info("Kagura created: point-light dancer, twist (KAG.2)")
+            return dancer
+        } catch {
+            logger.error("Kagura geometry failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// Build the spectral dispersion for the Stave preset (`StaveTrace` +

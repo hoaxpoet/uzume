@@ -41,7 +41,10 @@ public enum ParticleGeometryRegistry {
         // pseudo-spectral MHD solver that owns a compute pipeline and renders
         // its own field. It uses the conformer slot because that is the only
         // seam where a preset gets a command buffer and a draw of its own.
-        "Alfvén"
+        "Alfvén",
+        // KAG.2 — the point-light dancer (`KaguraDancer`): CPU choreography + a geometry-owned
+        // trail texture, drawn fullscreen in the particles pass.
+        "Kagura"
     ]
 }
 
@@ -69,6 +72,10 @@ public enum StatefulRuntimeRegistry {
         // PR.21 — Nebula is the first `direct` preset with a state buffer. Its ring's
         // peak-hold needs the previous frame's bands, which nothing on the direct path
         // carries: `SpectralHistoryBuffer` holds MIR scalars, not spectra.
-        "Nebula"
+        "Nebula",
+        // KAG.2 — Kagura's geometry needs the cached beat grid and the playback clock, neither of
+        // which `ParticleGeometry.update` carries. The tick pushes the clock (stamped with the render
+        // clock) every frame; grid installs push the grid (VisualizerEngine+Presets).
+        "Kagura"
     ]
 }

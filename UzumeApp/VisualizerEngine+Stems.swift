@@ -582,7 +582,7 @@ extension VisualizerEngine {
             guard let self else { return }
             let replacedExisting = self.mirPipeline.liveDriftTracker.hasGrid
             let trackTitle = self.currentTrack?.title ?? "unknown"
-            self.mirPipeline.setBeatGrid(grid)
+            self.installBeatGrid(grid)
             let replaceNote = replacedExisting ? " (replaced existing grid)" : ""
             self.logger_liveBeat(
                 "BEAT_GRID_INSTALL: source=liveAnalysis, track='\(trackTitle)', " +
@@ -709,10 +709,7 @@ extension VisualizerEngine {
             mirPipeline.setLoudnessProfile(cached.loudnessProfile)
             let installGrid = octaveCorrectedGrid(cached.beatGrid, title: identity.title)
             // BUG-007.8: pass per-track grid-vs-onset offset as initial drift bias.
-            mirPipeline.setBeatGrid(
-                installGrid.offsetBy(0),
-                initialDriftMs: cached.gridOnsetOffsetMs
-            )
+            installBeatGrid(installGrid.offsetBy(0), initialDriftMs: cached.gridOnsetOffsetMs)
             logCachedInstall(cached: cached, title: identity.title, replacedExisting: replacedExisting)
         } else {
             pipeline.setStemFeatures(.zero, live: false)   // BUG-064: not-live until convergence
@@ -724,7 +721,7 @@ extension VisualizerEngine {
             // `FO_SPIKE_BASELINE_PIVOT` in `FerrofluidOcean.metal`.
             pipeline.setCachedBassProportion(0.15)
             mirPipeline.setLoudnessProfile(nil)   // DYN.1c: no cache entry → fixed surge band
-            mirPipeline.setBeatGrid(nil)
+            installBeatGrid(nil)
             let trackDesc = identity.map { "'\($0.title)'" } ?? "unknown"
             logger.info(
                 "BEAT_GRID_INSTALL: source=none, track=\(trackDesc) — no cache entry, live inference will be allowed"

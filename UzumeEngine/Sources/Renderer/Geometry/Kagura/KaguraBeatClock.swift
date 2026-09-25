@@ -118,8 +118,9 @@ public struct KaguraBeatClock: Sendable {
     public private(set) var grid: KaguraGrid?
     /// Bumped on every `setGrid`, so a consumer can tell a replaced grid from the same one.
     public private(set) var gridGeneration = 0
-    /// Streaming path: the dancer waits for the drift tracker's lock before dancing (§3a).
-    public private(set) var requiresLock = false
+    /// Streaming path: the position adds the drift tracker's drift, and the dancer waits for its
+    /// lock before dancing (§3a). Local-file path: the playback clock alone (BUG-087).
+    public private(set) var streaming = false
     /// Drift-tracker lock state as the app publishes it (0 unlocked, 1 locking, 2 locked).
     public private(set) var lockState = 0
 
@@ -132,17 +133,19 @@ public struct KaguraBeatClock: Sendable {
 
     public init() {}
 
-    /// Install (or clear, with `nil`) the grid. `requiresLock` is true on the streaming path.
-    public mutating func setGrid(_ grid: KaguraGrid?, requiresLock: Bool) {
+    /// Install (or clear, with `nil`) the grid, and say which path it came from.
+    public mutating func setGrid(_ grid: KaguraGrid?, streaming: Bool) {
         self.grid = grid
-        self.requiresLock = requiresLock
+        self.streaming = streaming
         gridGeneration &+= 1
     }
 
-    /// Push this frame's playback position (seconds; streaming adds the drift) and the lock
-    /// state, stamped with the render clock (`FeatureVector.time`).
-    public mutating func ingest(playbackSeconds: Double, renderTime: Double, lockState: Int) {
-        let target = smoother.position(rawSeconds: playbackSeconds, now: renderTime)
+    /// Push this frame's playback clock, the drift tracker's drift (seconds; added on the streaming
+    /// path only, as its relative beat times add it) and lock state, stamped with the render clock
+    /// (`FeatureVector.time`).
+    public mutating func ingest(playbackSeconds: Double, driftSeconds: Double = 0, renderTime: Double, lockState: Int) {
+        let raw = streaming ? playbackSeconds + driftSeconds : playbackSeconds
+        let target = smoother.position(rawSeconds: raw, now: renderTime)
         if let predicted = self.playbackSeconds(atRenderTime: renderTime),
            abs(target - predicted) < PlaybackClockSmoother.maxDeadReckonSeconds {
             // Locked: never backwards, corrected a tenth of the way per frame.
@@ -176,5 +179,5 @@ public struct KaguraBeatClock: Sendable {
     }
 
     /// Whether the dancer may dance: a grid, and on the streaming path a lock (`lockState ≥ 1`).
-    public var dancePermitted: Bool { grid != nil && (!requiresLock || lockState >= 1) }
+    public var dancePermitted: Bool { grid != nil && (!streaming || lockState >= 1) }
 }

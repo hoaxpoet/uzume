@@ -100,6 +100,7 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     public var activeParticleFraction: Float = 1.0
 
     private let device: MTLDevice
+    private let clips: KaguraClipLibrary
     private var choreographer: KaguraChoreographer
     private let clockLock = NSLock()
     private var clock = KaguraBeatClock()
@@ -132,6 +133,7 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
         let lib = try clips ?? KaguraClipLibrary.shared()
         guard let choreographer = KaguraChoreographer(library: lib) else { throw KaguraError.clipsUnavailable }
         self.device = device
+        self.clips = lib
         self.choreographer = choreographer
         jointCount = lib.jointNames.count
 
@@ -167,15 +169,20 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
 
     // MARK: Clock + grid input (the app's push; thread-safe)
 
-    /// Install (or clear) the grid. `requiresLock` is true on the streaming path (§3a).
-    public func setGrid(_ grid: KaguraGrid?, requiresLock: Bool) {
-        clockLock.withLock { clock.setGrid(grid, requiresLock: requiresLock) }
+    /// Install (or clear) the grid; `streaming` selects the clock source and the lock gate (§3a).
+    public func setGrid(_ grid: KaguraGrid?, streaming: Bool) {
+        clockLock.withLock { clock.setGrid(grid, streaming: streaming) }
     }
 
-    /// Push this frame's playback position and lock state, stamped with the render clock.
-    public func ingestClock(playbackSeconds: Double, renderTime: Double, lockState: Int) {
+    /// Push this frame's playback clock, drift and lock state, stamped with the render clock.
+    public func ingestClock(playbackSeconds: Double, driftSeconds: Double = 0, renderTime: Double, lockState: Int) {
         clockLock.withLock {
-            clock.ingest(playbackSeconds: playbackSeconds, renderTime: renderTime, lockState: lockState)
+            clock.ingest(
+                playbackSeconds: playbackSeconds,
+                driftSeconds: driftSeconds,
+                renderTime: renderTime,
+                lockState: lockState
+            )
         }
     }
 
@@ -183,6 +190,16 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     /// grid fades the dancer to the sway; it rejoins at the new grid's next bar line).
     public func reset() {
         clockLock.withLock { clock.resetClock() }
+    }
+
+    /// Preset activation: start from the sway with an empty trail and no clock history, so a
+    /// dance and a clock left over from an earlier activation are never resumed minutes stale.
+    /// The installed grid is kept (it belongs to the track, not the activation).
+    public func restart() {
+        clockLock.withLock { clock.resetClock() }
+        if let fresh = KaguraChoreographer(library: clips) { choreographer = fresh }
+        lastPixels = nil
+        clearTrail()
     }
 
     // MARK: ParticleGeometry
