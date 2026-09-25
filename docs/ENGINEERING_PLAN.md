@@ -241,6 +241,21 @@ honest beta read is about 33–35. The plan, lanes, order and per-entry sources 
 [`docs/presets/BETA_SCENE_SLATE_2026-09-24.md`](presets/BETA_SCENE_SLATE_2026-09-24.md) §00; increments are
 recorded in their own rows as they land.
 
+### Lane 1 · Fireflies (slate D1)
+
+| ID | Status | Done-when |
+|---|---|---|
+| **FF.0** look-spike | ✅ 2026-09-24. **Passed on condition** (Matt): *"only if there is future optimization work scoped, because the scene looked cheap … like a sketch vs. a detailed rendering."* Setting **A, the dusk meadow**; **unknown beat clarity stays free**. | The swarm locks to the beat on clear-beat tracks (DYC +0.86 on-beat), stays free at K = 0, the half-beat decoy separates (−0.85), and max Δ luma/frame is 0.015 (gate 0.05). [`docs/presets/fireflies_spike/README.md`](presets/fireflies_spike/README.md) |
+| **FF.R** references | ✅ 2026-09-24. Matt's pick of 9 (*"keep the 9"*); hero `01_macro_afterglow_meadow_treeline.jpg` | 8–12 curated references in `docs/VISUAL_REFERENCES/fireflies/`, **Matt picks the set before any look work** |
+| **BC.1** beat-clarity float (infra, ships alone) | ✅ 2026-09-24 on its own branch `claude/bc-1` (its decision entry lands with that branch; closeout ALL GREEN) | A `StemFeatures._pad14` slot: 1 steady / 0 irregular / 0.5 unknown, written at track change and cleared at session boundaries on both paths |
+| **FF.1** engine port at spike fidelity | ⏳ | Coherence curves match the spike's on the same captures within ±0.1; flash safety measured in the real pipeline |
+| **FF.2** the world | ⏳ | Layered tree line, sky, grass, volumetric mist at ≥ 4 detail scales and ≥ 3 materials; `compare_render.sh` against FF.R; Release frame budget |
+| **FF.3** the light | ⏳ | Firefly bokeh, scatter into the mist, grass occlusion, bloom/ACES/grain; flash safety re-measured; 60 fps at 1080p in Release |
+| **FF.4** M7 + cert | ⏳ | Matt's M7 on the beta playlist; rewatch checks R1–R5 on the real pipeline |
+
+The fidelity bar is a matte-painting-quality dusk, not photoreal grass (README §7.2). If FF.2/FF.3 do not
+reach the reference bar by the October 11 cutoff, Fireflies ships after the beta rather than as a sketch.
+
 ## Phase PR — Preset review remediation ⏸ superseded by Phase BETA (Matt, 2026-09-24; D-255) (opened 2026-09-04 from Matt's full-roster review, scope calls below)
 
 Matt watched the roster end to end against **David Bowie — *Low*** (local FLAC,
