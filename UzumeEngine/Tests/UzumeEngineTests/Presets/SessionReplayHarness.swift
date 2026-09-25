@@ -245,6 +245,10 @@ struct SessionReplayHarness {
             s.brassActivityDev = g("brassActivityDev")
             s.woodwindsActivityDev = g("woodwindsActivityDev")
             s.percussionActivityDev = g("percussionActivityDev")
+            // BC.1 — a capture older than the column says nothing about the beat: replay it
+            // as UNKNOWN, never as the 0 (= irregular) a missing cell would otherwise give.
+            s.beatClarity01 = index["beatClarity01"] == nil
+                ? StemFeatures.beatClarityUnknown : g("beatClarity01")
             out.append(s)
         }
         return out

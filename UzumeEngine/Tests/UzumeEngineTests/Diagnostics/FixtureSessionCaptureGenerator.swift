@@ -202,6 +202,9 @@ struct FixtureSessionCaptureGenerator {
             features.woodwindsActivityDev = family[.woodwinds].dev
             features.percussionActivity = family[.percussion].smoothed
             features.percussionActivityDev = family[.percussion].dev
+            // BC.1 — the generator has no TrackProfile, so it cannot know the D-154 flag.
+            // Record UNKNOWN rather than the struct default 0, which reads as irregular.
+            features.beatClarity01 = StemFeatures.beatClarityUnknown
             rows.append(SessionRecorder.csvRow(
                 stems: features, frame: frame, wallclock: Double(frame) / Double(fps)))
             frame += 1

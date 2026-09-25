@@ -101,7 +101,8 @@ This ordering is the most important design rule in the project. Continuous-energ
 - Floats 41–42: MV-3c vocal pitch (`vocalsPitchHz`, `vocalsPitchConfidence`).
 - Float 43: `drumsEnergyDevSmoothed` (D-127). Float 44: `cachedBassProportion` (CSP.3). Floats 45–47: FFO aurora hue / punch / orbit (`auroraPalettePhase`, `totalEnergySmoothed`, `auroraOrbitAzimuth`).
 - Floats 48–55: IFC.4 / D-177 instrument-family activity — `{strings,brass,woodwinds,percussion}{Activity,ActivityDev}`. `*Activity` = smoothed absolute; `*ActivityDev` = positive D-026 deviation (the trigger). Sampled from the preview-clip PANNs sweep by playback position; zero when no cached series. Renderer-transient (excluded from Codable).
-- Floats 56–64: padding.
+- Float 56: BC.1 `beatClarity01` — the track's D-154 beat regularity, **1 steady / 0 irregular / 0.5 unknown**. Track-scoped (installed at track change by `RenderPipeline.setBeatClarity(beatIrregular:)`, reset to unknown at session boundaries, preserved across live stem pushes); renderer-transient (excluded from Codable).
+- Floats 57–64: padding.
 
 Rule: `base_zoom` and `base_rot` (continuous energy) should be 2–4× larger than `beat_zoom` and `beat_rot` (onset pulses).
 
@@ -308,7 +309,7 @@ Matt's call, "stems on time" over "jank-free".
 
 - `video.mp4` — H.264 capture of the rendered output, throttled to 30 fps. Writer is locked once the drawable size has been observed for 30 consecutive same-size frames; later frames at a different size are skipped (preventing corner-rendered video from transient launch-time drawable sizes). MetalView sets `framebufferOnly = false` so the drawable is blit-readable.
 - `features.csv` — per-frame `FeatureVector` (22 columns: bass/mid/treble, 6-band, beat onsets, spectral, valence/arousal, accumulatedAudioTime).
-- `stems.csv` — per-frame `StemFeatures` (vocals/drums/bass/other × {energy, band0, band1, beat, energyRel/Dev, onsetRate, centroid, attackRatio, energySlope}; plus vocalsPitchHz/Confidence).
+- `stems.csv` — per-frame `StemFeatures` (vocals/drums/bass/other × {energy, band0, band1, beat, energyRel/Dev, onsetRate, centroid, attackRatio, energySlope}; plus vocalsPitchHz/Confidence, the IFC.4 family activity, and BC.1 `beatClarity01` as the tail column).
 - `stems/<NNNN>_<title>/{drums,bass,vocals,other}.wav` — 16-bit mono PCM dump of each stem-separation cycle output, listenable in any audio editor.
 - `session.log` — startup banner (recorder version + macOS + GPU + hostname), state transitions (signal `.active/.suspect/.silent/.recovering`), track changes, preset changes, video-writer locked dimensions, and any frame-skip reasons.
 
@@ -859,6 +860,7 @@ UzumeEngine/
     StemFeatureSeries       → LFSTEM.1 pre-analysed stem features in playback order: `frames` on a uniform grid of `hopSeconds` (the 1024-sample analysis hop, ~23 ms — the separation period would flatten the transients accent routes read) plus `sample(atPlaybackSeconds:)`, nearest-frame and clamping past the end. Local-file only, `.empty` everywhere else — a streaming tap has no future to analyse, the same asymmetry `LoudnessProfile` carries; `sample` returns nil on an empty series so callers fall back to live separation. Built by `SessionPreparer.analyzeStemSeries`.
     AnalyzedFrame           → Timestamped container: AudioFrame + FFTResult + StemData + FeatureVector + EmotionalState + StructuralPrediction.
     BeatSyncSnapshot        → Per-frame beat-sync diagnostic snapshot (9 fields: barPhase01, beatsPerBar, beatInBar, isDownbeat, sessionMode, lockState, gridBPM, playbackTimeS, driftMs). CLAUDE.md §Defect Handling load-bearing artifact for the `dsp.beat` domain. NSLock-guarded on VisualizerEngine.
+    StemFeatures+Codable    → The on-disk `Codable` encoding of `StemFeatures` for `PersistentStemCache` (LF.3, D-130): floats 1–44 only; the renderer-transient floats 45–56 (incl. BC.1 `beatClarity01`) and the padding are excluded. Split from `StemFeatures.swift` at BC.1 (400-line cap). Pure move.
     StemSampleBuffer        → Interleaved stereo PCM ring buffer for stem separation input (15s).
     RenderPass              → Enum: direct, feedback, particles, mesh_shader, post_process, ray_march, icb, ssgi, mv_warp, staged.
     Logging                 → Per-module os.Logger instances (subsystem: "io.uzume"); categories audio / dsp / renderer / orchestrator / ml / metadata / session / bug012.
@@ -1050,7 +1052,8 @@ struct StemFeatures           // 256 bytes (64 floats), @frozen. GPU buffer(3). 
                               //   Float  47   : auroraOrbitAzimuth (BUG-047 integrate-don't-multiply).
                               //   Floats 48–55: IFC.4 (D-177) instrument-family capture, 2 per family
                               //     (strings/brass/woodwinds/percussion): *Activity, *ActivityDev.
-                              //   Floats 56–64: padding — the ONLY free floats (PUB.7 correction:
+                              //   Float  56   : BC.1 beatClarity01 (1 steady / 0 irregular / 0.5 unknown; track-scoped).
+                              //   Floats 57–64: padding — the ONLY free floats (PUB.7 correction:
                               //     44–55 were previously marked padding while live).
 struct AudioFrame             // 24 bytes, @frozen. PCM block metadata: timestamp/sampleRate/sampleCount/channelCount/bufferOffset.
 struct FFTResult              // 16 bytes, @frozen. binCount/binResolution/dominantFrequency/dominantMagnitude.

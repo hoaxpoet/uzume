@@ -115,12 +115,13 @@ Four stems (`vocals`, `drums`, `bass`, `other`), from Open-Unmix.
 | 25–40 | `{…}_{onset_rate,centroid,attack_ratio,energy_slope}` | `StemAnalyzer+RichMetadata` (MV-3a) |
 | 41–42 | `vocals_pitch_hz`, `vocals_pitch_confidence` | YIN on the vocals stem. `0` = unvoiced or confidence < 0.6 |
 | 43 | `drums_energy_dev_smoothed` | **CPU-patched per frame** — 150 ms EMA ([RenderPipeline+RayMarch.swift:243](../UzumeEngine/Sources/Renderer/RenderPipeline+RayMarch.swift#L243)) |
-| 44 | `cached_bass_proportion` | **Track-scoped constant** from the preview snapshot; frozen for the track ([VisualizerEngine+Stems.swift:686](../UzumeApp/VisualizerEngine+Stems.swift#L686)) |
+| 44 | `cached_bass_proportion` | **Track-scoped constant** from the preview snapshot; frozen for the track ([VisualizerEngine+Stems.swift:689](../UzumeApp/VisualizerEngine+Stems.swift#L689)) |
 | 45 | `aurora_palette_phase` | **CPU-patched** — τ≈3 s EMA of a pitch/valence composite ([RenderPipeline+AudioDrivers.swift:99](../UzumeEngine/Sources/Renderer/RenderPipeline+AudioDrivers.swift#L99)) |
 | 46 | `total_energy_smoothed` | **CPU-patched** — symmetric τ 2.5 s EMA of the four stem energies ([RenderPipeline+RayMarch.swift:261](../UzumeEngine/Sources/Renderer/RenderPipeline+RayMarch.swift#L261)) |
 | 47 | `aurora_orbit_azimuth` | **CPU-patched** — integrated azimuth (BUG-047) |
 | 48–55 | `{strings,brass,woodwinds,percussion}_activity{,_dev}` | PANNs family sweep of the preview clip, sampled by playback position (D-177). Zero when uncached |
-| 56–64 | `_pad14…_pad22` | Padding to 256 B |
+| 56 | `beat_clarity01` | **Track-scoped constant** (BC.1): the D-154 beat-regularity flag, 1 steady / 0 irregular / 0.5 unknown. Installed at track change, reset to unknown at session boundaries, preserved across live stem pushes — the same on both audio paths ([RenderPipeline+PresetSwitching.swift](../UzumeEngine/Sources/Renderer/RenderPipeline+PresetSwitching.swift) `setBeatClarity`) |
+| 57–64 | `_pad15…_pad22` | Padding to 256 B |
 
 Floats 43, 45, 46 and 47 are **derived on the CPU in the render path and written into the
 snapshot**, identically on both audio paths, regardless of where floats 1–42 came from.
@@ -216,7 +217,7 @@ data-driven and sits in one place: `currentStemSeries.isEmpty`
 ([VisualizerEngine+Stems.swift:218](../UzumeApp/VisualizerEngine+Stems.swift#L218),
 [VisualizerEngine+Audio.swift:413](../UzumeApp/VisualizerEngine+Audio.swift#L413)). The series
 is installed on the cache-hit branch at
-[VisualizerEngine+Stems.swift:700](../UzumeApp/VisualizerEngine+Stems.swift#L700) and is
+[VisualizerEngine+Stems.swift:703](../UzumeApp/VisualizerEngine+Stems.swift#L703) and is
 `.empty` for every non-local path and for cache entries written before schema v10.
 
 **Consequence for the site.** A visitor on the streaming path *does* get per-instrument

@@ -317,8 +317,12 @@ extension PresetLoader {
             float woodwinds_activity;  float woodwinds_activity_dev;
             float percussion_activity; float percussion_activity_dev;
 
-            // Padding to 256 bytes (floats 56–64).
-            float _pad14, _pad15, _pad16;
+            // Float 56 — BC.1 beat clarity, track-scoped: 1 steady / 0 irregular / 0.5 unknown
+            // (the D-154 flag). Preserved across live stem pushes.
+            float beat_clarity01;
+
+            // Padding to 256 bytes (floats 57–64).
+            float _pad15, _pad16;
             float _pad17, _pad18, _pad19, _pad20, _pad21, _pad22;
         };
 
