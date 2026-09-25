@@ -202,6 +202,10 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // to the heuristic even though TIV palette is CPU-fed)
     "Nimbus":               false,   // direct-fragment; heuristic sees no deviation primitives
     "Ricercar":             false,   // FL.13 flow-field coupling CPU-side; not yet certified
+    "Kagura":               false,   // KAG.2 — lightweight; the dance is CPU-side (KaguraChoreographer
+                                     // warped onto the cached grid) and the MSL reads no audio at all,
+                                     // so the source heuristic sees no coupling (Filigree precedent).
+                                     // certified:false until KAG.4.
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
     "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
                                      // surface, not a certification candidate. Reads no audio at all
