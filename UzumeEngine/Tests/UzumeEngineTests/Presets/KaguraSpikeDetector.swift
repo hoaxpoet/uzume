@@ -4,10 +4,14 @@
 // twist figure, so the two numbers mean the same thing. Sources (docs/presets/kagura_spike/kagura.py):
 //   `_extrema(sig, fps)`   — both local maxima and minima of a smoothed, detrended signal
 //   `beat_events(..., pulse="hipyaw")` — each extreme of the hip line's yaw
+//   `beat_events(..., pulse="wrists")` — each bottom of the summed wrist height (KAG.3, cabbage patch)
+//   `cmd_film`'s gesture block — RAW landings (minima of arm speed relative to the pelvis) in the
+//     output, not `beat_events`' re-fitted lattice, which can pick another phase (KAG.3; chicken
+//     dance, macarena, Egyptian walk)
 // and the scipy pieces they call, with scipy's defaults:
 //   `gaussian_filter1d`   — mode "reflect", truncate 4.0
 //   `find_peaks`          — local maxima (plateau midpoints), then `distance`, then `prominence`
-//   `np.unwrap`, `np.ptp`.
+//   `np.unwrap`, `np.ptp`, `np.gradient`.
 
 import Foundation
 import simd
@@ -23,6 +27,40 @@ enum KaguraSpikeDetector {
         return extrema(unwrap(yaw).map { $0 * 180 / .pi }, fps: fps)
     }
 
+    /// `beat_events(P, names, fps, pulse="wrists")[0]`: arm-circle bottoms, seconds from the window start.
+    static func wristBottoms(_ frames: [[SIMD3<Float>]], leftWrist: Int, rightWrist: Int, fps: Double) -> [Double] {
+        wristBottoms(summedHeight: frames.map { Double($0[leftWrist].y) + Double($0[rightWrist].y) }, fps: fps)
+    }
+
+    static func wristBottoms(summedHeight: [Double], fps: Double) -> [Double] {
+        let wy = gaussianFilter1d(summedHeight, sigma: fps * 0.03)
+        let prominence = ((wy.max() ?? 0) - (wy.min() ?? 0)) * 0.15
+        return findPeaks(wy.map { -$0 }, distance: Int(0.2 * fps), prominence: prominence).map { Double($0) / fps }
+    }
+
+    /// `cmd_film`'s gesture block: raw landings in the output, seconds from the window start.
+    /// `speed = gaussian_filter1d(|∇(arm joints − pelvis)|.sum · fps, 0.06 fps)`, minima at least
+    /// 0.6 beat apart with 5 % prominence.
+    static func gestureLandings(_ frames: [[SIMD3<Float>]], pelvis: Int, arms: [Int], fps: Double,
+                                beatPeriod: Double) -> [Double] {
+        let relative = arms.map { joint in frames.map { $0[joint] - $0[pelvis] } }
+        let gradients = relative.map { track in
+            (0..<3).map { axis in gradient(track.map { Double($0[axis]) }) }
+        }
+        let raw = frames.indices.map { index in
+            gradients.map { g in (g[0][index] * g[0][index] + g[1][index] * g[1][index] + g[2][index] * g[2][index]).squareRoot() }
+                .reduce(0, +) * fps
+        }
+        return gestureLandings(speed: raw, fps: fps, beatPeriod: beatPeriod)
+    }
+
+    static func gestureLandings(speed: [Double], fps: Double, beatPeriod: Double) -> [Double] {
+        let smooth = gaussianFilter1d(speed, sigma: fps * 0.06)
+        let prominence = ((smooth.max() ?? 0) - (smooth.min() ?? 0)) * 0.05
+        return findPeaks(smooth.map { -$0 }, distance: Int(0.6 * fps * beatPeriod), prominence: prominence)
+            .map { Double($0) / fps }
+    }
+
     /// `_extrema(sig, fps)`.
     static func extrema(_ sig: [Double], fps: Double) -> [Double] {
         let trend = gaussianFilter1d(sig, sigma: fps * 1.0)
@@ -36,6 +74,18 @@ enum KaguraSpikeDetector {
     }
 
     // MARK: - numpy / scipy
+
+    /// `np.gradient(x)`: central differences inside, one-sided first differences at the ends.
+    static func gradient(_ x: [Double]) -> [Double] {
+        guard x.count > 1 else { return x.map { _ in 0 } }
+        return x.indices.map { index in
+            switch index {
+            case 0: return x[1] - x[0]
+            case x.count - 1: return x[index] - x[index - 1]
+            default: return (x[index + 1] - x[index - 1]) / 2
+            }
+        }
+    }
 
     /// `np.unwrap` (discontinuity π).
     static func unwrap(_ phase: [Double]) -> [Double] {

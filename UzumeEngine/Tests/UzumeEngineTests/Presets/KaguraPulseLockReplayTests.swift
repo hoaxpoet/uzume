@@ -46,11 +46,11 @@ struct KaguraPulseLockReplayTests {
 
     // MARK: - Replay
 
-    static func measure(_ fixture: KaguraFixture, shiftBeats: Double) throws -> Lock {
+    static func measure(_ fixture: KaguraFixture, shiftBeats: Double, dance: KaguraDance = .twist) throws -> Lock {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let clips = try KaguraClipLibrary.shared()
-        let dancer = try KaguraDancer(device: ctx.device, library: lib.library)
+        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, dance: dance)
         dancer.ensureAllocated(width: 64, height: 36)
         let driven = try fixture.grid(shiftBeats: shiftBeats)
         dancer.setGrid(driven, streaming: false)
@@ -65,6 +65,7 @@ struct KaguraPulseLockReplayTests {
             var features = FeatureVector()
             features.time = Float(time)
             features.deltaTime = Float(1 / fps)
+            features.bassAtt = Float(fixture.bass(at: time))   // KAG.3: arm reach + the silence rest read it
             if let buffer = cmd { dancer.update(features: features, stemFeatures: StemFeatures(), commandBuffer: buffer) }
             joints.append(dancer.lastJoints)
             cuts.append(dancer.choreography.cutBeats.count)
@@ -86,13 +87,16 @@ struct KaguraPulseLockReplayTests {
                 let values = joints[index].flatMap { [$0.x, $0.y, $0.z] }.map { String(format: "%.5f", $0) }
                 csv += String(format: "%.5f,%d,", times[index], cut) + values.joined(separator: ",") + "\n"
             }
-            let url = URL(fileURLWithPath: dir).appendingPathComponent("\(fixture.name)_shift\(shiftBeats).csv")
+            let url = URL(fileURLWithPath: dir).appendingPathComponent("\(fixture.name)_\(dance)_shift\(shiftBeats).csv")
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
             try csv.write(to: url, atomically: true, encoding: .utf8)
         }
 
-        let leftHip = try #require(clips.jointNames.firstIndex(of: "lhip"))
-        let rightHip = try #require(clips.jointNames.firstIndex(of: "rhip"))
+        let joint = { (name: String) in try #require(clips.jointNames.firstIndex(of: name)) }
+        let leftHip = try joint("lhip"), rightHip = try joint("rhip")
+        let leftWrist = try joint("lwrist"), rightWrist = try joint("rwrist"), pelvis = try joint("pelvis")
+        let arms = try ["lwrist", "rwrist", "lelbow", "relbow"].map(joint)
+        let pulse = try #require(clips.clips(for: dance).first?.pulseKind)
         let truth = fixture.beats
         let crossfade = driven.beatPeriod
         let cutFrames = cuts.indices.filter { $0 > 0 && cuts[$0] != cuts[$0 - 1] }
@@ -103,8 +107,17 @@ struct KaguraPulseLockReplayTests {
             let end = index + 1 < cutFrames.count ? cutFrames[index + 1] : joints.count
             let window = stride(from: start, to: end, by: 2).filter { times[$0] >= times[start] + crossfade }
             guard window.count >= 30 else { continue }
-            let events = KaguraSpikeDetector.hipYawEvents(
-                window.map { joints[$0] }, leftHip: leftHip, rightHip: rightHip, fps: 30)
+            let frames = window.map { joints[$0] }
+            let events: [Double]
+            switch pulse {
+            case "hipyaw":
+                events = KaguraSpikeDetector.hipYawEvents(frames, leftHip: leftHip, rightHip: rightHip, fps: 30)
+            case "wrists":
+                events = KaguraSpikeDetector.wristBottoms(frames, leftWrist: leftWrist, rightWrist: rightWrist, fps: 30)
+            default:
+                events = KaguraSpikeDetector.gestureLandings(
+                    frames, pelvis: pelvis, arms: arms, fps: 30, beatPeriod: driven.beatPeriod)
+            }
             for event in events {
                 guard let music = fixture.truePlayback(at: times[window[0]] + event),
                       music >= truth[0], music < truth[truth.count - 1] else { continue }
@@ -152,3 +165,4 @@ struct KaguraPulseLockReplayTests {
         #expect(events.map { Int(($0 * fps).rounded()) } == scipyFrames, "\(events)")
     }
 }
+

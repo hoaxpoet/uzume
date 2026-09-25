@@ -20,58 +20,28 @@ struct KaguraDancerTests {
     /// No joint may move further than this between consecutive 60 fps frames (3.6 m/s). The
     /// twist's fastest joint at its fastest warp measures well under it; a handoff that re-poses the
     /// body, or a sway that wraps, moves joints tens of centimetres in one frame. Native clip maxima
-    /// (60 fps): twist 0.030/0.040, sway 0.055 (its own wrist, frame 650). KAG.3: the macarena is
-    /// 0.071 natively, so this bound becomes per-dance there.
+    /// (60 fps): twist 0.030/0.040, sway 0.055 (its own wrist, frame 650). The other four dances'
+    /// per-dance bounds are `KaguraSelectionTests.continuity` (KAG.3).
     private static let maxJointStep: Float = 0.06
 
-    struct Run {
-        var joints: [[SIMD3<Float>]] = []
-        var dancing: [Bool] = []
-        var beats: [Double?] = []
-        var choreographer: KaguraChoreographer
-    }
+    typealias Run = KaguraChoreographyHarness.Run
 
     private static func grid(bpm: Double, seconds: Double, downbeatOffset: Int = 0,
                              beatsPerBar: Int = 4, bars: Bool = true) throws -> KaguraGrid {
-        let period = 60 / bpm
-        let beats = (0..<Int(seconds / period) + 8).map { Double($0) * period }
-        let downbeats = bars ? stride(from: downbeatOffset, to: beats.count, by: beatsPerBar).map { beats[$0] } : []
-        return try #require(KaguraGrid(beats: beats, downbeats: downbeats,
-                                       beatsPerBar: bars ? beatsPerBar : 1, hasBarInformation: bars))
+        try KaguraChoreographyHarness.grid(bpm: bpm, seconds: seconds, downbeatOffset: downbeatOffset,
+                                           beatsPerBar: beatsPerBar, bars: bars)
     }
 
-    /// Run `seconds` at 60 fps. `schedule(t)` may change the grid or lock at render time `t`.
+    /// Run `seconds` at 60 fps, dancing the twist alone (the KAG.2 claims).
     private static func run(seconds: Double, grid: KaguraGrid?, streaming: Bool = false,
-                            lockState: (Double) -> Int = { _ in 0 },
+                            lockState: @escaping (Double) -> Int = { _ in 0 },
                             regrid: ((Double) -> KaguraGrid??)? = nil) throws -> Run {
-        let lib = try KaguraClipLibrary.shared()
-        var run = Run(choreographer: try #require(KaguraChoreographer(library: lib)))
-        var clock = KaguraBeatClock()
-        clock.setGrid(grid, streaming: streaming)
-        let frames = Int(seconds * fps)
-        for frame in 0..<frames {
-            let time = Double(frame) / fps
-            if let change = regrid?(time) { clock.setGrid(change, streaming: streaming) }
-            let beat = clock.beatPosition(atRenderTime: time)
-            let pose = run.choreographer.advance(
-                deltaTime: 1 / fps, beat: beat, grid: clock.grid, gridGeneration: clock.gridGeneration,
-                dancePermitted: clock.dancePermitted)
-            run.joints.append(pose)
-            run.dancing.append(run.choreographer.isDancing)
-            run.beats.append(beat)
-            clock.ingest(playbackSeconds: time, renderTime: time, lockState: lockState(time))
-        }
-        return run
+        try KaguraChoreographyHarness.run(seconds: seconds, grid: grid, streaming: streaming,
+                                          lockState: lockState, regrid: regrid)
     }
 
-    /// Largest single-frame joint displacement in `frames[range]`.
     private static func maxStep(_ frames: [[SIMD3<Float>]], in range: Range<Int>? = nil) -> Float {
-        let range = range ?? 1..<frames.count
-        var worst: Float = 0
-        for index in range where index > 0 && index < frames.count {
-            for (a, b) in zip(frames[index], frames[index - 1]) { worst = max(worst, simd_distance(a, b)) }
-        }
-        return worst
+        KaguraChoreographyHarness.maxStep(frames, in: range)
     }
 
     /// Frames within one beat of each index where `dancing` flips or a cut starts.
@@ -161,9 +131,7 @@ struct KaguraDancerTests {
     func swayWithoutGrid() throws {
         let run = try Self.run(seconds: 30, grid: nil)
         #expect(run.dancing.allSatisfy { !$0 })
-        let frozen = (1..<run.joints.count).filter { index in
-            zip(run.joints[index], run.joints[index - 1]).allSatisfy { simd_distance($0, $1) < 1e-6 }
-        }
+        let frozen = KaguraChoreographyHarness.frozenFrames(run)
         #expect(frozen.isEmpty, "\(frozen.count) frozen frames (a frozen human reads as a dropped frame)")
     }
 
