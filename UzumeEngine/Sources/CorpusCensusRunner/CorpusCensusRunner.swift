@@ -204,17 +204,18 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         )
         let drumsBPM: Double? = drumsGrid.bpm > 0 ? drumsGrid.bpm : nil
         timer.mark("drums")
+        dumpBeatsIfRequested(relpath: relpath, grid: grid, drumsGrid: drumsGrid)
 
         // Irregularity — record the continuous evidence AND the production boolean.
         let gridBPM = grid.bpm > 0 ? grid.bpm : nil
-        let folded = (gridBPM != nil && drumsBPM != nil)
-            ? foldedBPMDisagreement(grid.bpm, drumsGrid.bpm)
-            : nil
-        let irregular = assessBeatIrregularity(
-            gridBPM: grid.bpm,
-            drumsBPM: drumsGrid.bpm,
-            barConfidence: grid.barConfidence
-        )
+        // The gate's own tempos (BUG-140: octave-folded median, not `bpm`), so the
+        // folded/irregular columns match production. grid_bpm/drums_bpm stay raw `bpm`.
+        let folded = octaveFoldedMedianBPM(beats: grid.beats).flatMap { gridTempo in
+            octaveFoldedMedianBPM(beats: drumsGrid.beats).flatMap {
+                foldedBPMDisagreement(gridTempo, $0)
+            }
+        }
+        let irregular = assessBeatIrregularity(grid: grid, drums: drumsGrid)
 
         // MIR + mood at native rate.
         let mir = runMIR(samples: window, sampleRate: rate)
@@ -249,7 +250,22 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         return TrackAnalysis(row: row, extras: extras, stages: timer.summary())
     }
 
-    /// Separate the window's first ~10 s, take the drums stem BY VALUE from
+    /// `CENSUS_DUMP_BEATS=<dir>`: write both grids' beat times (one JSON per track)
+    /// so a flagged `folded_disagreement` can be traced to the IOIs behind it
+    /// (BUG-140 diagnosis). Unset → no-op.
+    private func dumpBeatsIfRequested(relpath: String, grid: BeatGrid, drumsGrid: BeatGrid) {
+        guard let dir = ProcessInfo.processInfo.environment["CENSUS_DUMP_BEATS"] else { return }
+        let name = relpath.replacingOccurrences(of: "/", with: "__") + ".json"
+        let payload: [String: Any] = [
+            "relpath": relpath,
+            "grid_bpm": grid.bpm, "grid_beats": grid.beats, "grid_downbeats": grid.downbeats,
+            "drums_bpm": drumsGrid.bpm, "drums_beats": drumsGrid.beats, "drums_downbeats": drumsGrid.downbeats
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        try? data.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+    }
+
+    /// Separate the window's first ~10 s (at the model rate), take the drums stem BY VALUE from
     /// stemWaveforms (CLEAN.1.2/BUG-031: never the separator's shared buffers;
     /// index 1 = drums in [vocals, drums, bass, other]), and run the same Beat
     /// This! path on it.
@@ -259,9 +275,11 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         beatGrid: DefaultBeatGridAnalyzer,
         separator: StemSeparator
     ) throws -> BeatGrid {
-        let stemCount = min(window.count, StemSeparator.requiredMonoSamples)
+        // Pass the whole window: the separator resamples to its model rate and THEN
+        // truncates. Cutting `requiredMonoSamples` at the native rate first gave a
+        // 96 kHz file 4.6 s of drums instead of production's 10 s (BUG-140).
         let stemResult = try separator.separate(
-            audio: Array(window[0..<stemCount]),
+            audio: window,
             channelCount: 1,
             sampleRate: nativeRate
         )

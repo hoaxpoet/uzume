@@ -256,6 +256,21 @@ recorded in their own rows as they land.
 The fidelity bar is a matte-painting-quality dusk, not photoreal grass (README §7.2). If FF.2/FF.3 do not
 reach the reference bar by the October 11 cutoff, Fireflies ships after the beta rather than as a sketch.
 
+### Lane 4 · Kagura (slate A3)
+
+| ID | Status | Done-when |
+|---|---|---|
+| **KAG.0** look-spike (+ 0b–0h follow-ups) | ✅ 2026-09-24, PR hoaxpoet/uzume#268 (`spike/kag-0`). **Matt's calls:** look **B** (dots + trails); in-place dances (salsa travels and smears); **half-time twist** on slow songs; **five dances** (twist, cabbage patch, chicken dance, macarena, Egyptian walk); the song's **tempo and energy pick** a three-dance repertoire and the dance choice **follows the song's energy** (no anti-repeat); energy bands calibrated on the beta playlist; `requires_regular_beat` exclusion plus a grid-regularity sway safety net. | Twist and cabbage pulse events land 100 % within ±⅛ beat; five-dance films 59–73 %; the half-beat decoy moves them wholesale. [`docs/presets/kagura_spike/README.md`](presets/kagura_spike/README.md) §0–§11 |
+| **KAG.D** design doc | ✅ 2026-09-24 | [`docs/presets/KAGURA_DESIGN.md`](presets/KAGURA_DESIGN.md): warp, dance choice, exclusion, look, the shipped clip format, the increment plan, grounding levels |
+| **KAG.1** clip bake + data resource (infra, ships alone) | ✅ 2026-09-25, on `kag-1` (local) | `tools/kagura/bake_clips.py` (spike port; per-subject fps table; deterministic, two runs byte-identical), `Renderer/Resources/Kagura/` (**459 KB**, ten clips, tracked), `KaguraClipLibrary`, `SHA256SUMS`, the CMU entry in `docs/CREDITS.md`. `--check` reproduces the spike: pulse rates 158/164, 50/53, 93/94, 87, 100/96 per min; vigor 0.71/0.60/0.45/0.38/0.38 m/s. `KaguraClipLibraryTests` 7/7. Not visually verifiable (no scene yet) |
+| **KAG.2** dancer geometry, one dance | ⏳ | `KaguraDancer: ParticleGeometry` with the warp, trails, sway and cold start, twist only. Still sheet + motion gate; a replay pulse-lock test on the route-coverage captures |
+| **KAG.3** dance selection + exclusion | ⏳ | Arousal-source equivalence shown first; repertoire, arm reach, per-section safety net, silence rest, sidecar with `requires_regular_beat`, `audio_routes`; `RouteCoverageTests`; M7 on the beta playlist, then the streaming pass |
+| **KAG.4** certification | ⏳ | Lightweight rubric, reference set, cert gates |
+
+Open for Matt's live look (not blocking KAG.1): whether the beat lock is legible with audio (R1), and
+whether the macarena's slightly early arms read as anticipation. The Superstition D-154 false positive is
+tracked as its own beat-sync task, not inside Kagura.
+
 ## Phase PR — Preset review remediation ⏸ superseded by Phase BETA (Matt, 2026-09-24; D-255) (opened 2026-09-04 from Matt's full-roster review, scope calls below)
 
 Matt watched the roster end to end against **David Bowie — *Low*** (local FLAC,
@@ -1653,6 +1668,21 @@ which closes the first. The toggle stays an explicit opt-in whose own copy says 
 "haven't passed quality review". Closing that too would take `is_diagnostic`, which marks an
 operational tool rather than a scene (D-074) and so misdescribes it; not used. Remove
 `exclude_from_cycling` at FF.4.
+
+### Increment BUG140.2 — the beat-irregularity gate measures the tempo it means ✅ (2026-09-25; live check passed)
+
+**Matt's option A** (fix the measurement, keep the 10 % rule). **Delivered:** the D-154 gate compares `octaveFoldedMedianBPM` of each grid's beats instead of `BeatGrid.bpm` (`assessBeatIrregularity(grid:drums:)`, used by `StemCache.beatIrregular` and CorpusCensusRunner). The drums grid is analysed at the separator's output rate (44.1 kHz). `PersistentStemCache` schema is v15 (BUG-141 took v14). The census harness separates the whole window. `computeBPM`/`BeatGrid.bpm` are untouched, so there is **no behavioural change to beat sync**. **Measured** (601-track stratified re-run + 150 duplicate pairs): corpus-est flag rate 25.2 % → 12.0 %; copies disagree 34/150 → 6/150; 12 new flags, 3 of them look false. Superstition/Penny Lane are regular; Pyramid Song is still flagged in production. Plain median (BUG140.1's proposal) measured insufficient; the octave fold is what clears the motivating tracks. D-154 amended.
+**Done-when:** ✅ tests + corpus re-run + production-path check (KNOWN_ISSUES BUG-140). ✅ Manual: Matt, session `2026-09-25T14-29-08Z` — *"Membrane is locked on Superstition … looks great!"* (`beatClarity01` = 1.00 throughout, on this branch's pre-renumber v14). **Follow-up:** the stem warm-up sample-rate bug found here became BUG-141, merged #271.
+
+### Increment BUG141.1 — stem analysis at the separator's rate, not the file's ✅ (2026-09-25)
+
+**Delivered.** BUG-141 was found during BUG140.2 and filed and fixed in one P2 increment. `LocalFilePreparationPipeline`'s stem-series `StemAnalyzer` and `analyzePreview`'s warmup fps both used the file's rate, though the stems are 44.1 kHz. Both now use `separator.outputSampleRate`. Cache schema 13 → 14. Real-file A/B (Release `PrepTimingRunner`): the 44.1 kHz control is bit-identical. On 48 kHz, vocal pitch drops 7–10 % to true and the scorer input moves ≤ 0.01. On 96 kHz, pitch halves to true and low bands move ×2–3.
+**Done-when:** ✅ two wiring tests, fail-before confirmed; ✅ real-file before/after; ✅ KNOWN_ISSUES + release notes. Merged #271 (`9fee33ae`); BUG140.2 took v15. **Open:** optional manual check on a 96 kHz file.
+
+### Increment BUG140.1 — why the beat-irregularity gate flags Superstition, diagnosed ✅ (2026-09-24)
+
+**Delivered (diagnosis only — no behaviour change, no threshold change).** BUG-140 filed with two root causes: (1) the drums-grid BPM the D-154 gate compares comes from `BeatGridResolver.computeBPM`, which averages IOIs across two octaves (BUG-134 fault 1, still unfixed in `computeBPM`), so Superstition's 138.25 is an eighth/quarter average, not a 4:3 or 3:2 relation; (2) on the local-file path the drums grid is analysed at `preview.sampleRate` though stems are 44.1 kHz — every 48 kHz file's drums BPM is scaled ×1.088. Corpus: 34 % flagged (July census), 42 % of flagged duplicate recordings disagree with their other copy; ratio folding rejected (no metrical peak in the data; un-flags Mingus). Median-IOI estimator measured on a 602-track re-run: corpus-est flag rate 27.7 % → 17.1 %. Instrumentation: `CENSUS_DUMP_BEATS=<dir>` on `CorpusCensusRunner`. Also fixed the stale `TrackProfile.beatIrregular` comment (Membrane declares `requires_regular_beat` since PR.26).
+**Done-when:** ✅ KNOWN_ISSUES BUG-140 with artifacts + verification criteria. **Next:** BUG140.2 fix (median estimator + drums-grid sample rate) — awaits Matt's call; needs a BeatBench before/after (all five suites).
 
 ### Increment BC.1 — beat clarity reaches the GPU ✅ (2026-09-24, D-257)
 
