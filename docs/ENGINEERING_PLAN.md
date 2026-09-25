@@ -1631,6 +1631,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment TESTREL.1 — the engine suite runs optimized ✅ (2026-09-25)
+
+**Delivered.** `swift test -c release --enable-testable-imports --package-path UzumeEngine` now builds and runs the whole suite, so test-derived numbers can be quoted in Release (CLAUDE.md §Build & Test). Two blockers: (1) `SystemAudioCapture.seedTapResourcesForTesting` was `#if DEBUG`, so `SystemAudioCaptureTeardownTests` did not compile optimized — the gate is dropped (`internal` already confines it to `@testable`). (2) Under -O, `PresetSessionReplay`'s async `@main` emitted a weak specialized thunk (`$sIetH_yts5Error_pIegHrzo_TR10async_MainTf3npf_n`) with the same name as the test runner's; the linker coalesced them and the runner's `main` ran the replay CLI ("Executed 0 tests" + its usage). Its `run()` never awaited, so it is now a sync `ParsableCommand`. Recipe in RUNBOOK §Build and Test.
+**Done-when:** ✅ full engine suite green in Debug (2006 Swift Testing / 214 XCTest, 274 s) and optimized (same counts, 63 s). **Caveat:** `--enable-testable-imports` compiles with `-enable-testing`, which inhibits some optimization — near-Release, not the shipped app's exact codegen. Any future test-linked executable must keep a sync `@main`.
+
 ### Increment BUG141.1 — stem analysis at the separator's rate, not the file's ✅ (2026-09-25)
 
 **Delivered.** BUG-141 was found during BUG140.2 and filed and fixed in one P2 increment. `LocalFilePreparationPipeline`'s stem-series `StemAnalyzer` and `analyzePreview`'s warmup fps both used the file's rate, though the stems are 44.1 kHz. Both now use `separator.outputSampleRate`. Cache schema 13 → 14. Real-file A/B (Release `PrepTimingRunner`): the 44.1 kHz control is bit-identical. On 48 kHz, vocal pitch drops 7–10 % to true and the scorer input moves ≤ 0.01. On 96 kHz, pitch halves to true and low bands move ×2–3.
