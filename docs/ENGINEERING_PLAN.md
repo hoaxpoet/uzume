@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG143.1 — the stored mood is the last seconds of the audio: diagnosed ✅ (2026-09-25; fix awaits Matt)
+
+**Delivered (diagnosis only, no code change).** The KAG.3 finding was filed as BUG-143 and measured through the shipping `LocalFilePreparationPipeline` (Release `PrepTimingRunner` with a temporary recording classifier) over the beta playlist. `TrackProfile.mood` equals the last frame on 10/10 songs. Spearman vs the production chain is 0.59, against 0.85 for a song-level median. With no history, the top-scored scene changes on 8/10 songs (local) and 5/10 (30 s window), and a ±0.02 control changes 0/10. Whole-session diffs are **not** evidence: the +0.02 control already changes 64/100 openers. Golden session plans are unaffected because they hand-author mood. Two defects were found in passing and filed: **BUG-144** (`TrackProfile.bpm` is 130–143 on every song) and **BUG-145** (prep mood moves with the file's sample rate: Superstition reads 0.21 at 96 kHz and 0.52 at 44.1 kHz). The Regenerate-seed `hashValue` non-reproducibility was flagged as a separate task.
+**Done-when:** ✅ KNOWN_ISSUES BUG-143/144/145 with evidence and verification criteria, and an OBS-DS4-1 pointer. **Next:** BUG143.2, the fix, once Matt picks the statistic.
+
 ### Increment TESTREL.1 — the engine suite runs optimized ✅ (2026-09-25)
 
 **Delivered.** `swift test -c release --enable-testable-imports --package-path UzumeEngine` now builds and runs the whole suite, so test-derived numbers can be quoted in Release (CLAUDE.md §Build & Test). Two blockers: (1) `SystemAudioCapture.seedTapResourcesForTesting` was `#if DEBUG`, so `SystemAudioCaptureTeardownTests` did not compile optimized — the gate is dropped (`internal` already confines it to `@testable`). (2) Under -O, `PresetSessionReplay`'s async `@main` emitted a weak specialized thunk (`$sIetH_yts5Error_pIegHrzo_TR10async_MainTf3npf_n`) with the same name as the test runner's; the linker coalesced them and the runner's `main` ran the replay CLI ("Executed 0 tests" + its usage). Its `run()` never awaited, so it is now a sync `ParsableCommand`. Recipe in RUNBOOK §Build and Test.
