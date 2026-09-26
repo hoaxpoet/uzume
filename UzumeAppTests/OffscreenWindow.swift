@@ -1,4 +1,4 @@
-// OffscreenWindow — the one way app tests build an AppKit window they later close. (BUG-147)
+// OffscreenWindow — the one way app tests build an AppKit window they later close. (BUG-143)
 //
 // A window made in code has `isReleasedWhenClosed == true`, a pre-ARC convention:
 // `close()` releases it once more on the caller's behalf. ARC also owns it, so the
@@ -28,7 +28,7 @@ extension NSWindow {
 
 // MARK: - Tests
 
-@Suite("Offscreen window (BUG-147)")
+@Suite("Offscreen window (BUG-143)")
 @MainActor
 struct OffscreenWindowTests {
 
@@ -37,7 +37,7 @@ struct OffscreenWindowTests {
         weak var weakWindow: NSWindow?
         let window = NSWindow.offscreen(CGRect(x: 0, y: 0, width: 64, height: 64))
         // Fail cleanly here: past this line an unfixed helper crashes the host outright
-        // (3/3 runs, the BUG-147 signature) instead of failing the expectation below.
+        // (3/3 runs, the BUG-143 signature) instead of failing the expectation below.
         try #require(!window.isReleasedWhenClosed)
         weakWindow = window
         window.contentView = NSView(frame: window.frame)

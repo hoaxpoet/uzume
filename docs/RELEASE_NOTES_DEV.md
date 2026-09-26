@@ -10,7 +10,7 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
-### [dev-2026-09-26-014709] BUG-147 — the app tests no longer crash their host after the engine suite
+### [dev-2026-09-26-014709] BUG-143 — the app tests no longer crash their host after the engine suite
 
 When `xcodebuild … test` ran straight after `swift test`, the app's test host sometimes crashed (exit 65, "0 tests" on the retry) in `objc_autoreleasePoolPop`. Three DS.6 tests built an `NSWindow` in code and closed it. A window made that way has `isReleasedWhenClosed` set, so `close()` released it once more than ARC owned. When that freed memory was reused, the host crashed, which happened more often on a machine the engine suite had just loaded. The tests now build their windows through `NSWindow.offscreen(_:)`, which clears the flag. A new test crashed the host 3/3 without the fix and passes with it. A source scan stops new tests from copying the old pattern. No product code changed and no timeout was widened.
 
