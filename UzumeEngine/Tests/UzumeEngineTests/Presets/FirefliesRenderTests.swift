@@ -77,6 +77,25 @@ struct FirefliesRenderTests {
         #expect(report.mean > 0.05, "the dusk world must stay lit (D-037)")
     }
 
+    /// FF.3 — occlusion is painter's order in depth bands, so it rests on two invariants: the
+    /// skeleton is stored far → near, and every band's draw range holds exactly that band.
+    @Test("The skeleton is in painter's order and each depth band draws only its own segments")
+    func depthBandsAreContiguous() {
+        let (branches, starts) = FirefliesGeometry.bandOrder(FirefliesWorld().branches)
+        let bands = branches.map { FirefliesGeometry.band(z: 0.5 * ($0.p0r0.z + $0.p1r1.z)) }
+        #expect(zip(bands, bands.dropFirst()).allSatisfy { $0 <= $1 }, "segments must run far → near")
+        #expect(starts.count == FirefliesGeometry.bandCount + 1)
+        #expect(starts.first == 0 && starts.last == bands.count)
+        for band in 0..<FirefliesGeometry.bandCount {
+            #expect(bands[starts[band]..<starts[band + 1]].allSatisfy { $0 == band }, "band \(band)")
+        }
+        // The near tree (~12 m) and the foreground grass (3.5–7 m) sit in bands NEARER than the
+        // deepest fireflies (27 m), so they are drawn after them and can cover them.
+        #expect(FirefliesGeometry.band(z: 27) < FirefliesGeometry.band(z: 12))
+        #expect(FirefliesGeometry.band(z: 12) < FirefliesGeometry.band(z: 5))
+        #expect(FirefliesGeometry.band(z: 80) == 0)
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_PARITY"] == "1"))
     func spikeCapturesAt1080p() throws {
         let out = ProcessInfo.processInfo.environment["FIREFLIES_PARITY_OUT"].map { URL(fileURLWithPath: $0) }
