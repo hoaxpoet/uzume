@@ -176,8 +176,8 @@ final class FirefliesWorld {
 
     /// `07`'s layout: one big tree near and to the left, a few smaller ones to the right at mid
     /// distance, and a ragged row of fine-branched trees along the far edge of the meadow in
-    /// front of the tree-line cards (`03`'s branching against the pale sky). Far to near, so the
-    /// segment array is already in painter's order.
+    /// front of the tree-line cards (`03`'s branching against the pale sky). Planted far to near;
+    /// `FirefliesGeometry` re-orders every segment into depth bands for occlusion (FF.3).
     static func plantTrees(seed: UInt64) -> [FFBranchGPU] {
         var rng = SplitMix64(seed: seed)
         var out: [FFBranchGPU] = []
