@@ -233,7 +233,9 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       Same bump (unmerged branch), BUG-144: `TrackProfile.bpm` was the
     ///                       MIR BeatDetector's IOI tempo, 130–143 on every song (sub-bass onsets
     ///                       firing at their cooldown); it is now the grid's octave-folded
-    ///                       tempo, nil when the D-154 gate calls the beat irregular.
+    ///                       tempo, nil when the D-154 gate calls the beat irregular. Same bump,
+    ///                       BUG-145: MIR (mood, key, centroid) now runs at 44.1 kHz whatever the
+    ///                       file's rate; every non-44.1 kHz v15 mood was skewed by the rate.
     public static let currentSchemaVersion: Int = 16
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`

@@ -94,11 +94,18 @@ extension SessionPreparer {
             )
         }
 
-        // Step 4: Offline MIR analysis (key, mood, centroid).
+        // Step 4: Offline MIR analysis (key, mood, centroid) at the stems' 44.1 kHz whatever the
+        // file's rate (BUG-145). MIR's 1024-point FFT at the file's rate moved the mood features
+        // with it: at 96 kHz the Nyquist-normalised centroid halved and 93.75 Hz bins pushed the
+        // key correlations +1.6/+1.9 σ, so the same song read arousal 0.21 instead of 0.52.
         let mir = probe.measure(PrepStage.mir) {
-            analyzeMIR(
-                samples: preview.pcmSamples,
-                sampleRate: preview.sampleRate,
+            let mirRate = Double(StemSeparator.modelSampleRate)
+            let fileRate = Double(preview.sampleRate)
+            return analyzeMIR(
+                samples: fileRate == mirRate
+                    ? preview.pcmSamples
+                    : BeatThisPreprocessor.resample(preview.pcmSamples, from: fileRate, to: mirRate),
+                sampleRate: Int(mirRate),
                 classifier: classifier
             )
         }
