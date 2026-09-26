@@ -125,10 +125,7 @@ final class FirefliesWorld {
     let branches: [FFBranchGPU]
 
     init(seed: UInt64 = 11) {
-        // Far → near by each segment's midpoint z: `FirefliesGeometry` cuts this order into depth
-        // bands and interleaves the fireflies with them, so a nearer segment covers a farther
-        // firefly (FF.3 occlusion by painter's order).
-        branches = Self.plantTrees(seed: seed).sorted { $0.p0r0.z + $0.p1r1.z > $1.p0r0.z + $1.p1r1.z }
+        branches = Self.plantTrees(seed: seed)
     }
 
     // MARK: Advance
@@ -180,7 +177,7 @@ final class FirefliesWorld {
     /// `07`'s layout: one big tree near and to the left, a few smaller ones to the right at mid
     /// distance, and a ragged row of fine-branched trees along the far edge of the meadow in
     /// front of the tree-line cards (`03`'s branching against the pale sky). Planted far to near;
-    /// `init` re-sorts every segment by depth for the banded painter's order (FF.3).
+    /// `FirefliesGeometry` re-orders every segment into depth bands for occlusion (FF.3).
     static func plantTrees(seed: UInt64) -> [FFBranchGPU] {
         var rng = SplitMix64(seed: seed)
         var out: [FFBranchGPU] = []

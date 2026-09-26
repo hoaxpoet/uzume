@@ -31,7 +31,7 @@
 //
 // OCCLUSION WITHOUT A DEPTH BUFFER (FF.3). The direct path has no depth attachment, so occlusion
 // is painter's order (Newell, Newell & Sancha 1972) in DEPTH BANDS: the static segments are
-// sorted far → near once (`FirefliesWorld`), cut into `bandWidth` slices of world z, and each
+// counting-sorted once into `bandWidth` slices of world z, far → near (`bandOrder`), and each
 // frame the lit fireflies are counting-sorted into the same slices. Band by band, far → near:
 // that band's branches, then its light pools, then its fireflies. A nearer trunk, branch or
 // grass stalk is drawn later and covers a farther firefly AND its light; a branch in front of a
@@ -147,13 +147,14 @@ public final class FirefliesGeometry: ParticleGeometry, @unchecked Sendable {
               let branches = device.makeBuffer(length: max(branchBytes, 16), options: .storageModeShared) else {
             throw FirefliesError.bufferAllocationFailed
         }
-        place.branches.withUnsafeBytes { raw in
+        let ordered = Self.bandOrder(place.branches)
+        ordered.branches.withUnsafeBytes { raw in
             if let base = raw.baseAddress { branches.contents().copyMemory(from: base, byteCount: raw.count) }
         }
         sprites = buffer
         worldBuffer = worldBuf
         branchBuffer = branches
-        branchBandStart = Self.bandStarts(place.branches.map { Self.band(z: 0.5 * ($0.p0r0.z + $0.p1r1.z)) })
+        branchBandStart = ordered.starts
         spriteBandStart = [Int](repeating: 0, count: Self.bandCount + 1)
         staging.reserveCapacity(FirefliesSwarm.count)
         guard let pixelFormat else { pipeline = nil; poolPipeline = nil; branchPipeline = nil; writeWorld(); return }
@@ -164,14 +165,22 @@ public final class FirefliesGeometry: ParticleGeometry, @unchecked Sendable {
         writeWorld()
     }
 
-    /// `starts[b]` = index of the first element in band ≥ b, for a band list sorted ascending.
-    static func bandStarts(_ bands: [Int]) -> [Int] {
-        var starts = [Int](repeating: bands.count, count: bandCount + 1)
-        for (index, band) in bands.enumerated().reversed() { starts[band] = index }
-        for band in stride(from: bandCount - 1, through: 0, by: -1) {
-            starts[band] = min(starts[band], starts[band + 1])
+    /// The skeleton re-ordered into depth bands, far → near, and each band's first index (+ the
+    /// end). A stable counting sort, O(n): a comparison sort of the ~100 k segments cost ~250 ms per
+    /// construction at `-Onone`, which the Debug frame-budget gate (it builds the geometry inside its
+    /// timed passes) read as +11 ms a frame. Within a band the planting order is kept.
+    static func bandOrder(_ branches: [FFBranchGPU]) -> (branches: [FFBranchGPU], starts: [Int]) {
+        let bands = branches.map { band(z: 0.5 * ($0.p0r0.z + $0.p1r1.z)) }
+        var starts = [Int](repeating: 0, count: bandCount + 1)
+        for band in bands { starts[band + 1] += 1 }
+        for band in 0..<bandCount { starts[band + 1] += starts[band] }
+        var cursor = starts
+        var out = branches
+        for (index, band) in bands.enumerated() {
+            out[cursor[band]] = branches[index]
+            cursor[band] += 1
         }
-        return starts
+        return (out, starts)
     }
 
     /// Builds the geometry's pipelines onto one colour target.
