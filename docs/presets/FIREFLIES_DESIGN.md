@@ -88,8 +88,8 @@ swelling over several seconds, never pulsing on the beat (§5 row 3).
 ### 4.4 The light (FF.3) — product requirements
 Restated from §3, §4.2 and D-157; nothing here is newly decided.
 - **Each firefly is a light:** a near-white core and a coloured bloom, the brightest thing in the frame
-  (`09`), and the scene's only warm colour. The bloom's colour is Matt's call (FF.3 prompt,
-  DECISION-NEEDED; default: the swarm's yellow-green).
+  (`09`), and the scene's only warm colour. **The bloom is yellow-green**, the swarm's own
+  colour (Matt, 2026-09-26: "A").
 - **Light only on what is right around it** (`07`, `04`): grass strokes, mist and nearby branches
   brighten within a short radius of a lit firefly; the rest of the print is untouched.
 - **Occlusion:** a firefly behind a tree trunk, a branch or a foreground grass stalk is hidden by it.

@@ -213,7 +213,7 @@ Invoke the `closeout` skill: the 8-part report with the verbatim `Scripts/closeo
 - the rubric result;
 - a one-line statement of which dispatch path the render tests exercised.
 
-## DECISION-NEEDED (before the session — Matt)
+## DECISION — RESOLVED before the session (Matt, 2026-09-26: "A")
 
 **What colour is a firefly's light?** (Everything else in the frame stays blue ink; this is the one warm
 colour — §3.)
@@ -225,6 +225,5 @@ colour — §3.)
 - **C. Near-white with a faint yellow-green edge.** Closest to how the prints draw light (`09`'s white-hot
   lamps); the firefly colour survives only at the rim of each glow.
 
-**Recommendation: A** — it is what a meadow of fireflies actually looks like, it is already what the
-swarm uses, and the near-white core the style requires comes on top of it in every option.
-**Default if no reply: A.**
+**Matt chose A: yellow-green**, the swarm's existing colour, with the near-white core on top. Build it.
+Do not ask again.
