@@ -250,9 +250,9 @@ in KAG.3.
 | Arm reach ±25 % | `bass_att`, 1.5 s EMA, song-normalised, soft-saturated | `continuous` | ~1.5 s |
 | Sway fallback | grid inter-beat-interval CV over the last 16 beats; lock state (streaming) | `structural` | sections |
 
-**Schema note (KAG.2).** The QG.1 route schema (`PresetDescriptor` `audio_routes` kinds) has **no `grid`
-kind** — only `continuous`, `accent`, `structural` and `gate`. The table above assumed one. KAG.3 must choose
-how the grid-driven rows are declared (or bring a schema change to Matt); KAG.2 declares no routes.
+**Schema note (KAG.2; settled KAG.3).** The QG.1 route schema (`PresetDescriptor` `audio_routes` kinds) has
+**no `grid` kind** — only `continuous`, `accent`, `structural` and `gate`. The grid-driven rows are not
+declared and are gated by `KaguraPulseLockReplayTests`; the `bassAtt` rows are declared (§15).
 
 This follows the Audio Data Hierarchy:
 - Beat-locked motion runs only on the cached grid, never on raw onsets.
@@ -287,9 +287,10 @@ This follows the Audio Data Hierarchy:
 | Beat-grid time-warp via pulse pins | **1 — working spike** | Pulse lock 100 % twist/cabbage, 59–82 % mixed. |
 | Pulse detectors (hip yaw, arm circle, gesture landing) | **1 — spike**, gesture weakest | Gesture landings are lattice-snapped; macarena skews about 0.1–0.2 beat early (undiagnosed). |
 | Instanced sprites + a geometry-owned trail texture | **1 — working code in this repo** | Witchlight, Ricercar. |
-| Energy-driven dance choice | **1 — spike**, calibrated on 10 songs | Reference constant with provenance. The arousal-source equivalence is not yet shown (§6). |
-| Grid-CV safety net | **1 — spike**, 61 captures | Per-window in the spike; per-section is unbuilt. |
-| Silence rest | **3 — design assertion** | Not exercised in the spike. M7. |
+| Energy-driven dance choice | **1 — spike**, calibrated on 10 songs | The spike's rule ported and reproduced (README §9, §10); the reference re-derived from `songArousal` (§15). The bar-just-played pick (option A) is **2 — measured offline**: 42 % agreement with the spike's lookahead picks; M7 judges whether it reads as following the music. |
+| Grid-CV safety net | **1 — spike + build**, 61 + 31 captures | Per-section with hysteresis (§15): sways on every irregular beta window, dances on every steady one. |
+| Silence rest | **3 — design assertion** | Built with a measured floor and a stopped-clock fallback (§15); tested on real rows. Not exercised in the spike. M7. |
+| Arm reach rate limit + band floor | **2 — measured bounds** | Outside anything 80 real captures reach (§15); they only act on flat stretches and silence. |
 | Streaming path | **3 — unmeasured** | The spike was local-file-equivalent only. Drift-tracker lock and preview-based arousal are untested for this scene. |
 | 60 fps at 1080p | **1 — measured (KAG.2)** | Release (`swift build -c release`), 1920×1080, no readback: 0.216 ms GPU median, p95 0.297; 0.018 ms CPU. Debug harness with readback: 2.94 ms, 0.5× the roster median. |
 
@@ -353,3 +354,127 @@ run in this package — see the KAG.2 closeout), 1920×1080, no readback: 0.216 
 sway over one nominal beat, and the dancer rejoins at the new grid's next bar line. Clip changes with the
 bar declined fall on a 4-beat lattice, at most 4 such "bars" apart (the spike's `beats[::bpb]` rule).
 
+
+## 15. What the build settled (KAG.3)
+
+**The arousal source (§6).** `TrackProfile.mood.arousal` is the mood classifier's state at the LAST frame of
+the analysed audio (0.7 s output window), so it is a song's final second or two. On the beta playlist it
+ranks against the spike's `ENERGY_REFERENCE` at Spearman ρ 0.59, and re-deriving would move 5 of 10
+repertoires, over the prompt's limit of 3. **Matt, 2026-09-25 (option A):** preparation measures
+`TrackProfile.songArousal`, the median per-frame arousal after the first sixth (the spike's own rule), and
+the reference is re-derived from it: ρ 0.85, **2 songs move** (Take Five and Teardrop, both to macarena /
+chicken / cabbage). `KaguraRepertoire.energyReference` is those ten values (shipping local-file
+preparation, Release, `PrepTimingRunner`). Cache schema v16. BUG-143, in another session, makes `mood`
+itself this median; once it lands, Kagura reads `mood.arousal` and the field goes.
+
+| Song | README §10 median | `mood.arousal` (final) | `songArousal` | Ranks (§10 / final / song) |
+|---|---|---|---|---|
+| Dance Yrself Clean | 0.69 | 0.428 | 0.609 | 10 / 8 / 10 |
+| B.O.B. | 0.67 | 0.554 | 0.569 | 9 / 9 / 8 |
+| Smells Like Teen Spirit | 0.54 | 0.605 | 0.597 | 8 / 10 / 9 |
+| Superstition | 0.51 | 0.243 | 0.206 | 7 / 7 / 4 |
+| Take Five | 0.48 | −0.376 | 0.327 | 6 / 2 / 5 |
+| Pyramid Song | 0.45 | −0.291 | 0.334 | 5 / 4 / 6 |
+| Teardrop | 0.43 | −0.424 | 0.479 | 4 / 1 / 7 |
+| Warszawa | 0.19 | −0.294 | 0.040 | 3 / 3 / 3 |
+| Penny Lane | −0.04 | −0.114 | −0.426 | 2 / 5 / 1 |
+| Moonlight I | −0.28 | −0.013 | −0.355 | 1 / 6 / 2 |
+
+The absolute scales differ (offline Superstition 0.21 against the production-chain 0.51), which is why the
+reference is re-derived rather than reused.
+
+**The pick (§6 item 3).** The 1.5 s `bass_att` EMA, per elapsed time, sampled at a fixed 20 Hz into a
+trailing 60 s window; at each clip change the mean rank of the bar just played picks calm / middle /
+vigorous (Matt's option A — no read-ahead, both paths alike). A track opens with nothing to rank against,
+so its first pick is the middle dance. A long steady loud stretch becomes the window's norm after about
+20 s and its rank drifts toward the middle; the spike's whole-window rank had the same property.
+**Agreement with the spike's `--family auto` picks** on the 30 beta captures is 41 % (64 / 155; 35 % before the twist and cabbage patch returned to KAG.2's entry). This is a
+report, not a gate, and most of it is option A: the spike's own rule, changed only to read the bar just
+played, agrees with its original picks 42 % of the time, because a bar's energy tercile rarely predicts the
+next bar's. The trailing window on 30 s captures (always in its first half-minute) accounts for most of the
+rest.
+
+**Clip entry and the cut rule.** A gesture dance (chicken, macarena, Egyptian) enters its clip as the spike's
+did, 1 + 2/m pulses in, and clip changes follow the spike's rule (the last bar line within 4 bars at least ½
+beat before the last pulse, else the next bar line). KAG.2's entry on the first pulse left those dances up to
+13 points off the spike's lock. The twist and cabbage patch keep KAG.2's entry (**Matt: split by dance**):
+their lock is 100 % either way, and the spike's entry raised the twist's foot-slide to 29.0 / 33.9 / 31.5
+cm/s. The spike's own pre-roll was 1 or 2 beats by float rounding of `beats >= t0 − 2·gp` (love_rehab: 1 on
+every cut; so_what mostly 2); the build takes the intended 2.
+
+**Pulse lock per dance** (`KaguraPulseLockReplayTests`, the spike's detectors on the dancer's output, ±⅛
+beat, chance 25 %). Build on-beat / half-beat %, with the spike at k = 0 and the lowest of its five
+whole-beat cuts (on-beat, on + half):
+
+| Capture | Dance | Build | Decoy | Spike k=0 | Spike lowest cut |
+|---|---|---|---|---|---|
+| love_rehab | twist | 100 / 0 (n 44) | 0 / 100 | 100 / 0 | — |
+| love_rehab | cabbage | 100 / 0 (n 14) | 0 / 100 | 100 / 0 | 93 / 93 |
+| love_rehab | chicken | 48 / 26 (n 42) | 27 / 54 | 49 / 32 | 41 / 67 |
+| love_rehab | macarena | 60 / 0 (n 40) | 0 / 60 | 51 / 0 | 41 / 44 |
+| love_rehab | Egyptian | 38 / 62 (n 34) | 50 / 50 | 39 / 61 | 36 / 100 |
+| so_what | twist | 100 / 0 (n 51) | 0 / 100 | 100 / 0 | — |
+| so_what | cabbage | 100 / 0 (n 16) | 0 / 100 | 94 / 0 | 94 / 94 |
+| so_what | chicken | 44 / 29 (n 45) | 28 / 46 | 49 / 24 | 45 / 68 |
+| so_what | macarena | 43 / 30 (n 44) | 32 / 41 | 38 / 47 | 36 / 75 |
+| so_what | Egyptian | 85 / 15 (n 47) | 18 / 82 | 42 / 56 | 40 / 95 |
+| there_there | twist | 100 / 0 (n 48) | 0 / 100 | 100 / 0 | — |
+| there_there | cabbage | 100 / 0 (n 15) | 0 / 100 | 100 / 0 | 94 / 94 |
+| there_there | chicken | 45 / 30 (n 44) | 23 / 50 | 51 / 31 | 31 / 59 |
+| there_there | macarena | 40 / 36 (n 42) | 36 / 40 | 38 / 45 | 33 / 76 |
+| there_there | Egyptian | 44 / 56 (n 45) | 51 / 47 | 29 / 71 | 29 / 97 |
+
+The gate is 10 points under the spike's lowest cut: a whole-beat grid shift keeps the true phase and only
+moves where clips start, and the spike's figure moves by up to 20 points from that alone (there_there
+chicken 51 → 31 on the beat). Against the k = 0 figure alone, one pair misses by 12: so_what macarena, on +
+half 73 against 85 (its cuts read 75–80). The decoy must move (on − half) at least 5 points toward the
+other side; the macarena's landings sit between beats (its early skew), so its decoy moves least (8).
+
+**Arm reach (§8).** `1 + 0.25·tanh((e − mid) / (p90 − p10) · 2)` over the trailing window, faded in over the
+first 4 s. Two guards the spike never needed, both outside anything real music reaches: the p10–p90 width is
+floored at 0.01 (narrowest of 80 captures 0.0117), and reach changes by at most 1.0 / s (the spike's formula
+peaks at 0.84 / s on the same 80). Without the rate limit a drop into silence moved a wrist 0.108 m in one
+frame. Wrist-to-shoulder ratio 0.76–1.20 on a varying synthetic bass; legs bit-identical with and without.
+Foot-slide on the route-coverage captures 21.9 / 25.2 / 23.1 cm/s, KAG.2's figures.
+
+**The safety net (§7).** CV of the last 16 grid intervals, evaluated per beat. Sway above 0.08; rejoin once
+under 0.06 for 8 beats. On the 30 beta captures (grids from their own `beatPhase01`, as the spike built them),
+steady windows peak at 0.062 (Take Five 50 %) and irregular ones never drop under 0.102 (Moonlight 80 %):
+
+| Song (20 / 50 / 80 %) | Max rolling CV | Safety net held | Spike (README §11) |
+|---|---|---|---|
+| Dance Yrself Clean | 0.016 / 0.023 / 0.021 | 0 / 0 / 0 % | steady |
+| B.O.B. | 0.032 / 0.034 / 0.037 | 0 / 0 / 0 % | steady |
+| Superstition | 0.022 / 0.027 / 0.030 | 0 / 0 / 0 % | steady |
+| Smells Like Teen Spirit | 0.024 / 0.029 / 0.028 | 0 / 0 / 0 % | steady |
+| Penny Lane | 0.033 / 0.028 / 0.030 | 0 / 0 / 0 % | steady |
+| Take Five | 0.046 / 0.062 / 0.039 | 0 / 0 / 0 % | steady |
+| Pyramid Song | 0.281 / 0.371 / 0.452 | 100 / 100 / 100 % | sways (0.105–0.395) |
+| Teardrop | 0.020 / 0.017 / 0.013 | 0 / 0 / 0 % | steady |
+| Moonlight I | 0.601 / 0.319 / 0.134 | 100 / 100 / 100 % | sways (0.129–0.533) |
+| Warszawa | 0.043 / 0.025 / 0.643 | 0 / 0 / 100 % | dances, dances, sways (0.566) |
+
+Steady windows dance 88–98 % of their 30 s (the rest is the opening sway to the first bar line). Dance
+Yrself Clean's first 30 s (spike session) sways through the hush and dances from 17.2 s; Girl from Ipanema
+and Money, which the spike swayed whole, now sway about half their window — the per-section evaluation.
+
+**The silence rest (§3a).** The same envelope under **0.02** for a full bar (or for all of a younger window —
+a track that opens silent has no music to leave). Measured: the quietest beat-bearing bar on the 30 beta
+captures peaks at 0.065 (B.O.B. 80 %; Penny Lane's quietest 0.166); a real track end (Warszawa's tail,
+production chain) reads 0.0047 at its first silent row and 0.001 after. On a paused or ended local file the
+playback clock holds (BUG-130 bounds it at 1.5 s), so no bar line comes: a beat advancing at under a quarter
+of the tempo for 0.5 s fades the dance to the sway in render time. **Grounding level 3 — M7 judges it.**
+
+**The routes (§9).** `audio_routes`: `bassAtt` × `arm_reach`, `dance_pick`, `silence_rest`, all `continuous`
+(`RouteCoverageTests` green). The silence rest is an enable, but `gate` asserts the primitive is itself an
+enable (peak ≥ 0.9), which `bassAtt` is not, so it is declared on the primitive it reads. The grid-driven rows
+(the moves on the beat, the clip-change timing) have **no schema kind** and are not declared; they are gated
+by `KaguraPulseLockReplayTests`. The repertoire reads `TrackProfile`, not a `FeatureVector` field, and is not
+declarable either. `requires_regular_beat: true`; no golden plan moved (`certified: false` keeps Kagura out of
+the planner).
+
+**Frame cost.** Release (`KAGURA_PERF=1 swift test -c release --enable-testable-imports`, TESTREL.1), 1920×1080,
+no readback, auto mode on love_rehab, `KaguraFrameCostTests`: GPU median 0.096–0.291 ms and p95 0.136–0.307 ms
+over two quiet runs (the spread is GPU clock state; a third run under another session's test load read p95
+5.7 ms with 1 frame in 1731 over 1 ms); CPU `update` median 0.014–0.042 ms. The selection code costs nothing
+visible; KAG.2 measured 0.216 ms.
