@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG148.1 — the mood model does not generalise: diagnosed ✅ (2026-09-26; fix awaits Matt)
+
+**Delivered (diagnosis only).** BUG-148 (valence negative on 10/10 beta songs) and BUG-149 (key reads F# minor on 7/10; 35 % of the census pilot) filed from Matt's BUG-144 check; the BUG-145 manual check is recorded as passed. A Python replica of `MoodClassifier` matches the app's per-frame output to 3×10⁻⁵. Leave-one-song-out with the shipping recipe scores valence sign agreement **42 %** (chance 50 %, r −0.30) and arousal 50 % (r −0.04): the 12-song model does not generalise, and its frame-shuffled validation split hid that. Today's flux runs +2.5 σ outside the training range. Library proxy (27,638 tracks): 61.5 % negative valence.
+**Done-when:** ✅ KNOWN_ISSUES BUG-148 diagnosis + fix verification criteria; ⏳ Matt's call on the fix. BUG-149 not yet diagnosed.
+
 ### Increment BUG146.2 — preparation MIR at 44.1 kHz whatever the file's rate ✅ (2026-09-26)
 
 **Diagnosed (BUG146.1).** `CorpusCensusRunner --dual-rate` on Superstition: at 96 kHz the fixed 1024-point FFT pushed the key correlations +1.6/+1.9 σ, halved the Nyquist-normalised centroid (−0.87 σ) and moved flux −0.40 σ; the band energies stayed within 0.23 σ.
