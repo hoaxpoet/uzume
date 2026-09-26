@@ -15,6 +15,11 @@
 #   [session-dir]  explicit RENDER_VISUAL output dir; overrides "newest under
 #                  /tmp/uzume_visual". Optional.
 #
+#   COMPARE_REF_DIR  optional env: read references from this folder instead of
+#                  docs/VISUAL_REFERENCES/<preset>/ — for LOCAL-ONLY sets that must never be
+#                  committed (FF.2: Fireflies' FF.R2 prints). Files starting with `_` (a
+#                  contact sheet) are skipped there. Unset = unchanged behaviour.
+#
 # Missing references or render frames → non-zero exit with a one-line reason.
 # Reader-facing only: no auto-scoring (D-064 — the reader is Claude's eyes).
 
@@ -29,8 +34,8 @@ SESSION_DIR="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-REF_DIR="$REPO_ROOT/docs/VISUAL_REFERENCES/$PRESET"
-[ -d "$REF_DIR" ] || die "no reference dir: docs/VISUAL_REFERENCES/$PRESET"
+REF_DIR="${COMPARE_REF_DIR:-$REPO_ROOT/docs/VISUAL_REFERENCES/$PRESET}"
+[ -d "$REF_DIR" ] || die "no reference dir: ${COMPARE_REF_DIR:-docs/VISUAL_REFERENCES/$PRESET}"
 
 # References: every image in the folder (README lives alongside; skip non-images).
 # `-type f -o -type l` — reference imagery is gitignored repo-wide, so in a WORKTREE the
@@ -40,7 +45,8 @@ REF_DIR="$REPO_ROOT/docs/VISUAL_REFERENCES/$PRESET"
 REFS=()
 while IFS= read -r f; do REFS+=("$f"); done < <(
   find "$REF_DIR" -maxdepth 1 \( -type f -o -type l \) \
-       \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort
+       \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort |
+  if [ -n "${COMPARE_REF_DIR:-}" ]; then grep -v '/_[^/]*$'; else cat; fi
 )
 [ ${#REFS[@]} -gt 0 ] || die "no reference images in $REF_DIR"
 
