@@ -1637,6 +1637,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
 **Done-when:** ✅ mechanism reproduced by a 500 ms latency probe (3/4 OAuth tests fail before, 16/16 pass after); ✅ app suite 476/476 + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
+
 ### Increment FF.3 — Fireflies: the light ✅ (2026-09-26, branch `ff-3`)
 
 **Done-when:** one still beside FF.R2 `09` / `07` accepted by Matt first; then all of FIREFLIES_DESIGN §4.4 — light on grass, mist and branches, occlusion by trunks, branches and foreground grass, out-of-focus near fireflies, the light rising and decaying with the flash — with films + motion gate, 1080p flash on all four captures, FF.1 parity, breath, Release frame time and rubric reported.
