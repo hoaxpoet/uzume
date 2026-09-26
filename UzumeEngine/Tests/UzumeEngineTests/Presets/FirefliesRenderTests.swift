@@ -145,6 +145,25 @@ struct FirefliesRenderTests {
                 print(String(format: "[fireflies-still] %@ frame %d mean luma %.4f", tag, frame, luma[frame]))
             }
         }
+        // FF.3 — the light at its sparsest: Warszawa (K = 0.5, unknown → free), scattered single
+        // flashes 28 s in; frames 1204–1213 as `fireflies_w_f<frame>.png`.
+        let free = try FirefliesDrive(directory: FirefliesSpikeParityProbe.root
+            .appendingPathComponent("sessions/fixturegen-08_-_Warszawa"))
+        let freeWindow = 1204..<1214
+        let freeFeatures = Array(free.features.prefix(freeWindow.upperBound))
+        MultiPassRenderHarness.firefliesGridBPM = free.gridBPM
+        MultiPassRenderHarness.firefliesCameraTimeOffset = 0
+        var index = 0
+        _ = try MultiPassRenderHarness(width: 1920, height: 1080).render(
+            preset: "Fireflies", features: freeFeatures, stems: Self.stems(freeFeatures.count, clarity: 0.5)
+        ) { bgra -> Int in
+            defer { index += 1 }
+            if freeWindow.contains(index) {
+                Self.writePNG(bgra, width: 1920, height: 1080,
+                              to: out.appendingPathComponent("fireflies_w_f\(index).png"))
+            }
+            return index
+        }
     }
 
     /// FF.2 Task 5 — the world at near-silence. Warszawa's tail ends in ~4.8 s of
