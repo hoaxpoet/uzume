@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-26-130233] BUG-144 — each song gets its real BPM; songs without a steady beat get none
+
+Every song was stored at 130–143 BPM, and that number both appeared in the preparation view and steered 27 % of the scene choice. The value came from a sub-bass onset detector that fires as soon as its 400 ms cooldown allows, on every song, so it measured the cooldown rather than the music. The stored BPM is now the beat tracker's tempo, which preparation already computes (octave-folded, so a stretch tracked at half time doesn't drag it). Songs Uzume judges to have no steady beat store no BPM, so they show none and tempo doesn't steer their scenes (Matt's call). On the beta playlist the BPMs now run from 77 to 172 and match the songs; Pyramid Song and Moonlight I show none. Scene choices shift on most songs as a result. The live beat path is unchanged. **Local files re-analyse once** (schema v16, shared with BUG-143). Still to do: Matt's look at the preparation view.
+
 ### [dev-2026-09-25-220217] BUG-143 — a song is planned with its own mood, not its last two seconds
 
 Each song's stored mood was the mood classifier's reading at the very end of the analysed audio: the fade-out on local files, and the last seconds of the 30 s preview on streaming. Mood is 40 % of how a scene is chosen, so songs were planned from their endings. On the beta playlist, Teardrop, Take Five and Pyramid Song were planned as calm, and Moonlight I as warm. The stored mood is now the song's median after its first sixth (Matt's option A). Its rank agreement with the full production-chain analysis on the beta playlist rose from 0.59 to 0.86. With no plan history, the top-scored opening scene changes on 8 of 10 beta songs. **Local files re-analyse once** (stem cache schema v16). The preparation view's mood word can change on those songs. The live mood path is unchanged. Still to do: Matt's listen on the beta playlist.

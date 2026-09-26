@@ -132,7 +132,7 @@ When a playlist is available, `SessionManager.startSession(source:)` (Apple Musi
 4. **Stem separation** — MPSGraph Open-Unmix HQ, ~142 ms warm predict per track. Mono waveforms extracted from the UMA `stemBuffers`.
 5. **Analysis pipeline** (composed in `SessionPreparer+Analysis.analyzePreview(...)`, run inside `Task.detached`):
    - StemAnalyzer multi-frame AGC warmup → `StemFeatures` snapshot.
-   - Offline MIR (`MIRPipeline`) over the preview clip — BPM, key, mood (the per-frame median after the first sixth, `SessionPreparer.songMood` — BUG-143; formerly the last-frame `MoodClassifier.currentState`), spectral centroid, structural section count.
+   - Offline MIR (`MIRPipeline`) over the preview clip — BPM (the grid's octave-folded tempo, nil when irregular — BUG-144; formerly the MIR `BeatDetector`'s saturated IOI tempo), key, mood (the per-frame median after the first sixth, `SessionPreparer.songMood` — BUG-143; formerly the last-frame `MoodClassifier.currentState`), spectral centroid, structural section count.
    - **Beat This! offline beat grid on the full mix** (D-077 via `BeatGridAnalyzer` / `BeatGridResolver`).
    - **Metadata-driven `beatsPerBar` override** (Round 26, 2026-05-15): when `MetadataPreFetcher` returned a `time_signature` (e.g. Money's 7/4), `BeatGrid.overridingBeatsPerBar(timeSignature)` overrides the ML-detected meter before caching.
    - **Beat This! offline beat grid on the drums stem** (DSP.4 diagnostic — same analyzer instance, MPSGraph graph reusable across calls; logged via `SessionPreparer+WiringLogs` for 3-way BPM disagreement detection alongside the full-mix grid and MIR BPM).

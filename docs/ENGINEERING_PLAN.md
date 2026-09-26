@@ -1633,6 +1633,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG144.2 — the stored BPM is the beat tracker's ✅ (2026-09-26; manual check pending)
+
+**Diagnosed (BUG144.1).** `TrackProfile.bpm` was the MIR `BeatDetector`'s IOI tempo. Its sub-bass onsets fire at their 400 ms cooldown on every song (median IOI 0.441 s on all ten beta songs, and on the 30 s windows), so it read 130–143 BPM whatever the music.
+**Delivered (Matt: no BPM for beatless songs).** The stored BPM is now `octaveFoldedTempoBPM` of the Beat This! grid, a new trimmed mean of the octave-folded intervals that avoids the median's 20 ms quantisation. It is `nil` when the D-154 gate calls the beat irregular. Folded into the branch's schema v16. No behavioural change to beat sync: the grid, the live `BeatDetector` and the gate are unchanged.
+**Done-when:** ✅ `ProfileTempoTests` (fails on the old code, which stored 139.7); ✅ the beta-playlist gate: spread 12.7 → 94.6 BPM, irregular → nil; ✅ KNOWN_ISSUES + release notes; ⏳ Matt looks at the preparation view. **Lead, not measured:** the live `stableBPM` may saturate the same way.
+
 ### Increment BUG143.2 — the stored mood is the song's median ✅ (2026-09-25; manual feel check pending)
 
 **Delivered (Matt's option A).** `analyzeMIR` stores `SessionPreparer.songMood`: the per-frame median of valence and arousal after the first sixth, instead of the classifier's last-frame EMA state. Cache schema 15 → 16. The rule matches KAG.3's `songArousal`; its owner will read `mood.arousal` and drop that field, and whichever branch merges second takes v17.
