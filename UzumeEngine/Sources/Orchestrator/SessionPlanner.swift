@@ -91,7 +91,8 @@ public struct DefaultSessionPlanner: Sendable {
     /// When `seed` is zero, output is byte-identical to the zero-seed run (D-034 preserved).
     /// When nonzero, a deterministic ±0.02 perturbation is added to each preset score before
     /// selection — enough to break ties without changing the ranking meaningfully on non-equal
-    /// scores. Two calls with the same nonzero seed produce identical output.
+    /// scores. Two calls with the same nonzero seed produce identical output, in any process —
+    /// pinned by `NearTieSamplingTests.pinnedAcrossProcesses` (BUG-147).
     public func plan(
         tracks: [(TrackIdentity, TrackProfile)],
         catalog: [PresetDescriptor],
