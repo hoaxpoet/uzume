@@ -163,7 +163,13 @@ struct PresetFrameBudgetTests {
         // 600 clocks + neighbour grid + world camera + sprite projection). In Release, no readback,
         // command-buffer timestamps at 1920x1080 on the DYC capture: 2.78 ms GPU median (p95 5.70),
         // CPU model 0.30 ms median — `FirefliesRenderTests.frameCostAt1080p`.
-        "Fireflies": 17.96
+        // FF.3 — re-recorded 19.61 ms (3.3x median, 2026-09-26, Debug harness with readback,
+        // isolated run; 19.96 / 19.61 over two runs): the light adds ~1.7 ms — 62 depth bands of
+        // branch / pool / sprite draws and the pools' overdraw. A first cut measured 29 ms because
+        // a COMPARISON sort of the 100 k-segment skeleton ran inside every timed pass (this harness
+        // builds the geometry per pass) at ~250 ms `-Onone`; `FirefliesGeometry.bandOrder` is a
+        // counting sort. Release, no readback, DYC 1920x1080: see `FirefliesRenderTests.frameCostAt1080p`.
+        "Fireflies": 19.61
     ]
 
     /// Presets `MultiPassRenderHarness` cannot drive. Named, printed, and NOT counted as passing.
