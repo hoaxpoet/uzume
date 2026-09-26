@@ -13,7 +13,6 @@ import Shared
 
 /// Result of `analyzeMIR` — avoids a large tuple return type.
 private struct MIRAnalysisResult {
-    var bpm: Float?
     var key: String?
     var mood: EmotionalState
     var centroidAvg: Float
@@ -95,13 +94,9 @@ extension SessionPreparer {
             )
         }
 
-        // Step 4: Offline MIR analysis (BPM, key, mood, centroid).
+        // Step 4: Offline MIR analysis (key, mood, centroid), at 44.1 kHz (BUG-146).
         let mir = probe.measure(PrepStage.mir) {
-            analyzeMIR(
-                samples: preview.pcmSamples,
-                sampleRate: preview.sampleRate,
-                classifier: classifier
-            )
+            analyzeMIR(preview: preview, classifier: classifier)
         }
 
         // Steps 5 + 6: offline beat grids (full mix + drums stem), with metadata meter override.
@@ -131,7 +126,7 @@ extension SessionPreparer {
         }
 
         let profile = TrackProfile(
-            bpm: mir.bpm,
+            bpm: storedTempo(grid: beatGrid, drums: drumsBeatGrid),
             key: mir.key,
             mood: mir.mood,
             spectralCentroidAvg: mir.centroidAvg,
@@ -266,10 +261,18 @@ extension SessionPreparer {
     /// rate (~43 frames/second at 44100 Hz). At 30 seconds this yields ~1290 frames,
     /// enough for `BeatDetector` and `ChromaExtractor` to converge on stable values.
     nonisolated private static func analyzeMIR(
-        samples: [Float],
-        sampleRate: Int,
+        preview: PreviewAudio,
         classifier: any MoodClassifying
     ) -> MIRAnalysisResult {
+        // BUG-146: MIR runs at the stems' 44.1 kHz whatever the file's rate. Its 1024-point FFT at
+        // the file's rate moved the mood features with it — at 96 kHz the Nyquist-normalised
+        // centroid halved and 93.75 Hz bins pushed the key correlations +1.6/+1.9 σ, so the same
+        // song read arousal 0.21 instead of 0.52.
+        let sampleRate = Int(StemSeparator.modelSampleRate)
+        let samples = preview.sampleRate == sampleRate
+            ? preview.pcmSamples
+            : BeatThisPreprocessor.resample(
+                preview.pcmSamples, from: Double(preview.sampleRate), to: Double(sampleRate))
         let fftSize = 1024
         let binCount = fftSize / 2   // 512
 
@@ -277,7 +280,7 @@ extension SessionPreparer {
         // FFTMagnitudeKernel — byte-identical to the live FFTProcessor (BUG-066 / MOOD-FLUX.3).
         guard let fft = try? FFTMagnitudeKernel(fftSize: fftSize) else {
             return MIRAnalysisResult(
-                bpm: nil, key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0
+                key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0
             )
         }
 
@@ -288,6 +291,7 @@ extension SessionPreparer {
         var centroidSum: Float = 0
         var frameCount = 0
         var moodAccumulator = MoodFeatureAccumulator()   // DYN.7
+        var moodTrace: [EmotionalState] = []             // BUG-144
         var offset = 0
 
         while offset + fftSize <= samples.count {
@@ -324,7 +328,9 @@ extension SessionPreparer {
             // Classify every frame, as live does. The output window is wall-clock now, so
             // the cadence no longer sets the smoothing — it only sets the cost, and the
             // forward pass is a 10→64→32→16→2 MLP over a 30 s window.
-            _ = try? classifier.classify(features: smoothed, deltaTime: dt)
+            if let state = try? classifier.classify(features: smoothed, deltaTime: dt) {
+                moodTrace.append(state)
+            }
 
             offset += fftSize
         }
@@ -342,11 +348,38 @@ extension SessionPreparer {
         // StructuralAnalyzer for diagnostics, unread.)
 
         return MIRAnalysisResult(
-            bpm: mir.stableBPM,
             key: mir.stableKey,
-            mood: classifier.currentState,
+            mood: songMood(moodTrace),
             centroidAvg: centroidAvg,
             sectionCount: sectionCount
+        )
+    }
+
+    /// The BPM a prepared track stores (BUG-145; Matt: no BPM for songs without a steady beat).
+    /// The beat tracker's octave-folded tempo — never the MIR BeatDetector's, whose sub-bass
+    /// onsets fire at their 400 ms cooldown on every song (130–143 BPM whatever the music).
+    /// nil when the D-154 gate calls the beat irregular: the scorer's neutral, no readout.
+    nonisolated static func storedTempo(grid: BeatGrid, drums: BeatGrid) -> Float? {
+        guard assessBeatIrregularity(grid: grid, drums: drums) != true else { return nil }
+        return octaveFoldedTempoBPM(beats: grid.beats).map(Float.init)
+    }
+
+    /// The song's typical mood (BUG-144, Matt's option A): the per-frame median of valence and
+    /// arousal after the first sixth, which is the classifier's warm-up (the KAG.0 spike's
+    /// `load_session` rule). `classifier.currentState` after the loop was a 0.7 s EMA, so it
+    /// described only the last second or two. On the beta playlist its rank agreement with the
+    /// production chain was 0.59; this statistic scores 0.85. `.neutral` when no frame was classified.
+    nonisolated static func songMood(_ trace: [EmotionalState]) -> EmotionalState {
+        guard !trace.isEmpty else { return .neutral }
+        let settled = trace[(trace.count / 6)...]
+        func median(_ values: [Float]) -> Float {
+            let sorted = values.sorted()
+            let mid = sorted.count / 2
+            return sorted.count % 2 == 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+        }
+        return EmotionalState(
+            valence: median(settled.map(\.valence)),
+            arousal: median(settled.map(\.arousal))
         )
     }
 }
