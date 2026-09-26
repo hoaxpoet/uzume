@@ -17,6 +17,7 @@ private struct MIRAnalysisResult {
     var mood: EmotionalState
     var centroidAvg: Float
     var sectionCount: Int
+    var energyCurve: EnergyCurve?
 }
 
 // MARK: - Analysis Pipeline
@@ -132,7 +133,8 @@ extension SessionPreparer {
             spectralCentroidAvg: mir.centroidAvg,
             genreTags: [],
             stemEnergyBalance: stemFeatures,
-            estimatedSectionCount: mir.sectionCount
+            estimatedSectionCount: mir.sectionCount,
+            energyCurve: mir.energyCurve
         )
 
         return CachedTrackData(
@@ -264,15 +266,7 @@ extension SessionPreparer {
         preview: PreviewAudio,
         classifier: any MoodClassifying
     ) -> MIRAnalysisResult {
-        // BUG-146: MIR runs at the stems' 44.1 kHz whatever the file's rate. Its 1024-point FFT at
-        // the file's rate moved the mood features with it — at 96 kHz the Nyquist-normalised
-        // centroid halved and 93.75 Hz bins pushed the key correlations +1.6/+1.9 σ, so the same
-        // song read arousal 0.21 instead of 0.52.
-        let sampleRate = Int(StemSeparator.modelSampleRate)
-        let samples = preview.sampleRate == sampleRate
-            ? preview.pcmSamples
-            : BeatThisPreprocessor.resample(
-                preview.pcmSamples, from: Double(preview.sampleRate), to: Double(sampleRate))
+        let (samples, sampleRate) = mirInput(preview)
         let fftSize = 1024
         let binCount = fftSize / 2   // 512
 
@@ -280,7 +274,7 @@ extension SessionPreparer {
         // FFTMagnitudeKernel — byte-identical to the live FFTProcessor (BUG-066 / MOOD-FLUX.3).
         guard let fft = try? FFTMagnitudeKernel(fftSize: fftSize) else {
             return MIRAnalysisResult(
-                key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0
+                key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0, energyCurve: nil
             )
         }
 
@@ -292,6 +286,7 @@ extension SessionPreparer {
         var frameCount = 0
         var moodAccumulator = MoodFeatureAccumulator()   // DYN.7
         var moodTrace: [EmotionalState] = []             // BUG-144
+        var energy = EnergyCurveBuilder(frameSeconds: dt) // NRG.1 (D-259)
         var offset = 0
 
         while offset + fftSize <= samples.count {
@@ -309,6 +304,10 @@ extension SessionPreparer {
             let fv = mir.process(magnitudes: fft.magnitudes, fps: fps, time: time, deltaTime: dt)
             centroidSum += fv.spectralCentroid
             frameCount += 1
+            samples.withUnsafeBufferPointer {
+                energy.add(frame: UnsafeBufferPointer(rebasing: $0[offset..<offset + fftSize]),
+                           flux: mir.rawSmoothedFlux)
+            }
 
             // DYN.7 — the SAME measurement the live path makes. Previously this fed the
             // classifier INSTANTANEOUS features every 30th frame while live fed a 1.67 s
@@ -351,8 +350,20 @@ extension SessionPreparer {
             key: mir.stableKey,
             mood: songMood(moodTrace),
             centroidAvg: centroidAvg,
-            sectionCount: sectionCount
+            sectionCount: sectionCount,
+            energyCurve: energy.build()
         )
+    }
+
+    /// The preview at the rate MIR runs at (BUG-146): the stems' 44.1 kHz whatever the file's rate.
+    /// A 1024-point FFT at the file's rate moved the mood features with it — at 96 kHz the
+    /// Nyquist-normalised centroid halved and 93.75 Hz bins pushed the key correlations
+    /// +1.6/+1.9 σ, so the same song read arousal 0.21 instead of 0.52.
+    nonisolated static func mirInput(_ preview: PreviewAudio) -> (samples: [Float], sampleRate: Int) {
+        let rate = Int(StemSeparator.modelSampleRate)
+        guard preview.sampleRate != rate else { return (preview.pcmSamples, rate) }
+        return (BeatThisPreprocessor.resample(
+            preview.pcmSamples, from: Double(preview.sampleRate), to: Double(rate)), rate)
     }
 
     /// The BPM a prepared track stores (BUG-145; Matt: no BPM for songs without a steady beat).

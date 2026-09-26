@@ -236,7 +236,10 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       tempo, nil when the D-154 gate calls the beat irregular. Same bump,
     ///                       BUG-146: MIR (mood, key, centroid) now runs at 44.1 kHz whatever the
     ///                       file's rate; every non-44.1 kHz v15 mood was skewed by the rate.
-    public static let currentSchemaVersion: Int = 16
+    ///   v17 (NRG.1, D-259) — adds `TrackProfile.energyCurve`, the measured loudness + activity
+    ///                       curve scene choice will read instead of mood. v16 entries decode
+    ///                       with it nil — re-analyse so every cached song has one.
+    public static let currentSchemaVersion: Int = 17
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).
