@@ -236,8 +236,7 @@ struct ReviewCaptureHarness {
         let size = hosting.fittingSize
         let bounds = CGRect(origin: .zero, size: size)
         hosting.frame = bounds
-        let window = NSWindow(contentRect: bounds, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .darkAqua)
+        let window = NSWindow.offscreen(bounds)
         window.contentView = hosting
         hosting.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(250))
