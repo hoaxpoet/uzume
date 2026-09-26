@@ -113,7 +113,7 @@ None. Every public, internal, or fileprivate symbol in `Sources/Session/` has at
    - `TrackPreparationStatus.swift` — `AnalysisStage` + `TrackPreparationStatus` enums (7-status canonical state machine for per-track preparation).
    - `BeatGridAnalyzer.swift` — `BeatGridAnalyzing` protocol + `DefaultBeatGridAnalyzer` (composes DSP's `BeatThisPreprocessor` + ML's `BeatThisModel` + DSP's `BeatGridResolver` into a single injectable step). CA.1 boundary-deferred to here; verdict assigned in §Resolution-of-CA.1/CA.2-boundary-deferred-items below.
    - `GridOnsetCalibrator.swift` — BUG-007.8 per-track grid-vs-onset offset calibrator. CA.1 boundary-deferred to here; verdict assigned below.
-   - `BPMMismatchCheck.swift` — `detectBPMMismatch(...)` 2-way (BUG-008.2) + `detectThreeWayBPMDisagreement(...)` 3-way (DSP.4) diagnostic functions; consumed only by `SessionPreparer+WiringLogs`.
+   - `BPMMismatchCheck.swift` — `detectBPMMismatch(...)` 2-way (BUG-008.2) + `detectThreeWayBPMDisagreement(...)` 3-way (DSP.4) diagnostic functions; consumed only by `SessionPreparer+WiringLogs`. *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
    - `LocalFolderConnector.swift` — `#if`-gated stub (above).
    - `Connectors/SpotifyTokenProvider.swift` — `SpotifyTokenProviding` protocol + `MissingCredentialsTokenProvider` internal fallback. (CLEAN.2.1 removed the `DefaultSpotifyTokenProvider` client-credentials actor with the bundled secret; OAuth Authorization Code + PKCE via the App-layer `SpotifyOAuthTokenProvider` is now the sole Spotify token source.)
    - `Connectors/SpotifyWebAPIConnector.swift` — `SpotifyWebAPIConnecting` protocol + `SpotifyWebAPIConnector` implementation (D-070 `/items` schema, `preview_url` capture, OAuth + 401-retry mapping).
@@ -152,7 +152,7 @@ The audit produced no new `boundary-deferred` findings. The following Session-mo
 - **Preparation pipeline (6 files):** `SessionPreparer` (orchestrator, @MainActor), `SessionPreparer+Analysis` (static `analyzePreview` composition), `SessionPreparer+WiringLogs` (BUG-006.1 + DSP.4 diagnostic emission), `PreviewResolver` (D-070 Spotify-first / iTunes fallback), `PreviewDownloader` (AAC/MP3 → mono Float32 PCM via `AVAudioFile`), `StemCache` (NSLock-guarded per-track cache).
 - **Track / Playlist value types (3 files):** `TrackIdentity` (cache key with the `spotifyPreviewURL` hint excluded from Equatable/Hashable/Codable per D-070), `TrackProfile`, `PlaylistConnector` (Apple Music AppleScript + Spotify routing).
 - **Boundary-resolved-from-CA.1 (2 files):** `BeatGridAnalyzer` (`BeatGridAnalyzing` protocol + `DefaultBeatGridAnalyzer` composing DSP + ML), `GridOnsetCalibrator` (BUG-007.8 per-track offset calibration). See §Resolution-of-CA.1/CA.2-boundary-deferred-items below.
-- **Quality gates (1 file):** `BPMMismatchCheck` (`detectBPMMismatch` 2-way BUG-008.2 + `detectThreeWayBPMDisagreement` 3-way DSP.4).
+- **Quality gates (1 file):** `BPMMismatchCheck` (`detectBPMMismatch` 2-way BUG-008.2 + `detectThreeWayBPMDisagreement` 3-way DSP.4). *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
 - **Connectors subdirectory (2 files):** `Connectors/SpotifyTokenProvider` (`SpotifyTokenProviding` protocol + `MissingCredentialsTokenProvider` fallback; CLEAN.2.1 removed the D-068 client-credentials provider — OAuth/D-069 via the App-layer `SpotifyOAuthTokenProvider` is now the sole token source), `Connectors/SpotifyWebAPIConnector` (D-070 `/items` schema + `preview_url` capture + 401-retry + 403→`spotifyLoginRequired` mapping).
 
 ---
@@ -268,7 +268,7 @@ Notable: `FFTContext` (lines 25–35) is a private working-buffer struct allocat
 BUG-006.1 + BUG-008.2 + DSP.4 diagnostic emission. Three responsibilities:
 1. **`logWiringDoneSummary(cachedTracks:failedTracks:)`** — per-track `WIRING: SessionPreparer.beatGrid` lines + a final `DONE` summary. Called from `SessionPreparer._runPreparation` (line 266).
 2. **`logDrumsBeatGridLine(track:)`** — DSP.4 `WIRING: SessionPreparer.drumsBeatGrid` line per cached track.
-3. **`logBPMMismatchIfAny(track:)`** — 3-way preferred (`detectThreeWayBPMDisagreement`), falls back to 2-way (`detectBPMMismatch`, BUG-008.2 backward grep-ability) when drums-stem BPM is zero or missing.
+3. **`logBPMMismatchIfAny(track:)`** — 3-way preferred (`detectThreeWayBPMDisagreement`), falls back to 2-way (`detectBPMMismatch`, BUG-008.2 backward grep-ability) when drums-stem BPM is zero or missing. *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
 
 Diagnostic-only — no production behaviour depends on these log lines, but they are the load-bearing diagnostic trail for any session-prep regression. Tracked for QR.5 cleanup once BUG-006 / BUG-007 / BUG-008 fully close.
 
@@ -337,7 +337,7 @@ Test consumers: `GridOnsetCalibratorTests` (5 cases — empty-grid, insufficient
 
 [`BPMMismatchCheck.swift:91, 164`](../../UzumeEngine/Sources/Session/BPMMismatchCheck.swift) — `public func detectBPMMismatch(...)` (2-way, BUG-008.2 backward-grep-able) + `public func detectThreeWayBPMDisagreement(...)` (3-way, DSP.4 diagnostic). Plus two result structs: `BPMMismatchWarning` and `ThreeWayBPMReading`. Pure functions — no I/O, no logging, no Sendable concerns. Default threshold 3 % (intentionally generous — 0.4 % is the `BeatGridResolver`'s own `±0.5` BPM tolerance at 125 BPM; 3 % leaves headroom for legitimate small disagreements like Money's 1.4 %).
 
-Sole production consumer: `SessionPreparer+WiringLogs.logBPMMismatchIfAny(track:)` at lines 81 (3-way) and 104 (2-way). Test consumer: `BPMMismatchCheckTests` (16+ cases). No App-layer or non-Session consumer — diagnostic-only.
+Sole production consumer: `SessionPreparer+WiringLogs.logBPMMismatchIfAny(track:)` at lines 81 (3-way) and 104 (2-way). Test consumer: `BPMMismatchCheckTests` (16+ cases). No App-layer or non-Session consumer — diagnostic-only. *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
 
 ### `Connectors/SpotifyTokenProvider.swift` — `production-active`
 

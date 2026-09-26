@@ -94,20 +94,9 @@ extension SessionPreparer {
             )
         }
 
-        // Step 4: Offline MIR analysis (key, mood, centroid) at the stems' 44.1 kHz whatever the
-        // file's rate (BUG-145). MIR's 1024-point FFT at the file's rate moved the mood features
-        // with it: at 96 kHz the Nyquist-normalised centroid halved and 93.75 Hz bins pushed the
-        // key correlations +1.6/+1.9 σ, so the same song read arousal 0.21 instead of 0.52.
+        // Step 4: Offline MIR analysis (key, mood, centroid), at 44.1 kHz (BUG-145).
         let mir = probe.measure(PrepStage.mir) {
-            let mirRate = Double(StemSeparator.modelSampleRate)
-            let fileRate = Double(preview.sampleRate)
-            return analyzeMIR(
-                samples: fileRate == mirRate
-                    ? preview.pcmSamples
-                    : BeatThisPreprocessor.resample(preview.pcmSamples, from: fileRate, to: mirRate),
-                sampleRate: Int(mirRate),
-                classifier: classifier
-            )
+            analyzeMIR(preview: preview, classifier: classifier)
         }
 
         // Steps 5 + 6: offline beat grids (full mix + drums stem), with metadata meter override.
@@ -136,16 +125,8 @@ extension SessionPreparer {
                 samples: preview.pcmSamples, sampleRate: Double(preview.sampleRate)) ?? []
         }
 
-        // BUG-144 (Matt: no BPM for songs without a steady beat): the tempo is the beat
-        // tracker's, never the MIR BeatDetector's — its sub-bass onsets fire at their 400 ms
-        // cooldown on every song, so its IOI tempo read 130–143 whatever the music. Songs the
-        // D-154 gate calls irregular store nil (the scorer's neutral, no readout).
-        let bpm: Float? = assessBeatIrregularity(grid: beatGrid, drums: drumsBeatGrid) == true
-            ? nil
-            : octaveFoldedTempoBPM(beats: beatGrid.beats).map(Float.init)
-
         let profile = TrackProfile(
-            bpm: bpm,
+            bpm: storedTempo(grid: beatGrid, drums: drumsBeatGrid),
             key: mir.key,
             mood: mir.mood,
             spectralCentroidAvg: mir.centroidAvg,
@@ -280,10 +261,18 @@ extension SessionPreparer {
     /// rate (~43 frames/second at 44100 Hz). At 30 seconds this yields ~1290 frames,
     /// enough for `BeatDetector` and `ChromaExtractor` to converge on stable values.
     nonisolated private static func analyzeMIR(
-        samples: [Float],
-        sampleRate: Int,
+        preview: PreviewAudio,
         classifier: any MoodClassifying
     ) -> MIRAnalysisResult {
+        // BUG-145: MIR runs at the stems' 44.1 kHz whatever the file's rate. Its 1024-point FFT at
+        // the file's rate moved the mood features with it — at 96 kHz the Nyquist-normalised
+        // centroid halved and 93.75 Hz bins pushed the key correlations +1.6/+1.9 σ, so the same
+        // song read arousal 0.21 instead of 0.52.
+        let sampleRate = Int(StemSeparator.modelSampleRate)
+        let samples = preview.sampleRate == sampleRate
+            ? preview.pcmSamples
+            : BeatThisPreprocessor.resample(
+                preview.pcmSamples, from: Double(preview.sampleRate), to: Double(sampleRate))
         let fftSize = 1024
         let binCount = fftSize / 2   // 512
 
@@ -364,6 +353,15 @@ extension SessionPreparer {
             centroidAvg: centroidAvg,
             sectionCount: sectionCount
         )
+    }
+
+    /// The BPM a prepared track stores (BUG-144; Matt: no BPM for songs without a steady beat).
+    /// The beat tracker's octave-folded tempo — never the MIR BeatDetector's, whose sub-bass
+    /// onsets fire at their 400 ms cooldown on every song (130–143 BPM whatever the music).
+    /// nil when the D-154 gate calls the beat irregular: the scorer's neutral, no readout.
+    nonisolated static func storedTempo(grid: BeatGrid, drums: BeatGrid) -> Float? {
+        guard assessBeatIrregularity(grid: grid, drums: drums) != true else { return nil }
+        return octaveFoldedTempoBPM(beats: grid.beats).map(Float.init)
     }
 
     /// The song's typical mood (BUG-143, Matt's option A): the per-frame median of valence and
