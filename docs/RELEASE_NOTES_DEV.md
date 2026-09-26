@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-26-014709] BUG-143 — the app tests no longer crash their host after the engine suite
+
+When `xcodebuild … test` ran straight after `swift test`, the app's test host sometimes crashed (exit 65, "0 tests" on the retry) in `objc_autoreleasePoolPop`. Three DS.6 tests built an `NSWindow` in code and closed it. A window made that way has `isReleasedWhenClosed` set, so `close()` released it once more than ARC owned. When that freed memory was reused, the host crashed, which happened more often on a machine the engine suite had just loaded. The tests now build their windows through `NSWindow.offscreen(_:)`, which clears the flag. A new test crashed the host 3/3 without the fix and passes with it. A source scan stops new tests from copying the old pattern. No product code changed and no timeout was widened.
+
 ### [dev-2026-09-25-170143] BUG-142 — no track-change event after streaming metadata stops
 
 A Now Playing poll that was still waiting on Music/Spotify when observation stopped fired a track-change event (with no previous track) afterwards, and set `currentTrack` again. This showed up as an intermittent CI failure (3 events where the test expected 2). A generation counter bumped under the lock at stop now makes a stale poll drop its result. A deterministic test parks the reader across a stop; it failed every time before the fix. Test sleep budgets are unchanged.
