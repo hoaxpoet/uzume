@@ -227,7 +227,16 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       stems are at the separator's 44.1 kHz, so every non-44.1 kHz
     ///                       v13/v14 entry holds a time-scaled drums grid (48 kHz: tempo x1.088) that
     ///                       feeds the D-154 beat-irregularity gate. Data again — re-analyse.
-    public static let currentSchemaVersion: Int = 15
+    ///   v16 (BUG-144) — `TrackProfile.mood` was the classifier's state at the LAST frame (the
+    ///                       audio's final second or two); it is now the song's median after the
+    ///                       first sixth. Every v15 mood describes the fade-out — re-analyse.
+    ///                       Same bump (unmerged branch), BUG-145: `TrackProfile.bpm` was the
+    ///                       MIR BeatDetector's IOI tempo, 130–143 on every song (sub-bass onsets
+    ///                       firing at their cooldown); it is now the grid's octave-folded
+    ///                       tempo, nil when the D-154 gate calls the beat irregular. Same bump,
+    ///                       BUG-146: MIR (mood, key, centroid) now runs at 44.1 kHz whatever the
+    ///                       file's rate; every non-44.1 kHz v15 mood was skewed by the rate.
+    public static let currentSchemaVersion: Int = 16
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

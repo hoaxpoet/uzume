@@ -314,17 +314,15 @@ func nilAnalyzer_producesEmptyDrumsBeatGrid() async throws {
     #expect(result.cache.drumsBeatGrid(for: track) == .empty)
 }
 
-// MARK: - BUG-008.2 — BPM mismatch wiring smoke test
+// MARK: - Grid → cache → profile tempo (BUG-008.2 wiring, BUG-145)
 
-/// Wiring smoke test for BUG-008.2. With a fixed-BPM stub analyzer producing
-/// a known grid BPM, prepare() must complete without crashing and the
-/// cached BeatGrid must carry that BPM verbatim. The detector logic itself
-/// is covered exhaustively by `BPMMismatchCheckTests`; this test exists to
-/// prove the SessionPreparer call site reaches the detector and tolerates
-/// the cases where MIR is zero (sine-tone preview produces no usable BPM).
+/// With a fixed-BPM stub analyzer, prepare() must complete, the cached BeatGrid must carry
+/// that BPM verbatim, and the profile's BPM must be the grid's tempo (BUG-145 — it was the
+/// MIR BeatDetector's, which a sine preview drives to ~140). The BUG-008.2 MIR-vs-grid
+/// mismatch log this test used to smoke-test was removed at BUG-145 with its MIR input.
 @Test
 @MainActor
-func bpmMismatch_wiring_doesNotCrash_andGridReachesCache() async throws {
+func stubGrid_reachesCacheVerbatim() async throws {
     let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
     let separator = try StubSeparator(device: device)
     let stubGrid = FixedBPMBeatGridAnalyzer(fixedBPM: 118.0)
@@ -344,17 +342,8 @@ func bpmMismatch_wiring_doesNotCrash_andGridReachesCache() async throws {
 
     #expect(cached.beatGrid.bpm == 118.0,
             "Stub analyzer's grid BPM must reach the cache verbatim")
+    #expect(abs((cached.trackProfile.bpm ?? 0) - 118) < 0.5,
+            "the profile's BPM must be the grid's tempo, not the MIR detector's (BUG-145)")
     #expect(!cached.beatGrid.beats.isEmpty,
             "Stub analyzer must produce a non-empty grid")
-    // MIR on a 440 Hz sine produces a non-zero artifact BPM (sine harmonics
-    // trigger spectral-flux onsets), giving both estimators non-zero values.
-    // We don't assert the exact value — only that the detector's positive
-    // WARN path is exercised. The actual log line is observable in the
-    // unified-log output during this test run; the BPMMismatchCheckTests
-    // pure-function suite proves the detection math.
-    let mirFloat = try #require(cached.trackProfile.bpm,
-                                "Sine artifact should produce a non-zero MIR BPM")
-    let mismatch = detectBPMMismatch(mirBPM: Double(mirFloat), gridBPM: cached.beatGrid.bpm)
-    #expect(mismatch != nil,
-            "118 stub vs sine-artifact MIR (≈140) must trip the >3% threshold")
 }
