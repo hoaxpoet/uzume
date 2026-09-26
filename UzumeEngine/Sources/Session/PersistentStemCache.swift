@@ -230,6 +230,10 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///   v16 (BUG-143) — `TrackProfile.mood` was the classifier's state at the LAST frame (the
     ///                       audio's final second or two); it is now the song's median after the
     ///                       first sixth. Every v15 mood describes the fade-out — re-analyse.
+    ///                       Same bump (unmerged branch), BUG-144: `TrackProfile.bpm` was the
+    ///                       MIR BeatDetector's IOI tempo, 130–143 on every song (sub-bass onsets
+    ///                       firing at their cooldown); it is now the grid's octave-folded median
+    ///                       tempo, nil when the D-154 gate calls the beat irregular.
     public static let currentSchemaVersion: Int = 16
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`

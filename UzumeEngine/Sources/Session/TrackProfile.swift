@@ -16,7 +16,9 @@ public struct TrackProfile: Sendable, Codable {
 
     // MARK: - Fields
 
-    /// Estimated tempo in BPM, or nil if insufficient onset data.
+    /// The song's tempo in BPM: the Beat This! grid's octave-folded median (BUG-144). nil when
+    /// the grid has too few beats, or the D-154 gate judges the beat irregular (Matt: no BPM for
+    /// songs without a steady beat) — the scorer then treats tempo as neutral.
     public var bpm: Float?
 
     /// Estimated musical key (e.g. "C major", "F# minor"), or nil if atonal/percussive.

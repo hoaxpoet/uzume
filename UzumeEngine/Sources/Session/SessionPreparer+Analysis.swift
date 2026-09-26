@@ -13,7 +13,6 @@ import Shared
 
 /// Result of `analyzeMIR` — avoids a large tuple return type.
 private struct MIRAnalysisResult {
-    var bpm: Float?
     var key: String?
     var mood: EmotionalState
     var centroidAvg: Float
@@ -95,7 +94,7 @@ extension SessionPreparer {
             )
         }
 
-        // Step 4: Offline MIR analysis (BPM, key, mood, centroid).
+        // Step 4: Offline MIR analysis (key, mood, centroid).
         let mir = probe.measure(PrepStage.mir) {
             analyzeMIR(
                 samples: preview.pcmSamples,
@@ -130,8 +129,18 @@ extension SessionPreparer {
                 samples: preview.pcmSamples, sampleRate: Double(preview.sampleRate)) ?? []
         }
 
+        // BUG-144 (Matt: no BPM for songs without a steady beat): the tempo is the beat
+        // tracker's, never the MIR BeatDetector's — its sub-bass onsets fire at their 400 ms
+        // cooldown on every song, so its IOI tempo read 130–143 whatever the music. Songs the
+        // D-154 gate calls irregular store nil (the scorer's neutral, no readout).
+        // ponytail: octaveFoldedMedianBPM inherits Beat This!'s 20 ms beat grid (≈ ±3 %);
+        // a trimmed mean of the folded IOIs if the displayed number ever needs to be exact.
+        let bpm: Float? = assessBeatIrregularity(grid: beatGrid, drums: drumsBeatGrid) == true
+            ? nil
+            : octaveFoldedMedianBPM(beats: beatGrid.beats).map(Float.init)
+
         let profile = TrackProfile(
-            bpm: mir.bpm,
+            bpm: bpm,
             key: mir.key,
             mood: mir.mood,
             spectralCentroidAvg: mir.centroidAvg,
@@ -277,7 +286,7 @@ extension SessionPreparer {
         // FFTMagnitudeKernel — byte-identical to the live FFTProcessor (BUG-066 / MOOD-FLUX.3).
         guard let fft = try? FFTMagnitudeKernel(fftSize: fftSize) else {
             return MIRAnalysisResult(
-                bpm: nil, key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0
+                key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0
             )
         }
 
@@ -345,7 +354,6 @@ extension SessionPreparer {
         // StructuralAnalyzer for diagnostics, unread.)
 
         return MIRAnalysisResult(
-            bpm: mir.stableBPM,
             key: mir.stableKey,
             mood: songMood(moodTrace),
             centroidAvg: centroidAvg,
