@@ -2,8 +2,8 @@
 
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
-**FF.3 (the light) next** — prompt `prompts/FF.3-prompt.md` · FF.4 (M7 + certification). `certified: false`,
-`exclude_from_cycling: true` until FF.3.
+FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
+**FF.4 (M7 + certification) next.** `certified: false`, `exclude_from_cycling: true` until FF.4.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
@@ -99,6 +99,16 @@ Restated from §3, §4.2 and D-157; nothing here is newly decided.
   stays < 0.05 at 1080p through the real draw path. If a bloom breaks that, the bloom shrinks.
 - The world's composition, inks, camera and breath (FF.2) and the swarm's behaviour (FF.1) do not change.
 
+**As built (FF.3).** Each lit firefly is a flat near-white printed dot, a yellow-green halo and a
+four-point starburst printed as grain coverage, and a light pool that multiplies the print around it
+(pale strokes and mist brighten toward green; the dark between strokes stays dark). The nearest
+fireflies (≲ 6 m) are soft discs of the thin-lens circle of confusion. Occlusion is painter's order in
+0.5 m depth bands. Known limit: a light cannot brighten the **near-black** ink of the nearest trunks
+(multiplying near-black stays near-black), so those trunks stay silhouettes beside a light, as in
+`07`; the mid and far trees, the grass and the mist do catch it. The pools' screen reach is capped so
+a unison cannot tile the foreground — the flash budget (D-157) is what limits how far the light
+reaches, and FF.3 spends about three times FF.2's per-frame step (see ENGINEERING_PLAN FF.3).
+
 ## 5. Audio routing (one primitive per layer, FA #67)
 
 | Visual layer | Primitive | Timescale | Status |
@@ -117,7 +127,7 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 - **Performance:** 60 fps at 1080p in Release. The Debug-built `PresetFrameBudgetTests` also times any
   CPU-side model at `-Onone` (FF.1 lesson), so CPU work must be cheap in both configurations.
 - **Silence:** never black (D-037); the world coasts (§4.3).
-- **Rotation:** stays `certified: false` + `exclude_from_cycling: true` until FF.3.
+- **Rotation:** stays `certified: false` + `exclude_from_cycling: true` until FF.4 (M7 + certification).
 
 ## 7. Increments
 | ID | Delivers | Gate |
