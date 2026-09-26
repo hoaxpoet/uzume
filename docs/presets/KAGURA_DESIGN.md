@@ -160,6 +160,16 @@ These are Matt's calls [§9–§11]:
 - **The within-song energy percentile needs the song's distribution.**
   - *Local-file path:* whole-track pre-analysis provides it.
   - *Streaming path:* a trailing running rank over the last ~60 s, primed with the preview.
+  - **Correction (2026-09-25, KAG.3 pre-read — verified in the tree).** No whole-track distribution of
+    `bass_att` exists on either path. What the local-file pre-analysis does carry is `LoudnessProfile` (full-band
+    loudness quantiles, `Shared/LoudnessProfile.swift`) and the pre-analysed stem series (the bass STEM, 43 Hz,
+    whole track). Neither is the spike's signal, so KAG.3 uses a trailing running rank of the smoothed
+    `bass_att` on both paths unless it measures a local-file source that reproduces the spike's picks.
+- **The spike's pick looked one bar AHEAD.** `build_dancer` ranks the smoothed bass envelope over the bar
+  *after* the change (`t0 … t0 + bar`). The streaming path cannot see the future, and on the local-file path
+  no `bass_att` exists ahead of the playhead. **Matt, 2026-09-25 (option A): the pick reads the bar just
+  played, identically on both paths.** A louder stretch gets the vigorous dance at most one bar late; local
+  files and streaming behave the same, so the local M7 previews streaming. No read-ahead.
 - **The reference is ten songs.** Re-derive it if the playlist changes. It is a constant with provenance,
   not a tuned value.
 
@@ -186,8 +196,9 @@ information (`beatsPerBar == 1`, empty `downbeats`), clip changes fall every 4 b
 Take Five is the playlist case.
 
 **Known flag errors, handled outside this scene:**
-- The D-154 flag excludes **Superstition** (drums-stem tempo 138 against grid 98.5) even though its grid is
-  steady. That is being investigated as its own beat-sync task. Kagura does not work around it.
+- ~~The D-154 flag excludes **Superstition**~~ — **resolved by BUG-140 (BUG140.2, 2026-09-25):** the gate now
+  compares octave-folded median tempos, and Matt's live check passed (*"Membrane is locked on Superstition"*).
+  Superstition now pairs with `requires_regular_beat` scenes, Kagura included.
 - It lets through **Pyramid Song** (0.0987 against the 0.10 threshold) and **Warszawa** (no drums tempo, so
   `nil`, which is permissive). Layer 2 catches both.
 
