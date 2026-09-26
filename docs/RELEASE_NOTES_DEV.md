@@ -10,6 +10,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-25-214737] BUG-147 — a planner seed reproduces its plan in any process
+
+The seeded planner noise (D-047) hashed preset ids with `String.hashValue`, which Swift randomizes per launch, so the same seed planned differently in every process. Users never saw it, because the app picks a fresh random seed for each plan and each Regenerate. It did mean a logged seed could not be replayed and seeded offline measurements (BUG-144) were not reproducible. The noise now uses FNV-1a over the id's UTF-8 bytes, and the scorer sums stem affinities in sorted order instead of `Set` order. `NearTieSamplingTests.pinnedAcrossProcesses` pins a seeded plan in source. Every nonzero-seed plan changes once; seed 0 is unchanged.
 ### [dev-2026-09-26-131209] BUG-146 — high-sample-rate files get the mood their music has
 
 Preparation measured mood at the file's own sample rate, so 48 kHz and 96 kHz files read differently from the same music at 44.1 kHz. Superstition's 96 kHz FLAC read arousal 0.21, against 0.52 for the same audio at 44.1 kHz. The fixed-size analysis window halved the brightness measure and blurred the key detection. Preparation now analyses mood, key and brightness at 44.1 kHz (the rate the stems already use) whatever the file's rate. Superstition now reads 0.49. 44.1 kHz files are unchanged; about 16 % of the pilot corpus is at other rates (BUG-141). **Local files re-analyse once** (schema v16, shared with BUG-144/145).

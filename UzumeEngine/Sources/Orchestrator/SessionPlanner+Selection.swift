@@ -18,9 +18,13 @@ extension DefaultSessionPlanner {
     ///
     /// Uses a simple LCG chain to produce a float in [-0.02, 0.02] for a given
     /// (seed, trackIndex, presetID) triple. When seed == 0 this is never called.
+    ///
+    /// The id is hashed with FNV-1a over its UTF-8 bytes, NOT `String.hashValue`: Swift seeds
+    /// `hashValue` randomly per process, so the same seed planned differently on every launch
+    /// and a logged seed could not be replayed (BUG-147).
     private func seededNoise(seed: UInt64, trackIndex: Int, presetID: String) -> Float {
         var hash = seed &+ UInt64(bitPattern: Int64(trackIndex)) &* 2654435761
-        hash ^= UInt64(bitPattern: Int64(presetID.hashValue))
+        hash ^= presetID.utf8.reduce(UInt64(0xcbf2_9ce4_8422_2325)) { ($0 ^ UInt64($1)) &* 0x100_0000_01b3 }
         hash = hash &* 6364136223846793005 &+ 1442695040888963407
         let normalized = Float(hash >> 11) / Float(1 << 53)
         return (normalized - 0.5) * 0.04  // [-0.02, 0.02]

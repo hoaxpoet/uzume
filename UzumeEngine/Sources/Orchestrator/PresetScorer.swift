@@ -305,7 +305,8 @@ public struct DefaultPresetScorer: Sendable {
         // preset scored 0.50, and those five owned the top of every ranking. Declared presets still
         // score over their declared stems only.
         let declared = Set(preset.stemAffinity.keys)
-        let stems: [String] = declared.isEmpty ? ["drums", "bass", "vocals", "other"] : Array(declared)
+        // Sorted: Set order is per-process (BUG-147), and float addition is order-sensitive.
+        let stems: [String] = declared.isEmpty ? ["drums", "bass", "vocals", "other"] : declared.sorted()
         let devSum = stems.reduce(Float(0)) { acc, stem in
             acc + max(0, stemEnergyDeviation(stem, in: track.stemEnergyBalance))
         }

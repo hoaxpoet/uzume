@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG147.1 — a planner seed reproduces its plan in any process ✅ (2026-09-25)
+
+**Delivered.** BUG-147 (P3, found while measuring BUG-144), filed and fixed in one increment as P3 allows. `seededNoise` hashes the preset id with FNV-1a over UTF-8 instead of the per-process-seeded `String.hashValue`. `stemAffinitySubScore` sums stems in sorted order, not `Set` order. BUG-133's `nearTiePick` had no per-process source of its own. Not user-visible: the app draws a random seed per plan and per Regenerate.
+**Done-when:** ✅ `NearTieSamplingTests.pinnedAcrossProcesses` (pinned fingerprint; two different values in two processes before the fix, the same value in three after); ✅ full engine suite + SwiftLint strict; ✅ KNOWN_ISSUES + release notes.
+
 ### Increment BUG146.2 — preparation MIR at 44.1 kHz whatever the file's rate ✅ (2026-09-26)
 
 **Diagnosed (BUG146.1).** `CorpusCensusRunner --dual-rate` on Superstition: at 96 kHz the fixed 1024-point FFT pushed the key correlations +1.6/+1.9 σ, halved the Nyquist-normalised centroid (−0.87 σ) and moved flux −0.40 σ; the band energies stayed within 0.23 σ.
