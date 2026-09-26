@@ -1633,10 +1633,10 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
-### Increment NRG.1 — preparation measures each song's energy curve ✅ (2026-09-26; Matt's curve check pending)
+### Increment NRG.1 — preparation measures each song's energy curve ✅ (2026-09-26; Matt: *"the curves look right"*)
 
 **Delivered (D-259).** `TrackProfile.energyCurve`: one point per second of loudness (mean power, dB) and activity (median smoothed raw flux), built by `EnergyCurveBuilder` inside `analyzeMIR` from the frames it already analyses. The whole file is covered locally, the 30 s preview on streaming. Cache schema 16 → 17. It measures only: no 1–10 level and no scene choice yet. **Why a curve:** Matt rejected ranking whole songs (*"it depends on the part of the song — dance yourself clean is … both calm and driving"*), and confirmed the Dance Yrself Clean curve (quiet to 2:40, drop ~3:15, breakdown ~6:00, return 6:40, fade 8:20) matches the song.
-**Done-when:** ✅ `EnergyCurveTests` (a quiet→loud clip reads a 29.5 dB step, rising activity, one point a second); ⏳ Matt checks the curves of the other beta songs. **Next:** NRG.2, the library-wide 1–10 scale + range readout; then NRG.3, the planner reads the curve per segment (valence out, D-259 §3).
+**Done-when:** ✅ `EnergyCurveTests` (a quiet→loud clip reads a 29.5 dB step, rising activity, one point a second); ✅ Matt checked all ten beta-song loudness curves (*"the curves look right"*, 2026-09-26). **Next:** NRG.2, the library-wide 1–10 scale + range readout; then NRG.3, the planner reads the curve per segment (valence out, D-259 §3).
 
 ### Increment BUG148.1 — the mood model does not generalise: diagnosed ✅ (2026-09-26; fix awaits Matt)
 
