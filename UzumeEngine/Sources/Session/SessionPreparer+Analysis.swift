@@ -133,11 +133,9 @@ extension SessionPreparer {
         // tracker's, never the MIR BeatDetector's — its sub-bass onsets fire at their 400 ms
         // cooldown on every song, so its IOI tempo read 130–143 whatever the music. Songs the
         // D-154 gate calls irregular store nil (the scorer's neutral, no readout).
-        // ponytail: octaveFoldedMedianBPM inherits Beat This!'s 20 ms beat grid (≈ ±3 %);
-        // a trimmed mean of the folded IOIs if the displayed number ever needs to be exact.
         let bpm: Float? = assessBeatIrregularity(grid: beatGrid, drums: drumsBeatGrid) == true
             ? nil
-            : octaveFoldedMedianBPM(beats: beatGrid.beats).map(Float.init)
+            : octaveFoldedTempoBPM(beats: beatGrid.beats).map(Float.init)
 
         let profile = TrackProfile(
             bpm: bpm,

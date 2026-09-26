@@ -248,18 +248,37 @@ public func assessBeatIrregularity(grid: BeatGrid, drums: BeatGrid?) -> Bool? {
 ///
 /// - Returns: BPM, or `nil` for fewer than 4 beats (the same floor as `computeBPM`).
 public func octaveFoldedMedianBPM(beats: [Double]) -> Double? {
+    guard let folded = octaveFoldedIOIs(beats: beats), let period = median(folded), period > 0 else {
+        return nil
+    }
+    return 60.0 / period
+}
+
+/// The tempo a listener reads (BUG-144): the mean of the octave-folded intervals within ±15 % of
+/// their median. The median alone lands on Beat This!'s 20 ms beat grid — B.O.B. read 150.0 for
+/// a 153.8 grid — while the trimmed mean matches the grid's own average on steady songs and still
+/// folds out eighth/quarter switches. `nil` for fewer than 4 beats.
+public func octaveFoldedTempoBPM(beats: [Double]) -> Double? {
+    guard let folded = octaveFoldedIOIs(beats: beats), let centre = median(folded), centre > 0 else {
+        return nil
+    }
+    let kept = folded.filter { abs($0 - centre) <= centre * 0.15 }
+    guard !kept.isEmpty else { return nil }
+    return 60.0 / (kept.reduce(0, +) / Double(kept.count))
+}
+
+/// Every inter-beat interval folded by factors of 2 onto the octave of the median interval.
+private func octaveFoldedIOIs(beats: [Double]) -> [Double]? {
     guard beats.count >= 4 else { return nil }
     let iois = zip(beats, beats.dropFirst()).map { $1 - $0 }.filter { $0 > 0 }
     guard let reference = median(iois), reference > 0 else { return nil }
     let root2 = 2.0.squareRoot()
-    let folded = iois.map { ioi -> Double in
+    return iois.map { ioi -> Double in
         var value = ioi
         while value > reference * root2 { value /= 2 }
         while value < reference / root2 { value *= 2 }
         return value
     }
-    guard let period = median(folded), period > 0 else { return nil }
-    return 60.0 / period
 }
 
 private func median(_ values: [Double]) -> Double? {

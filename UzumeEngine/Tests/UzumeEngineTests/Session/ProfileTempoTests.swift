@@ -61,4 +61,15 @@ struct ProfileTempoTests {
         // 90 vs 117: a 30 % non-octave disagreement between the full-mix and drums grids.
         #expect(try storedBPM(fullMix: 90, drums: 117) == nil)
     }
+
+    @Test("a 20 ms-quantised grid reads its average tempo, through a half-time stretch")
+    func foldedTempoIsNotQuantised() throws {
+        // B.O.B.'s shape: intervals alternate 0.38/0.40 s (mean 0.39 s = 153.8 BPM) on Beat This!'s
+        // 20 ms grid, with a stretch tracked at half time. The folded MEDIAN reads 150.0 or 157.9.
+        var beats: [Double] = [0]
+        for i in 0..<200 { beats.append(beats[beats.count - 1] + (i.isMultiple(of: 2) ? 0.38 : 0.40)) }
+        for _ in 0..<30 { beats.append(beats[beats.count - 1] + 0.78) }
+        let bpm = try #require(octaveFoldedTempoBPM(beats: beats))
+        #expect(abs(bpm - 60 / 0.39) < 0.5, "read \(bpm), expected 153.8")
+    }
 }

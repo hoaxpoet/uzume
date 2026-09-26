@@ -232,7 +232,7 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       first sixth. Every v15 mood describes the fade-out — re-analyse.
     ///                       Same bump (unmerged branch), BUG-144: `TrackProfile.bpm` was the
     ///                       MIR BeatDetector's IOI tempo, 130–143 on every song (sub-bass onsets
-    ///                       firing at their cooldown); it is now the grid's octave-folded median
+    ///                       firing at their cooldown); it is now the grid's octave-folded
     ///                       tempo, nil when the D-154 gate calls the beat irregular.
     public static let currentSchemaVersion: Int = 16
 

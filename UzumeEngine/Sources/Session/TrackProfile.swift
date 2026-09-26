@@ -16,7 +16,7 @@ public struct TrackProfile: Sendable, Codable {
 
     // MARK: - Fields
 
-    /// The song's tempo in BPM: the Beat This! grid's octave-folded median (BUG-144). nil when
+    /// The song's tempo in BPM: the Beat This! grid's octave-folded tempo (BUG-144). nil when
     /// the grid has too few beats, or the D-154 gate judges the beat irregular (Matt: no BPM for
     /// songs without a steady beat) — the scorer then treats tempo as neutral.
     public var bpm: Float?
