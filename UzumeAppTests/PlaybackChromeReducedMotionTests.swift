@@ -34,8 +34,7 @@ struct PlaybackChromeReducedMotionTests {
         let hosting = NSHostingView(rootView: view.preferredColorScheme(.dark))
         let bounds = CGRect(origin: .zero, size: hosting.fittingSize)
         hosting.frame = bounds
-        let window = NSWindow(contentRect: bounds, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .darkAqua)
+        let window = NSWindow.offscreen(bounds)
         window.contentView = hosting
         defer { window.contentView = nil; window.close() }
 

@@ -21,6 +21,9 @@ Every song was stored at 130–143 BPM, and that number both appeared in the pre
 ### [dev-2026-09-25-220217] BUG-144 — a song is planned with its own mood, not its last two seconds
 
 Each song's stored mood was the mood classifier's reading at the very end of the analysed audio: the fade-out on local files, and the last seconds of the 30 s preview on streaming. Mood is 40 % of how a scene is chosen, so songs were planned from their endings. On the beta playlist, Teardrop, Take Five and Pyramid Song were planned as calm, and Moonlight I as warm. The stored mood is now the song's median after its first sixth (Matt's option A). Its rank agreement with the full production-chain analysis on the beta playlist rose from 0.59 to 0.86. With no plan history, the top-scored opening scene changes on 8 of 10 beta songs. **Local files re-analyse once** (stem cache schema v16). The preparation view's mood word can change on those songs. The live mood path is unchanged. Still to do: Matt's listen on the beta playlist.
+### [dev-2026-09-26-014709] BUG-143 — the app tests no longer crash their host after the engine suite
+
+When `xcodebuild … test` ran straight after `swift test`, the app's test host sometimes crashed (exit 65, "0 tests" on the retry) in `objc_autoreleasePoolPop`. Three DS.6 tests built an `NSWindow` in code and closed it. A window made that way has `isReleasedWhenClosed` set, so `close()` released it once more than ARC owned. When that freed memory was reused, the host crashed, which happened more often on a machine the engine suite had just loaded. The tests now build their windows through `NSWindow.offscreen(_:)`, which clears the flag. A new test crashed the host 3/3 without the fix and passes with it. A source scan stops new tests from copying the old pattern. No product code changed and no timeout was widened.
 
 ### [dev-2026-09-25-170143] BUG-142 — no track-change event after streaming metadata stops
 
