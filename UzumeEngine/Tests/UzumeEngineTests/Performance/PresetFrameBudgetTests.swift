@@ -157,7 +157,13 @@ struct PresetFrameBudgetTests {
         // KAG.2 — first recorded cost 2.94 ms (0.5x median, 2026-09-25, Debug harness with readback,
         // another session's suite running). In Release with no readback, timed from command-buffer
         // timestamps at 1920x1080: 0.216 ms GPU median (p95 0.297), 0.018 ms CPU encode.
-        "Kagura": 2.94
+        "Kagura": 2.94,
+        // FF.2 — first recorded cost 17.96 ms (3.1x median, 2026-09-25, Debug harness with readback,
+        // isolated run). The Debug figure is dominated by the CPU model at `-Onone` (5.46 ms median:
+        // 600 clocks + neighbour grid + world camera + sprite projection). In Release, no readback,
+        // command-buffer timestamps at 1920x1080 on the DYC capture: 2.78 ms GPU median (p95 5.70),
+        // CPU model 0.30 ms median — `FirefliesRenderTests.frameCostAt1080p`.
+        "Fireflies": 17.96
     ]
 
     /// Presets `MultiPassRenderHarness` cannot drive. Named, printed, and NOT counted as passing.

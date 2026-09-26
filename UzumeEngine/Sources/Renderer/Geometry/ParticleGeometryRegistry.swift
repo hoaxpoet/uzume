@@ -77,6 +77,9 @@ public enum StatefulRuntimeRegistry {
         // KAG.2 — Kagura's geometry needs the cached beat grid and the playback clock, neither of
         // which `ParticleGeometry.update` carries. The tick pushes the clock (stamped with the render
         // clock) every frame; grid installs push the grid (VisualizerEngine+Presets).
-        "Kagura"
+        "Kagura",
+        // FF.2 — Fireflies' world fragment reads the shared camera (`FirefliesGeometry.worldBuffer`)
+        // at slot 6, so the world and the swarm project through one camera.
+        "Fireflies"
     ]
 }

@@ -29,8 +29,7 @@ struct PerformanceToastLayoutTests {
         let bounds = CGRect(x: 0, y: 0, width: 960, height: 600)
         let hosting = NSHostingView(rootView: view.preferredColorScheme(.dark))
         hosting.frame = bounds
-        let window = NSWindow(contentRect: bounds, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .darkAqua)
+        let window = NSWindow.offscreen(bounds)
         window.contentView = hosting
         defer { window.contentView = nil; window.close() }
         hosting.layoutSubtreeIfNeeded()

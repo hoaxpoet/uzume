@@ -39,11 +39,14 @@ struct FirefliesDrive {
         }
         let delta = column("deltaTime"), phase = column("beatPhase01")
         let silent = column("near_silent01"), elapsed = column("track_elapsed_s")
+        // FF.2 — the world's breath route (FirefliesWorld.advance).
+        let bassAttRel = column("bassAttRel")
         gridBPM = column("grid_bpm")
         features = (0..<series.frameCount).map { i in
             var f = FeatureVector(time: 0, deltaTime: delta[i], accumulatedAudioTime: 0)
             f.beatPhase01 = phase[i]
             f.nearSilent01 = silent[i]
+            f.bassAttRel = bassAttRel[i]
             f.trackElapsedS = elapsed[i]
             f.aspectRatio = 16.0 / 9.0
             return f

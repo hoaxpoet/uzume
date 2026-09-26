@@ -522,6 +522,17 @@ struct MultiPassRenderHarness {
     /// which leaves the swarm free. The `realSpectrum` injection precedent.
     nonisolated(unsafe) static var firefliesGridBPM: [Float]?
 
+    /// FF.2 — shifts the Fireflies camera drift's clock (`FirefliesGeometry.cameraTimeOffset`) so a
+    /// still can show the same moment from a drifted camera. 0 = production.
+    nonisolated(unsafe) static var firefliesCameraTimeOffset: Float = 0
+    /// FF.2 — hold the Fireflies camera still (`FirefliesGeometry.freezeCamera`). Probes only.
+    nonisolated(unsafe) static var firefliesFreezeCamera = false
+
+    /// FF.2 — when non-nil, every committed frame appends its command-buffer GPU time (ms,
+    /// `gpuEndTime − gpuStartTime`; the readback is a CPU copy after completion, so it is
+    /// excluded). Timing probes only.
+    nonisolated(unsafe) static var gpuTimesMs: [Double]?
+
     /// Fireflies (FF.1). Mirrors `RenderPipeline.encodePresetVisualization` on the direct path:
     /// the world fragment through the preset's own compiled pipeline, then the swarm sprites
     /// into the same encoder. `settle` frames advance the swarm without capture.
@@ -535,6 +546,9 @@ struct MultiPassRenderHarness {
         let history = SpectralHistoryBuffer(device: ctx.device)
         let geo = try FirefliesGeometry(device: ctx.device, library: lib.library, beatGrid: history,
                                         pixelFormat: ctx.pixelFormat)
+        geo.ensureAllocated(width: width, height: height)
+        geo.cameraTimeOffset = Self.firefliesCameraTimeOffset
+        geo.freezeCamera = Self.firefliesFreezeCamera
         let aspect = Float(width) / Float(height)
         let bpm = Self.firefliesGridBPM
         func frame(_ i: Int) -> FeatureVector {
@@ -552,6 +566,8 @@ struct MultiPassRenderHarness {
             var f = frame(settle + i)
             enc.setRenderPipelineState(preset.pipelineState)
             enc.setFragmentBytes(&f, length: MemoryLayout<FeatureVector>.size, index: 0)
+            // FF.2 — the world camera at slot 6, as `bindFirefliesRuntime` binds it in the app.
+            enc.setFragmentBuffer(geo.worldBuffer, offset: 0, index: 6)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             geo.render(encoder: enc, features: f)
         } update: { i, cmd in
@@ -1218,6 +1234,7 @@ struct MultiPassRenderHarness {
         cmd.commit()
         cmd.waitUntilCompleted()
         guard cmd.status == .completed else { throw HarnessError.renderFailed }
+        Self.gpuTimesMs?.append((cmd.gpuEndTime - cmd.gpuStartTime) * 1000)
         guard readback else { return }   // see `readback` — timing runs skip this
         outTex.getBytes(&pixels, bytesPerRow: width * 4,
                         from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
