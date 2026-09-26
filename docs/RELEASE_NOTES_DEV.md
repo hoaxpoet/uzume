@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-26-224055] BUG-150 — the Spotify connection tests wait for the connect, not the clock
+
+`connectLoginRequiredUnauthenticated` failed once when the app tests ran right after the engine suite: it slept 400 ms after `connect()` and asserted while the connect was still running. Every wait in the two Spotify view-model suites was a fixed sleep. They now await the view model's own debounce and connect tasks, so they pass however slow the machine is. A probe that adds 500 ms of connector latency failed 3 of 4 OAuth tests before the fix and passes all 16 after. Test-only change; no budget widened, and the suites run about 15 s faster.
+
 ### [dev-2026-09-25-214737] BUG-147 — a planner seed reproduces its plan in any process
 
 The seeded planner noise (D-047) hashed preset ids with `String.hashValue`, which Swift randomizes per launch, so the same seed planned differently in every process. Users never saw it, because the app picks a fresh random seed for each plan and each Regenerate. It did mean a logged seed could not be replayed and seeded offline measurements (BUG-144) were not reproducible. The noise now uses FNV-1a over the id's UTF-8 bytes, and the scorer sums stem affinities in sorted order instead of `Set` order. `NearTieSamplingTests.pinnedAcrossProcesses` pins a seeded plan in source. Every nonzero-seed plan changes once; seed 0 is unchanged.

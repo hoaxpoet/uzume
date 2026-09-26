@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG150.1 — the Spotify connection tests await the connect ✅ (2026-09-26)
+
+**Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
+**Done-when:** ✅ mechanism reproduced by a 500 ms latency probe (3/4 OAuth tests fail before, 16/16 pass after); ✅ app suite 476/476 + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
+
 ### Increment BUG147.1 — a planner seed reproduces its plan in any process ✅ (2026-09-25)
 
 **Delivered.** BUG-147 (P3, found while measuring BUG-144), filed and fixed in one increment as P3 allows. `seededNoise` hashes the preset id with FNV-1a over UTF-8 instead of the per-process-seeded `String.hashValue`. `stemAffinitySubScore` sums stems in sorted order, not `Set` order. BUG-133's `nearTiePick` had no per-process source of its own. Not user-visible: the app draws a random seed per plan and per Regenerate.
