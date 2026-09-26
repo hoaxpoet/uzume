@@ -61,7 +61,7 @@ reads" are not reads — see the entry.)*
 | BUG-106 | P2 · **FIXED + LIVE-CONFIRMED 2026-08-26 (BUG106.1)** — `ml_forced=0` across a 25 ms/frame 4K session; only the felt half (Matt's eye on stem timing / new stutter) is outstanding | ml.dispatch / calibration | **`MLDispatchScheduler`'s budget is a hardcoded 14/16 ms with no resolution term, so at 4K the gate can never open.** `recentMaxFrameMs` is the WORST frame of the window and 4K's median was 17.6 ms in BUG-100's own session, so every stem dispatch defers to the 1.5–2.0 s ceiling and force-fires — against a 2.0 s stem period. Jank avoidance never happens and stems run ~a period late at 4K. ⚠ **Not** BUG-100's mechanism: the PERF.15 VL session was flat across 172 s at 4K while permanently over the same budget. Needs Matt's call between "stems on time" and "jank-free" at 4K. |
 | BUG-143 | P2 · **FIXED 2026-09-25 (BUG143.2, Matt's option A)**. The song's median mood after the first sixth is stored; cache v16; beta-playlist ρ 0.59 → 0.855. Manual feel check outstanding | dsp.mir / orchestrator | **A track's stored mood is its last one or two seconds, not the song.** `analyzeMIR` returns `classifier.currentState` after the frame loop, and that state is a 0.7 s EMA of a 1.67 s EMA. Local files therefore get the mood of the fade-out, and streaming gets the last seconds of the 30 s preview. Beta playlist: Take Five is stored at arousal −0.38 though the song's median is +0.33, and Teardrop at −0.42 against +0.48. Mood is **40 %** of every preset score. With no history, the top-scored scene changes on **8/10** songs (local) and **5/10** (30 s window) under a song-level median; a ±0.02 nudge control changes 0/10. Detail below |
 | BUG-144 | P2 · **FIXED 2026-09-26 (BUG144.2, Matt: no BPM for beatless songs)**. The stored BPM is the grid's octave-folded tempo, nil when the beat is irregular; beta spread 12.7 → 94.6 BPM; cache v16. Manual check of the preparation view outstanding | dsp.mir / orchestrator | **`TrackProfile.bpm` reads 130.6–143.3 on every beta-playlist song, whatever the song's tempo.** The cached Beat This! grid for the same files spans 44.5–171.4 BPM. The field is the legacy `BeatDetector` IOI-histogram `stableBPM`, not the grid. It feeds the scorer's tempo sub-score (27 % of every score) and the preparation view's BPM readout. This matches OBS-DS4-1's "132–138 BPM" exactly. Detail below |
-| BUG-145 | P3 · OPEN — recorded 2026-09-25, not diagnosed | dsp.mir / sample-rate | **Preparation-time mood depends on the file's sample rate.** Superstition, same pipeline: its 96 kHz FLAC reads median arousal **0.21**, the same audio resampled to 48 kHz reads 0.45, and at 44.1 kHz it reads 0.52 (production chain: 0.51). This is BUG-141's class, in `analyzeMIR` rather than the stem analyzers. Detail below |
+| BUG-145 | P3 · OPEN — **diagnosed 2026-09-26**: a fixed 1024-point FFT at the file's rate moves the key correlations (+1.6/+1.9 σ at 96 kHz), the Nyquist-normalised centroid (halved) and flux | dsp.mir / sample-rate | **Preparation-time mood depends on the file's sample rate.** Superstition, same pipeline: its 96 kHz FLAC reads median arousal **0.21**, the same audio resampled to 48 kHz reads 0.45, and at 44.1 kHz it reads 0.52 (production chain: 0.51). This is BUG-141's class, in `analyzeMIR` rather than the stem analyzers. Detail below |
 | BUG-140 | P2 · **RESOLVED 2026-09-25 (BUG140.2, Matt's option A)** — gate compares octave-folded median tempos; drums grid at 44.1 kHz; cache v15. Matt's live check passed: *"Membrane is locked on Superstition"* | dsp.beat / orchestrator | **The D-154 beat-irregularity gate flags steady songs (Superstition, Penny Lane): the drums-grid BPM it compares averages two octaves, and on local files is also scaled by the wrong sample rate.** Corpus-estimated flag rate 28 %; 42 % of flagged duplicate recordings are unflagged in their other copy. |
 | BUG-141 | P2 · **FIXED 2026-09-25 (BUG141.1)** — merged #271 (`9fee33ae`); cache schema v14 | dsp.stem / sample-rate | **On any local file that is not 44.1 kHz, the stem data is analysed as if the 44.1 kHz stems were at the file's rate.** The local-file stem series (what shaders read) mapped FFT bins to Hz at the file's rate, and the `stemEnergyBalance` snapshot the scorer and preparation UI read was warmed at the file's frame rate. 48 kHz (~14 % of the pilot corpus): vocal pitch read 7–10 % sharp, band splits off by up to 18 %, scorer inputs shift ≤ 0.01. 96 kHz (~2 %): vocal pitch read ~2× high, low-band energy off ×2–3. 44.1 kHz bit-identical. Detail below |
 | BUG-142 | P2 · **FIXED 2026-09-25 (BUG142.1)** — generation guard; merged #277 (`5f4d421e`) | audio / concurrency | **A Now Playing poll that is in flight when `stopObserving()` runs fires a track-change event (`previous == nil`) after observation has stopped, and repopulates `currentTrack`.** Surfaced as an intermittent CI failure of `trackChange_secondTrack_hasPrevious` (3 events, expected 2). Detail below |
@@ -420,7 +420,7 @@ The 96 kHz Superstition file sits highest (143) because its 10.7 ms frames reach
 
 ### BUG-145 — preparation-time mood depends on the file's sample rate (2026-09-25)
 
-**Severity:** P3 (a single song measured; raise if 48 kHz shifts prove common) · **Domain:** `dsp.mir` · **Failure class:** `sample-rate` (suspected) · **Status:** Open, recorded while measuring BUG-143 · **Related:** BUG-141 (the same class, in the stem analyzers)
+**Severity:** P3 (a single song measured; raise if 48 kHz shifts prove common) · **Domain:** `dsp.mir` · **Failure class:** `sample-rate` · **Status:** Open, diagnosed 2026-09-26 · **Related:** BUG-141 (the same class, in the stem analyzers)
 
 **Evidence.** Superstition, the same shipping local pipeline, with the per-frame median after the first sixth:
 
@@ -431,7 +431,25 @@ The 96 kHz Superstition file sits highest (143) because its 10.7 ms frames reach
 | ffmpeg-resampled to 44.1 kHz | +0.52 | −0.46 |
 | Production chain, 44.1 kHz windows (KAG.0g) | +0.51 | — |
 
-`analyzeMIR` runs a fixed 1024-point FFT at the file's rate. At 96 kHz that means 93.75 fps and 93.75 Hz bins, against the ~43 Hz / 43 fps the mood scaler was fitted at. **Mechanism not asserted** beyond "the reading moves with the rate". Per BUG-141, about 14 % of the pilot corpus is 48 kHz and about 2 % is 96 kHz. Only one song has been measured.
+`analyzeMIR` runs a fixed 1024-point FFT at the file's rate. At 96 kHz that means 93.75 fps and 93.75 Hz bins, against ~43 of each at 44.1 kHz. Per BUG-141, about 14 % of the pilot corpus is 48 kHz and about 2 % is 96 kHz.
+
+**Diagnosis (2026-09-26).** `CorpusCensusRunner --dual-rate --window-seconds 120` on Superstition gives the ten mood-feature means at native 96 kHz and resampled to 44.1 and 48 kHz. Shift at 96 vs 44.1 kHz, in scaler σ:
+
+| Feature | Shift (σ) |
+|---|---|
+| Six band energies | within ±0.23 |
+| `spectralCentroid` | **−0.87**: it is normalised by Nyquist, so the same Hz reads half (0.068 vs 0.133) |
+| Raw flux | **−0.40**: a sum over twice as many bins, each twice as wide |
+| Major key correlation | **+1.62** |
+| Minor key correlation | **+1.94**: chroma from 93.75 Hz bins cannot resolve pitch in the low register |
+
+48 kHz sits much closer to 44.1 kHz on every feature. The rate this path should run at is settled by existing decisions: the stems are 44.1 kHz (`StemSeparator.modelSampleRate`, BUG-141), and D-128's sample-rate note records LF analysis at 44.1 kHz. (The DEAM classifier was trained at 48 kHz; that cross-path delta is the ~9 % centroid skew CENSUS.3 measured and D-128 accepts, and it is out of scope here.)
+
+**Verification criteria (before the fix).**
+1. Automated: the same synthetic tone mix sampled at 44.1 kHz and at 96 kHz, prepared through `analyzePreview`, stores the same `spectralCentroidAvg` (±5 %) and mood (±0.05). It fails on current code, where the centroid halves.
+2. Real file: Superstition's 96 kHz FLAC through the shipping pipeline stores arousal within 0.05 of its 44.1 kHz resample (today 0.21 vs 0.52). Its 48 kHz resample does likewise.
+3. Cache schema bump.
+4. No change on 44.1 kHz files: the beta-playlist gates (ρ, BPM spread) still pass.
 
 ### BUG-142 — a Now Playing poll in flight at `stopObserving()` fires a stale track change (2026-09-25)
 
