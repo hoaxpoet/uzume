@@ -2,7 +2,7 @@
 
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
-**FF.3 (the light) next** · FF.4 (M7 + certification). `certified: false`,
+**FF.3 (the light) next** — prompt `prompts/FF.3-prompt.md` · FF.4 (M7 + certification). `certified: false`,
 `exclude_from_cycling: true` until FF.3.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
@@ -84,6 +84,20 @@ freezes and never goes black (D-037).
 **Decided (Matt, 2026-09-25: "B"; D-258 addendum):** the world motion also **breathes with the
 music's slow energy** — the wind stirs the grass and the mist moves more in louder, fuller passages,
 swelling over several seconds, never pulsing on the beat (§5 row 3).
+
+### 4.4 The light (FF.3) — product requirements
+Restated from §3, §4.2 and D-157; nothing here is newly decided.
+- **Each firefly is a light:** a near-white core and a coloured bloom, the brightest thing in the frame
+  (`09`), and the scene's only warm colour. **The bloom is yellow-green**, the swarm's own
+  colour (Matt, 2026-09-26: "A").
+- **Light only on what is right around it** (`07`, `04`): grass strokes, mist and nearby branches
+  brighten within a short radius of a lit firefly; the rest of the print is untouched.
+- **Occlusion:** a firefly behind a tree trunk, a branch or a foreground grass stalk is hidden by it.
+- **Depth of field:** the nearest fireflies read as soft, out-of-focus discs.
+- **Timing:** the light rises and falls with the flash (40 ms rise, 0.11 s decay) — it never lingers.
+- **Never a frame-wide lift (D-157):** a unison flash is hundreds of small lights; max Δ frame-mean luma
+  stays < 0.05 at 1080p through the real draw path. If a bloom breaks that, the bloom shrinks.
+- The world's composition, inks, camera and breath (FF.2) and the swarm's behaviour (FF.1) do not change.
 
 ## 5. Audio routing (one primitive per layer, FA #67)
 
