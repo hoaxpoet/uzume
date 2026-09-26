@@ -6,9 +6,11 @@
 //
 // - **Warp (KAGURA_DESIGN §5).** Pulse position `u = 1 + (p − (p0 − 2)) / m`, clip time
 //   `c = clip.clipTime(atPulse: u)`, pose `clip.pose(at: c)`. `p0` is the bar line the clip
-//   entered on; beat p0 − 2 pins the clip's second pulse (spike `warp_map(..., start_event=1)` on
-//   beats from t0 − 2), so a clip enters 1 + 2/m pulses in. KAG.2 entered on the first pulse: the
-//   gesture dances then landed up to 13 points off the spike's pulse lock (KAG.3, Matt's option A).
+//   entered on. A GESTURE dance enters as the spike's did: beat p0 − 2 pins its second pulse
+//   (`warp_map(..., start_event=1)` on beats from t0 − 2), 1 + 2/m pulses in — entering on the first
+//   pulse moved its landings up to 13 points off the spike's lock. The twist and cabbage patch (one
+//   repeated move; 100 % locked either way) enter on the first pulse, as KAG.2 did: the spike's
+//   entry made the twist's planted feet slide ~⅓ more (Matt, 2026-09-25: split by dance).
 // - **Level `m`** is `choose_level`: the allowed level whose playback rate is closest to 1. The
 //   twist's allowed set excludes ×½ (Matt: never two turns per beat).
 // - **Clip changes** on a bar line: the last one within 4 bars (+ ½ beat) that is at least ½ beat
@@ -285,7 +287,7 @@ public struct KaguraChoreographer: Sendable {
     /// the crossfade beat after the cut; a beat before its pulse map runs out if no bar line fits.
     private func plannedDanceCut(clip: Int, entry: Double, level: Double, grid: KaguraGrid) -> Cut {
         // The beat at which the warp reaches the clip's last pulse (spike `tt[-1]`).
-        let covered = entry + (dances[clip].pulseSpan - Self.entryPulse(level: level)) * level
+        let covered = entry + (dances[clip].pulseSpan - Self.entryPulse(dances[clip], level: level)) * level
         let first = grid.nextBarLine(after: entry + 0.5)
         var best: Int?
         var line = first
@@ -296,8 +298,11 @@ public struct KaguraChoreographer: Sendable {
         return Cut(beat: best ?? first, toDance: true)
     }
 
-    /// Pulses into a clip at the bar line it enters on: the spike pins beat `p0 − 2` to pulse 1.
-    static func entryPulse(level: Double) -> Double { 1 + 2 / level }
+    /// Pulses into a clip at the bar line it enters on: a gesture dance as the spike (beat `p0 − 2` on
+    /// pulse 1), a single repeated move on its first pulse.
+    static func entryPulse(_ clip: KaguraClip, level: Double) -> Double {
+        clip.pulseKind == "gesture" ? 1 + 2 / level : 0
+    }
 
     private mutating func perform(_ cut: Cut, grid: KaguraGrid, beat: Double) {
         guard fade == nil else {
@@ -322,7 +327,7 @@ public struct KaguraChoreographer: Sendable {
                 beatPeriod: grid.beatPeriod,
                 levels: clip.allowedLevels)
             chosenLevels.append(level)
-            let raw = clip.pose(at: clip.clipTime(atPulse: Self.entryPulse(level: level)))
+            let raw = clip.pose(at: clip.clipTime(atPulse: Self.entryPulse(clip, level: level)))
             incoming = .dance(clip: index, entry: entry, level: level, offset: feet(raw) - feet(outgoing))
             nextCut = plannedDanceCut(clip: index, entry: entry, level: level, grid: grid)
         } else {
@@ -364,7 +369,7 @@ public struct KaguraChoreographer: Sendable {
         let raw: [SIMD3<Float>]
         switch segment {
         case let .dance(clip, entry, level, _):
-            let pulse = ((beat ?? entry) - entry) / level + Self.entryPulse(level: level)
+            let pulse = ((beat ?? entry) - entry) / level + Self.entryPulse(dances[clip], level: level)
             raw = dances[clip].pose(at: dances[clip].clipTime(atPulse: pulse))
         case .sway:
             raw = rawSway()
