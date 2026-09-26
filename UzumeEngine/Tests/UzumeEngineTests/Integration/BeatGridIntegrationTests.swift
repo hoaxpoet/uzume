@@ -314,12 +314,12 @@ func nilAnalyzer_producesEmptyDrumsBeatGrid() async throws {
     #expect(result.cache.drumsBeatGrid(for: track) == .empty)
 }
 
-// MARK: - Grid → cache → profile tempo (BUG-008.2 wiring, BUG-144)
+// MARK: - Grid → cache → profile tempo (BUG-008.2 wiring, BUG-145)
 
 /// With a fixed-BPM stub analyzer, prepare() must complete, the cached BeatGrid must carry
-/// that BPM verbatim, and the profile's BPM must be the grid's tempo (BUG-144 — it was the
+/// that BPM verbatim, and the profile's BPM must be the grid's tempo (BUG-145 — it was the
 /// MIR BeatDetector's, which a sine preview drives to ~140). The BUG-008.2 MIR-vs-grid
-/// mismatch log this test used to smoke-test was removed at BUG-144 with its MIR input.
+/// mismatch log this test used to smoke-test was removed at BUG-145 with its MIR input.
 @Test
 @MainActor
 func stubGrid_reachesCacheVerbatim() async throws {
@@ -343,7 +343,7 @@ func stubGrid_reachesCacheVerbatim() async throws {
     #expect(cached.beatGrid.bpm == 118.0,
             "Stub analyzer's grid BPM must reach the cache verbatim")
     #expect(abs((cached.trackProfile.bpm ?? 0) - 118) < 0.5,
-            "the profile's BPM must be the grid's tempo, not the MIR detector's (BUG-144)")
+            "the profile's BPM must be the grid's tempo, not the MIR detector's (BUG-145)")
     #expect(!cached.beatGrid.beats.isEmpty,
             "Stub analyzer must produce a non-empty grid")
 }

@@ -1,4 +1,4 @@
-// SongMoodTests — BUG-143. The stored `TrackProfile.mood` must describe the song, not its last
+// SongMoodTests — BUG-144. The stored `TrackProfile.mood` must describe the song, not its last
 // second or two. It used to be `classifier.currentState` after the frame loop — a 0.7 s EMA —
 // so a song with a quiet 2 s fade-out was planned as a quiet song.
 
@@ -35,7 +35,7 @@ private final class ScriptedMoodClassifier: MoodClassifying, @unchecked Sendable
 
 // MARK: - Tests
 
-@Suite("BUG-143 song-level mood")
+@Suite("BUG-144 song-level mood")
 struct SongMoodTests {
 
     @Test("a 2 s ending that disagrees with the song does not become the song's mood")
@@ -65,7 +65,7 @@ struct SongMoodTests {
         #expect(classifier.currentState == tail, "precondition: the classifier ENDED on the tail")
         #expect(cached.trackProfile.mood == body, """
             stored mood \(cached.trackProfile.mood) is not the song's \(body) — \
-            the last-frame state (\(tail)) leaked into the profile (BUG-143)
+            the last-frame state (\(tail)) leaked into the profile (BUG-144)
             """)
     }
 }

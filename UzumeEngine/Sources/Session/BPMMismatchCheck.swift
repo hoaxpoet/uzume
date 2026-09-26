@@ -1,8 +1,8 @@
 // BPMMismatchCheck — tempo agreement between the full-mix and drums-stem Beat This! grids:
 // the D-154 beat-irregularity gate and the octave-folded tempo statistics it and
-// `TrackProfile.bpm` (BUG-144) share.
+// `TrackProfile.bpm` (BUG-145) share.
 //
-// BUG-144 removed the MIR-vs-grid mismatch diagnostics that used to live here
+// BUG-145 removed the MIR-vs-grid mismatch diagnostics that used to live here
 // (`detectBPMMismatch`, BUG-008.2; `detectThreeWayBPMDisagreement`, DSP.4). Their MIR
 // input — `BeatDetector`'s sub-bass IOI tempo — sits at its 400 ms onset cooldown on every
 // song (130–143 BPM), so the "disagreement" they logged measured the cooldown, and the
@@ -84,7 +84,7 @@ public func octaveFoldedMedianBPM(beats: [Double]) -> Double? {
     return 60.0 / period
 }
 
-/// The tempo a listener reads (BUG-144): the mean of the octave-folded intervals within ±15 % of
+/// The tempo a listener reads (BUG-145): the mean of the octave-folded intervals within ±15 % of
 /// their median. The median alone lands on Beat This!'s 20 ms beat grid — B.O.B. read 150.0 for
 /// a 153.8 grid — while the trimmed mean matches the grid's own average on steady songs and still
 /// folds out eighth/quarter switches. `nil` for fewer than 4 beats.

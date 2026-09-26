@@ -1,4 +1,4 @@
-// ProfileTempoTests — BUG-144. `TrackProfile.bpm` must be the beat tracker's tempo. It was the
+// ProfileTempoTests — BUG-145. `TrackProfile.bpm` must be the beat tracker's tempo. It was the
 // MIR BeatDetector's sub-bass IOI tempo, whose onsets fire at their 400 ms cooldown on every
 // song, so every song read 130–143 BPM. Matt's call: songs without a steady beat store no BPM.
 
@@ -26,7 +26,7 @@ private final class FixedTempoAnalyzer: BeatGridAnalyzing, @unchecked Sendable {
 
 // MARK: - Tests
 
-@Suite("BUG-144 stored tempo is the beat tracker's")
+@Suite("BUG-145 stored tempo is the beat tracker's")
 struct ProfileTempoTests {
 
     @available(macOS 14.2, *)
@@ -52,7 +52,7 @@ struct ProfileTempoTests {
     func steadyGridTempoIsStored() throws {
         guard #available(macOS 14.2, *) else { return }   // FakeStemSeparator's floor
         let bpm = try #require(try storedBPM(fullMix: 90, drums: 90), "a steady grid must store a BPM")
-        #expect(abs(bpm - 90) < 0.5, "stored \(bpm), expected the grid's 90 (BUG-144)")
+        #expect(abs(bpm - 90) < 0.5, "stored \(bpm), expected the grid's 90 (BUG-145)")
     }
 
     @Test("a beat the D-154 gate calls irregular stores no BPM")

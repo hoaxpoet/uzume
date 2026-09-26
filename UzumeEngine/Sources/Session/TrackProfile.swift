@@ -16,7 +16,7 @@ public struct TrackProfile: Sendable, Codable {
 
     // MARK: - Fields
 
-    /// The song's tempo in BPM: the Beat This! grid's octave-folded tempo (BUG-144). nil when
+    /// The song's tempo in BPM: the Beat This! grid's octave-folded tempo (BUG-145). nil when
     /// the grid has too few beats, or the D-154 gate judges the beat irregular (Matt: no BPM for
     /// songs without a steady beat) — the scorer then treats tempo as neutral.
     public var bpm: Float?
@@ -25,7 +25,7 @@ public struct TrackProfile: Sendable, Codable {
     public var key: String?
 
     /// Emotional state (valence × arousal) from the mood classifier: the song's typical mood,
-    /// i.e. the per-frame median after the first sixth (BUG-143). Covers the whole file on the
+    /// i.e. the per-frame median after the first sixth (BUG-144). Covers the whole file on the
     /// local-file path and the 30 s preview on streaming.
     public var mood: EmotionalState
 

@@ -94,7 +94,7 @@ extension SessionPreparer {
             )
         }
 
-        // Step 4: Offline MIR analysis (key, mood, centroid), at 44.1 kHz (BUG-145).
+        // Step 4: Offline MIR analysis (key, mood, centroid), at 44.1 kHz (BUG-146).
         let mir = probe.measure(PrepStage.mir) {
             analyzeMIR(preview: preview, classifier: classifier)
         }
@@ -264,7 +264,7 @@ extension SessionPreparer {
         preview: PreviewAudio,
         classifier: any MoodClassifying
     ) -> MIRAnalysisResult {
-        // BUG-145: MIR runs at the stems' 44.1 kHz whatever the file's rate. Its 1024-point FFT at
+        // BUG-146: MIR runs at the stems' 44.1 kHz whatever the file's rate. Its 1024-point FFT at
         // the file's rate moved the mood features with it — at 96 kHz the Nyquist-normalised
         // centroid halved and 93.75 Hz bins pushed the key correlations +1.6/+1.9 σ, so the same
         // song read arousal 0.21 instead of 0.52.
@@ -291,7 +291,7 @@ extension SessionPreparer {
         var centroidSum: Float = 0
         var frameCount = 0
         var moodAccumulator = MoodFeatureAccumulator()   // DYN.7
-        var moodTrace: [EmotionalState] = []             // BUG-143
+        var moodTrace: [EmotionalState] = []             // BUG-144
         var offset = 0
 
         while offset + fftSize <= samples.count {
@@ -355,7 +355,7 @@ extension SessionPreparer {
         )
     }
 
-    /// The BPM a prepared track stores (BUG-144; Matt: no BPM for songs without a steady beat).
+    /// The BPM a prepared track stores (BUG-145; Matt: no BPM for songs without a steady beat).
     /// The beat tracker's octave-folded tempo — never the MIR BeatDetector's, whose sub-bass
     /// onsets fire at their 400 ms cooldown on every song (130–143 BPM whatever the music).
     /// nil when the D-154 gate calls the beat irregular: the scorer's neutral, no readout.
@@ -364,7 +364,7 @@ extension SessionPreparer {
         return octaveFoldedTempoBPM(beats: grid.beats).map(Float.init)
     }
 
-    /// The song's typical mood (BUG-143, Matt's option A): the per-frame median of valence and
+    /// The song's typical mood (BUG-144, Matt's option A): the per-frame median of valence and
     /// arousal after the first sixth, which is the classifier's warm-up (the KAG.0 spike's
     /// `load_session` rule). `classifier.currentState` after the loop was a 0.7 s EMA, so it
     /// described only the last second or two. On the beta playlist its rank agreement with the

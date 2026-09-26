@@ -1,4 +1,4 @@
-// SongMoodBetaPlaylistTests — BUG-143 + BUG-144 verification on real music. Env-gated: it needs a
+// SongMoodBetaPlaylistTests — BUG-144 + BUG-145 verification on real music. Env-gated: it needs a
 // PrepTimingRunner cache of the ten `tools/data/beta_test_playlist.m3u` songs.
 //
 //   PrepTimingRunner --cache <dir> --out <dir> <each playlist file>   (Release, one song per run)
@@ -9,7 +9,7 @@ import Testing
 @testable import Session
 @testable import Shared
 
-@Suite("BUG-143/144 stored profile on the beta playlist (env-gated)")
+@Suite("BUG-144/145 stored profile on the beta playlist (env-gated)")
 struct SongMoodBetaPlaylistTests {
     private struct Entry: Decodable {
         let trackProfile: TrackProfile; let decodedDuration: Double?
@@ -24,7 +24,7 @@ struct SongMoodBetaPlaylistTests {
         }
     }
 
-    /// (playlist EXTINF seconds, production-chain song-median arousal — KAG.0g §10, the median
+    /// (playlist EXTINF seconds, production-chain song-median arousal — KAG.0g 10, the median
     /// of three 30 s windows at 20/50/80 %). Matched by duration: FLAC entries carry no title.
     private static let reference: [(seconds: Double, arousal: Float)] = [
         (538, 0.69), (304, 0.67), (266, 0.51), (301, 0.54), (181, -0.04),
@@ -53,10 +53,10 @@ struct SongMoodBetaPlaylistTests {
         let d2 = zip(Self.ranks(stored), Self.ranks(expected)).map { Float(($0 - $1) * ($0 - $1)) }.reduce(0, +)
         let rho = 1 - 6 * d2 / (n * (n * n - 1))
         print("[song-mood] stored arousal \(stored.map { String(format: "%+.3f", $0) }) ρ = \(rho)")
-        #expect(rho >= 0.85, "Spearman ρ \(rho) < 0.85 — the stored mood is not the song's (BUG-143)")
+        #expect(rho >= 0.85, "Spearman ρ \(rho) < 0.85 — the stored mood is not the song's (BUG-144)")
     }
 
-    @Test("stored BPM spreads with the music; irregular beats store none (BUG-144; was 130.6–143.3)")
+    @Test("stored BPM spreads with the music; irregular beats store none (BUG-145; was 130.6–143.3)")
     func tempoFollowsTheGrid() throws {
         guard let dir = ProcessInfo.processInfo.environment["BETA_MOOD_CACHE"] else { return }
         let entries = try Self.entries(in: dir)
@@ -69,6 +69,6 @@ struct SongMoodBetaPlaylistTests {
         let bpms = entries.compactMap(\.trackProfile.bpm)
         let spread = (bpms.max() ?? 0) - (bpms.min() ?? 0)
         print("[song-tempo] stored BPM \(bpms.map { String(format: "%.1f", $0) }) spread \(spread)")
-        #expect(spread > 60, "stored BPMs span only \(spread) — the onset-cooldown tempo is back (BUG-144)")
+        #expect(spread > 60, "stored BPMs span only \(spread) — the onset-cooldown tempo is back (BUG-145)")
     }
 }

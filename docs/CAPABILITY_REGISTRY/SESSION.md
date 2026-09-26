@@ -11,29 +11,29 @@
 
 ## Summary
 
-22 file-level entities audited (~3.4k LoC). The Session subsystem is **substantially production-active and largely doc-aligned**. Zero `broken-but-claimed`; zero new BUG entries filed. The most notable findings are doc-drift at the architecture-narrative level (the `§Session Preparation` step list has not kept up with D-070 / BUG-007.8 / Round 26 metadata-meter override) and one genuine `stub` (`LocalFolderConnector` is `#if`-gated behind a flag that is never set).
+22 file-level entities audited (~3.4k LoC). The Session subsystem is **substantially production-active and largely doc-aligned**. Zero `broken-but-claimed`; zero new BUG entries filed. The most notable findings are doc-drift at the architecture-narrative level (the `Session Preparation` step list has not kept up with D-070 / BUG-007.8 / Round 26 metadata-meter override) and one genuine `stub` (`LocalFolderConnector` is `#if`-gated behind a flag that is never set).
 
 | Verdict | Count | Notes |
 |---|---|---|
 | `production-active` | 21 files | Default verdict. Every other Session source file has at least one production consumer and the documented behaviour matches the code. |
-| `stub` | 1 file | `LocalFolderConnector.swift` — `public final class LocalFolderConnector` whose entire body is gated behind `#if ENABLE_LOCAL_FOLDER_CONNECTOR`. Grep confirms the flag is referenced only in the file's own gate and in a `ConnectorPickerViewModel.swift` comment (`localFolderEnabled is false in v1; ENABLE_LOCAL_FOLDER_CONNECTOR compile flag gates it`); it is **not** set in `Package.swift`, `Uzume.xcconfig`, or any Swift build setting. The class never compiles in production builds. The file is intentional scaffold per D-046 / UX_SPEC §4.4, not dead code — but the audit verdict for a `#if`-gated stub with no enabled site is `stub`. |
+| `stub` | 1 file | `LocalFolderConnector.swift` — `public final class LocalFolderConnector` whose entire body is gated behind `#if ENABLE_LOCAL_FOLDER_CONNECTOR`. Grep confirms the flag is referenced only in the file's own gate and in a `ConnectorPickerViewModel.swift` comment (`localFolderEnabled is false in v1; ENABLE_LOCAL_FOLDER_CONNECTOR compile flag gates it`); it is **not** set in `Package.swift`, `Uzume.xcconfig`, or any Swift build setting. The class never compiles in production builds. The file is intentional scaffold per D-046 / UX_SPEC 4.4, not dead code — but the audit verdict for a `#if`-gated stub with no enabled site is `stub`. |
 | `broken-but-claimed` | 0 | No new BUG entries. BUG-006 (cited in the CA.3 kickoff as Open / P1) is in fact **already `Resolved` per `docs/QUALITY/KNOWN_ISSUES.md`** (BUG-006.2 wiring fix, 2026-05-06); the kickoff prompt's "Active BUGs in scope" list was stale. BUG-005 is Open / P3 / `session.ux` only — UX-copy improvement work, not a Session-module correctness defect. |
-| `documented-but-missing` | 2 | (a) `ARCHITECTURE.md §Session Preparation` lines 112–124 describes a 7-step pipeline that omits four pieces of work that have landed since: D-070 preview-URL primary path (Spotify `preview_url` inline, iTunes Search fallback — Failed Approach #47); the Beat This! offline beat-grid pass (D-077 via `BeatGridAnalyzer`); the DSP.4 drums-stem beat grid; BUG-007.8 `GridOnsetCalibrator` per-track offset calibration; Round 26 (2026-05-15) metadata-driven `BeatGrid.overridingBeatsPerBar` override via `MetadataPreFetcher`. (b) `ARCHITECTURE.md §Module Map Tests/Session/` block references `StemCacheTests` as a separate test file; no such file exists on disk (`StemCache` is exercised inside `SessionPreparerTests` and the `PreparedBeatGrid*WiringTests` integration suite). |
-| `built-but-undocumented` | 2 | (a) `ARCHITECTURE.md §Session/` module-map block at lines 544–554 lists 9 of 22 source files — 13 are missing (full list under `§Cross-references` below). Same shape as CA.1's DSP/ 6-of-20 drift and CA.2's ML/ 9-of-16 drift. (b) `ARCHITECTURE.md §Module Map Tests/Session/` block at line 580 lists 9 of 14 actual test files (6 missing + 1 phantom — see `documented-but-missing`). |
+| `documented-but-missing` | 2 | (a) `ARCHITECTURE.md Session Preparation` lines 112–124 describes a 7-step pipeline that omits four pieces of work that have landed since: D-070 preview-URL primary path (Spotify `preview_url` inline, iTunes Search fallback — Failed Approach #47); the Beat This! offline beat-grid pass (D-077 via `BeatGridAnalyzer`); the DSP.4 drums-stem beat grid; BUG-007.8 `GridOnsetCalibrator` per-track offset calibration; Round 26 (2026-05-15) metadata-driven `BeatGrid.overridingBeatsPerBar` override via `MetadataPreFetcher`. (b) `ARCHITECTURE.md Module Map Tests/Session/` block references `StemCacheTests` as a separate test file; no such file exists on disk (`StemCache` is exercised inside `SessionPreparerTests` and the `PreparedBeatGrid*WiringTests` integration suite). |
+| `built-but-undocumented` | 2 | (a) `ARCHITECTURE.md Session/` module-map block at lines 544–554 lists 9 of 22 source files — 13 are missing (full list under `Cross-references` below). Same shape as CA.1's DSP/ 6-of-20 drift and CA.2's ML/ 9-of-16 drift. (b) `ARCHITECTURE.md Module Map Tests/Session/` block at line 580 lists 9 of 14 actual test files (6 missing + 1 phantom — see `documented-but-missing`). |
 | `unverified-claim` | 0 | — |
 | `boundary-noted` | 4 | Session ↔ App boundaries: `SessionManager` is `@MainActor ObservableObject` observed by `UzumeApp/ViewModels/SessionStateViewModel`, `PlaybackChromeViewModel`, `PreparationProgressViewModel`, `EndSessionConfirmViewModel`, `ReadyViewModel`; six concrete views switch on `SessionState`. `SpotifyOAuthTokenProvider` (in `UzumeApp/Services/`) conforms to the Session-module `SpotifyTokenProviding` protocol per D-069 Decision 2 — boundary-noted, not boundary-deferred (no future re-audit will change the placement). |
-| `boundary-deferred` | 0 (new) | The three CA.1/CA.2 carry-forward items resolve in §Resolution-of-CA.1/CA.2-boundary-deferred-items below — final verdicts assigned, no new deferrals filed. |
+| `boundary-deferred` | 0 (new) | The three CA.1/CA.2 carry-forward items resolve in Resolution-of-CA.1/CA.2-boundary-deferred-items below — final verdicts assigned, no new deferrals filed. |
 | `dead` | 0 | — |
 
-**The highest-priority non-`production-active` finding** is the `ARCHITECTURE.md §Session Preparation` step-list drift. The pipeline described in lines 112–124 is the U.10-era pipeline; four named pieces of work that have shipped since (D-070, BeatGridAnalyzer / Beat This! offline grid, DSP.4 drums-grid, BUG-007.8 grid-onset calibration, Round 26 meter-override) are not reflected. Any reader who builds a mental model of session preparation from `ARCHITECTURE.md` alone will be missing the load-bearing 2026-04 / 2026-05 work. Doc-drift correction applied in this increment.
+**The highest-priority non-`production-active` finding** is the `ARCHITECTURE.md Session Preparation` step-list drift. The pipeline described in lines 112–124 is the U.10-era pipeline; four named pieces of work that have shipped since (D-070, BeatGridAnalyzer / Beat This! offline grid, DSP.4 drums-grid, BUG-007.8 grid-onset calibration, Round 26 meter-override) are not reflected. Any reader who builds a mental model of session preparation from `ARCHITECTURE.md` alone will be missing the load-bearing 2026-04 / 2026-05 work. Doc-drift correction applied in this increment.
 
-**Three follow-up items are tracked in [§Follow-up Backlog](#follow-up-backlog) below** (`CA.3-FU-1` through `CA.3-FU-3`). Per the kickoff's audit-only discipline, none ship as part of this audit increment.
+**Three follow-up items are tracked in [Follow-up Backlog](#follow-up-backlog) below** (`CA.3-FU-1` through `CA.3-FU-3`). Per the kickoff's audit-only discipline, none ship as part of this audit increment.
 
 **Doc-drift findings of note:**
-1. **`§Session Preparation` step list out of date** — see §Cross-references for the new ordered list reflecting current code (`SessionPreparer+Analysis.swift:66-165`).
-2. **`§Session/` module-map block missing 13 files** — same systemic class as CA.1/CA.2 found.
-3. **`§Tests/Session/` block missing 6 real files + 1 phantom file** — corrected.
-4. **`§Session Recording (Diagnostics)` doesn't mention the `WIRING:` log surface** that landed for BUG-006.1 + DSP.4 (3-way BPM disagreement) and now lives permanently in `SessionPreparer+WiringLogs.swift`. Light note added.
+1. **`Session Preparation` step list out of date** — see Cross-references for the new ordered list reflecting current code (`SessionPreparer+Analysis.swift:66-165`).
+2. **`Session/` module-map block missing 13 files** — same systemic class as CA.1/CA.2 found.
+3. **`Tests/Session/` block missing 6 real files + 1 phantom file** — corrected.
+4. **`Session Recording (Diagnostics)` doesn't mention the `WIRING:` log surface** that landed for BUG-006.1 + DSP.4 (3-way BPM disagreement) and now lives permanently in `SessionPreparer+WiringLogs.swift`. Light note added.
 
 ---
 
@@ -49,7 +49,7 @@
 
 ### documented-but-missing
 
-1. **`ARCHITECTURE.md §Session Preparation` (lines 112–124) — out-of-date step list.** The current 7-step list says:
+1. **`ARCHITECTURE.md Session Preparation` (lines 112–124) — out-of-date step list.** The current 7-step list says:
    ```
    2. Resolve preview clip URLs via iTunes Search API (PreviewResolver).
    …
@@ -62,7 +62,7 @@
 
    Doc-drift correction applied in this increment.
 
-2. **`ARCHITECTURE.md §Module Map Tests/Session/` (line 580) — references nonexistent `StemCacheTests`.** The line reads: *"SessionManagerTests, PlaylistConnectorTests, PreviewResolverTests, PreviewDownloaderTests, SessionPreparerTests, **StemCacheTests**, …"*. `find UzumeEngine/Tests -name "StemCacheTests*"` returns no results. `StemCache`'s behaviour is exercised inside `SessionPreparerTests` (which constructs and asserts on `cache.store` / `cache.loadForPlayback`) and `PreparedBeatGridWiringTests` / `PreparedBeatGridAppLayerWiringTests` (which assert cache-store / cache-load wiring across the engine boundary). The phantom file reference is removed in this increment.
+2. **`ARCHITECTURE.md Module Map Tests/Session/` (line 580) — references nonexistent `StemCacheTests`.** The line reads: *"SessionManagerTests, PlaylistConnectorTests, PreviewResolverTests, PreviewDownloaderTests, SessionPreparerTests, **StemCacheTests**, …"*. `find UzumeEngine/Tests -name "StemCacheTests*"` returns no results. `StemCache`'s behaviour is exercised inside `SessionPreparerTests` (which constructs and asserts on `cache.store` / `cache.loadForPlayback`) and `PreparedBeatGridWiringTests` / `PreparedBeatGridAppLayerWiringTests` (which assert cache-store / cache-load wiring across the engine boundary). The phantom file reference is removed in this increment.
 
 ### unverified-claim
 
@@ -94,13 +94,13 @@ None. Every public, internal, or fileprivate symbol in `Sources/Session/` has at
 
    `grep -rn "ENABLE_LOCAL_FOLDER_CONNECTOR" Package.swift UzumeApp/Uzume.xcconfig UzumeEngine` returns no other hits. The flag is not set in `swiftSettings`, `cSettings`, or any `*.xcconfig`. The class is therefore never compiled into either the test target or the production app target.
 
-   The file is intentional scaffold per D-046 (connector picker architecture) and UX_SPEC §4.4 (Local Folder as a v2 surface). The header comment says verbatim: *"Gated by ENABLE_LOCAL_FOLDER_CONNECTOR compile flag; not enabled in v1. Actual folder reading is out of scope until post-v1."* The body throws `PlaylistConnectorError.networkFailure("Local folder connector not yet implemented.")` — itself a sentinel rather than a real implementation.
+   The file is intentional scaffold per D-046 (connector picker architecture) and UX_SPEC 4.4 (Local Folder as a v2 surface). The header comment says verbatim: *"Gated by ENABLE_LOCAL_FOLDER_CONNECTOR compile flag; not enabled in v1. Actual folder reading is out of scope until post-v1."* The body throws `PlaylistConnectorError.networkFailure("Local folder connector not yet implemented.")` — itself a sentinel rather than a real implementation.
 
    Verdict: `stub` is the correct CA-taxonomy label for a `#if`-gated public type whose body is a sentinel. Not `dead` (the file is intentional scaffold; deletion would lose the v2 commitment), not `production-orphan` (intent is correct — production builds genuinely don't compile it). See `CA.3-FU-2` for the decision question.
 
 ### built-but-undocumented
 
-1. **`ARCHITECTURE.md §Module Map Session/` block (lines 544–554) lists 9 of 22 files; 13 are absent.** Same systemic class as CA.1 (DSP/ 6-of-20) and CA.2 (ML/ 9-of-16).
+1. **`ARCHITECTURE.md Module Map Session/` block (lines 544–554) lists 9 of 22 files; 13 are absent.** Same systemic class as CA.1 (DSP/ 6-of-20) and CA.2 (ML/ 9-of-16).
 
    **Currently listed (9):** `SessionManager`, `PlaylistConnector`, `TrackIdentity`, `SessionTypes`, `PreviewResolver`, `PreviewDownloader`, `SessionPreparer`, `StemCache`, `TrackProfile`.
 
@@ -111,16 +111,16 @@ None. Every public, internal, or fileprivate symbol in `Sources/Session/` has at
    - `SessionPreparer+WiringLogs.swift` — BUG-006.1 `WIRING:` instrumentation and DSP.4 3-way BPM disagreement warning emission.
    - `PreparationProgressPublishing.swift` — `@MainActor public protocol PreparationProgressPublishing: AnyObject` consumed by `PreparationProgressViewModel`.
    - `TrackPreparationStatus.swift` — `AnalysisStage` + `TrackPreparationStatus` enums (7-status canonical state machine for per-track preparation).
-   - `BeatGridAnalyzer.swift` — `BeatGridAnalyzing` protocol + `DefaultBeatGridAnalyzer` (composes DSP's `BeatThisPreprocessor` + ML's `BeatThisModel` + DSP's `BeatGridResolver` into a single injectable step). CA.1 boundary-deferred to here; verdict assigned in §Resolution-of-CA.1/CA.2-boundary-deferred-items below.
+   - `BeatGridAnalyzer.swift` — `BeatGridAnalyzing` protocol + `DefaultBeatGridAnalyzer` (composes DSP's `BeatThisPreprocessor` + ML's `BeatThisModel` + DSP's `BeatGridResolver` into a single injectable step). CA.1 boundary-deferred to here; verdict assigned in Resolution-of-CA.1/CA.2-boundary-deferred-items below.
    - `GridOnsetCalibrator.swift` — BUG-007.8 per-track grid-vs-onset offset calibrator. CA.1 boundary-deferred to here; verdict assigned below.
-   - `BPMMismatchCheck.swift` — `detectBPMMismatch(...)` 2-way (BUG-008.2) + `detectThreeWayBPMDisagreement(...)` 3-way (DSP.4) diagnostic functions; consumed only by `SessionPreparer+WiringLogs`. *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
+   - `BPMMismatchCheck.swift` — `detectBPMMismatch(...)` 2-way (BUG-008.2) + `detectThreeWayBPMDisagreement(...)` 3-way (DSP.4) diagnostic functions; consumed only by `SessionPreparer+WiringLogs`. *(Removed at BUG-145, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
    - `LocalFolderConnector.swift` — `#if`-gated stub (above).
    - `Connectors/SpotifyTokenProvider.swift` — `SpotifyTokenProviding` protocol + `MissingCredentialsTokenProvider` internal fallback. (CLEAN.2.1 removed the `DefaultSpotifyTokenProvider` client-credentials actor with the bundled secret; OAuth Authorization Code + PKCE via the App-layer `SpotifyOAuthTokenProvider` is now the sole Spotify token source.)
    - `Connectors/SpotifyWebAPIConnector.swift` — `SpotifyWebAPIConnecting` protocol + `SpotifyWebAPIConnector` implementation (D-070 `/items` schema, `preview_url` capture, OAuth + 401-retry mapping).
 
    Doc-drift correction applied in this increment — Session/ block extended to cover all 22 files with one-line behavioural descriptions.
 
-2. **`ARCHITECTURE.md §Module Map Tests/Session/` block (line 580) — 6 real files missing, 1 phantom listed.**
+2. **`ARCHITECTURE.md Module Map Tests/Session/` block (line 580) — 6 real files missing, 1 phantom listed.**
 
    **Listed (9 — but 1 is wrong):** SessionManagerTests, PlaylistConnectorTests, PreviewResolverTests, PreviewDownloaderTests, SessionPreparerTests, ~~StemCacheTests~~ (phantom — see `documented-but-missing` finding 2), SpotifyWebAPIConnectorTests, SpotifyTokenProviderTests, SpotifyItemsSchemaTests.
 
@@ -128,7 +128,7 @@ None. Every public, internal, or fileprivate symbol in `Sources/Session/` has at
 
    Doc-drift correction applied in this increment.
 
-3. **`ARCHITECTURE.md §Session Recording (Diagnostics)` doesn't reference the `WIRING:` log channel.** BUG-006.1 introduced a permanent `WIRING:` line family that flows from `SessionManager.startSession(preFetchedTracks:source:)`, `SessionManager._beginPreparation`, `SessionManager.startNow()`, `SessionPreparer.prepare(tracks:)`, `SessionPreparer+WiringLogs.logWiringDoneSummary` / `logDrumsBeatGridLine` / `logBPMMismatchIfAny`, into the session-log file. The current `§Session Recording` block describes `features.csv` + `stems.csv` + per-stem WAVs + `session.log` but doesn't surface that the `WIRING:` lines are *the* diagnostic trail for prepared-cache wiring, drums-stem beat-grid emission, and 2-way / 3-way BPM disagreement. Removal of the `WIRING:` family is tracked under QR.5 (post-BUG-006 cleanup); until then the lines are load-bearing for any session-prep regression diagnosis. Light note added in this increment.
+3. **`ARCHITECTURE.md Session Recording (Diagnostics)` doesn't reference the `WIRING:` log channel.** BUG-006.1 introduced a permanent `WIRING:` line family that flows from `SessionManager.startSession(preFetchedTracks:source:)`, `SessionManager._beginPreparation`, `SessionManager.startNow()`, `SessionPreparer.prepare(tracks:)`, `SessionPreparer+WiringLogs.logWiringDoneSummary` / `logDrumsBeatGridLine` / `logBPMMismatchIfAny`, into the session-log file. The current `Session Recording` block describes `features.csv` + `stems.csv` + per-stem WAVs + `session.log` but doesn't surface that the `WIRING:` lines are *the* diagnostic trail for prepared-cache wiring, drums-stem beat-grid emission, and 2-way / 3-way BPM disagreement. Removal of the `WIRING:` family is tracked under QR.5 (post-BUG-006 cleanup); until then the lines are load-bearing for any session-prep regression diagnosis. Light note added in this increment.
 
 ### boundary-noted
 
@@ -142,7 +142,7 @@ The audit produced no new `boundary-deferred` findings. The following Session-mo
 
 - **Session ↔ ML (`Sources/ML/`).** Session imports ML at `SessionPreparer.swift:19` (for `StemSeparating` indirectly via Audio's protocol; the production `StemSeparator` concrete is ML), `BeatGridAnalyzer.swift:10` (for `BeatThisModel`). The `MoodClassifier.currentState` end-of-prep read (`SessionPreparer+Analysis.swift:295`) is the carry-forward item from CA.2; resolved below.
 
-- **Session ↔ Audio (`Sources/Audio/`).** Session imports Audio at `SessionPreparer.swift:15` and `SessionPreparer+Analysis.swift:6` for the protocols (`StemSeparating`, `StemAnalyzing`, `MoodClassifying`) and the `PreviewAudio` value type… wait, `PreviewAudio` is declared in `Session/SessionTypes.swift:88`, not Audio. **Correction:** the only Audio-module consumption from Session is the protocol seams (`StemSeparating` etc. are declared in `Audio/Protocols.swift` per CA.2's note at `ML.md §Cross-references`); `PreviewAudio` is Session-owned. `MetadataPreFetcher` (used at `SessionPreparer.swift:86, 132` and called at `:299`) lives in the **Audio** module (`Sources/Audio/MetadataPreFetcher.swift`). **CA-Audio correction (2026-05-21):** `TrackMetadata` (constructed at `:295`) lives in the **Shared** module (`Sources/Shared/AudioFeatures+Metadata.swift:30`), NOT in Audio — same for `PreFetchedTrackProfile` and `MetadataSource` (lines 69, 10 of the same file). Boundary-noted: Session consumes `MetadataPreFetcher` as an injected dependency; Audio is the producer. Full Audio-side audit at [`docs/CAPABILITY_REGISTRY/AUDIO.md`](AUDIO.md).
+- **Session ↔ Audio (`Sources/Audio/`).** Session imports Audio at `SessionPreparer.swift:15` and `SessionPreparer+Analysis.swift:6` for the protocols (`StemSeparating`, `StemAnalyzing`, `MoodClassifying`) and the `PreviewAudio` value type… wait, `PreviewAudio` is declared in `Session/SessionTypes.swift:88`, not Audio. **Correction:** the only Audio-module consumption from Session is the protocol seams (`StemSeparating` etc. are declared in `Audio/Protocols.swift` per CA.2's note at `ML.md Cross-references`); `PreviewAudio` is Session-owned. `MetadataPreFetcher` (used at `SessionPreparer.swift:86, 132` and called at `:299`) lives in the **Audio** module (`Sources/Audio/MetadataPreFetcher.swift`). **CA-Audio correction (2026-05-21):** `TrackMetadata` (constructed at `:295`) lives in the **Shared** module (`Sources/Shared/AudioFeatures+Metadata.swift:30`), NOT in Audio — same for `PreFetchedTrackProfile` and `MetadataSource` (lines 69, 10 of the same file). Boundary-noted: Session consumes `MetadataPreFetcher` as an injected dependency; Audio is the producer. Full Audio-side audit at [`docs/CAPABILITY_REGISTRY/AUDIO.md`](AUDIO.md).
 
 ### production-active
 
@@ -151,8 +151,8 @@ The audit produced no new `boundary-deferred` findings. The following Session-mo
 - **Lifecycle + state machine (6 files):** `SessionManager` (`@MainActor ObservableObject`, D-018 / D-056), `SessionManager+Readiness`, `SessionTypes` (SessionState / ProgressiveReadinessLevel / SessionPlan / PreviewAudio), `TrackPreparationStatus` (AnalysisStage + 7-status state machine), `PreparationProgressPublishing` (protocol seam), `Session.swift` (module marker).
 - **Preparation pipeline (6 files):** `SessionPreparer` (orchestrator, @MainActor), `SessionPreparer+Analysis` (static `analyzePreview` composition), `SessionPreparer+WiringLogs` (BUG-006.1 + DSP.4 diagnostic emission), `PreviewResolver` (D-070 Spotify-first / iTunes fallback), `PreviewDownloader` (AAC/MP3 → mono Float32 PCM via `AVAudioFile`), `StemCache` (NSLock-guarded per-track cache).
 - **Track / Playlist value types (3 files):** `TrackIdentity` (cache key with the `spotifyPreviewURL` hint excluded from Equatable/Hashable/Codable per D-070), `TrackProfile`, `PlaylistConnector` (Apple Music AppleScript + Spotify routing).
-- **Boundary-resolved-from-CA.1 (2 files):** `BeatGridAnalyzer` (`BeatGridAnalyzing` protocol + `DefaultBeatGridAnalyzer` composing DSP + ML), `GridOnsetCalibrator` (BUG-007.8 per-track offset calibration). See §Resolution-of-CA.1/CA.2-boundary-deferred-items below.
-- **Quality gates (1 file):** `BPMMismatchCheck` (`detectBPMMismatch` 2-way BUG-008.2 + `detectThreeWayBPMDisagreement` 3-way DSP.4). *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
+- **Boundary-resolved-from-CA.1 (2 files):** `BeatGridAnalyzer` (`BeatGridAnalyzing` protocol + `DefaultBeatGridAnalyzer` composing DSP + ML), `GridOnsetCalibrator` (BUG-007.8 per-track offset calibration). See Resolution-of-CA.1/CA.2-boundary-deferred-items below.
+- **Quality gates (1 file):** `BPMMismatchCheck` (`detectBPMMismatch` 2-way BUG-008.2 + `detectThreeWayBPMDisagreement` 3-way DSP.4). *(Removed at BUG-145, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
 - **Connectors subdirectory (2 files):** `Connectors/SpotifyTokenProvider` (`SpotifyTokenProviding` protocol + `MissingCredentialsTokenProvider` fallback; CLEAN.2.1 removed the D-068 client-credentials provider — OAuth/D-069 via the App-layer `SpotifyOAuthTokenProvider` is now the sole token source), `Connectors/SpotifyWebAPIConnector` (D-070 `/items` schema + `preview_url` capture + 401-retry + 403→`spotifyLoginRequired` mapping).
 
 ---
@@ -161,7 +161,7 @@ The audit produced no new `boundary-deferred` findings. The following Session-mo
 
 Citations use `path:line` format. Inventory data from per-file direct reads (Explore agents not used — file sizes were tractable for direct reading); consumer counts from `grep -rn` of canonical type names across `UzumeApp/`, `UzumeEngine/Sources/`, and `UzumeEngine/Tests/`. Visibility cross-checked against the file's text per the CA.3 visibility-verification rule.
 
-Consolidation: 21 of 22 files concentrate on `production-active`; the per-file index below mirrors CA.1/CA.2's consolidated form. Non-`production-active` files (LocalFolderConnector) are visually marked. Boundary-resolved files (BeatGridAnalyzer, GridOnsetCalibrator) get their final verdicts here plus a cross-link to §Resolution.
+Consolidation: 21 of 22 files concentrate on `production-active`; the per-file index below mirrors CA.1/CA.2's consolidated form. Non-`production-active` files (LocalFolderConnector) are visually marked. Boundary-resolved files (BeatGridAnalyzer, GridOnsetCalibrator) get their final verdicts here plus a cross-link to Resolution.
 
 ### `Session.swift` (5 lines) — `production-active`
 
@@ -173,11 +173,11 @@ Four shared value types for the session preparation pipeline.
 
 | Capability | Verdict | Consumers (prod / test) | Doc-cited |
 |---|---|---|---|
-| `SessionState` enum (`.idle / .connecting / .preparing / .ready / .playing / .ended`) | `production-active` | 6 view files (one per state) + `SessionStateViewModel.swift:30` + `NetworkRecoveryCoordinator.swift:49,104` + 4 test files | `ARCHITECTURE.md §Session Lifecycle`, `§UX Contract`; D-017 |
+| `SessionState` enum (`.idle / .connecting / .preparing / .ready / .playing / .ended`) | `production-active` | 6 view files (one per state) + `SessionStateViewModel.swift:30` + `NetworkRecoveryCoordinator.swift:49,104` + 4 test files | `ARCHITECTURE.md Session Lifecycle`, `UX Contract`; D-017 |
 | `ProgressiveReadinessLevel` enum (`.preparing / .readyForFirstTracks / .partiallyPlanned / .fullyPrepared / .reactiveFallback`, `Comparable`) | `production-active` | `SessionManager.swift:48`, `PlaybackChromeViewModel.swift:125`, `PreparationProgressViewModel.swift:89`, `PreparationProgressView.swift:61`, `PlaybackView.swift:78`, `ProgressiveReadinessTests` | D-056 |
 | `defaultProgressiveReadinessThreshold: Int = 3` (top-level public let) | `production-active` | `SessionManager+Readiness.swift:28`; tests reference via `@testable import Session` | D-056 |
 | `SessionPlan` struct (holds `[TrackIdentity]`) | `production-active` | `SessionManager.swift:52,155,199,234` + tests | D-017 |
-| `PreviewAudio` struct (`trackIdentity / pcmSamples / sampleRate / duration`) | `production-active` | `SessionPreparer.swift:301` + `SessionPreparer+Analysis.swift:67` + 5 test files | `ARCHITECTURE.md §Session Preparation` |
+| `PreviewAudio` struct (`trackIdentity / pcmSamples / sampleRate / duration`) | `production-active` | `SessionPreparer.swift:301` + `SessionPreparer+Analysis.swift:67` + 5 test files | `ARCHITECTURE.md Session Preparation` |
 
 ### `SessionManager.swift` (354 lines) — `production-active`
 
@@ -185,13 +185,13 @@ Four shared value types for the session preparation pipeline.
 
 | Capability | Verdict | Consumers | Notes |
 |---|---|---|---|
-| `SessionManager` class | `production-active` | App-layer (VisualizerEngine, 5 VMs, 6 views) + 4 test files | `ARCHITECTURE.md §Session Lifecycle`; D-018 degradation contract |
+| `SessionManager` class | `production-active` | App-layer (VisualizerEngine, 5 VMs, 6 views) + 4 test files | `ARCHITECTURE.md Session Lifecycle`; D-018 degradation contract |
 | `state: SessionState` (`@Published`) | `production-active` | ContentView routing + NetworkRecoveryCoordinator | D-018 |
 | `progressiveReadinessLevel: ProgressiveReadinessLevel` (`@Published`) | `production-active` | PreparationProgressViewModel CTA gate + PlaybackChromeViewModel background indicator | D-056 |
 | `currentPlan: SessionPlan?` (`@Published`) | `production-active` | App-layer (orchestrator wiring) | — |
 | `sessionSource: PlaylistSource?` (`@Published`) | `production-active` | `EndedView` + telemetry | — |
 | `preparingTracks: [TrackIdentity]` (`@Published`) | `production-active` | `PreparationProgressView` track-list | — |
-| `cache: StemCache` (computed) | `production-active` | App-layer engine wiring (BUG-006.2 / D-091 fix); tests | `KNOWN_ISSUES.md §BUG-006` |
+| `cache: StemCache` (computed) | `production-active` | App-layer engine wiring (BUG-006.2 / D-091 fix); tests | `KNOWN_ISSUES.md BUG-006` |
 | `preparationProgress: (any PreparationProgressPublishing)?` | `production-active` | `PreparationProgressViewModel` | — |
 | `init(connector:preparer:sessionRecorder:)` | `production-active` | `VisualizerEngine+InitHelpers.makeSessionManager` | — |
 | `startSession(source:) async` | `production-active` | `IdleView` (Apple Music path) | D-018 degradation |
@@ -228,7 +228,7 @@ Two enums.
 
 | Capability | Verdict | Consumers | Notes |
 |---|---|---|---|
-| `SessionPreparer` class | `production-active` | `VisualizerEngine+InitHelpers.swift:115`; 6 test files (SessionPreparerTests, SessionPreparerProgressTests, ProgressiveReadinessTests, SessionManagerCancelTests, SessionManagerTests, BeatGridIntegrationTests) | `ARCHITECTURE.md §Session Preparation`; D-008 |
+| `SessionPreparer` class | `production-active` | `VisualizerEngine+InitHelpers.swift:115`; 6 test files (SessionPreparerTests, SessionPreparerProgressTests, ProgressiveReadinessTests, SessionManagerCancelTests, SessionManagerTests, BeatGridIntegrationTests) | `ARCHITECTURE.md Session Preparation`; D-008 |
 | `SessionPreparationResult` struct | `production-active` | `SessionPreparer.prepare(tracks:)` return + `SessionManager._beginPreparation` consumer | — |
 | `SessionPreparationError` enum | `production-active` (internal) | Thrown inside `prepareTrack`, caught inside `_runPreparation` | `internal` visibility — no external consumers, correctly scoped. |
 | `progress` / `trackStatuses` (`@Published`) | `production-active` | App-layer VMs + tests | — |
@@ -240,7 +240,7 @@ Two enums.
 | `resumeFailedNetworkTracks() async` | `production-active` | `SessionManager.resumeFailedNetworkTracks()` | D-061(d) |
 | `sessionRecorder: SessionRecorder?` (internal `let`) | `production-active` | `SessionPreparer+WiringLogs` (extension access requires internal visibility per file comment at `:92`) | BUG-006.1 instrumentation; tracked for QR.5 cleanup |
 | BUG-006.1 `WIRING: SessionPreparer.prepare ENTER` / `DONE` lines | `production-active` | Diagnostic trail | Tracked for QR.5 cleanup |
-| Round 26 metadata-driven meter override (parallel `async let profileTask`) | `production-active` | `SessionPreparer.swift:292-304` — `prefetchedProfile` is threaded into `analyzePreview` which calls `BeatGrid.overridingBeatsPerBar(timeSignature)` at line 136 | 2026-05-15 work; documented in `BeatGrid.swift` (CA.1) but not in `ARCHITECTURE.md §Session Preparation` (see `documented-but-missing` finding 1) |
+| Round 26 metadata-driven meter override (parallel `async let profileTask`) | `production-active` | `SessionPreparer.swift:292-304` — `prefetchedProfile` is threaded into `analyzePreview` which calls `BeatGrid.overridingBeatsPerBar(timeSignature)` at line 136 | 2026-05-15 work; documented in `BeatGrid.swift` (CA.1) but not in `ARCHITECTURE.md Session Preparation` (see `documented-but-missing` finding 1) |
 
 Two TODO markers at the file top (`U.4-followup`): split `.mir` sub-stage emission from the detached task, and wire URLSession download progress callback. Neither is a defect — both are documented limitations.
 
@@ -268,7 +268,7 @@ Notable: `FFTContext` (lines 25–35) is a private working-buffer struct allocat
 BUG-006.1 + BUG-008.2 + DSP.4 diagnostic emission. Three responsibilities:
 1. **`logWiringDoneSummary(cachedTracks:failedTracks:)`** — per-track `WIRING: SessionPreparer.beatGrid` lines + a final `DONE` summary. Called from `SessionPreparer._runPreparation` (line 266).
 2. **`logDrumsBeatGridLine(track:)`** — DSP.4 `WIRING: SessionPreparer.drumsBeatGrid` line per cached track.
-3. **`logBPMMismatchIfAny(track:)`** — 3-way preferred (`detectThreeWayBPMDisagreement`), falls back to 2-way (`detectBPMMismatch`, BUG-008.2 backward grep-ability) when drums-stem BPM is zero or missing. *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
+3. **`logBPMMismatchIfAny(track:)`** — 3-way preferred (`detectThreeWayBPMDisagreement`), falls back to 2-way (`detectBPMMismatch`, BUG-008.2 backward grep-ability) when drums-stem BPM is zero or missing. *(Removed at BUG-145, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
 
 Diagnostic-only — no production behaviour depends on these log lines, but they are the load-bearing diagnostic trail for any session-prep regression. Tracked for QR.5 cleanup once BUG-006 / BUG-007 / BUG-008 fully close.
 
@@ -305,13 +305,13 @@ The Spotify-inline short-circuit at lines 73–76 is the D-070 Decision (Failed 
 
 Five public types: `PlaylistSource` enum (4 cases), `PlaylistConnectorError` enum (9 cases — `appleMusicNotRunning`, `spotifyAuthFailure`, `spotifyLoginRequired`, `spotifyPlaylistInaccessible`, `spotifyPlaylistNotFound`, `rateLimited(retryAfterSeconds:)`, `unrecognizedPlaylistURL`, `networkFailure`, `parseFailure`), `PlaylistConnecting` protocol, `PlaylistConnector` class, plus `PlaylistSource.displayName` extension. Apple Music path uses AppleScript via `executeAndReturnError` on `Task.detached` with -600 / -1728 swallowed as expected; Spotify path delegates to the `SpotifyWebAPIConnecting` injection seam. `appleScriptReader` is the test-time injection point (`PlaylistConnectorTests` exercises canned scripts).
 
-The `.spotifyCurrentQueue` source explicitly throws `networkFailure("Spotify queue requires an active OAuth session (v2 feature)")` at line 127–129 — deliberate deferral per UX_SPEC §4.4. Not a defect.
+The `.spotifyCurrentQueue` source explicitly throws `networkFailure("Spotify queue requires an active OAuth session (v2 feature)")` at line 127–129 — deliberate deferral per UX_SPEC 4.4. Not a defect.
 
 The `.appleMusicPlaylistURL` path at lines 204–213 validates the URL format then **falls back to the current-playlist path** with a logged note (`MusicKit deferred`). This is a documented v1 limitation per the in-file comment; correct behaviour.
 
 ### `LocalFolderConnector.swift` (25 lines) — `stub`
 
-See `§stub` finding above. Entire body gated behind `#if ENABLE_LOCAL_FOLDER_CONNECTOR`; flag never set; class never compiles into the production app. Intentional scaffold per D-046 + UX_SPEC §4.4.
+See `stub` finding above. Entire body gated behind `#if ENABLE_LOCAL_FOLDER_CONNECTOR`; flag never set; class never compiles into the production app. Intentional scaffold per D-046 + UX_SPEC 4.4.
 
 ### `BeatGridAnalyzer.swift` (81 lines) — `production-active` (CA.1 boundary-deferred — resolved)
 
@@ -321,7 +321,7 @@ Production consumers: `SessionPreparer+Analysis.swift:116` (full mix), `SessionP
 
 Test consumers: `BeatGridIntegrationTests` (6 cases with both `CountingBeatGridAnalyzer` and `FixedBPMBeatGridAnalyzer` stubs); `BeatGridAccuracyDiagnosticTests`; `LiveDriftValidationTests` (real `DefaultBeatGridAnalyzer` on `love_rehab.m4a`).
 
-**Verdict assignment per §Resolution-of-CA.1/CA.2-boundary-deferred-items:** `production-active`. Recommendation: **keep in Session/**. The `BeatGridAnalyzing` protocol is the testability-seam pattern that matches Session's other `*-ing` injectables (`StemAnalyzing`, `MoodClassifying`, `PreviewResolving`, `PreviewDownloading`, `PlaylistConnecting`). Relocating the protocol would break that consistency; relocating only the `DefaultBeatGridAnalyzer` implementation would create a confusing protocol-without-default split. The composition shape (DSP + ML inside a single Session-facing protocol) is correct.
+**Verdict assignment per Resolution-of-CA.1/CA.2-boundary-deferred-items:** `production-active`. Recommendation: **keep in Session/**. The `BeatGridAnalyzing` protocol is the testability-seam pattern that matches Session's other `*-ing` injectables (`StemAnalyzing`, `MoodClassifying`, `PreviewResolving`, `PreviewDownloading`, `PlaylistConnecting`). Relocating the protocol would break that consistency; relocating only the `DefaultBeatGridAnalyzer` implementation would create a confusing protocol-without-default split. The composition shape (DSP + ML inside a single Session-facing protocol) is correct.
 
 ### `GridOnsetCalibrator.swift` (198 lines) — `production-active` (CA.1 boundary-deferred — resolved)
 
@@ -331,13 +331,13 @@ Production consumers: `SessionPreparer+Analysis.swift:179` (prep-time calibratio
 
 Test consumers: `GridOnsetCalibratorTests` (5 cases — empty-grid, insufficient-samples, no-onsets, valid-offset, large-offset).
 
-**Verdict assignment per §Resolution-of-CA.1/CA.2-boundary-deferred-items:** `production-active`. Recommendation: **relocate to `Sources/DSP/`** as `CA.3-FU-1`. The struct has no Session-side coupling — it constructs a DSP `BeatDetector`, runs vDSP FFTs, consumes a DSP `BeatGrid` value type, and returns a `Double`. The runtime consumer at `VisualizerEngine+Stems.swift:271` already imports DSP. The Session-side consumer at `SessionPreparer+Analysis.swift:179` already imports DSP. Both call sites would be unchanged by the relocation. Unlike `BeatGridAnalyzer`, there is no protocol-injection pattern to preserve — `GridOnsetCalibrator` is constructed inline by both consumers as a value type. This recommendation matches CA.1-FU-5.
+**Verdict assignment per Resolution-of-CA.1/CA.2-boundary-deferred-items:** `production-active`. Recommendation: **relocate to `Sources/DSP/`** as `CA.3-FU-1`. The struct has no Session-side coupling — it constructs a DSP `BeatDetector`, runs vDSP FFTs, consumes a DSP `BeatGrid` value type, and returns a `Double`. The runtime consumer at `VisualizerEngine+Stems.swift:271` already imports DSP. The Session-side consumer at `SessionPreparer+Analysis.swift:179` already imports DSP. Both call sites would be unchanged by the relocation. Unlike `BeatGridAnalyzer`, there is no protocol-injection pattern to preserve — `GridOnsetCalibrator` is constructed inline by both consumers as a value type. This recommendation matches CA.1-FU-5.
 
 ### `BPMMismatchCheck.swift` (181 lines) — `production-active`
 
 [`BPMMismatchCheck.swift:91, 164`](../../UzumeEngine/Sources/Session/BPMMismatchCheck.swift) — `public func detectBPMMismatch(...)` (2-way, BUG-008.2 backward-grep-able) + `public func detectThreeWayBPMDisagreement(...)` (3-way, DSP.4 diagnostic). Plus two result structs: `BPMMismatchWarning` and `ThreeWayBPMReading`. Pure functions — no I/O, no logging, no Sendable concerns. Default threshold 3 % (intentionally generous — 0.4 % is the `BeatGridResolver`'s own `±0.5` BPM tolerance at 125 BPM; 3 % leaves headroom for legitimate small disagreements like Money's 1.4 %).
 
-Sole production consumer: `SessionPreparer+WiringLogs.logBPMMismatchIfAny(track:)` at lines 81 (3-way) and 104 (2-way). Test consumer: `BPMMismatchCheckTests` (16+ cases). No App-layer or non-Session consumer — diagnostic-only. *(Removed at BUG-144, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
+Sole production consumer: `SessionPreparer+WiringLogs.logBPMMismatchIfAny(track:)` at lines 81 (3-way) and 104 (2-way). Test consumer: `BPMMismatchCheckTests` (16+ cases). No App-layer or non-Session consumer — diagnostic-only. *(Removed at BUG-145, 2026-09-26: the MIR-vs-grid detectors and `logBPMMismatchIfAny` went with their MIR input, a tempo pinned at the onset cooldown; `BPMMismatchCheck.swift` now holds the D-154 gate and the octave-folded tempos.)*
 
 ### `Connectors/SpotifyTokenProvider.swift` — `production-active`
 
@@ -412,19 +412,19 @@ The instant return value of `classify` is wired into the **runtime** mood path v
 
 ### Updates needed in CLAUDE.md
 
-CLAUDE.md's pointers to Session-module documentation are correct and current — `§Session Preparation Pipeline` (the canonical pointer line) routes through `ARCHITECTURE.md §Session Preparation`. The drift surfaced below is entirely in ARCHITECTURE.md, not CLAUDE.md. **No CLAUDE.md edits applied in this increment.**
+CLAUDE.md's pointers to Session-module documentation are correct and current — `Session Preparation Pipeline` (the canonical pointer line) routes through `ARCHITECTURE.md Session Preparation`. The drift surfaced below is entirely in ARCHITECTURE.md, not CLAUDE.md. **No CLAUDE.md edits applied in this increment.**
 
 ### Updates needed in ARCHITECTURE.md
 
 Applied in this increment as doc-only corrections:
 
-1. **`§Session Preparation` (lines 112–124) — update the step list** to reflect the production pipeline (`SessionPreparer+Analysis.swift:66-165`):
+1. **`Session Preparation` (lines 112–124) — update the step list** to reflect the production pipeline (`SessionPreparer+Analysis.swift:66-165`):
    - Step 2 corrected: "Resolve preview clip URLs — primary: `TrackIdentity.spotifyPreviewURL` (inline from Spotify `/items` per D-070), iTunes Search API fallback (`PreviewResolver`, D-011)."
    - New step added: metadata pre-fetch parallel with the PCM download (Round 26, 2026-05-15) for ML-detected meter override on odd-time-signature tracks.
    - Step 5 expanded: stem separation → analyzer warmup → MIR → full-mix Beat This! `BeatGrid` (D-077 via `BeatGridAnalyzer`) → metadata-driven `beatsPerBar` override (Round 26) → drums-stem `BeatGrid` (DSP.4 diagnostic) → `GridOnsetCalibrator` per-track median offset (BUG-007.8) → cache to `StemCache`.
-   - Cross-link to `KNOWN_ISSUES.md §BUG-007.8` and `§BUG-007.9` for the calibration story.
+   - Cross-link to `KNOWN_ISSUES.md BUG-007.8` and `BUG-007.9` for the calibration story.
 
-2. **`§Module Map Session/` block (lines 544–554) — add the 13 missing files** with one-line behavioural descriptions:
+2. **`Module Map Session/` block (lines 544–554) — add the 13 missing files** with one-line behavioural descriptions:
    - `Session.swift` — module marker; `@_exported import Shared`.
    - `SessionManager+Readiness.swift` — pure `computeReadiness(...)` static; D-056 `.partial` threshold rule.
    - `SessionPreparer+Analysis.swift` — `nonisolated static func analyzePreview(...)` composing DSP + ML + Audio inside `Task.detached`.
@@ -438,11 +438,11 @@ Applied in this increment as doc-only corrections:
    - `Connectors/SpotifyTokenProvider.swift` — `MissingCredentialsTokenProvider` internal fallback + `SpotifyTokenProviding` protocol. (CLEAN.2.1 removed the D-068 `DefaultSpotifyTokenProvider` client-credentials actor; OAuth + PKCE via the App-layer `SpotifyOAuthTokenProvider` per D-069 is the sole token source.)
    - `Connectors/SpotifyWebAPIConnector.swift` — D-070 `/items` schema + `preview_url` capture + 401-retry + 403→`spotifyLoginRequired` mapping; `SpotifyWebAPIConnecting` protocol.
 
-3. **`§Module Map Tests/Session/` block (line 580) — remove phantom `StemCacheTests`, add 6 missing files:**
+3. **`Module Map Tests/Session/` block (line 580) — remove phantom `StemCacheTests`, add 6 missing files:**
    - Remove: `StemCacheTests` (does not exist on disk; StemCache exercised inside `SessionPreparerTests` + the `PreparedBeatGrid*WiringTests` integration suite).
    - Add: `BPMMismatchCheckTests` (~16 cases), `GridOnsetCalibratorTests` (5 cases), `ProgressiveReadinessTests` (10 cases), `SessionManagerCancelTests`, `SessionPreparerProgressTests`, `TrackPreparationStatusTests`.
 
-4. **`§Session Recording (Diagnostics)` — note the `WIRING:` log surface.** Add a one-line pointer that BUG-006.1 introduced a `WIRING:` line family covering session start, preparer entry/done, per-track beat-grid summary, drums-stem beat-grid summary (DSP.4), and 2-way / 3-way BPM disagreement warnings (BUG-008.2 / DSP.4); these are diagnostic-only and tracked for QR.5 cleanup.
+4. **`Session Recording (Diagnostics)` — note the `WIRING:` log surface.** Add a one-line pointer that BUG-006.1 introduced a `WIRING:` line family covering session start, preparer entry/done, per-track beat-grid summary, drums-stem beat-grid summary (DSP.4), and 2-way / 3-way BPM disagreement warnings (BUG-008.2 / DSP.4); these are diagnostic-only and tracked for QR.5 cleanup.
 
 ### Updates needed in ENGINEERING_PLAN.md
 
@@ -488,8 +488,8 @@ Items are greppable as `CA\.3-FU-\d+`. If/when a top-level `docs/CAPABILITY_REGI
 
 | ID | Scope | Done-when | Est. sessions | Status |
 |---|---|---|---|---|
-| **CA.3-FU-1** | Relocate `Sources/Session/GridOnsetCalibrator.swift` → `Sources/DSP/GridOnsetCalibrator.swift`. The struct is functionally a DSP capability (constructs `BeatDetector`, runs vDSP FFTs, consumes `BeatGrid`, returns `Double`). Both consumers (`SessionPreparer+Analysis.swift:179`, `VisualizerEngine+Stems.swift:271`) already import DSP. The relocation is mechanical: 1 file move + verify Package.swift if module exports require it. Closes CA.1-FU-5's GridOnsetCalibrator half (which was marked "Blocked on CA-Session audit" — block is cleared by this audit). Explicitly does NOT relocate `BeatGridAnalyzer` — see §Resolution-of-CA.1/CA.2-boundary-deferred-items for why that stays in Session/. | File at `Sources/DSP/GridOnsetCalibrator.swift`; both consumer call sites unchanged; `swift test --package-path UzumeEngine` passes; SwiftLint clean. | <1 | Ready now |
-| **CA.3-FU-2** | Decide the fate of `LocalFolderConnector.swift`. Today it is a `#if ENABLE_LOCAL_FOLDER_CONNECTOR`-gated stub with no enabled site anywhere in the build. Two options: **(a)** Delete the file. UX_SPEC §4.4 mentions local-folder as a v2 surface, but the deletion can be reverted from git history when v2 work starts. Matches D-068's "silent-degrade removal" aesthetic — don't ship dead scaffold. **(b)** Replace the `#if` gate with a runtime-disabled toggle that surfaces a "Local folder support coming in a future update" UX. The current behaviour (the class never compiles) is the worst of both worlds: a developer reading `LocalFolderConnector.swift` sees scaffold that isn't actually wired and may waste time tracing the gate. **Recommended (a) to Matt** — the engineering cost is low and the v2 revival starts cleaner from spec than from a year-old stub. Either decision is a Matt call. | Either (a) `LocalFolderConnector.swift` is deleted and the `ConnectorPickerViewModel` comment updated, OR (b) the `#if` gate is replaced with a runtime-disabled toggle. Build green; SwiftLint clean. | <1 | **Blocked on Matt's product call** (delete vs. keep-as-runtime-disabled) |
+| **CA.3-FU-1** | Relocate `Sources/Session/GridOnsetCalibrator.swift` → `Sources/DSP/GridOnsetCalibrator.swift`. The struct is functionally a DSP capability (constructs `BeatDetector`, runs vDSP FFTs, consumes `BeatGrid`, returns `Double`). Both consumers (`SessionPreparer+Analysis.swift:179`, `VisualizerEngine+Stems.swift:271`) already import DSP. The relocation is mechanical: 1 file move + verify Package.swift if module exports require it. Closes CA.1-FU-5's GridOnsetCalibrator half (which was marked "Blocked on CA-Session audit" — block is cleared by this audit). Explicitly does NOT relocate `BeatGridAnalyzer` — see Resolution-of-CA.1/CA.2-boundary-deferred-items for why that stays in Session/. | File at `Sources/DSP/GridOnsetCalibrator.swift`; both consumer call sites unchanged; `swift test --package-path UzumeEngine` passes; SwiftLint clean. | <1 | Ready now |
+| **CA.3-FU-2** | Decide the fate of `LocalFolderConnector.swift`. Today it is a `#if ENABLE_LOCAL_FOLDER_CONNECTOR`-gated stub with no enabled site anywhere in the build. Two options: **(a)** Delete the file. UX_SPEC 4.4 mentions local-folder as a v2 surface, but the deletion can be reverted from git history when v2 work starts. Matches D-068's "silent-degrade removal" aesthetic — don't ship dead scaffold. **(b)** Replace the `#if` gate with a runtime-disabled toggle that surfaces a "Local folder support coming in a future update" UX. The current behaviour (the class never compiles) is the worst of both worlds: a developer reading `LocalFolderConnector.swift` sees scaffold that isn't actually wired and may waste time tracing the gate. **Recommended (a) to Matt** — the engineering cost is low and the v2 revival starts cleaner from spec than from a year-old stub. Either decision is a Matt call. | Either (a) `LocalFolderConnector.swift` is deleted and the `ConnectorPickerViewModel` comment updated, OR (b) the `#if` gate is replaced with a runtime-disabled toggle. Build green; SwiftLint clean. | <1 | **Blocked on Matt's product call** (delete vs. keep-as-runtime-disabled) |
 | **CA.3-FU-3** | (Optional, low priority.) Retire BUG-006.1 `WIRING:` log instrumentation per the QR.5 plan. The instrumentation is in `SessionManager.startSession`, `SessionManager._beginPreparation`, `SessionManager.startNow()`, `SessionPreparer.prepare(tracks:)`, `SessionPreparer+WiringLogs.logWiringDoneSummary` / `logDrumsBeatGridLine` / `logBPMMismatchIfAny`. BUG-006 is closed; BUG-007 + BUG-008 are tracked but not Session-module-side issues. Costs nothing at runtime; the value of keeping it is "the next session-prep regression has the diagnostic trail already in place." Costs of retiring: net negative readability surface around 10–20 lines of LOC. Defer to QR.5; flagging here for completeness. | Either the `WIRING:` family is retired (and `SessionPreparer+WiringLogs.swift` either deleted or trimmed to just the DONE summary + the BPM-mismatch warnings), OR the file's top comment is updated to say "intentional permanent instrumentation" so it doesn't read as cleanup-pending. | <1 | Deferred to QR.5 wave |
 
 **Bundling recommendation.** FU-1 is standalone and ready to land in any DSP-touching increment. FU-2 needs a Matt product call before scheduling. FU-3 is part of the QR.5 cleanup wave and doesn't need to be a CA.3-attributed follow-up at all — recorded here for completeness.

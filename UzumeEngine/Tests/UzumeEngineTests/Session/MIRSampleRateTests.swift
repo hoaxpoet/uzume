@@ -1,4 +1,4 @@
-// MIRSampleRateTests — BUG-145. Preparation MIR ran its 1024-point FFT at the FILE's rate, so the
+// MIRSampleRateTests — BUG-146. Preparation MIR ran its 1024-point FFT at the FILE's rate, so the
 // same music prepared from a 96 kHz file read a halved centroid and skewed key correlations —
 // Superstition's arousal 0.21 against 0.52 at 44.1 kHz. It now runs at the stems' 44.1 kHz.
 
@@ -11,7 +11,7 @@ import Testing
 @testable import Session
 @testable import Shared
 
-@Suite("BUG-145 preparation MIR is sample-rate independent")
+@Suite("BUG-146 preparation MIR is sample-rate independent")
 struct MIRSampleRateTests {
 
     /// The same 20 s of music at any rate: a pulsing chord with a bass line.
@@ -43,9 +43,9 @@ struct MIRSampleRateTests {
         let reference = try Self.profile(rate: Int(StemSeparator.modelSampleRate))
         let high = try Self.profile(rate: 96_000)
         #expect(abs(high.spectralCentroidAvg / reference.spectralCentroidAvg - 1) < 0.05,
-                "centroid \(high.spectralCentroidAvg) at 96 kHz vs \(reference.spectralCentroidAvg) (BUG-145)")
+                "centroid \(high.spectralCentroidAvg) at 96 kHz vs \(reference.spectralCentroidAvg) (BUG-146)")
         #expect(abs(high.mood.arousal - reference.mood.arousal) < 0.05
                 && abs(high.mood.valence - reference.mood.valence) < 0.05,
-                "mood \(high.mood) at 96 kHz vs \(reference.mood) (BUG-145)")
+                "mood \(high.mood) at 96 kHz vs \(reference.mood) (BUG-146)")
     }
 }
