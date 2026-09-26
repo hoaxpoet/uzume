@@ -1633,6 +1633,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG145.2 — preparation MIR at 44.1 kHz whatever the file's rate ✅ (2026-09-26)
+
+**Diagnosed (BUG145.1).** `CorpusCensusRunner --dual-rate` on Superstition: at 96 kHz the fixed 1024-point FFT pushed the key correlations +1.6/+1.9 σ, halved the Nyquist-normalised centroid (−0.87 σ) and moved flux −0.40 σ; the band energies stayed within 0.23 σ.
+**Delivered.** `analyzePreview` resamples to `StemSeparator.modelSampleRate` (`BeatThisPreprocessor.resample`) before `analyzeMIR`; 44.1 kHz input is untouched. Folded into the branch's schema v16.
+**Done-when:** ✅ `MIRSampleRateTests` (fails on the old code: centroid off 50 %); ✅ Superstition 96 / 48 / 44.1 kHz stores arousal 0.494 / 0.499 / 0.517 (was 0.21 / 0.45 / 0.52); ✅ beta playlist: 44.1 kHz songs unchanged, BUG-143 ρ 0.855 → 0.927. Residual: valence 0.09 apart at 96 kHz.
+
 ### Increment BUG144.2 — the stored BPM is the beat tracker's ✅ (2026-09-26; manual check pending)
 
 **Diagnosed (BUG144.1).** `TrackProfile.bpm` was the MIR `BeatDetector`'s IOI tempo. Its sub-bass onsets fire at their 400 ms cooldown on every song (median IOI 0.441 s on all ten beta songs, and on the 30 s windows), so it read 130–143 BPM whatever the music.

@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-26-131209] BUG-145 — high-sample-rate files get the mood their music has
+
+Preparation measured mood at the file's own sample rate, so 48 kHz and 96 kHz files read differently from the same music at 44.1 kHz. Superstition's 96 kHz FLAC read arousal 0.21, against 0.52 for the same audio at 44.1 kHz. The fixed-size analysis window halved the brightness measure and blurred the key detection. Preparation now analyses mood, key and brightness at 44.1 kHz (the rate the stems already use) whatever the file's rate. Superstition now reads 0.49. 44.1 kHz files are unchanged; about 16 % of the pilot corpus is at other rates (BUG-141). **Local files re-analyse once** (schema v16, shared with BUG-143/144).
+
 ### [dev-2026-09-26-130233] BUG-144 — each song gets its real BPM; songs without a steady beat get none
 
 Every song was stored at 130–143 BPM, and that number both appeared in the preparation view and steered 27 % of the scene choice. The value came from a sub-bass onset detector that fires as soon as its 400 ms cooldown allows, on every song, so it measured the cooldown rather than the music. The stored BPM is now the beat tracker's tempo, which preparation already computes (octave-folded, so a stretch tracked at half time doesn't drag it). Songs Uzume judges to have no steady beat store no BPM, so they show none and tempo doesn't steer their scenes (Matt's call). On the beta playlist the BPMs now run from 77 to 172 and match the songs; Pyramid Song and Moonlight I show none. Scene choices shift on most songs as a result. The live beat path is unchanged. **Local files re-analyse once** (schema v16, shared with BUG-143). Still to do: Matt's look at the preparation view.
