@@ -3,7 +3,7 @@
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
 FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
-**FF.4 (M7 + certification) next.** `certified: false`, `exclude_from_cycling: true` until FF.4.
+**FF.4 (M7 + certification) next** — prompt `prompts/FF.4-prompt.md`. `certified: false`, `exclude_from_cycling: true` until FF.4.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
