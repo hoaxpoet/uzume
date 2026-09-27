@@ -27,7 +27,7 @@ private let logger = Logger(subsystem: "io.uzume.mac", category: "LiveAdaptation
 ///
 /// Consumed exclusively by `DefaultPlaybackActionRouter` (11 `emitAck(_:)` call sites
 /// covering moreLikeThis / lessLikeThis / reshuffleUpcoming / presetNudge / rePlanSession
-/// / undoLastAdaptation / toggleMoodLock plus the ambient `lessLikeThis` hint).
+/// / undoLastAdaptation plus the ambient `lessLikeThis` hint).
 /// Engine-driven adaptations intentionally do NOT reach this bridge per UX_SPEC §7.4
 /// and the CA.5-FU-2 product decision (Matt 2026-05-21).
 @MainActor

@@ -175,7 +175,7 @@ Top-level files (1):
 Services/ (23):
 - `AccessibilityLabels.swift` — Centralised VoiceOver labels under `"a11y.*"` keys.
 - `AccessibilityState.swift` — `@MainActor ObservableObject`; combines system `NSWorkspace.accessibilityDisplayShouldReduceMotion` with `ReducedMotionPreference` from `SettingsStore`. Publishes `reduceMotion`, `beatAmplitudeScale: Float`. Per-frame gating queries `shouldExecuteMVWarp(presetEnabled:)` / `shouldExecuteSSGI`. U.9 / D-054.
-- `DefaultPlaybackActionRouter.swift` — Concrete `PlaybackActionRouter` per D-050 / U.6b. `AdaptationFields` snapshot type. 7 router methods (`moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation` / `toggleMoodLock`). Family-boost cap `0.3`, family-exclusion window `600s`, ambient-hint window `90s`, override ceiling `8s`, undo capacity `8`. Static `live(engine:toastBridge:onShowPlanPreview:)` factory captures weak engine references.
+- `DefaultPlaybackActionRouter.swift` — Concrete `PlaybackActionRouter` per D-050 / U.6b. `AdaptationFields` snapshot type. 6 router methods (`moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation`). Family-boost cap `0.3`, family-exclusion window `600s`, ambient-hint window `90s`, override ceiling `8s`, undo capacity `8`. Static `live(engine:toastBridge:onShowPlanPreview:)` factory captures weak engine references.
 - `DisplayManager.swift` — `@MainActor ObservableObject` for screen tracking + window-move with fullscreen-quirk handling. Publishes `allScreens`, `currentScreen`, `primaryScreen`. `attach(to:)`, `moveToSecondaryDisplay()`, `moveToPrimaryDisplay()`. Plus `onScreensAdded` / `onScreensRemoved` callbacks consumed by `MultiDisplayToastBridge`.
 - `FirstAudioDetector.swift` — `@MainActor ObservableObject`; subscribes to `AudioSignalState` publisher; sets `hasDetectedAudio` after ≥ 250 ms sustained `.active` state. Per UX_SPEC §6.3.
 - `FullscreenObserver.swift` — `@MainActor ObservableObject` wrapping `NSWindow.didEnterFullScreenNotification` / `didExitFullScreenNotification`; publishes `isFullscreen: Bool`.
@@ -187,7 +187,7 @@ Services/ (23):
 - `PlaybackErrorBridge.swift` — Routes UX_SPEC §9.4 audio-signal errors to `ToastManager` with condition-ID semantics. `silenceToastThresholdSeconds: 15`.
 - `PlaybackErrorConditionTracker.swift` — Lightweight register of asserted condition IDs. `assert` / `clear` / `isAsserted` / `reset`.
 - `PlaybackKeyMonitor.swift` — `NSEvent.addLocalMonitorForEvents` install/uninstall for in-session keyboard shortcuts. Routes via `PlaybackShortcutRegistry`.
-- `PlaybackShortcutRegistry.swift` — Declarative shortcut catalog. `ShortcutCategory` enum (`.playback / .liveAdaptation / .developer`). `PlaybackShortcut(id:key:modifiers:label:category:action:)`. Wires Shift+→ / Shift+← (presetNudge), `+` / `-` (moreLikeThis / lessLikeThis), `R` (reshuffle), `Z` (undo), `M` (mood-lock), plus diagnostic shortcuts (beat-phase / audio-latency / bar-phase / spider / preset cycling).
+- `PlaybackShortcutRegistry.swift` — Declarative shortcut catalog. `ShortcutCategory` enum (`.playback / .liveAdaptation / .developer`). `PlaybackShortcut(id:key:modifiers:label:category:action:)`. Wires Shift+→ / Shift+← (presetNudge), `+` / `-` (moreLikeThis / lessLikeThis), `R` (reshuffle), `Z` (undo), plus diagnostic shortcuts (beat-phase / audio-latency / bar-phase / spider / preset cycling).
 - `PreparationETAEstimator.swift` — Rolling EMA over per-stage durations (resolving / downloading / stemSeparation / caching). `minSamplesRequired: 3`, `emaAlpha: 0.3`.
 - `PresetScoringContextProvider.swift` — Canonical builder of `PresetScoringContext` for Orchestrator scoring calls. Resolves `DeviceTierOverride` (`.auto`/`.forceTier1`/`.forceTier2`) against detected hardware tier. U.8 Part C.
 - `ReachabilityMonitor.swift` — `NWPathMonitor` wrapper with 1 s debounce. `ReachabilityPublishing` protocol + `StubReachabilityMonitor` test-double pair.
@@ -484,7 +484,7 @@ Concrete `PlaybackActionRouter` per D-050 / U.6b. **All 7 protocol methods imple
 | `presetNudge(_:immediate:)` | `production-active` | Keyboard `→` / `←` / Shift+→ / Shift+← | D-074 diagnostic-aware; scorer-driven or alphabetical |
 | `rePlanSession()` | `production-active` | Keyboard `⌘R` | Reshuffle all + preview |
 | `undoLastAdaptation()` | `production-active` | Keyboard `Z` | Pop adaptationHistory; preserves preferences per D-058(b) |
-| `toggleMoodLock()` (`@Published isMoodLocked: Bool`) | `production-active` | Keyboard `M`; ViewModels | — |
+| `toggleMoodLock()` (`@Published isMoodLocked: Bool`) | `removed` (NRG.3) | — the M key flipped a flag nothing read; mood left scene choice at D-259 | — |
 | `static live(engine:toastBridge:onShowPlanPreview:) -> DefaultPlaybackActionRouter` | `production-active` | `PlaybackView` | Wires weak engine refs |
 
 #### PlaybackShortcutRegistry.swift (365 lines) — `production-active`

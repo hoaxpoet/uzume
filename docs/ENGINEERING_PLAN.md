@@ -1649,7 +1649,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Found, not changed:**
 - Scene changes land on fixed segment boundaries, so the drop at ~3:15 switches at 3:21. Aligning changes to energy changes is a candidate NRG.4.
-- The **M key ("Toggle mood lock")** flips a flag nothing reads; it was dead before this increment. Matt's call.
+- The **M key ("Toggle mood lock")** flipped a flag nothing read; removed at Matt's call (2026-09-27).
 - The segment walk can emit a zero-length tail segment at a track's end (floating-point loop edge, pre-existing, never played).
 
 ### Increment NRG.2 — the library 1–10 energy scale and the preparation readout ✅ (2026-09-26; Matt's look at the readout pending)

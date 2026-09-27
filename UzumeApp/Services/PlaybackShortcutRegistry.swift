@@ -237,14 +237,6 @@ final class PlaybackShortcutRegistry {
                 action: onToggleOverlay
             ),
             PlaybackShortcut(
-                id: "moodLock",
-                key: "m",
-                modifiers: [],
-                label: "Toggle mood lock",
-                category: .playback,
-                action: { actionRouter.toggleMoodLock() }
-            ),
-            PlaybackShortcut(
                 id: "endSession",
                 key: "\u{1B}", // ESC
                 modifiers: [],
