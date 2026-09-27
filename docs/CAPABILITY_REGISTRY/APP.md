@@ -266,7 +266,7 @@ The engine's primary owner type: a `final class VisualizerEngine: ObservableObje
 | `currentTrackIndex: @Published Int?` | `production-active` | `PlaybackChromeViewModel` (bound via publisher in ContentView) | D-091 |
 | `arachneState`, `gossamerState`, `auroraVeilState`, `lumenPatternEngine`, `ferrofluidParticles`, `ferrofluidMesh`, `spectralCartographOverlay`, `currentRayMarchPipeline`, `murmurationGeometry` | `production-active` | `applyPreset` set/clear; per-frame tick closures | Per-preset increments |
 | `presetCompletionCancellable` + `currentSegmentStartTime` + `presetCompletionAdvanceCount` | `production-active` | `wirePresetCompletionSubscription`; `handlePresetCompletionEvent` | D-095 / V.7.6.2 |
-| `diagnosticPresetLocked: Bool` | `production-active` | `applyLiveUpdate` mood-override suppression; `handlePresetCompletionEvent` | DSP.3.1 + V.7.7C.4 |
+| `diagnosticPresetLocked: Bool` | `production-active` | planned-segment apply gate (`applyPlannedSegment`); `handlePresetCompletionEvent`. (Its `applyLiveUpdate` mood-override suppression went with the override at NRG.3, D-259.) | DSP.3.1 + V.7.7C.4 |
 | BUG-012 probes (`init` line 709, `deinit` line 718) | **read-only — instrumented** | BUG012Probe | BUG-012-i1 |
 | `featureEmaAlpha: Float = 0.01` (10-second EMA, ~7s effective window @ 94 Hz) | `production-active` | `accumulateMoodFeatures` | Mood classifier inputs |
 

@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-27-182327] NRG.3 — scenes follow the song's energy as it moves
+
+Scene choice now reads each song's measured energy for the stretch a scene will play over, instead of the mood model's single guess. A quiet opening gets a sparse scene and the drop after it a dense one. In Dance Yrself Clean on the beta playlist, the hush gets Witchlight, Skein and Aurora Veil; from 3:21 the drop gets Cymatic Resonance, Nebula and Filigree; the 6:09 breakdown returns to Witchlight. Transitions follow energy too: calm stretches crossfade longer, and only the most energetic moments (level 10) cut. The live re-planning that fired when the mood model's reading drifted is removed, because it was re-planning on noise. The certified scenes' own use of mood is unchanged for now. Still to do: Matt's live listen.
+
 ### [dev-2026-09-26-231257] NRG.1–2 — songs get a measured energy curve and a 1–10 energy readout instead of a mood word
 
 The mood word in the preparation view ("restless", "wistful", …) came from a model that turned out to be no better than chance on songs it hadn't seen (BUG-148). Preparation now measures each song's energy over time instead, one point per second of loudness and activity. The view shows it on a 1–10 scale calibrated across the library: one number for a steady song ("energy 5"), or the low → high range for one that moves ("energy 2 → 9", Dance Yrself Clean's quiet opening and its drop). Across a 1,000-song sample of the library, the typical level runs from classical 2 to hip-hop 9. Scene choice doesn't use it yet; that's NRG.3. **Local files re-analyse once** (stem cache schema v17).
