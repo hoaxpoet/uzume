@@ -3,7 +3,9 @@
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
 FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
-**FF.4 (M7 + certification) next** — prompt `prompts/FF.4-prompt.md`. `certified: false`, `exclude_from_cycling: true` until FF.4.
+**FF.4 (M7 + certification) in progress** — prompt `prompts/FF.4-prompt.md`. Reachable by the arrow keys
+for Matt's M7 (`exclude_from_cycling` removed, FF.4 Task 2); `certified: false` until he passes it, so no
+session plans it yet.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
@@ -127,7 +129,9 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 - **Performance:** 60 fps at 1080p in Release. The Debug-built `PresetFrameBudgetTests` also times any
   CPU-side model at `-Onone` (FF.1 lesson), so CPU work must be cheap in both configurations.
 - **Silence:** never black (D-037); the world coasts (§4.3).
-- **Rotation:** stays `certified: false` + `exclude_from_cycling: true` until FF.4 (M7 + certification).
+- **Rotation:** reachable by the arrow keys since FF.4 Task 2 (`exclude_from_cycling` removed so Matt's
+  build can show it for the M7); `certified: false` until the M7 and the streaming pass, so the planner,
+  the reactive picker and Shift+→ skip it unless "Show uncertified scenes" is on.
 
 ## 7. Increments
 | ID | Delivers | Gate |
