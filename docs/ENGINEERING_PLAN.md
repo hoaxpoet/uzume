@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG150.1 — the Spotify connection tests await the connect ✅ (2026-09-26)
+
+**Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
+**Done-when:** ✅ mechanism reproduced by a 500 ms latency probe (3/4 OAuth tests fail before, 16/16 pass after); ✅ app suite 476/476 + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
+
 ### Increment NRG.1 — preparation measures each song's energy curve ✅ (2026-09-26; Matt: *"the curves look right"*)
 
 **Delivered (D-259).** `TrackProfile.energyCurve`: one point per second of loudness (mean power, dB) and activity (median smoothed raw flux), built by `EnergyCurveBuilder` inside `analyzeMIR` from the frames it already analyses. The whole file is covered locally, the 30 s preview on streaming. Cache schema 16 → 17. It measures only: no 1–10 level and no scene choice yet. **Why a curve:** Matt rejected ranking whole songs (*"it depends on the part of the song — dance yourself clean is … both calm and driving"*), and confirmed the Dance Yrself Clean curve (quiet to 2:40, drop ~3:15, breakdown ~6:00, return 6:40, fade 8:20) matches the song.

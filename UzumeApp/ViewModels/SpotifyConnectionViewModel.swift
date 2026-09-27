@@ -76,7 +76,9 @@ final class SpotifyConnectionViewModel: ObservableObject {
 
     private var parsedPlaylistID: String = ""
     private var parsedURL: String = ""
-    private var debounceTask: Task<Void, Never>?
+    /// Internal (not private) for the same reason as `connectTask` (BUG-150): tests
+    /// `await debounceTask?.value` instead of sleeping past the 300 ms debounce.
+    var debounceTask: Task<Void, Never>?
     /// Internal (not private) so tests can `await connectTask?.value` instead of
     /// guessing a wall-clock sleep duration for the retry-backoff loop to finish.
     var connectTask: Task<Void, Never>?
