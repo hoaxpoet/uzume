@@ -830,14 +830,6 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// analysis-queue mirror — same value, different access discipline.
     var liveTrackPlanIndex: Int?
 
-    /// Most recent mood classification (post-stability attenuation) written
-    /// by `publishMoodResult` on the analysis queue. Read by
-    /// `runOrchestratorLiveUpdate(mir:)` on the same queue and passed into
-    /// `applyLiveUpdate(mood:)` (BUG-015). Defaults to `.neutral` so the wire
-    /// is well-defined before the first mood frame fires (≈ first 3 seconds).
-    /// Guarded by `orchestratorLock`.
-    var lastClassifiedMood: EmotionalState = .neutral
-
     /// Once-per-track diagnostic latch for `runOrchestratorLiveUpdate(mir:)`
     /// (BUG-015 follow-up). When `false`, the next wire tick that actually
     /// reaches `applyLiveUpdate(...)` emits one `Orchestrator: wire active`
