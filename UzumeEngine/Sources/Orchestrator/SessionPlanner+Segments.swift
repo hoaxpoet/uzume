@@ -53,10 +53,14 @@ extension DefaultSessionPlanner {
             let edges = [trackStart] + profile.energyChanges(trackDuration: span).map { trackStart + $0 } + [trackEnd]
             return zip(edges, edges.dropFirst()).flatMap { start, end -> [TrackSection] in
                 let slices = max(1, Int(((end - start) / perSection).rounded()))
+                let step = (end - start) / Double(slices)
                 return (0..<slices).map { idx in
-                    TrackSection(start: start + Double(idx) * (end - start) / Double(slices),
-                                 end: idx == slices - 1 ? end : start + Double(idx + 1) * (end - start) / Double(slices),
-                                 section: nil, isRealSection: false)
+                    TrackSection(
+                        start: start + Double(idx) * step,
+                        end: idx == slices - 1 ? end : start + Double(idx + 1) * step,
+                        section: nil,
+                        isRealSection: false
+                    )
                 }
             }
         }
