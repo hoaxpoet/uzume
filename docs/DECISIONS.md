@@ -140,6 +140,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-256 | Accepted | **50 certified scenes is a goal, not a floor; the quality bar governs** (BETA.0, Matt 2026-09-24) |
 | D-257 | Accepted | **Beat clarity reaches the GPU as one track-scoped float** (`StemFeatures.beat_clarity01`, 1 steady / 0 irregular / 0.5 unknown, from the D-154 flag); **Fireflies maps unknown to free** and lives in the **dusk meadow** (BC.1 + FF.0, Matt 2026-09-24) |
 | D-258 | Accepted | **Fireflies' look is a stylized screenprint rendered from a real 3D scene** — Daniel Danger's night prints, blue palette, hero `07`; supersedes FF.0's photographic / matte-painting bar; addendum: the world breathes with slow energy, never the beat (FF.R2 / FF.2 prompt, Matt 2026-09-25) |
+| D-259 | Accepted | **Scenes are chosen by measured energy, not by the mood classifier** — a 1–10 energy level plus the song's range; valence leaves scene choice; certified scenes' live mood routes untouched for now (BUG-148, Matt 2026-09-26) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6085,3 +6086,35 @@ Recorded in `docs/presets/FIREFLIES_DESIGN.md` §4.3 / §5; built in FF.2.
 
 **References.** D-257; `docs/VISUAL_REFERENCES/fireflies/README.md`; FF.0 README §7;
 `docs/presets/FIREFLIES_DESIGN.md`.
+
+## D-259: Scenes are chosen by measured energy, not by the mood classifier (BUG-148)
+
+**Date:** 2026-09-26 · **Increment:** BUG148.1 (diagnosis) → the NRG increments · **Status:** Accepted ·
+**Supersedes:** the mood term of the preset scorer (valence → colour temperature, arousal → density)
+and the per-track mood word in the preparation view.
+
+**What happened.** Matt's BUG-144 check found every beta song labelled "restless" (valence negative on
+10/10). BUG148.1 showed that the mood model does not generalise. Leave-one-song-out with its own training
+recipe scores valence sign agreement 42 % (chance 50 %, r −0.30) and arousal 50 % (r −0.04). It had been
+trained on 818 frames of 12 hand-labelled songs and validated on frames of those same songs. Shown the
+mood taxonomies in use (MIREX clusters, GEMS, Russell's circumplex, AllMusic tags), Matt asked whether
+songs carry several moods and shift between them within a song. The research answer to both is yes.
+Matt: *"the taxonomy is horrible … this is enough to make the final product unusable. use a measured
+energy value instead."*
+
+**The decision.**
+1. **Scene choice reads measured energy**: signal-derived, no classifier. Where the data allows it is
+   measured per stretch of a song, because songs shift (Dance Yrself Clean: hush, then drop).
+2. **The readout is a 1–10 energy level plus the song's range** (Matt, 2026-09-26: *"go with the 1–10
+   energy level and range"*), the DJ convention, so a steady song reads "6" and a song that moves reads
+   "3 → 9". Word taxonomies were offered (dynamics markings, set-arc roles, texture words) and
+   declined.
+3. **Valence leaves scene choice.** No measured substitute; it returns only if a visual rationale and a
+   model that beats chance on held-out songs both exist.
+4. **The certified scenes' live mood routes are untouched for now** (Matt: *"leave the certified scenes
+   alone for now"*). About a dozen scenes read the live `valence` / `arousal` inside the scene. Changing
+   them changes approved looks, so each is a separate call with Matt's eye.
+
+**Evidence obligation.** An energy measure is admitted only if it ranks the beta playlist the way Matt
+hears it. His ranking, or his pick among candidate orderings, is the reference; a measure that disagrees
+with his ears does not ship, whatever it correlates with.

@@ -53,6 +53,11 @@ public struct TrackProfile: Sendable, Codable {
     /// Optional so old persisted profiles decode unchanged.
     public var beatIrregular: Bool?
 
+    /// The song's measured energy over time (NRG.1, D-259): loudness and activity, one point per
+    /// second, over the analysed audio (the whole file locally, the 30 s preview on streaming).
+    /// nil for profiles written before schema v17.
+    public var energyCurve: EnergyCurve?
+
     // MARK: - Init
 
     public init(
@@ -63,7 +68,8 @@ public struct TrackProfile: Sendable, Codable {
         genreTags: [String] = [],
         stemEnergyBalance: StemFeatures = .zero,
         estimatedSectionCount: Int = 0,
-        beatIrregular: Bool? = nil
+        beatIrregular: Bool? = nil,
+        energyCurve: EnergyCurve? = nil
     ) {
         self.bpm = bpm
         self.key = key
@@ -73,6 +79,7 @@ public struct TrackProfile: Sendable, Codable {
         self.stemEnergyBalance = stemEnergyBalance
         self.estimatedSectionCount = estimatedSectionCount
         self.beatIrregular = beatIrregular
+        self.energyCurve = energyCurve
     }
 
     // MARK: - Defaults
