@@ -1638,6 +1638,16 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 **Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
 **Done-when:** ✅ mechanism reproduced by a 500 ms latency probe (3/4 OAuth tests fail before, 16/16 pass after); ✅ app suite 476/476 + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
 
+### Increment NRG.1 — preparation measures each song's energy curve ✅ (2026-09-26; Matt: *"the curves look right"*)
+
+**Delivered (D-259).** `TrackProfile.energyCurve`: one point per second of loudness (mean power, dB) and activity (median smoothed raw flux), built by `EnergyCurveBuilder` inside `analyzeMIR` from the frames it already analyses. The whole file is covered locally, the 30 s preview on streaming. Cache schema 16 → 17. It measures only: no 1–10 level and no scene choice yet. **Why a curve:** Matt rejected ranking whole songs (*"it depends on the part of the song — dance yourself clean is … both calm and driving"*), and confirmed the Dance Yrself Clean curve (quiet to 2:40, drop ~3:15, breakdown ~6:00, return 6:40, fade 8:20) matches the song.
+**Done-when:** ✅ `EnergyCurveTests` (a quiet→loud clip reads a 29.5 dB step, rising activity, one point a second); ✅ Matt checked all ten beta-song loudness curves (*"the curves look right"*, 2026-09-26). **Next:** NRG.2, the library-wide 1–10 scale + range readout; then NRG.3, the planner reads the curve per segment (valence out, D-259 §3).
+
+### Increment BUG148.1 — the mood model does not generalise: diagnosed ✅ (2026-09-26; fix awaits Matt)
+
+**Delivered (diagnosis only).** BUG-148 (valence negative on 10/10 beta songs) and BUG-149 (key reads F# minor on 7/10; 35 % of the census pilot) filed from Matt's BUG-144 check; the BUG-145 manual check is recorded as passed. A Python replica of `MoodClassifier` matches the app's per-frame output to 3×10⁻⁵. Leave-one-song-out with the shipping recipe scores valence sign agreement **42 %** (chance 50 %, r −0.30) and arousal 50 % (r −0.04): the 12-song model does not generalise, and its frame-shuffled validation split hid that. Today's flux runs +2.5 σ outside the training range. Library proxy (27,638 tracks): 61.5 % negative valence.
+**Done-when:** ✅ KNOWN_ISSUES BUG-148 diagnosis + fix verification criteria; ⏳ Matt's call on the fix. BUG-149 not yet diagnosed.
+
 ### Increment FF.3 — Fireflies: the light ✅ (2026-09-26, branch `ff-3`)
 
 **Done-when:** one still beside FF.R2 `09` / `07` accepted by Matt first; then all of FIREFLIES_DESIGN §4.4 — light on grass, mist and branches, occlusion by trunks, branches and foreground grass, out-of-focus near fireflies, the light rising and decaying with the flash — with films + motion gate, 1080p flash on all four captures, FF.1 parity, breath, Release frame time and rubric reported.
