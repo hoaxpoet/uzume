@@ -13,6 +13,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 ### [dev-2026-09-26-231257] NRG.1–2 — songs get a measured energy curve and a 1–10 energy readout instead of a mood word
 
 The mood word in the preparation view ("restless", "wistful", …) came from a model that turned out to be no better than chance on songs it hadn't seen (BUG-148). Preparation now measures each song's energy over time instead, one point per second of loudness and activity. The view shows it on a 1–10 scale calibrated across the library: one number for a steady song ("energy 5"), or the low → high range for one that moves ("energy 2 → 9", Dance Yrself Clean's quiet opening and its drop). Across a 1,000-song sample of the library, the typical level runs from classical 2 to hip-hop 9. Scene choice doesn't use it yet; that's NRG.3. **Local files re-analyse once** (stem cache schema v17).
+### [dev-2026-09-26-224055] BUG-150 — the Spotify connection tests wait for the connect, not the clock
+
+`connectLoginRequiredUnauthenticated` failed once when the app tests ran right after the engine suite: it slept 400 ms after `connect()` and asserted while the connect was still running. Every wait in the two Spotify view-model suites was a fixed sleep. They now await the view model's own debounce and connect tasks, so they pass however slow the machine is. A probe that adds 500 ms of connector latency failed 3 of 4 OAuth tests before the fix and passes all 16 after. Test-only change; no budget widened, and the suites run about 15 s faster.
 
 ### [dev-2026-09-25-214737] BUG-147 — a planner seed reproduces its plan in any process
 
