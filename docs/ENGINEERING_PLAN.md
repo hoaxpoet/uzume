@@ -1633,6 +1633,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment NRG.2 — the library 1–10 energy scale and the preparation readout ✅ (2026-09-26; Matt's look at the readout pending)
+
+**Delivered (D-259).** `EnergyScale.library`: each second's loudness and activity are ranked against the library and the ranks averaged, and the library deciles of that score are levels 1–10. Calibrated by `tools/energy_calibration.py` on `CorpusCensusRunner --energy` over the 1,000-track stratified pilot (999 decoded, 287,777 seconds; production `analyzeMIR` via `SessionPreparer.energyCurve(of:)`). `EnergyCurve.readout()` gives the 10th/90th-percentile section levels after a ±5 s running median, shown as one number when they're within one level. The preparation row shows *energy 5* or *energy 2 → 9* in place of the mood word (retired with its four strings). **Library sanity:** the median typical level by genre is classical 2, jazz 4, soul/R&B 5, folk 6, pop and rock 7, electronic 8, hip-hop 9; 22 % of songs read steady. **Beta playlist:** Dance Yrself Clean 2 → 9, B.O.B. 8 → 10, Superstition 4 → 6, Teen Spirit 5 → 8, Penny Lane 5, Take Five 2, Pyramid Song 4 → 10, Teardrop 5 → 9, Moonlight I 1, Warszawa 3 → 6. Swift and Python agree exactly on all ten.
+**Done-when:** ✅ `EnergyScaleTests`; ✅ library + beta readouts; ⏳ Matt sees the readout in the preparation view. **Not changed (follow-ups):** `PreparationAperture` still sets its churn from mood spread; `DebugOverlayView` still shows live mood; the planner still scores mood (NRG.3). **Next:** NRG.3, the planner reads the energy curve per segment, and valence leaves scene choice.
+
 ### Increment BUG150.1 — the Spotify connection tests await the connect ✅ (2026-09-26)
 
 **Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
