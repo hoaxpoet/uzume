@@ -200,11 +200,13 @@ public struct DefaultSessionPlanner: Sendable {
     func buildTransition(
         from fromPreset: PresetDescriptor,
         to toPreset: PresetDescriptor,
-        profile: TrackProfile,
+        energyLevel: Int?,
         at sessionClock: TimeInterval,
         lastEntry: PresetHistoryEntry?
     ) -> PlannedTransition {
-        let energy = max(0, min(1, 0.5 + 0.4 * profile.mood.arousal))
+        // NRG.3 (D-259): the incoming stretch's measured energy — a hard cut only at level 10,
+        // crossfades that lengthen as the music gets calmer. Was the mood model's arousal.
+        let energy = DefaultPresetScorer.energy01(energyLevel)
         let clock = Float(sessionClock)
         let elapsed = lastEntry.map { $0.endTime - $0.startTime } ?? 0
         let ctx = TransitionContext(
