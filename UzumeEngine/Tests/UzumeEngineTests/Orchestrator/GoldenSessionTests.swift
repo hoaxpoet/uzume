@@ -39,8 +39,11 @@ struct GoldenSessionTests {
     //   Filigree          0.633 (energy 0.961, tempo 0.933)
     //   Mitosis           0.631 (energy 0.989, tempo 0.883)
     //   Cymatic Resonance 0.613 · Cytokinesis 0.604 · Ferrofluid Ocean 0.580 · Fractal Tree 0.580
-    // Track-firsts rotate (Filigree, Ferrofluid Ocean, Mitosis, Cymatic Resonance, Filigree) as
-    // each winner's fatigue window is still open at the next track boundary.
+    // NRG.4 (2026-09-27): each 180 s track now splits evenly under the scenes' caps into
+    // Filigree 60 s · Cymatic Resonance · Mitosis · Ferrofluid Ocean 40 s each, so Filigree's
+    // fatigue window has closed by every track boundary and every track opens on the argmax,
+    // Filigree. (NRG.3's uneven 40/40/40/…/stub split left it open and the openers rotated.) A
+    // steady, identical-song seed-0 fixture; seeded production plans vary the rotation.
 
     @Test("Session A: 5 tracks, no errors")
     func sessionA_producesCorrectCount() throws {
@@ -62,10 +65,10 @@ struct GoldenSessionTests {
         let session = try planner.plan(
             tracks: makeSessionA(), catalog: makeRealCatalog(), deviceTier: .tier2)
         let ids = session.tracks.map { $0.preset.id }
-        // NRG.3 (2026-09-27): regenerated for energy (trace above). Production plans with a
-        // random seed; this seed-0 argmax pins the scorer only.
+        // NRG.3 (2026-09-27): regenerated for energy; NRG.4 for even splits (trace above).
+        // Production plans with a random seed; this seed-0 argmax pins the scorer only.
         #expect(ids == [
-            "Filigree", "Ferrofluid Ocean", "Mitosis", "Cymatic Resonance", "Filigree",
+            "Filigree", "Filigree", "Filigree", "Filigree", "Filigree",
         ])
     }
 

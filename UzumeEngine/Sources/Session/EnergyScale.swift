@@ -90,6 +90,45 @@ extension EnergyCurve {
         return levels.isEmpty ? nil : levels[(levels.count - 1) / 2]
     }
 
+    /// Where the music's energy steps (NRG.4): seconds at which the median section level of the
+    /// `span` seconds after differs from the `span` seconds before by at least `minStep` levels —
+    /// a drop, a breakdown, a re-entry. A stretch of `span` seconds or less between two changes
+    /// (a brief dip or burst) is too short to hold its own scene, so both of its changes are dropped.
+    public func energyChanges(minStep: Int = 3, span: Int = 20, on scale: EnergyScale = .library) -> [TimeInterval] {
+        let timed = timedSectionLevels(on: scale)
+        guard timed.count >= 2 * span else { return [] }
+        // The true median (mean of the two middle values), so the plateau below centres on the
+        // step whichever way it goes.
+        let median = { (slice: ArraySlice<Int?>) -> Double? in
+            let levels = slice.compactMap { $0 }.sorted()
+            guard !levels.isEmpty else { return nil }
+            return Double(levels[(levels.count - 1) / 2] + levels[levels.count / 2]) / 2
+        }
+        // Jump at each second; a step shows as a plateau of equal jumps around it.
+        let jumps: [Double] = (0..<timed.count).map { i in
+            guard i >= span, i + span <= timed.count,
+                  let before = median(timed[(i - span)..<i]), let after = median(timed[i..<(i + span)])
+            else { return 0 }
+            return abs(after - before)
+        }
+        var changes: [TimeInterval] = []
+        var i = 0
+        while i < jumps.count {
+            guard jumps[i] >= Double(minStep) else { i += 1; continue }
+            var end = i
+            while end + 1 < jumps.count, jumps[end + 1] >= Double(minStep) { end += 1 }
+            // The run's highest jump; the middle of its plateau is where the step sits.
+            let peak = jumps[i...end].max() ?? 0
+            let top = (i...end).filter { jumps[$0] == peak }
+            changes.append(Double(top[(top.count - 1) / 2]) * Double(hopSeconds))
+            i = end + 1
+        }
+        let tooClose = Set(zip(changes, changes.dropFirst())
+            .filter { $1 - $0 <= Double(span) * Double(hopSeconds) }
+            .flatMap { [$0, $1] })
+        return changes.filter { !tooClose.contains($0) }
+    }
+
     /// The song's readout, or nil when it has no audible second.
     public func readout(on scale: EnergyScale = .library) -> EnergyReadout? {
         let levels = sectionLevels(on: scale).sorted()
@@ -118,13 +157,24 @@ extension TrackProfile {
     /// track — what scene choice reads (D-259). nil when the profile has no curve.
     public func energyLevel(at offset: TimeInterval, window: TimeInterval, trackDuration: TimeInterval) -> Int? {
         guard let curve = energyCurve else { return nil }
-        let covered = Double(curve.loudnessDB.count) * Double(curve.hopSeconds)
-        guard trackDuration > 0, covered >= Self.wholeTrackCoverage * trackDuration else {
-            return curve.readout()?.typical
-        }
+        guard let whole = wholeTrackCurve(trackDuration: trackDuration) else { return curve.readout()?.typical }
+        let covered = Double(whole.loudnessDB.count) * Double(whole.hopSeconds)
         // Near the song's end "the next `window` seconds" runs past the curve: read its last
         // `window` seconds instead of falling back to the whole song.
         let start = min(offset, max(0, covered - window))
-        return curve.level(from: start, to: start + window) ?? curve.readout()?.typical
+        return whole.level(from: start, to: start + window) ?? whole.readout()?.typical
+    }
+
+    /// Offsets (seconds into the track) where its energy steps — where scene changes belong
+    /// (NRG.4). Empty for a preview curve, whose place in the song is unknown.
+    public func energyChanges(trackDuration: TimeInterval) -> [TimeInterval] {
+        wholeTrackCurve(trackDuration: trackDuration)?.energyChanges().filter { $0 < trackDuration } ?? []
+    }
+
+    /// The curve when it covers the whole track (not a 30 s preview), else nil.
+    public func wholeTrackCurve(trackDuration: TimeInterval) -> EnergyCurve? {
+        guard let curve = energyCurve, trackDuration > 0 else { return nil }
+        let covered = Double(curve.loudnessDB.count) * Double(curve.hopSeconds)
+        return covered >= Self.wholeTrackCoverage * trackDuration ? curve : nil
     }
 }
