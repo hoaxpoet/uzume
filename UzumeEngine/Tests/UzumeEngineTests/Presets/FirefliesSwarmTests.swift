@@ -63,7 +63,9 @@ struct FirefliesDrive {
         }
     }
 
-    func run(clarity: Float, seed: UInt64 = 7) -> Run {
+    /// `phaseShift` (FF.4 R1 decoy) feeds the swarm a grid shifted by that fraction of a beat;
+    /// on-beat is still scored against the TRUE beats.
+    func run(clarity: Float, seed: UInt64 = 7, phaseShift: Float = 0) -> Run {
         let swarm = FirefliesSwarm(seed: seed)
         swarm.flashLog = []
         var beats: [Double] = []
@@ -75,7 +77,9 @@ struct FirefliesDrive {
                 beats.append(swarm.now + Double((1 - p) / (f.beatPhase01 + 1 - p) * f.deltaTime))
             }
             prev = f.beatPhase01
-            swarm.advance(features: f, clarity: clarity, gridBPM: bpm)
+            var fed = f
+            fed.beatPhase01 = (f.beatPhase01 + phaseShift).truncatingRemainder(dividingBy: 1)
+            swarm.advance(features: fed, clarity: clarity, gridBPM: bpm)
             run.t.append(swarm.now - offset)
             run.coherence.append(swarm.coherence)
             run.onBeat.append(Self.onBeat(flashes: swarm.flashLog ?? [], beats: beats, now: swarm.now))
@@ -223,5 +227,32 @@ struct FirefliesSpikeParityProbe {
             #expect(abs(r - spikeR) <= 0.1, "\(stem): seed-mean R \(r) vs spike \(spikeR)")
             #expect(abs(b - spikeB) <= 0.1, "\(stem): seed-mean on-beat \(b) vs spike \(spikeB)")
         }
+    }
+
+    /// FF.4 R1 (rewatch bar, legible): DYC, the swarm on the true grid vs the same grid shifted
+    /// half a beat (the decoy), plus a free swarm (clarity 0) for the chance band — 20 seeds each,
+    /// on-beat scored against the TRUE beats over 25–30 s. The spike read +0.86 vs −0.85.
+    /// Env-gated (`FIREFLIES_DECOY=1`); report + a separation floor, no swarm change.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_DECOY"] == "1"))
+    func decoyIsDistinguishable() throws {
+        let drive = try FirefliesDrive(directory: Self.root.appendingPathComponent("sessions/fixturegen-01_Dance_Yrself_Clean"))
+        func onBeat(_ clarity: Float, _ shift: Float) -> [Float] {
+            (0..<UInt64(20)).map { seed in
+                let run = drive.run(clarity: clarity, seed: seed, phaseShift: shift)
+                return run.mean(run.onBeat, from: 25, to: 30)
+            }
+        }
+        let truth = onBeat(1, 0), decoy = onBeat(1, 0.5), free = onBeat(0, 0)
+        func stats(_ v: [Float]) -> (mean: Float, sd: Float) {
+            let m = v.reduce(0, +) / Float(v.count)
+            return (m, (v.map { ($0 - m) * ($0 - m) }.reduce(0, +) / Float(v.count)).squareRoot())
+        }
+        let (t, d, f) = (stats(truth), stats(decoy), stats(free))
+        print(String(format: "[decoy] DYC 20 seeds, 25–30 s on-beat vs true grid: truth %+.3f ± %.3f [%+.2f, %+.2f]  "
+                     + "half-beat decoy %+.3f ± %.3f [%+.2f, %+.2f]  free (chance) %+.3f ± %.3f",
+                     t.mean, t.sd, truth.min() ?? 0, truth.max() ?? 0,
+                     d.mean, d.sd, decoy.min() ?? 0, decoy.max() ?? 0, f.mean, f.sd))
+        let chance = abs(f.mean) + 2 * f.sd
+        #expect(t.mean > chance && d.mean < -chance, "truth and decoy must sit on opposite sides of the chance band")
     }
 }
