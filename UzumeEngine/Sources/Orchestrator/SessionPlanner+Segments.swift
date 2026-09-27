@@ -12,6 +12,11 @@ import Shared
 
 extension DefaultSessionPlanner {
 
+    /// How far ahead a segment's energy is read (NRG.3, D-259): the stretch a scene starting here
+    /// will mostly play over — about one preset's span, so a quiet opening and the drop after it
+    /// are scored as different music.
+    static let energyWindowSeconds: TimeInterval = 30
+
     /// Section-list shape for a single track.
     ///
     /// Sections divide the track into equal-length spans with a default `nil` section type
@@ -90,6 +95,7 @@ extension DefaultSessionPlanner {
             while sectionClock < sectionEntry.end {
                 let result = planOneSegment(
                     sectionEntry: sectionEntry,
+                    trackStart: trackStart,
                     isLastSection: isLastSection,
                     sectionClock: sectionClock,
                     trackEnd: trackEnd,
@@ -151,6 +157,7 @@ extension DefaultSessionPlanner {
     /// Build a single segment within a section.
     private func planOneSegment(
         sectionEntry: TrackSection,
+        trackStart: TimeInterval,
         isLastSection: Bool,
         sectionClock: TimeInterval,
         trackEnd: TimeInterval,
@@ -167,13 +174,20 @@ extension DefaultSessionPlanner {
         warnings: inout [PlanningWarning]
     ) -> (segment: PlannedPresetSegment, advanced: Bool) {
         let remainingInSection = sectionEntry.end - sectionClock
+        // NRG.3 (D-259): the energy of the stretch a scene starting here will play over.
+        let energyLevel = profile.energyLevel(
+            at: sectionClock - trackStart,
+            window: Self.energyWindowSeconds,
+            trackDuration: trackEnd - trackStart
+        )
         let ctx = PresetScoringContext(
             deviceTier: deviceTier,
             recentHistory: history,
             currentPreset: currentPreset,
             elapsedSessionTime: sectionClock,
             currentSection: sectionEntry.section,
-            includeUncertifiedPresets: includeUncertifiedPresets
+            includeUncertifiedPresets: includeUncertifiedPresets,
+            energyLevel: energyLevel
         )
         let (chosen, breakdown) = selectPreset(
             catalog: catalog,
@@ -228,7 +242,7 @@ extension DefaultSessionPlanner {
             incomingTransition = buildTransition(
                 from: prior,
                 to: chosen,
-                profile: profile,
+                energyLevel: energyLevel,
                 at: segStart,
                 lastEntry: history.last
             )
@@ -237,7 +251,7 @@ extension DefaultSessionPlanner {
             incomingTransition = buildTransition(
                 from: prior,
                 to: chosen,
-                profile: profile,
+                energyLevel: energyLevel,
                 at: segStart,
                 lastEntry: history.last
             )

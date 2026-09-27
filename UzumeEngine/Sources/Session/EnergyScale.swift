@@ -64,10 +64,30 @@ extension EnergyCurve {
     /// Each second's level at section scale: loudness and activity are first smoothed with a
     /// ±5 s running median, so the readout describes sections rather than second-to-second jitter.
     public func sectionLevels(on scale: EnergyScale = .library) -> [Int] {
+        timedSectionLevels(on: scale).compactMap { $0 }
+    }
+
+    /// `sectionLevels`, aligned with the curve's seconds: nil where the second is digital silence.
+    public func timedSectionLevels(on scale: EnergyScale = .library) -> [Int?] {
         let kept = loudnessDB.indices.filter { loudnessDB[$0] > Self.silenceFloorDB }
         let loud = Self.runningMedian(kept.map { loudnessDB[$0] })
         let act = Self.runningMedian(kept.map { activity[$0] })
-        return zip(loud, act).map { scale.level(loudnessDB: $0, activity: $1) }
+        var timed = [Int?](repeating: nil, count: loudnessDB.count)
+        for (position, index) in kept.enumerated() {
+            timed[index] = scale.level(loudnessDB: loud[position], activity: act[position])
+        }
+        return timed
+    }
+
+    /// The median section level over seconds `start ..< end` of the curve (NRG.3), or nil when
+    /// that stretch holds no audible second.
+    public func level(from start: TimeInterval, to end: TimeInterval, on scale: EnergyScale = .library) -> Int? {
+        let timed = timedSectionLevels(on: scale)
+        let first = max(0, Int(start / Double(hopSeconds)))
+        let last = min(timed.count, Int((end / Double(hopSeconds)).rounded(.up)))
+        guard first < last else { return nil }
+        let levels = timed[first..<last].compactMap { $0 }.sorted()
+        return levels.isEmpty ? nil : levels[(levels.count - 1) / 2]
     }
 
     /// The song's readout, or nil when it has no audible second.
@@ -83,5 +103,28 @@ extension EnergyCurve {
             let window = values[max(0, i - half)...min(values.count - 1, i + half)].sorted()
             return window[window.count / 2]
         }
+    }
+}
+
+// MARK: - Profile energy (NRG.3)
+
+extension TrackProfile {
+
+    /// A curve covering less than this fraction of the track is a preview (streaming's 30 s): where
+    /// it sits in the song is unknown, so the song's typical level stands in for every stretch.
+    static let wholeTrackCoverage = 0.9
+
+    /// The measured energy level (1–10) of the stretch `offset ..< offset + window` seconds into the
+    /// track — what scene choice reads (D-259). nil when the profile has no curve.
+    public func energyLevel(at offset: TimeInterval, window: TimeInterval, trackDuration: TimeInterval) -> Int? {
+        guard let curve = energyCurve else { return nil }
+        let covered = Double(curve.loudnessDB.count) * Double(curve.hopSeconds)
+        guard trackDuration > 0, covered >= Self.wholeTrackCoverage * trackDuration else {
+            return curve.readout()?.typical
+        }
+        // Near the song's end "the next `window` seconds" runs past the curve: read its last
+        // `window` seconds instead of falling back to the whole song.
+        let start = min(offset, max(0, covered - window))
+        return curve.level(from: start, to: start + window) ?? curve.readout()?.typical
     }
 }

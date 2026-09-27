@@ -3,8 +3,8 @@
 // All sessions are built via DefaultSessionPlanner.plan() — never hand-constructed.
 // Fixture builders at the bottom keep test bodies compact.
 //
-// Scoring math is verified inline in comments where non-obvious.
-// Key invariant: gap = altScore - currentScore must exceed 0.15 to trigger override.
+// Boundary rescheduling only: the mood-driven preset override was removed at NRG.3 (D-259 —
+// the mood model is at chance on unseen songs, BUG-148).
 
 import Foundation
 import Testing
@@ -20,7 +20,6 @@ import simd
 struct LiveAdapterTests {
 
     private let adapter = DefaultLiveAdapter()
-    private let planner = DefaultSessionPlanner()
 
     // MARK: 1 — No reschedule when live boundary is within tolerance
 
@@ -36,12 +35,10 @@ struct LiveAdapterTests {
             confidence: 0.8
         )
         let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 30,
-            liveBoundary: liveBoundary, liveMood: .neutral, catalog: simpleCatalog()
+            plan: plan, currentTrackIndex: 0, liveBoundary: liveBoundary
         )
 
         #expect(result.updatedTransition == nil, "Deviation < 5 s must not trigger reschedule")
-        #expect(result.presetOverride == nil)
         #expect(result.events.contains { $0.kind == .noAdaptation })
     }
 
@@ -58,15 +55,13 @@ struct LiveAdapterTests {
             confidence: 0.8
         )
         let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 30,
-            liveBoundary: liveBoundary, liveMood: .neutral, catalog: simpleCatalog()
+            plan: plan, currentTrackIndex: 0, liveBoundary: liveBoundary
         )
 
         let rescheduled = try #require(result.updatedTransition, "Deviation ≥ 5 s must reschedule")
         // liveSessionBoundary = 67 + plannedStartTime(0) = 67 s
         #expect(abs(Float(rescheduled.scheduledAt) - 67.0) < 0.01,
                 "Rescheduled time must equal the live session boundary")
-        #expect(result.presetOverride == nil, "Boundary reschedule must not also fire override")
         #expect(result.events.contains { $0.kind == .boundaryRescheduled })
     }
 
@@ -83,323 +78,41 @@ struct LiveAdapterTests {
             confidence: 0.4             // below threshold
         )
         let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 30,
-            liveBoundary: lowConfidence, liveMood: .neutral, catalog: simpleCatalog()
+            plan: plan, currentTrackIndex: 0, liveBoundary: lowConfidence
         )
 
         #expect(result.updatedTransition == nil, "Low confidence must suppress reschedule")
     }
 
-    // MARK: 4 — No override when mood diverges but track is ≥ 40 % elapsed
+    // MARK: 4 — Each outcome emits its event kind
 
-    @Test("No override when mood diverges but 62 % of track has elapsed")
-    func noPresetOverride_whenMoodDivergesLateInTrack() throws {
-        // Pre-analyzed neutral; live mood is energetically divergent.
-        let plan = try twoTrackPlan(duration: 120, mood: EmotionalState(valence: 0, arousal: 0))
-        let liveMood = EmotionalState(valence: 0, arousal: 0.6) // arousalDiff = 0.6 > 0.4
+    @Test("No adaptation and boundary reschedule each emit their AdaptationEvent.Kind")
+    func adaptationEvents_areLogged_forBothOutcomes() throws {
+        let plan = try twoTrackPlan(duration: 60)
 
-        // Zero-confidence boundary so the boundary path is completely bypassed.
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0,
-            elapsedTrackTime: 75,             // 75/120 = 62.5 % > 40 %
-            liveBoundary: noBoundarySignal(),
-            liveMood: liveMood,
-            catalog: simpleCatalog()
-        )
+        let none = adapter.adapt(plan: plan, currentTrackIndex: 0, liveBoundary: noBoundarySignal())
+        #expect(none.events.first?.kind == .noAdaptation)
 
-        #expect(result.presetOverride == nil, "Override must be suppressed after 40 % elapsed")
-        #expect(result.events.contains { $0.kind == .moodDivergenceDetected },
-                "Mood divergence must still be logged even when override is suppressed")
-    }
-
-    // MARK: 5 — No override when score gap is insufficient
-
-    @Test("No override when current preset is already well-matched to live mood")
-    func noPresetOverride_whenScoreGapInsufficient() throws {
-        // CurrentPreset: center=0.5 temp, density=0.70 — perfect for live (arousal=0.5).
-        // AltPreset: center=0.1 temp, density=0.1 — poorly matched.
-        //
-        // Scoring with live (valence=0, arousal=0.5): targetTemp=0.5, targetDensity=0.70
-        //   CurrentPreset: moodScore=1.0 → currentScore ≈ 0.875
-        //   AltPreset:     moodScore=0.5 → altScore ≈ 0.725
-        //   gap = 0.725 - 0.875 = -0.15 → no override (gap < 0.15)
-        let catalog = [
-            makePreset(name: "CurrentPreset", family: .reaction,
-                       motionIntensity: 0.5, colorTempRange: SIMD2(0.45, 0.55),
-                       visualDensity: 0.70),
-            makePreset(name: "AltPreset", family: .geometric,
-                       motionIntensity: 0.5, colorTempRange: SIMD2(0.0, 0.2),
-                       visualDensity: 0.1),
-        ]
-
-        // Pre-analyzed neutral → planner picks CurrentPreset (moodScore 0.9 vs 0.6).
-        let plan = try planWithCatalog(catalog, mood: EmotionalState(valence: 0, arousal: 0),
-                                       duration: 120)
-        let liveMood = EmotionalState(valence: 0, arousal: 0.5) // arousalDiff = 0.5 > 0.4 ✓
-
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0,
-            elapsedTrackTime: 20,          // 20/120 = 16.7 % < 40 % ✓
-            liveBoundary: noBoundarySignal(),
-            liveMood: liveMood,
-            catalog: catalog
-        )
-
-        #expect(result.presetOverride == nil, "No override when gap is insufficient")
-        #expect(result.events.contains { $0.kind == .moodDivergenceDetected },
-                "Diverging mood must still emit moodDivergenceDetected")
-    }
-
-    // MARK: 6 — Override triggered
-
-    @Test("Preset override fires: early track, strong divergence, better alternative exists")
-    func presetOverride_whenMoodDivergesEarlyAndBetterPresetExists() throws {
-        // CurrentPreset: center=0.25 temp, density=0.25 — tuned for sad/calm pre-analyzed mood.
-        // AltPreset:     center=0.78 temp, density=0.78 — tuned for happy/energetic live mood.
-        //
-        // Pre-analyzed (valence=-0.5, arousal=-0.5): targetTemp=0.30, targetDensity=0.30
-        //   CurrentPreset moodScore = (1-|0.25-0.30| + 1-|0.25-0.30|)/2 = 0.95 → selected ✓
-        //   AltPreset     moodScore = (1-|0.78-0.30| + 1-|0.78-0.30|)/2 = 0.52
-        //
-        // Live (valence=0.7, arousal=0.7): targetTemp=0.78, targetDensity=0.78
-        //   currentScore = 0.3×0.47 + 0.2×1.0 + 0.25×0.5 + 0.25×1.0 = 0.716
-        //   altScore     = 0.3×1.00 + 0.2×1.0 + 0.25×0.5 + 0.25×1.0 = 0.875
-        //   gap = 0.159 > 0.15 ✓
-        let catalog = overrideCatalog()
-        let plan = try planWithCatalog(catalog,
-                                       mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                       duration: 120)
-
-        let liveMood = EmotionalState(valence: 0.7, arousal: 0.7)
-        // valenceDiff = 1.2 > 0.4, arousalDiff = 1.2 > 0.4
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0,
-            elapsedTrackTime: 30,      // 30/120 = 25 % < 40 % ✓
-            liveBoundary: noBoundarySignal(),
-            liveMood: liveMood,
-            catalog: catalog
-        )
-
-        let override = try #require(result.presetOverride, "Override must fire")
-        #expect(override.preset.name == "AltPreset", "Better preset must be selected")
-        #expect(override.score > plan.tracks[0].presetScore,
-                "Override preset score must exceed original")
-        #expect(result.updatedTransition == nil)
-        #expect(result.events.contains { $0.kind == .presetOverrideTriggered })
-    }
-
-    // MARK: 7 — Boundary reschedule takes priority over override
-
-    @Test("Boundary reschedule returned, not override, when both conditions are true")
-    func boundaryReschedulePrecedesOverride_whenBothTrigger() throws {
-        // Same mood setup as test 6 — override would fire without boundary condition.
-        let catalog = overrideCatalog()
-        let plan = try planWithCatalog(catalog,
-                                       mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                       duration: 120)
-
-        // plannedTransition.scheduledAt ≈ 120 s; live boundary at 150 s → deviation 30 s > 5 s.
-        let bigDeviation = StructuralPrediction(
-            sectionIndex: 0, sectionStartTime: 0,
-            predictedNextBoundary: 150.0,
-            confidence: 0.9
-        )
-
-        let liveMood = EmotionalState(valence: 0.7, arousal: 0.7) // would also trigger override
-
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0,
-            elapsedTrackTime: 30,
-            liveBoundary: bigDeviation,
-            liveMood: liveMood,
-            catalog: catalog
-        )
-
-        #expect(result.updatedTransition != nil, "Boundary reschedule must fire")
-        #expect(result.presetOverride == nil,
-                "Override must be suppressed when boundary reschedule wins")
-        #expect(result.events.contains { $0.kind == .boundaryRescheduled })
-        #expect(!result.events.contains { $0.kind == .presetOverrideTriggered },
-                "presetOverrideTriggered must not appear alongside boundaryRescheduled")
-    }
-
-    // MARK: 8 — All event kinds are emitted for the correct scenarios
-
-    @Test("Each adaptation path emits the correct AdaptationEvent.Kind")
-    func adaptationEvents_areLogged_forAllOutcomes() throws {
-        let catalog = overrideCatalog()
-        let planOverride = try planWithCatalog(catalog,
-                                               mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                               duration: 120)
-        let planNeutral = try twoTrackPlan(duration: 60)
-
-        // ── noAdaptation: stable mood, zero-confidence boundary ───────────────
-        let noAdaptResult = adapter.adapt(
-            plan: planNeutral, currentTrackIndex: 0, elapsedTrackTime: 20,
-            liveBoundary: noBoundarySignal(),
-            liveMood: .neutral,
-            catalog: simpleCatalog()
-        )
-        #expect(noAdaptResult.events.first?.kind == .noAdaptation)
-
-        // ── boundaryRescheduled: 60 s track, planned at 60 s, live at 70 s ────
         let bigBoundary = StructuralPrediction(
             sectionIndex: 0, sectionStartTime: 0,
-            predictedNextBoundary: 70.0, confidence: 0.7
+            predictedNextBoundary: 70.0, confidence: 0.7   // planned at 60 s, live at 70 s
         )
-        let rescheduleResult = adapter.adapt(
-            plan: planNeutral, currentTrackIndex: 0, elapsedTrackTime: 20,
-            liveBoundary: bigBoundary, liveMood: .neutral, catalog: simpleCatalog()
-        )
-        #expect(rescheduleResult.events.first?.kind == .boundaryRescheduled)
-
-        // ── moodDivergenceDetected (late in track) ────────────────────────────
-        let moodDivergeLate = adapter.adapt(
-            plan: planOverride, currentTrackIndex: 0,
-            elapsedTrackTime: 80,          // 80/120 = 67 % > 40 %
-            liveBoundary: noBoundarySignal(),
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
-            catalog: catalog
-        )
-        #expect(moodDivergeLate.events.first?.kind == .moodDivergenceDetected)
-
-        // ── presetOverrideTriggered ───────────────────────────────────────────
-        let overrideResult = adapter.adapt(
-            plan: planOverride, currentTrackIndex: 0,
-            elapsedTrackTime: 20,          // 20/120 = 17 % < 40 %
-            liveBoundary: noBoundarySignal(),
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
-            catalog: catalog
-        )
-        #expect(overrideResult.events.first?.kind == .presetOverrideTriggered)
-    }
-
-    // MARK: 9 — Mood-override cooldown (QR.2 D-080)
-
-    @Test("First mood override on a track fires immediately (QR.2 cooldown)")
-    func moodOverrideCooldown_firstOverrideFires() throws {
-        let catalog = overrideCatalog()
-        let plan = try planWithCatalog(catalog,
-                                       mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                       duration: 120)
-        let divergentMood = EmotionalState(valence: 0.7, arousal: 0.7)
-
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 20,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-        #expect(result.events.contains { $0.kind == .presetOverrideTriggered },
-                "First override on a track should fire immediately (cooldown starts from zero)")
-    }
-
-    @Test("Second mood override within 30 s cooldown is suppressed (QR.2 cooldown)")
-    func moodOverrideCooldown_secondWithin30sIsSuppressed() throws {
-        let catalog = overrideCatalog()
-        let plan = try planWithCatalog(catalog,
-                                       mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                       duration: 120)
-        let divergentMood = EmotionalState(valence: 0.7, arousal: 0.7)
-
-        // Fire the first override at t=20s.
-        _ = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 20,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-
-        // Second call at t=35s — only 15 s elapsed since first override (<30 s cooldown).
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 35,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-        #expect(!result.events.contains { $0.kind == .presetOverrideTriggered },
-                "Override at t=35 (15 s since first at t=20) must be suppressed by 30 s cooldown")
-        // moodDivergenceDetected should appear since mood conditions still hold.
-        #expect(result.events.contains { $0.kind == .moodDivergenceDetected },
-                "moodDivergenceDetected should still appear when cooldown blocks override")
-    }
-
-    @Test("Mood override survives a replay: a reset (backwards) track clock is not an active cooldown (CLEAN.3.3)")
-    func moodOverrideCooldown_survivesReplay() throws {
-        let catalog = overrideCatalog()
-        let plan = try planWithCatalog(catalog,
-                                       mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                       duration: 120)
-        let divergentMood = EmotionalState(valence: 0.7, arousal: 0.7)
-
-        // Play 1: override fires at t=20s, recording the cooldown timestamp for the track.
-        _ = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 20,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-
-        // Replay: the same track restarts, so elapsedTrackTime resets to ~2s — earlier
-        // than the recorded t=20. Before CLEAN.3.3 the cooldown read `2 - 20 = -18 < 30`
-        // and stayed "active" for the entire 2nd play (override permanently dead from
-        // play 2). A backwards clock must instead be treated as no active cooldown.
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 2,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-        #expect(result.events.contains { $0.kind == .presetOverrideTriggered },
-                "Override must fire on replay — a reset track clock is not an active cooldown")
-    }
-
-    @Test("Third mood override after 30 s cooldown fires again (QR.2 cooldown)")
-    func moodOverrideCooldown_afterCooldownOverrideFiresAgain() throws {
-        let catalog = overrideCatalog()
-        // Use 300 s track so elapsed-fraction guard (40%) doesn't fire until t > 120 s.
-        let plan = try planWithCatalog(catalog,
-                                       mood: EmotionalState(valence: -0.5, arousal: -0.5),
-                                       duration: 300)
-        let divergentMood = EmotionalState(valence: 0.7, arousal: 0.7)
-
-        // First override at t=20s (6.7% elapsed — well under 40% guard).
-        _ = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 20,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-
-        // Third call at t=55s — 35 s since first override (> 30 s cooldown), 18% elapsed.
-        let result = adapter.adapt(
-            plan: plan, currentTrackIndex: 0, elapsedTrackTime: 55,
-            liveBoundary: noBoundarySignal(), liveMood: divergentMood, catalog: catalog
-        )
-        #expect(result.events.contains { $0.kind == .presetOverrideTriggered },
-                "Override at t=55 (35 s since first at t=20) should fire — cooldown has expired")
+        let rescheduled = adapter.adapt(plan: plan, currentTrackIndex: 0, liveBoundary: bigBoundary)
+        #expect(rescheduled.events.first?.kind == .boundaryRescheduled)
     }
 }
 
 // MARK: - Session Builders
 
-private func twoTrackPlan(
-    duration: TimeInterval,
-    mood: EmotionalState = .neutral
-) throws -> PlannedSession {
+private func twoTrackPlan(duration: TimeInterval) throws -> PlannedSession {
     let tracks: [(TrackIdentity, TrackProfile)] = [
-        (makeIdentity(title: "T0", duration: duration), makeProfile(valence: mood.valence, arousal: mood.arousal)),
-        (makeIdentity(title: "T1", duration: duration), makeProfile()),
+        (makeIdentity(title: "T0", duration: duration), TrackProfile()),
+        (makeIdentity(title: "T1", duration: duration), TrackProfile()),
     ]
-    // swiftlint:disable:next force_try
-    return try! DefaultSessionPlanner().plan(tracks: tracks, catalog: simpleCatalog(), deviceTier: .tier1)
-}
-
-private func planWithCatalog(
-    _ catalog: [PresetDescriptor],
-    mood: EmotionalState,
-    duration: TimeInterval
-) throws -> PlannedSession {
-    let tracks: [(TrackIdentity, TrackProfile)] = [
-        (makeIdentity(title: "T0", duration: duration),
-         makeProfile(valence: mood.valence, arousal: mood.arousal)),
-        (makeIdentity(title: "T1", duration: duration), makeProfile()),
-    ]
-    // swiftlint:disable:next force_try
-    return try! DefaultSessionPlanner().plan(tracks: tracks, catalog: catalog, deviceTier: .tier1)
+    return try DefaultSessionPlanner().plan(tracks: tracks, catalog: simpleCatalog(), deviceTier: .tier1)
 }
 
 /// A structural prediction with zero confidence — the boundary path is never triggered.
-///
-/// Use in tests that exercise the mood-override path exclusively.
 private func noBoundarySignal() -> StructuralPrediction {
     StructuralPrediction(sectionIndex: 0, sectionStartTime: 0,
                          predictedNextBoundary: 0, confidence: 0.0)
@@ -414,28 +127,6 @@ private func simpleCatalog() -> [PresetDescriptor] {
     ]
 }
 
-/// Catalog used for override tests (tests 6, 7, 8).
-///
-/// CurrentPreset is cold/low-density (suits pre-analyzed sad/calm mood).
-/// AltPreset is warm/high-density (suits live happy/energetic mood).
-///
-/// Scoring with live (valence=0.7, arousal=0.7) — targetTemp=0.78, targetDensity=0.78:
-///   CurrentPreset: moodScore=0.47 → currentScore=0.716
-///   AltPreset:     moodScore=1.00 → altScore=0.875
-///   gap = 0.159 > 0.15 ✓
-private func overrideCatalog() -> [PresetDescriptor] {
-    [
-        makePreset(name: "CurrentPreset", family: .reaction,
-                   motionIntensity: 0.5,
-                   colorTempRange: SIMD2(0.2, 0.3),   // center = 0.25
-                   visualDensity: 0.25),
-        makePreset(name: "AltPreset", family: .geometric,
-                   motionIntensity: 0.5,
-                   colorTempRange: SIMD2(0.73, 0.83),  // center = 0.78
-                   visualDensity: 0.78),
-    ]
-}
-
 // MARK: - Fixture Builders
 
 private func makeIdentity(
@@ -443,13 +134,6 @@ private func makeIdentity(
     duration: TimeInterval = 180
 ) -> TrackIdentity {
     TrackIdentity(title: title, artist: "TestArtist", duration: duration)
-}
-
-private func makeProfile(
-    valence: Float = 0,
-    arousal: Float = 0
-) -> TrackProfile {
-    TrackProfile(mood: EmotionalState(valence: valence, arousal: arousal))
 }
 
 private func makePreset(

@@ -1633,6 +1633,25 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment NRG.3 — scene choice reads the energy curve ✅ (2026-09-27; Matt's live check pending)
+
+**Delivered (D-259).**
+- `PresetScorer`'s mood term became an energy term: the stretch's 1–10 level sets the target visual density (`energy01`: 0.1 + 0.8·(level−1)/9, the span the mood mapping had). The weight is still 0.30, and valence and colour temperature are out.
+- The planner reads the 30 s from each segment's start (`TrackProfile.energyLevel(at:window:trackDuration:)`). A preview curve uses the song's typical level; near the end, the last 30 s is read. The transition into the segment uses the same level, so only level 10 cuts and calmer stretches crossfade longer.
+- Removed: the `LiveAdapter` mood-driven preset override, with its event kinds, cooldown, `LiveAdapter+MoodOverride.swift`, the app's override-suppression gates, `lastClassifiedMood` and `DiagnosticHoldTests`. Reactive mode no longer scores mood. The live classifier still feeds the certified scenes (Matt: leave them alone).
+
+**Evidence.**
+- New `EnergyPlanningTests`: a quiet-then-loud song gets sparse then dense scenes. The scorer test now covers energy and pins that colour temperature is not scored.
+- Goldens re-expressed as energy levels matching the old arousal density, and regenerated with traces; Session B's and D's winners are unchanged.
+- The real beta playlist, planned from its NRG.1 curves: Dance Yrself Clean gets sparse scenes (Witchlight, Skein, Aurora Veil) through its hush, dense ones (Cymatic Resonance, Nebula, Filigree) from 3:21, Witchlight again at the 6:09 breakdown and the 8:24 fade. B.O.B. takes its one cut at level 10.
+
+**Done-when:** ✅ tests + goldens + real-playlist plan; ⏳ Matt's live check.
+
+**Found, not changed:**
+- Scene changes land on fixed segment boundaries, so the drop at ~3:15 switches at 3:21. Aligning changes to energy changes is a candidate NRG.4.
+- The **M key ("Toggle mood lock")** flipped a flag nothing read; removed at Matt's call (2026-09-27).
+- The segment walk can emit a zero-length tail segment at a track's end (floating-point loop edge, pre-existing, never played).
+
 ### Increment NRG.2 — the library 1–10 energy scale and the preparation readout ✅ (2026-09-26; Matt's look at the readout pending)
 
 **Delivered (D-259).** `EnergyScale.library`: each second's loudness and activity are ranked against the library and the ranks averaged, and the library deciles of that score are levels 1–10. Calibrated by `tools/energy_calibration.py` on `CorpusCensusRunner --energy` over the 1,000-track stratified pilot (999 decoded, 287,777 seconds; production `analyzeMIR` via `SessionPreparer.energyCurve(of:)`). `EnergyCurve.readout()` gives the 10th/90th-percentile section levels after a ±5 s running median, shown as one number when they're within one level. The preparation row shows *energy 5* or *energy 2 → 9* in place of the mood word (retired with its four strings). **Library sanity:** the median typical level by genre is classical 2, jazz 4, soul/R&B 5, folk 6, pop and rock 7, electronic 8, hip-hop 9; 22 % of songs read steady. **Beta playlist:** Dance Yrself Clean 2 → 9, B.O.B. 8 → 10, Superstition 4 → 6, Teen Spirit 5 → 8, Penny Lane 5, Take Five 2, Pyramid Song 4 → 10, Teardrop 5 → 9, Moonlight I 1, Warszawa 3 → 6. Swift and Python agree exactly on all ten.

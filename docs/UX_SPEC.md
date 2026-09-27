@@ -502,7 +502,6 @@ Combined reference for shortcuts defined in §7.4 plus general playback controls
 | `⌘Shift+F` | Send to secondary display (see §7.9) |
 | `Space` | Toggle overlay visibility |
 | `+` / `-` / `.` / `←` / `→` / `⌘R` / `⌘Z` / `?` | Live adaptation — see §7.4 |
-| `M` | Mood-lock toggle (freeze mood values, prevent palette drift) |
 | `D` | Debug overlay toggle (developer-facing — shows FFT, stems, frame timing, orchestrator state) |
 | `Esc` | Exit fullscreen if fullscreen, else end session (with confirm) |
 

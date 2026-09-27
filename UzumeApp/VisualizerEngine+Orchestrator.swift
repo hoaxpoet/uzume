@@ -199,27 +199,20 @@ extension VisualizerEngine {
     ///   - trackIndex: 0-based index of the currently playing track.
     ///   - elapsedTrackTime: Seconds since this track began playing.
     ///   - boundary: Latest `StructuralPrediction` from the live MIR pipeline.
-    ///   - mood: Current `EmotionalState` from the live mood classifier.
     func applyLiveUpdate(
         trackIndex: Int,
         elapsedTrackTime: TimeInterval,
-        boundary: StructuralPrediction,
-        mood: EmotionalState
+        boundary: StructuralPrediction
     ) {
         guard let plan = orchestratorLock.withLock({ livePlan }) else {
-            applyReactiveUpdate(boundary: boundary, mood: mood)
+            applyReactiveUpdate(boundary: boundary)
             return
         }
-
-        let catalog = presetLoader.presets.map { $0.descriptor }
 
         let adaptation = liveAdapter.adapt(
             plan: plan,
             currentTrackIndex: trackIndex,
-            elapsedTrackTime: elapsedTrackTime,
-            liveBoundary: boundary,
-            liveMood: mood,
-            catalog: catalog
+            liveBoundary: boundary
         )
 
         // Log each event from the adaptation.
@@ -227,18 +220,11 @@ extension VisualizerEngine {
             switch event.kind {
             case .noAdaptation:
                 break
-            case .boundaryRescheduled, .moodDivergenceDetected, .presetOverrideTriggered:
+            case .boundaryRescheduled:
                 logger.info("Orchestrator: [\(event.kind.rawValue)] \(event.message)")
             }
         }
 
-        // Suppress mood-derived preset overrides during: (a) capture-mode switch grace window
-        // (silence may produce spurious Δmood), (b) diagnostic hold (user explicitly pinned a
-        // diagnostic preset), (c) the currently-active preset's descriptor sets
-        // `wait_for_completion_event: true` (BUG-011 round 8 — the preset's contract is to
-        // run until it emits `PresetSignaling.presetCompletionEvent`; mood-override would
-        // swap it out mid-build cycle, which is exactly what the flag exists to prevent).
-        // Boundary rescheduling (updatedTransition) is always allowed. D-061(b,c), DSP.3.1.
         // Segment times are session-relative (`PlannedPresetSegment.plannedStartTime`
         // / `plannedEndTime` are cumulative across the playlist). Convert to
         // track-relative via the parent track's `plannedStartTime` before
@@ -261,27 +247,11 @@ extension VisualizerEngine {
             elapsedTrackTime: elapsedTrackTime
         )
 
-        let effectiveAdaptation: LiveAdaptation
-        let suppressOverride = diagnosticPresetLocked
-            || activePresetWaitsForCompletion
-        if suppressOverride, adaptation.presetOverride != nil {
-            effectiveAdaptation = LiveAdaptation(
-                updatedTransition: adaptation.updatedTransition,
-                presetOverride: nil,
-                events: adaptation.events.filter { $0.kind != .presetOverrideTriggered }
-            )
-            let reason = diagnosticPresetLocked ? "diagnostic hold" : "wait_for_completion_event"
-            logger.info("Orchestrator: \(reason) active — preset override suppressed")
-        } else {
-            effectiveAdaptation = adaptation
-        }
+        // Patch the plan only when a boundary reschedule fired (the mood-driven preset
+        // override and its suppression gates were removed at NRG.3, D-259).
+        guard adaptation.updatedTransition != nil else { return }
 
-        // Patch the plan only when something changed.
-        guard effectiveAdaptation.updatedTransition != nil || effectiveAdaptation.presetOverride != nil else {
-            return
-        }
-
-        let patched = plan.applying(effectiveAdaptation, at: trackIndex)
+        let patched = plan.applying(adaptation, at: trackIndex)
         orchestratorLock.withLock { livePlan = patched }
     }
 
@@ -344,17 +314,15 @@ extension VisualizerEngine {
 
     /// Cadence divisor for `runOrchestratorLiveUpdate(mir:)`. The analysis
     /// queue ticks at the FFT-hop rate (≈ 94 Hz at 48 kHz / 512-hop), so a
-    /// divisor of 30 fires the orchestrator wire at ≈ 3.1 Hz. The 30 s
-    /// per-track mood-override cooldown (`DefaultLiveAdapter.cooldownAdaptation`
-    /// per D-080) suppresses ~94 redundant calls per allowed override at this
-    /// rate. Boundary rescheduling is unaffected by cadence — it only fires
+    /// divisor of 30 fires the orchestrator wire at ≈ 3.1 Hz. Boundary
+    /// rescheduling is unaffected by cadence — it only fires
     /// when the live prediction drifts more than 5 s from the *rescheduled*
     /// transition time, so a high tick rate is safe.
     static let orchestratorWireFrameDivisor: Int = 30
 
     /// BUG-015 wire: tick the live-adaptation pipeline at ~3 Hz from the
     /// analysis queue. Called from `processAnalysisFrame` after each per-
-    /// frame MIR + mood update completes. Snapshots the three inputs
+    /// frame MIR + mood update completes. Snapshots the two inputs
     /// `applyLiveUpdate(...)` needs under one `orchestratorLock` acquisition,
     /// then calls the engine method (which acquires its own locks as it
     /// patches `livePlan`).
@@ -380,8 +348,7 @@ extension VisualizerEngine {
         let snapshot = orchestratorLock.withLock {
             OrchestratorWireSnapshot(
                 hasPlan: livePlan != nil,
-                trackIndex: liveTrackPlanIndex,
-                mood: lastClassifiedMood
+                trackIndex: liveTrackPlanIndex
             )
         }
 
@@ -423,19 +390,17 @@ extension VisualizerEngine {
         applyLiveUpdate(
             trackIndex: snapshot.trackIndex ?? 0,
             elapsedTrackTime: mir.elapsedSeconds,
-            boundary: mir.latestStructuralPrediction,
-            mood: snapshot.mood
+            boundary: mir.latestStructuralPrediction
         )
     }
 
-    /// Single-acquisition snapshot of the three `applyLiveUpdate(...)` inputs
+    /// Single-acquisition snapshot of the two `applyLiveUpdate(...)` inputs
     /// that live behind `orchestratorLock`. Kept as a struct rather than a
     /// tuple so SwiftLint's `large_tuple` rule stays satisfied; same shape,
     /// same semantics.
     private struct OrchestratorWireSnapshot {
         let hasPlan: Bool
         let trackIndex: Int?
-        let mood: EmotionalState
     }
 
     // MARK: - Reactive Mode (Ad-Hoc Sessions)
@@ -447,7 +412,7 @@ extension VisualizerEngine {
     /// the main thread. A 60 s cooldown prevents switch-thrashing.
     ///
     /// Called from the audio/analysis path (background queue).
-    private func applyReactiveUpdate(boundary: StructuralPrediction, mood: EmotionalState) {
+    private func applyReactiveUpdate(boundary: StructuralPrediction) {
         if reactiveSessionStart == nil { reactiveSessionStart = Date() }
         guard let sessionStart = reactiveSessionStart else { return }
         let elapsed = Date().timeIntervalSince(sessionStart)
@@ -467,7 +432,6 @@ extension VisualizerEngine {
         let beatIrregular = currentTrackBeatIrregular
 
         let decision = reactiveOrchestrator.evaluate(
-            liveMood: mood,
             liveBoundary: boundary,
             elapsedSessionTime: elapsed,
             currentPreset: currentDesc,
