@@ -252,7 +252,7 @@ recorded in their own rows as they land.
 | **FF.R2** style references | ✅ 2026-09-25 (D-258). Matt: *"not looking for photographic… more stylized but still 3D"*, anchored on Daniel Danger's screenprints; kept all 9, **blue palette, hero `07`**. Prints are local-only (commercial art, never committed) | Style rules + per-print "for" notes in `docs/VISUAL_REFERENCES/fireflies/README.md` §FF.R2; the FF.R photos demoted to composition only |
 | **FF.2** the world | ✅ 2026-09-25, branch `ff-2` (local). **Look still accepted** (Matt: *"accept — continue to Task 5. looks good overall, might want to consider having the trees move based on musical input."*). A real 3D meadow drawn as a screenprint: ray-cast sky / receding ground / three crowned tree-line cards / height mist in the six inks of `07`, threshold hatching; fine-branched 3D trees and light-ink foreground grass drawn by the geometry; one shared drifting camera; the swarm placed in depth without touching the model. The world breathes on `bassAttRel` (4 s, Matt's "B"; the trees sway on it). **Parity** identical to FF.1; **flash** 1080p max Δ ≤ 0.0124; **Release** 2.78 ms GPU median at 1080p, CPU model 0.30 ms. | One 3D still beside FF.R2 `07`, accepted by Matt first; then films, motion gate, flash, frame budget, FF.1 parity still green |
 | **FF.3** the light | ✅ 2026-09-26, branch `ff-3`. **Look still accepted** (Matt: *"This light clears the bar."*). Each lit firefly: a near-white printed dot, a yellow-green halo + starburst printed as grain coverage, and a light pool (modulate-add, src·dst + dst) that brightens the grass strokes, mist and paler branches around it while the dark between strokes stays dark; near fireflies as thin-lens CoC discs; occlusion by painter's order in 0.5 m depth bands. **Parity** identical to FF.1/FF.2; **flash** 1080p max Δ 0.0296 / 0.0374 / 0.0038 / 0.0036 (FF.2 0.0099 / 0.0124 / 0.0016 / 0.0014, gate 0.05); **Release** 2.32 ms GPU median at 1080p, CPU model 0.29 ms; breath 3.33× / 1.68× (unchanged). | **First artifact: one still beside FF.R2 `09`/`07`, accepted by Matt before the rest is built.** The fireflies as the scene's only warm lights, the way FF.R2 `09`/`07` draw light: near-white core, coloured bloom, lighting only the grass and mist right around them; occlusion by grass and trees; flash safety re-measured (a bloom enlarges each flash, D-157); 60 fps at 1080p in Release |
-| **FF.4** M7 + cert | ⏳ | Matt's M7 on the beta playlist; rewatch checks R1–R5 on the real pipeline |
+| **FF.4** M7 + cert | ⏳ — prompt `prompts/FF.4-prompt.md` (certifying enrols a WCAG flash test, `multiPassMeasured` and a Session C golden regen — measured 2026-09-26) | Matt's M7 on the beta playlist (local files) and one streaming pass; rewatch checks R1–R5 on the real pipeline; then certification with every certified-set gate measured |
 
 The bar is a stylized screenprint rendered from a real 3D scene (D-258, superseding the FF.0 README 7.2
 matte-painting bar). If FF.2/FF.3 do not reach it by the October 11 cutoff, Fireflies ships after the
@@ -2346,33 +2346,6 @@ from an unset default by eye, and that ambiguity is the whole complaint. Four ne
 `FeatureVector` change; the render capability registry is unchanged.
 
 ### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ M7 PASSED, BUG-130 RESOLVED (2026-09-12, Matt: *"silence pauses correctly now"*)
-
-`PlayheadAnalysisClock.tick()` delivers a tick's worth of zeros when the playhead is not moving —
-paused (no render time) or stopped (smoothed position not advancing). Before, every guard returned
-and, with the tap retired at BUG087.5, the last `FeatureVector` re-published indefinitely: 1617
-frames of byte-identical bands in session `2026-09-11T21-00-42Z` while playback was stopped, on
-every preset.
-
-★ **The fix belongs at the input, not at the publisher.** Clearing the published vector on the
-pause path would create a second definition of silence that has to be kept in step with the chain's
-own; feeding zeros in at the top of the funnel means the existing AGC, band smoothers and
-`nearSilent01` produce silence here exactly as they do for real musical silence on streaming.
-
-The silence is bounded at 1.5 s: `MIRPipeline.elapsedSeconds` accumulates analysis `dt` and the live
-drift tracker indexes the cached `BeatGrid` by it, so unbounded silence would walk the grid forward
-by the whole pause. Bounded, a pause costs ≤ 1.5 s of grid phase and what stays frozen afterwards is
-frozen at silence. The zero-cost version needs the analysis callback to carry "no playhead" — a
-change to the contract shared with `SystemAudioCapture`, named as the upgrade path in the code.
-
-A stall also resets `PlaybackClockSmoother` and re-seeds the cursor (otherwise the smoother's 0.25 s
-dead-reckon overshoot turns a resume into another quarter-second of silence), and the seeding tick
-delivers silence rather than returning. Gate: `PlayheadAnalysisClockTests` steps `tick()` through
-playing → stopped → paused → resumed. Streaming is unaffected — its tap already delivers real zeros.
-`LoopingFileReader` moved to its own file: this increment plus BUG-131's teardown barrier, landing
-in the same file minutes apart, crossed the 400-line lint budget together. Nothing moved but the
-type. No renderer, shader, preset or `FeatureVector` change; the render capability registry is
-unchanged.
-
 ### Increment DOC.12 — scheduled documentation rotation ✅ (2026-09-11)
 ### BUG087.5 — retire the tap's forwarding role ✅ (2026-09-11, Matt: *"retire the tap's forwarding role"*)
 ### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ M7 PASSED, default-on, BUG-087 RESOLVED (2026-09-11, Matt: *"I like it. It's punchy."*)
