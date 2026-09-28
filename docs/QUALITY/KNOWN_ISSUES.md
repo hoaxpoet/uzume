@@ -66,6 +66,9 @@ reads" are not reads — see the entry.)*
 | BUG-146 | P3 · **FIXED 2026-09-26 (BUG146.2)**. Preparation MIR runs at the stems' 44.1 kHz whatever the file's rate; Superstition at 96 kHz reads 0.494 (was 0.21); beta ρ 0.855 → 0.927; cache v16 | dsp.mir / sample-rate | **Preparation-time mood depends on the file's sample rate.** Superstition, same pipeline: its 96 kHz FLAC reads median arousal **0.21**, the same audio resampled to 48 kHz reads 0.45, and at 44.1 kHz it reads 0.52 (production chain: 0.51). This is BUG-141's class, in `analyzeMIR` rather than the stem analyzers. Detail below |
 | BUG-150 | P3 · **FIXED 2026-09-26 (BUG150.1)** — the tests await the VM's `debounceTask` / `connectTask`; no budget widened; merged #291 (`5327841f`) | test-infra / concurrency | **`SpotifyConnectionViewModelOAuthTests.connectLoginRequiredUnauthenticated` failed once in `closeout_evidence.sh` (app tests straight after the engine suite): state was still `.preview(playlistID: "abc")` at the assert.** The test slept 400 ms after `connect()` and asserted; the connect task had not finished. Every wait in both Spotify VM suites was a wall-clock sleep. Detail below |
 | BUG-151 | P2 · **FIXED 2026-09-28 (LFSEEK.1)** — the queue advances on `.dataPlayedBack`; a single-file loop keeps `.dataConsumed`. Manual check outstanding: the last second of a local track is heard before the next starts | audio.localfile / transport | **In a multi-file local session the next track started about a second early, cutting each song's last second.** `LocalFilePlaybackProvider` armed its end-of-file callback with `scheduleFile`'s default completion type, `.dataConsumed`, which fires when the player has *read* the last audio, not played it. Measured on the real engine: 2.0 s after a seek to 3 s from the end (LFSEEK.1, which found it). Since LF.5, `onFileEnded` has driven `advanceLocalFileQueue`, so every advance cut the tail. **Fix:** when `onFileEnded` is set, schedule with `.dataPlayedBack`. The single-file loop keeps `.dataConsumed`, because re-arming while the tail still plays is what makes the loop seamless. **Gate:** `LocalFileSeekTests.seekMovesThePlayhead` requires the end ≥ 2.8 s into a 3 s remainder; the old code fails it at 2.0 s. |
+| BUG-153 | P2 · **OPEN** (found 2026-09-28, SCAN.4 live check) | session / playlist scan | **A live scan kept a wrong artist for one row: the first, edge-of-frame reading of a row beats every later complete reading.** Matt, Release scan of TC 27 (38 songs, 15:09): *"it just misread one track (Prizefighter - has the wrong artist, which should be Youth Lagoon)."* The frame log shows #9 first read as the bottom row of a frame; the accumulator replaces a reading only with a strictly more confident one, and Vision reports clipped text at full confidence. Detail below |
+| BUG-152 | P2 · **OPEN** (found 2026-09-28, SCAN.0) — not fixed: changing the streaming path needs its own before/after | session / preview resolution | **The streaming preview lookup takes the catalog's first hit, and for 8 % of four real playlists that is a different song.** Paste-a-link Spotify and Apple Music tracks resolve through `PreviewResolver`'s limit-1 iTunes search on "artist title". On Matt's four fixture playlists **11 of 136** rows with a preview land on another song ("Not Techno — i_o" → Lady Gaga's "Just Dance"; "It´s Up There" → a Kumbia Queers track; songs the catalog lacks → a piano cover or another track by the artist), so those sessions plan visuals for music that isn't playing. The SCAN verified lookup (`ScreenReadMatchPolicy`: 25 candidates, title/artist/duration must agree, else no match) is the likely fix. Detail below |
+| SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
 | BUG-147 | P3 · **FIXED 2026-09-25 (BUG147.1)** — FNV-1a noise; merged #286 (`c6369035`) | orchestrator / algorithm | **A nonzero planner seed produced a different plan in every process: the D-047 noise hashed `presetID.hashValue`, which Swift seeds randomly per launch.** Not user-visible (the app draws a fresh random seed for every plan and every Regenerate), but a logged seed could not be replayed and offline seeded measurements (BUG-144's) were not reproducible. Detail below |
 | BUG-140 | P2 · **RESOLVED 2026-09-25 (BUG140.2, Matt's option A)** — gate compares octave-folded median tempos; drums grid at 44.1 kHz; cache v15. Matt's live check passed: *"Membrane is locked on Superstition"* | dsp.beat / orchestrator | **The D-154 beat-irregularity gate flags steady songs (Superstition, Penny Lane): the drums-grid BPM it compares averages two octaves, and on local files is also scaled by the wrong sample rate.** Corpus-estimated flag rate 28 %; 42 % of flagged duplicate recordings are unflagged in their other copy. |
 | BUG-141 | P2 · **FIXED 2026-09-25 (BUG141.1)** — merged #271 (`9fee33ae`); cache schema v14 | dsp.stem / sample-rate | **On any local file that is not 44.1 kHz, the stem data is analysed as if the 44.1 kHz stems were at the file's rate.** The local-file stem series (what shaders read) mapped FFT bins to Hz at the file's rate, and the `stemEnergyBalance` snapshot the scorer and preparation UI read was warmed at the file's frame rate. 48 kHz (~14 % of the pilot corpus): vocal pitch read 7–10 % sharp, band splits off by up to 18 %, scorer inputs shift ≤ 0.01. 96 kHz (~2 %): vocal pitch read ~2× high, low-band energy off ×2–3. 44.1 kHz bit-identical. Detail below |
@@ -330,6 +333,45 @@ future consumers and is independently regression-tested.
 ---
 
 ## Open
+
+### BUG-153 — a live scan keeps the first, edge-of-frame reading of a row (2026-09-28)
+
+**Severity:** P2 · **Domain:** `session` (playlist scan) · **Failure class:** `algorithm` · **Status:** Open · **Found by:** Matt's SCAN.4 live check · **Related:** D-260, SCAN.1 (`PlaylistScanAccumulator`)
+
+**Expected:** every row in the review list shows the title and artist Spotify shows for it; for TC 27 row 9, "Prizefighter — Youth Lagoon".
+**Actual:** Matt, live Release scan of TC 27 2023.12.16 Los Angeles (fixture playlist 3, 38 rows, 15:09:44–15:09:53): *"it just misread one track (Prizefighter - has the wrong artist, which should be Youth Lagoon)."* One row of 38; the other 37 correct by his read. The wrong text itself was not logged (the scan logged frame counts only).
+
+**Reproduction / artifacts.**
+- Frame log (`io.uzume.mac`/`SpotifyScan`, 15:09:45–53): rows #1–#7, #1–#7, **#1–#9** (15:09:46.39 — #9 first seen as the frame's bottom row), then #1–#12 onward.
+- Fixture captures of the same playlist (`playlist 3`, capture 1): #9 is the bottom row with its artist line cut off (read with an empty artist, confidence 0.5; complete in capture 2). Live, the clip line falls differently frame to frame.
+- Mechanism in code: `PlaylistScanAccumulator.add` keeps the held reading unless the new one is *strictly* more confident; Vision reports confidence 1.0 for most text, including text cut by the frame edge. So a clipped but confidently misread artist, seen first, is never replaced by the ~10 complete readings that follow.
+
+**Suspected failure class:** `algorithm`.
+
+**Verification (written before the fix).**
+1. Automated: an accumulator test where a row's first reading comes from a frame edge with a wrong artist and later interior readings agree on the right one — the review keeps the right one; and a one-off misread among agreeing readings loses. The fixture gate (`PlaylistScanFixtureTests`) must not lose any row it had.
+2. Manual: Matt re-scans TC 27 in the instrumented Release build; the logged review diffs clean against the CSV (row 9 "Prizefighter — Youth Lagoon").
+
+### BUG-152 — the streaming preview lookup lands on another song for 8 % of rows (2026-09-28)
+
+**Severity:** P2 · **Domain:** `session` (preview resolution) · **Failure class:** `algorithm` (first hit trusted without verification) · **Status:** Open — not SCAN's to change · **Found by:** SCAN.0 (the ground-truth resolution in ScanBench is exactly this path) · **Related:** D-260, `ScreenReadMatchPolicy`
+
+**Expected:** a planned track's preview is the song in the playlist.
+**Actual:** `PreviewResolver` asks iTunes Search for one result for "artist title" and takes it. On the four SCAN fixture playlists, 11 of the 136 rows that have a preview resolve to a different song (`docs/diagnostics/SCAN_FEASIBILITY_2026-09-28.md` §Failures, "truth resolves elsewhere"): an underscore or acute accent in a name breaks the search, and when the catalog lacks the song the first hit is whatever else ranks first. Stems, beat grid and energy are then measured on the wrong music.
+
+**Likely fix.** Apply the verified lookup SCAN built for screen-read rows (title, primary artist and duration must agree; else no match) to every track. The prompt that built it forbade changing the streaming path without a before/after on a known playlist; that measurement is the fix increment's first step (ScanBench's ground-truth column already gives the "before").
+
+### SCAN-LIM — what the playlist scan has not been shown to handle (2026-09-28)
+
+**Severity:** P3 · **Domain:** `session` (playlist scan) · **Status:** Open (recorded limits, D-260)
+
+- **Non-English Spotify interface.** The header's "N songs" is matched in English. Elsewhere the count is unread; the "Recommended" shelf (also English) or the user's Done ends the scan, and the panel shows "27 songs" instead of "27 of 38 songs".
+- **Compact list view.** Parsed from synthetic observations only; no real compact capture was measured.
+- **100+ song playlists.** Not measured; nothing in the reader depends on length, but no long capture exists.
+- **The Spotify web player.** Only the desktop app's window (`com.spotify.client`) is read.
+- **Very small windows.** Heavier truncation. The pass bar was measured with both side panels open (heavy truncation: 26 of 144 titles cut off, 25 identified).
+- **Esc typed into Spotify** goes to Spotify; the panel's Esc works once the panel has focus (the scan does not use the Accessibility permission).
+- **Spotify's music-video badge** can fuse onto an artist name in the review list ("DSZA"); resolution tolerates it, the display does not.
 
 ### BUG-151 — a local-file queue cut the last second of every song (2026-09-28)
 

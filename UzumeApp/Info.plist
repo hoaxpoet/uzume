@@ -14,7 +14,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Uzume</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Uzume captures system audio to generate real-time music visualizations. No video is recorded.</string>
+	<string>Uzume listens to your Mac’s audio to create visuals and, when you scan a playlist, reads the track names in your Spotify window. Nothing is recorded or sent anywhere.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Uzume reads track info from music apps (Apple Music, Spotify) to display what's currently playing.</string>
 	<key>NSAppleMusicUsageDescription</key>
