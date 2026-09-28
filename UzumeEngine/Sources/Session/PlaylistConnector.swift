@@ -21,6 +21,10 @@ public enum PlaylistSource: Sendable {
     case appleMusicPlaylistURL(String)
     /// A Spotify playlist URL. Client-credentials auth is handled internally.
     case spotifyPlaylistURL(String)
+    /// A Spotify playlist read off the screen (SCAN, D-260) — the live scan or
+    /// dropped screenshots. The music plays in Spotify, exactly as for
+    /// `.spotifyPlaylistURL`; the tracks arrive pre-fetched (no Spotify request).
+    case spotifyScan(playlistName: String?)
 }
 
 // MARK: - PlaylistConnectorError
@@ -72,7 +76,7 @@ extension PlaylistSource {
         switch self {
         case .appleMusicCurrentPlaylist, .appleMusicPlaylistURL:
             return "Apple Music"
-        case .spotifyCurrentQueue, .spotifyPlaylistURL:
+        case .spotifyCurrentQueue, .spotifyPlaylistURL, .spotifyScan:
             return "Spotify"
         }
     }
@@ -81,7 +85,7 @@ extension PlaylistSource {
     /// remediation copy (e.g. the "Normalize Volume" nudge, ASH.2).
     public var isSpotify: Bool {
         switch self {
-        case .spotifyCurrentQueue, .spotifyPlaylistURL: return true
+        case .spotifyCurrentQueue, .spotifyPlaylistURL, .spotifyScan: return true
         case .appleMusicCurrentPlaylist, .appleMusicPlaylistURL: return false
         }
     }
@@ -141,6 +145,11 @@ public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
                 throw PlaylistConnectorError.unrecognizedPlaylistURL(urlString)
             }
             return try await spotifyConnector.connect(playlistID: playlistID)
+        case .spotifyScan:
+            // The screen reader already produced the tracks; nothing to fetch.
+            throw PlaylistConnectorError.parseFailure(
+                "A scanned playlist arrives pre-fetched — use startSession(preFetchedTracks:source:)"
+            )
         }
     }
 
