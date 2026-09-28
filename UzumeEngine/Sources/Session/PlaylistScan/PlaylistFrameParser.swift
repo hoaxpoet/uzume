@@ -26,11 +26,6 @@ public enum PlaylistFrameParser {
     /// Durations belong to one column when their right edges agree this closely
     /// (normalized width). The player bar's elapsed/total times sit ~0.009 away.
     static let durationColumnTolerance: CGFloat = 0.004
-    /// Text that is chrome, never a title or artist.
-    static let chromeText: Set<String> = [
-        "add", "+ add", "add to liked songs", "remove from liked songs",
-        "add to playlist", "save to your library", "more options"
-    ]
 
     // MARK: Parse
 
@@ -96,63 +91,6 @@ public enum PlaylistFrameParser {
             .max { $0.box.minY < $1.box.minY }
         return sticky.map { clean($0.text).text }
     }
-
-    // MARK: Text cleanup
-
-    static func isChrome(_ text: String) -> Bool {
-        chromeText.contains(text.trimmingCharacters(in: .whitespaces).lowercased())
-    }
-
-    /// Normalize one displayed string: strip a trailing ellipsis (reporting it),
-    /// map Vision's "|" / "l" for a lone capital I, collapse whitespace.
-    static func clean(_ raw: String) -> (text: String, truncated: Bool) {
-        var text = raw.replacingOccurrences(of: "\u{2026}", with: "...")
-        var truncated = false
-        while let last = text.last, last == "." || last == " " {
-            // A single trailing "." can be real ("The Radio Dept."); two+ is an ellipsis.
-            if text.hasSuffix("..") { truncated = true } else if last == ".", !truncated { break }
-            text.removeLast()
-        }
-        let words = text
-            .split(separator: " ", omittingEmptySubsequences: true)
-            .map { $0 == "|" || $0 == "l" ? "I" : String($0) }
-        return (words.joined(separator: " "), truncated)
-    }
-
-    /// Strip the badges Spotify draws before an artist ("E" explicit, ▶ music
-    /// video — Vision reads the latter as "•", "D", "▶" or "►").
-    static func stripBadges(_ text: String) -> String {
-        var words = text.split(separator: " ").map(String.init)
-        // Vision's readings of the explicit (E) and music-video (▶) badges, as seen on
-        // real captures (SCAN.0). "DJ" is deliberately absent — it is a real first word.
-        let badges: Set<String> = ["E", "D", "L", "J", "LI", "L]", "D]", "E]", "ED", "EO", "EL", "[E]",
-                                   "•", "▶", "►", "▷", "⊳", "■", "□", "回"]
-        let glyphs = CharacterSet(charactersIn: "•▶►▷⊳■□回")
-        // ponytail: a real artist whose first word is a lone "E"/"D" loses it; none seen, revisit if one is
-        while words.count > 1, badges.contains(words[0])
-                || (words[0].count <= 2 && words[0].unicodeScalars.contains(where: glyphs.contains)) {
-            words.removeFirst()
-        }
-        // A badge's edge can fuse onto the first word as a bar: "|ZHU".
-        if let first = words.first, first.count > 1, first.hasPrefix("|") {
-            words[0] = String(first.dropFirst())
-        }
-        return words.joined(separator: " ")
-    }
-
-    /// A duration at the start of a cell with trailing junk ("3:27 ...").
-    static func leadingDuration(_ text: String) -> Double? {
-        guard let match = text.firstMatch(of: /^\s*((?:\d{1,2}:)?\d{1,2}:\d{2})(?:\s|$)/) else { return nil }
-        return duration(String(match.1))
-    }
-
-    static func duration(_ text: String) -> Double? {
-        guard let match = text.trimmingCharacters(in: .whitespaces)
-            .wholeMatch(of: /(?:(\d{1,2}):)?(\d{1,2}):(\d{2})/) else { return nil }
-        let hours = match.1.flatMap { Double($0) } ?? 0
-        guard let minutes = Double(match.2), let seconds = Double(match.3) else { return nil }
-        return hours * 3600 + minutes * 60 + seconds
-    }
 }
 
 // MARK: - Layout
@@ -188,6 +126,10 @@ extension PlaylistFrameParser {
         let paneMaxX: CGFloat
         /// The "# Title" column-header row, when visible.
         let columnHeader: ScanTextObservation?
+        /// Where the title column ends: the next header label ("Album", "Date added");
+        /// "Artist" is a column of its own only in compact view, so it doesn't count.
+        /// The duration column when no other label is visible.
+        let titleColumnMaxX: CGFloat
         /// Top of the first list row.
         let listTopY: CGFloat
 
@@ -237,7 +179,22 @@ extension PlaylistFrameParser {
             self.paneMinX = paneMinX
             self.paneMaxX = durations.map(\.obs.box.maxX).max() ?? 1
             self.columnHeader = columnHeader
+            self.titleColumnMaxX = Self.titleColumnEnd(observations, header: columnHeader, durationMinX: durationMinX)
             self.listTopY = columnHeader?.box.maxY ?? ((durations.first?.obs.box.midY ?? 0) - rowHeight / 2)
+        }
+
+        /// Left edge of the first header label right of "Title" (other than "Artist").
+        static func titleColumnEnd(
+            _ observations: [ScanTextObservation],
+            header: ScanTextObservation?,
+            durationMinX: CGFloat
+        ) -> CGFloat {
+            guard let header else { return durationMinX }
+            let labels = observations.filter {
+                abs($0.box.midY - header.box.midY) < header.box.height && $0.box.minX > header.box.maxX
+                    && $0.box.maxX < durationMinX && $0.text.lowercased() != "artist"
+            }
+            return (labels.map(\.box.minX).min() ?? durationMinX) - 0.004
         }
 
         /// The biggest set of durations sharing a right edge.
@@ -266,6 +223,7 @@ extension PlaylistFrameParser {
             let durationMinX = durations.map(\.obs.box.minX).min() ?? 1
             let textCells = observations.filter { obs in
                 obs.box.minX >= textMinX - 0.006 && obs.box.maxX <= durationMinX
+                    && obs.box.minX < titleColumnMaxX
                     && PlaylistFrameParser.duration(obs.text) == nil && !PlaylistFrameParser.isChrome(obs.text)
                     && obs.text.contains(where: { $0.isLetter || $0.isNumber })
             }
@@ -295,8 +253,10 @@ extension PlaylistFrameParser {
             let titleLine: [ScanTextObservation]
             let artistLine: [ScanTextObservation]?
             if lines.count >= 2 {
+                // A third, centred line (an album column with no header in view) sits
+                // between them: the artist is the lowest line.
                 titleLine = first
-                artistLine = lines[1]
+                artistLine = lines[lines.count - 1]
             } else if first[0].box.midY <= centre {
                 titleLine = first    // bottom edge: artist cut off
                 artistLine = nil

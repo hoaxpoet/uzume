@@ -107,6 +107,15 @@ struct PlaylistScanRowAssemblyTests {
         #expect(!frame.rows.contains { $0.artist == "Some Album" }, "album column read as artist")
     }
 
+    @Test("wide window: the Album and Date added columns and an open context menu are not read as artist")
+    func albumColumn() throws {
+        let frame = try #require(try parsed("frame_album_column").first)
+        #expect(frame.rows.map(\.number) == Array(1...5))
+        #expect(frame.rows.map(\.artist) == ["Ada Vale", "Len Morrow", "CØNTRA, Saturna", "Nilüfer Yanya",
+                                              "K.Flay, Aire Atlantica"])
+        #expect(!frame.rows.contains { $0.title.contains("Remove from") || $0.artist.contains("Album") })
+    }
+
     @Test("header without a song count: name read, count nil")
     func headerWithoutCount() throws {
         let frame = try #require(try parsed("frame_header_no_count").first)
