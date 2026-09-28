@@ -62,7 +62,7 @@ struct KaguraSelectionTests {
 
     /// Every ordered pair of the five dances, in 21 clip changes: strides 1–4 through the library.
     static let allPairs: [KaguraDance] = {
-        let dances = KaguraRepertoire.dances
+        let dances = KaguraRepertoire.spikeDances
         return (1...4).flatMap { stride in (0..<5).map { dances[($0 * stride) % 5] } } + [dances[0]]
     }()
 
@@ -88,7 +88,7 @@ struct KaguraSelectionTests {
           arguments: [80.0, 166.0])
     func continuity(bpm: Double) throws {
         let lib = try KaguraClipLibrary.shared()
-        let natives = KaguraRepertoire.dances.map { dance in
+        let natives = KaguraRepertoire.spikeDances.map { dance in
             "\(dance) " + lib.clips(for: dance).map { String(format: "%.3f", Self.nativeStep($0)) }.joined(separator: "/")
         }
         print("[kagura-continuity] native max step (60 fps): \(natives), sway \(Self.nativeStep(lib.sway))")
@@ -101,7 +101,7 @@ struct KaguraSelectionTests {
         let pairs = Set(zip(order, order.dropFirst()).map { "\($0)>\($1)" })
         #expect(pairs.count >= 20, "only \(pairs.count) ordered dance pairs covered: \(order)")
         var bounds: [KaguraDance?: Float] = [:]
-        for dance in KaguraRepertoire.dances.map(Optional.some) + [nil] { bounds[dance] = Self.bound(dance, bpm: bpm, library: lib) }
+        for dance in KaguraRepertoire.spikeDances.map(Optional.some) + [nil] { bounds[dance] = Self.bound(dance, bpm: bpm, library: lib) }
         var worstRatio: Float = 0
         for index in 1..<run.joints.count {
             let limit = max(bounds[run.dance[index]] ?? 0, run.fading[index] ? bounds[run.fadingFrom[index]] ?? 0 : 0)
@@ -236,20 +236,20 @@ struct KaguraSelectionTests {
             KaguraRepertoire.pick(bpm: 60 / grid.beatPeriod,
                                   energy: arousal.map { KaguraRepertoire.songEnergy(arousal: $0) } ?? 0.5, library: clips)
         }
-        #expect(expected(-0.426) != expected(nil) && expected(0.609) != expected(nil), "the fixture cannot tell them apart")
+        #expect(expected(0.609) != expected(nil), "the fixture cannot tell them apart")
 
-        // Track 1 (Penny Lane's songArousal): the push reaches the repertoire.
+        // Track 1 (Dance Yrself Clean's songArousal): the push reaches the repertoire.
         dancer.setGrid(grid, streaming: false)
-        dancer.setSongArousal(-0.426)
+        dancer.setSongArousal(0.609)
         play(12)
-        #expect(dancer.choreography.picks.last?.repertoire == expected(-0.426))
+        #expect(dancer.choreography.picks.last?.repertoire == expected(0.609))
         // The session-log feed: each pick handed over once, with what it read and chose.
         let logged = dancer.takeNewPicks()
         #expect(!logged.isEmpty && dancer.takeNewPicks().isEmpty)
         let line = try #require(logged.last?.logLine)
         print("[kagura-log] \(line)")
-        #expect(line.hasPrefix("KAGURA_PICK: beat=") && line.contains("songArousal=-0.426")
-                && line.contains("songEnergy=0.00") && line.contains("repertoire=[") && line.contains("barRank="))
+        #expect(line.hasPrefix("KAGURA_PICK: beat=") && line.contains("songArousal=0.609")
+                && line.contains("songEnergy=1.00") && line.contains("repertoire=[") && line.contains("barRank="))
 
         // Track change, cache miss: the app writes nil; the next pick reads the middle energy, not Penny Lane.
         dancer.setSongArousal(nil)

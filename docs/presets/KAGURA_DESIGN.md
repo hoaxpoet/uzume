@@ -478,3 +478,13 @@ no readback, auto mode on love_rehab, `KaguraFrameCostTests`: GPU median 0.096â€
 over two quiet runs (the spread is GPU clock state; a third run under another session's test load read p95
 5.7 ms with 1 frame in 1731 over 1 ms); CPU `update` median 0.014â€“0.042 ms. The selection code costs nothing
 visible; KAG.2 measured 0.216 ms.
+
+**The chicken dance is out of the pick (Matt, 2026-09-28, after the three live sessions of that day).** Live,
+on the beta playlist: the twist "synced beautifully", the cabbage patch works but is "a little slow" on
+energetic songs (one circle per 2 beats on Smells Like Teen Spirit, per 4 on B.O.B.), the chicken dance
+"doesn't really work" and "should be used sparingly, if at all". It locks at ~45 % on the beat (the spike's
+figure too) and was in every one of the ten repertoires. `KaguraRepertoire.dances` is now twist, cabbage,
+macarena, Egyptian; `spikeDances` keeps the spike's five for the README reproductions, and the chicken's clips
+stay in the KAG.1 resource. On the beta playlist that leaves two repertoires: Egyptian / cabbage / twist
+(Dance Yrself Clean, Smells Like Teen Spirit; B.O.B. gets macarena for Egyptian) and Egyptian / macarena /
+cabbage (the other seven). The cabbage patch is now in every repertoire.

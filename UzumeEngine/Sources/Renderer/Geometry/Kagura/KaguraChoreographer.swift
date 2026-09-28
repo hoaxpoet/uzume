@@ -165,7 +165,7 @@ public struct KaguraChoreographer: Sendable {
 
     /// A choreographer dancing `sequence` in turn, one dance per clip change (empty: by the song).
     init?(library: KaguraClipLibrary, sequence: [KaguraDance]) {
-        let clips = KaguraRepertoire.dances.flatMap { library.clips(for: $0) }
+        let clips = KaguraDance.allCases.filter { $0 != .sway }.flatMap { library.clips(for: $0) }   // incl. unpicked
         let names = library.jointNames
         let index = { (name: String) in names.firstIndex(of: name) }
         guard !clips.isEmpty, let sway = library.sway, sequence.allSatisfy({ !library.clips(for: $0).isEmpty }),

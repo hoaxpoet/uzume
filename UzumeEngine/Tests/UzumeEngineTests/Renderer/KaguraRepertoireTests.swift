@@ -46,26 +46,28 @@ struct KaguraRepertoireTests {
     ]
 
     /// The build (Matt, 2026-09-25, option A): `TrackProfile.songArousal` and the grid BPM from the shipping
-    /// local-file preparation (PrepTimingRunner, Release), against `KaguraRepertoire.energyReference`.
-    /// Two songs differ from README §10: Take Five and Teardrop (both to the middle set).
+    /// local-file preparation (PrepTimingRunner, Release), against `KaguraRepertoire.energyReference`, picking
+    /// from the four dances left after the chicken dance went (Matt, 2026-09-28). The spike's rule (oracle:
+    /// `kagura.py` with `DANCES` minus chicken) yields two repertoires on this playlist.
     static let build: [Row] = [
-        ("Dance Yrself Clean", 98.0, 0.609, [.chicken, .cabbage, .twist]),
-        ("B.O.B.", 153.8, 0.569, [.chicken, .cabbage, .twist]),
-        ("Superstition", 101.4, 0.206, [.egyptian, .chicken, .cabbage]),
-        ("Smells Like Teen Spirit", 117.3, 0.597, [.chicken, .cabbage, .twist]),
-        ("Penny Lane", 113.3, -0.426, [.egyptian, .macarena, .chicken]),
-        ("Take Five", 171.4, 0.327, [.macarena, .chicken, .cabbage]),
-        ("Pyramid Song", 95.2, 0.334, [.egyptian, .chicken, .cabbage]),
-        ("Teardrop", 78.8, 0.479, [.macarena, .chicken, .cabbage]),
-        ("Moonlight I", 44.5, -0.355, [.egyptian, .macarena, .chicken]),
-        ("Warszawa", 75.2, 0.040, [.egyptian, .macarena, .chicken]),
+        ("Dance Yrself Clean", 98.0, 0.609, [.egyptian, .cabbage, .twist]),
+        ("B.O.B.", 153.8, 0.569, [.macarena, .cabbage, .twist]),
+        ("Superstition", 101.4, 0.206, [.egyptian, .macarena, .cabbage]),
+        ("Smells Like Teen Spirit", 117.3, 0.597, [.egyptian, .cabbage, .twist]),
+        ("Penny Lane", 113.3, -0.426, [.egyptian, .macarena, .cabbage]),
+        ("Take Five", 171.4, 0.327, [.egyptian, .macarena, .cabbage]),
+        ("Pyramid Song", 95.2, 0.334, [.egyptian, .macarena, .cabbage]),
+        ("Teardrop", 78.8, 0.479, [.egyptian, .macarena, .cabbage]),
+        ("Moonlight I", 44.5, -0.355, [.egyptian, .macarena, .cabbage]),
+        ("Warszawa", 75.2, 0.040, [.egyptian, .macarena, .cabbage]),
     ]
 
     @Test("README §9: the nine spike songs, from their printed energy")
     func readmeNine() throws {
         let lib = try KaguraClipLibrary.shared()
         for row in Self.readme9 {
-            #expect(KaguraRepertoire.pick(bpm: row.bpm, energy: row.input, library: lib) == row.expected, "\(row.song)")
+            let picked = KaguraRepertoire.pick(bpm: row.bpm, energy: row.input, library: lib, from: KaguraRepertoire.spikeDances)
+            #expect(picked == row.expected, "\(row.song)")
         }
     }
 
@@ -74,7 +76,8 @@ struct KaguraRepertoireTests {
         let lib = try KaguraClipLibrary.shared()
         for row in Self.readme10 {
             let energy = KaguraRepertoire.songEnergy(arousal: row.input, reference: Self.spikeReference)
-            #expect(KaguraRepertoire.pick(bpm: row.bpm, energy: energy, library: lib) == row.expected, "\(row.song)")
+            let picked = KaguraRepertoire.pick(bpm: row.bpm, energy: energy, library: lib, from: KaguraRepertoire.spikeDances)
+            #expect(picked == row.expected, "\(row.song)")
         }
     }
 

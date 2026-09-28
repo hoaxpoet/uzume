@@ -22,8 +22,11 @@ import Foundation
 /// The song's three dances, from its arousal and tempo (spike `pick_repertoire`).
 public enum KaguraRepertoire {
 
-    /// The dances the repertoire picks from (spike `DANCES`).
-    public static let dances: [KaguraDance] = [.twist, .cabbage, .chicken, .macarena, .egyptian]
+    /// The dances the repertoire picks from. The chicken dance is out (Matt, 2026-09-28, after three M7
+    /// sessions: "a poor fit", "should be used sparingly, if at all"); its clips stay in the KAG.1 resource.
+    public static let dances: [KaguraDance] = [.twist, .cabbage, .macarena, .egyptian]
+    /// The spike's `DANCES` (README §9, §10 are reproduced against these).
+    public static let spikeDances: [KaguraDance] = [.twist, .cabbage, .chicken, .macarena, .egyptian]
 
     /// Song-level arousal of the ten `tools/data/beta_test_playlist.m3u` songs (`TrackProfile.songArousal`,
     /// the shipping local-file preparation, Release, KAG.3 2026-09-25), ascending. Song energy is a song's
@@ -80,7 +83,7 @@ public enum KaguraRepertoire {
     /// `pick_repertoire(bpm, arousal, k=3)`: the `k` lowest-scoring dances, calmest first.
     /// Score = |log₂ playback rate at the best level| + |library-normalised vigor − song energy|.
     public static func pick(
-        bpm: Double, energy: Double, library: KaguraClipLibrary, count: Int = 3
+        bpm: Double, energy: Double, library: KaguraClipLibrary, count: Int = 3, from dances: [KaguraDance] = dances
     ) -> [KaguraDance] {
         let profiles = dances.compactMap { dance in profile(dance, library: library).map { (dance, $0) } }
         let vigors = profiles.map(\.1.vigor)
