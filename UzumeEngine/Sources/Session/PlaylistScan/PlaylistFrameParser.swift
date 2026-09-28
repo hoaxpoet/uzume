@@ -26,6 +26,8 @@ public enum PlaylistFrameParser {
     /// Durations belong to one column when their right edges agree this closely
     /// (normalized width). The player bar's elapsed/total times sit ~0.009 away.
     static let durationColumnTolerance: CGFloat = 0.004
+    /// Confidence factor for a frame's first/last row (see `parse`).
+    static let edgeRowWeight = 0.8
 
     // MARK: Parse
 
@@ -36,7 +38,13 @@ public enum PlaylistFrameParser {
         guard let layout = Layout(observations) else {
             return PlaylistScanFrame(songCount: songCount, playlistName: nil, reachedEnd: endY != nil)
         }
-        let rows = layout.rows(endY: endY)
+        var rows = layout.rows(endY: endY)
+        // A frame's first and last rows can be clipped by the sticky header or the
+        // frame edge, and Vision reports clipped text at full confidence (BUG-153): they
+        // count for less than the same row read fully in view. The last row is complete
+        // when the list's end is on screen.
+        if !rows.isEmpty { rows[0].confidence *= edgeRowWeight }
+        if rows.count > 1, endY == nil { rows[rows.count - 1].confidence *= edgeRowWeight }
         let left = max(0, layout.paneMinX - 0.03)
         return PlaylistScanFrame(
             rows: rows,

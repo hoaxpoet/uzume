@@ -2,8 +2,10 @@
 //
 // Incremental by design: the live scan feeds one frame at a time; a dropped set
 // of screenshots feeds them in name order. Rows are keyed by their playlist
-// number, so overlapping captures dedupe for free and the best reading of each
-// row wins (a complete row beats one cut off at a frame edge).
+// number, so overlapping captures dedupe for free. Each row's text is chosen by
+// vote: identical readings pool their confidence, so ten complete readings
+// outweigh one misread at a frame edge (BUG-153 — the first reading used to
+// stick unless a later one was strictly more confident).
 
 import Foundation
 
@@ -14,8 +16,16 @@ public struct PlaylistScanAccumulator: Sendable, Equatable {
 
     // MARK: State
 
-    /// Best reading per row number.
+    /// Winning reading per row number.
     public private(set) var rowsByNumber: [Int: ScannedRow] = [:]
+    /// Every distinct reading of each row, with its pooled confidence.
+    private var tallies: [Int: [String: Tally]] = [:]
+
+    /// One distinct reading of a row: the sum of its confidences and its best instance.
+    private struct Tally: Sendable, Equatable {
+        var weight: Double
+        var row: ScannedRow
+    }
     /// The header's "N songs" count, once read.
     public private(set) var songCount: Int?
     /// The playlist name, once read.
@@ -42,11 +52,29 @@ public struct PlaylistScanAccumulator: Sendable, Equatable {
         if frame.reachedEnd { reachedEnd = true }
         if firstNumberSeen == nil, let first = frame.rows.map(\.number).min() { firstNumberSeen = first }
         for row in frame.rows where songCount.map({ row.number <= $0 }) ?? true {
-            if let held = rowsByNumber[row.number], held.confidence >= row.confidence { continue }
-            rowsByNumber[row.number] = row
+            vote(row)
         }
-        if let count = songCount { rowsByNumber = rowsByNumber.filter { $0.key <= count } }
+        if let count = songCount {
+            rowsByNumber = rowsByNumber.filter { $0.key <= count }
+            tallies = tallies.filter { $0.key <= count }
+        }
         return self != before
+    }
+
+    /// Add one reading to its row's tally and re-elect the row's text: the most
+    /// pooled confidence wins; on a tie, the more confident single reading.
+    private mutating func vote(_ row: ScannedRow) {
+        let key = "\(row.title)\u{1F}\(row.artist)"
+        var readings = tallies[row.number] ?? [:]
+        var tally = readings[key] ?? Tally(weight: 0, row: row)
+        tally.weight += row.confidence
+        if row.confidence > tally.row.confidence { tally.row = row }
+        readings[key] = tally
+        tallies[row.number] = readings
+        let winner = readings.values.max {
+            $0.weight != $1.weight ? $0.weight < $1.weight : $0.row.confidence < $1.row.confidence
+        }
+        rowsByNumber[row.number] = winner?.row
     }
 
     /// A complete name beats a cut-off one; otherwise the longer reading wins.

@@ -89,6 +89,16 @@ struct PlaylistScanRowAssemblyTests {
         #expect(frames[1].playlistName == "TC 98 2026.01.01 Somewhere", "sticky-bar name")
     }
 
+    @Test("a frame's first and last rows count for less; the last row is whole when the list's end shows")
+    func edgeRowsDiscounted() throws {
+        let frames = try parsed("frames_normal")
+        let scrolled = frames[1]
+        #expect(scrolled.rows.first?.confidence == PlaylistFrameParser.edgeRowWeight)
+        #expect(scrolled.rows.last?.confidence == PlaylistFrameParser.edgeRowWeight)
+        #expect(scrolled.rows.dropFirst().dropLast().allSatisfy { $0.confidence == 1 })
+        #expect(frames[2].rows.last?.confidence == 1, "Recommended in view: the last row is complete")
+    }
+
     @Test("Recommended shelf ends the list; its rows are not playlist rows")
     func recommendedShelf() throws {
         let frame = try parsed("frames_normal")[2]
@@ -195,6 +205,27 @@ struct PlaylistScanAccumulatorTests {
         #expect(scan.songCount == nil)
         #expect(scan.expectedCount == 12)
         #expect(scan.gaps == [ScanGap(first: 1, last: 5)])
+    }
+
+    @Test("BUG-153: an edge misread seen first loses to the complete readings that follow")
+    func edgeMisreadSeenFirstLoses() {
+        var scan = PlaylistScanAccumulator()
+        let edge = ScannedRow(number: 9, title: "Prizefighter", artist: "Vouth Laqoon", confidence: 1 * PlaylistFrameParser.edgeRowWeight)
+        let whole = ScannedRow(number: 9, title: "Prizefighter", artist: "Youth Lagoon", confidence: 1)
+        scan.add(PlaylistScanFrame(rows: [edge]))
+        #expect(scan.rowsByNumber[9]?.artist == "Vouth Laqoon", "the only reading so far")
+        scan.add(PlaylistScanFrame(rows: [whole]))
+        scan.add(PlaylistScanFrame(rows: [whole]))
+        #expect(scan.rowsByNumber[9]?.artist == "Youth Lagoon")
+    }
+
+    @Test("a misread seen first at full confidence is outvoted by the agreeing readings after it (BUG-153 shape)")
+    func oneOffMisreadOutvoted() {
+        var scan = PlaylistScanAccumulator()
+        for title in ["NikkiR", "Nikki", "Nikki"] {
+            scan.add(PlaylistScanFrame(rows: [ScannedRow(number: 16, title: title, artist: "Worakls", confidence: 1)]))
+        }
+        #expect(scan.rowsByNumber[16]?.title == "Nikki")
     }
 
     @Test("higher-confidence reading of a row wins; rows past the header count are dropped")
