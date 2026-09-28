@@ -1647,7 +1647,7 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Done-when:** ✅ tests; ⏳ Matt's live check. Open Dance Yrself Clean, drag the bar to about 3:00, and the drop at 3:08 should bring the dense scene.
 
-**Found, not changed.** The end-of-track signal fires when the player has *read* the last audio (`.dataConsumed`, AVAudioPlayerNode's default), about 1 s before it has *played* it: 2.0 s after a seek to 3 s from the end. In a multi-file queue, the next track likely starts about a second early, cutting each song's last second. It predates this increment; Matt's call whether to fix it (`.dataPlayedBack`).
+**Found and fixed (BUG-151, Matt: "don't flag, fix").** The end-of-track signal fired when the player had *read* the last audio (`.dataConsumed`, AVAudioPlayerNode's default), 1.0 s before it had *played* it, so each multi-file queue advance cut the song's last second. The queue advance now waits for `.dataPlayedBack`; a single-file loop keeps `.dataConsumed` so it stays seamless. The seek test requires the end ≥ 2.8 s into a 3 s remainder (the old code measured 2.0 s).
 
 ### Increment NRG.4 — scene changes land on the song's energy changes ✅ (2026-09-27; Matt's live check pending)
 
