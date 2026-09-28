@@ -192,6 +192,8 @@ final class SpotifyWindowFrameSource: NSObject, PlaylistFrameSource, SCStreamOut
         let first = frame.rows.first?.number ?? 0
         let last = frame.rows.last?.number ?? 0
         logger.info("SCAN frame: \(Int(millis)) ms, \(frame.rows.count) rows (#\(first)–#\(last))")
+        // BUG-153 instrumentation: every reading, so a live scan can be diffed row by row.
+        for row in frame.rows { logger.info("SCAN read: \(ScanDiagnostics.describe(row), privacy: .public)") }
         continuation.yield(frame)
     }
 
@@ -240,5 +242,23 @@ enum PlaylistScreenshotReader {
                     return try? PlaylistScreenReader().read(image)
                 }
         }.value
+    }
+}
+
+// MARK: - Diagnostics (BUG-153 instrumentation)
+
+/// One-line row descriptions for the local unified log (`io.uzume.mac` / `SpotifyScan`).
+/// Temporary: removed when BUG-153 closes.
+enum ScanDiagnostics {
+    static func describe(_ row: ScannedRow) -> String {
+        let duration = row.duration.map { String(format: "%.0fs", $0) } ?? "—"
+        return "#\(row.number) [\(String(format: "%.2f", row.confidence))] \(row.title)\(row.titleTruncated ? "…" : "")"
+            + " | \(row.artist)\(row.artistTruncated ? "…" : "") | \(duration)"
+    }
+
+    static func logReview(_ rows: [ScannedRow], name: String?, missing: [ScanGap]) {
+        let gaps = missing.map { "\($0.first)-\($0.last)" }.joined(separator: ",")
+        logger.info("SCAN review: \(rows.count) rows, name=\(name ?? "—", privacy: .public), missing=\(gaps, privacy: .public)")
+        for row in rows { logger.info("SCAN review row: \(describe(row), privacy: .public)") }
     }
 }
