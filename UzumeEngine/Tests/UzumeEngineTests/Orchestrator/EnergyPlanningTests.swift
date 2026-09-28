@@ -60,6 +60,24 @@ struct EnergyPlanningTests {
         #expect(broken.energyChanges() == [90, 130], "a 40 s breakdown is its own section")
     }
 
+    @Test("energy sections (KAG.5): whole track cuts at the changes, a preview is one section, no curve is none")
+    func energySections() {
+        let quiet = steadyCurve(level: 2, seconds: 90), loud = steadyCurve(level: 9, seconds: 90)
+        let step = EnergyCurve(hopSeconds: 1, loudnessDB: quiet.loudnessDB + loud.loudnessDB,
+                               activity: quiet.activity + loud.activity)
+        var profile = TrackProfile(bpm: 120)
+        profile.energyCurve = step
+        let whole = profile.energySections(trackDuration: 180)
+        #expect(whole.coverage == .whole)
+        #expect(whole.sections == [EnergySection(start: 0, loudEnd: 2), EnergySection(start: 90, loudEnd: 9)])
+        // The same 180 s read as a preview of a 10-minute track: one section, the readout's `high`.
+        let preview = profile.energySections(trackDuration: 600)
+        #expect(preview.coverage == .preview)
+        #expect(preview.sections == [EnergySection(start: 0, loudEnd: step.readout()?.high)])
+        #expect(TrackProfile(bpm: 120).energySections(trackDuration: 180).coverage == .none)
+        #expect(TrackProfile(bpm: 120).energySections(trackDuration: 180).sections.isEmpty)
+    }
+
     /// FF.5 — what the renderer installs per track (`StemFeatures.energyLevel`).
     @Test("per-second levels step with the song; a preview gives one level; no curve gives none")
     func energyLevelsPerSecond() {

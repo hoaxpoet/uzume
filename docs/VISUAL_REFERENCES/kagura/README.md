@@ -40,8 +40,8 @@ Scored by hand at KAG.4 (lightweight: these four), against the evidence named:
 ## Audio routing notes
 
 - Grid beat position → the time-warp (each dance's pulse pinned to beats), KAGURA_DESIGN §5.
-- Song arousal + grid BPM → the three-dance repertoire; `bassAtt` (1.5 s envelope) → the dance pick per bar, arm reach, and the silence rest (§6, §8, §15).
-- Irregular grid, silence, a stopped clock or no lock yet (streaming cold start) → the rest: ballet on calm songs, the sway elsewhere (§3a / §7 / §15).
+- The measured energy of the song's stretch playing (its loud-end 1–10 level, KAG.5) + grid BPM → the three-dance repertoire; `bassAtt` (1.5 s envelope) → the dance pick per bar, arm reach, and the silence rest (§6, §8, §15).
+- Irregular grid, silence, a stopped clock or no lock yet (streaming cold start) → the rest: ballet in calm stretches (level ≤ 3), the sway elsewhere (§3a / §7 / §15).
 
 ## Provenance
 

@@ -16,7 +16,7 @@
 // scales with drawable HEIGHT, and the figure is centred on the width.
 //
 // Nothing brightens on the beat (D-157). The choice of dance, arm reach and the safety nets are CPU-side
-// (`KaguraChoreographer`, `KaguraSelection`); this file only feeds them `bassAtt` and the song's arousal.
+// (`KaguraChoreographer`, `KaguraSelection`); this file only feeds them `bassAtt` and the song's energy sections.
 
 import Foundation
 import Metal
@@ -105,9 +105,9 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     private var choreographer: KaguraChoreographer
     private let clockLock = NSLock()
     private var clock = KaguraBeatClock()
-    /// The song's arousal as the app last pushed it, and whether a per-track reset is pending — both
-    /// written under `clockLock` by the app and applied to the choreographer on the render thread.
-    private var pushedArousal: Double?
+    /// The song's energy sections as the app last pushed them, and whether a per-track reset is pending —
+    /// both written under `clockLock` by the app and applied to the choreographer on the render thread.
+    private var pushedSections: [KaguraSection] = []
     private var songResetPending = false
     /// Picks already handed to `takeNewPicks()`. Render thread only.
     private var picksTaken = 0
@@ -197,17 +197,18 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
         }
     }
 
-    /// The song's arousal (`TrackProfile.mood.arousal`, the song's median (BUG-144)), or `nil` when the track has none. The app
-    /// writes it at every track change on both paths — a value, or `nil` — so a previous track's
-    /// arousal never reaches the next one's repertoire (CLAUDE.md §What NOT To Do).
-    public func setSongArousal(_ arousal: Double?) {
-        clockLock.withLock { pushedArousal = arousal }
+    /// The song's energy sections (KAG.5, D-259): each stretch between the song's energy changes and its
+    /// measured level; one section on a streaming preview; empty when the track has no curve. The app
+    /// writes them at every track change on both paths — sections, or empty — so a previous track's
+    /// energy never reaches the next one's repertoire (CLAUDE.md §What NOT To Do).
+    public func setSongSections(_ sections: [KaguraSection]) {
+        clockLock.withLock { pushedSections = sections }
     }
 
     /// Per-track reset: forget the playback clock's history and the song's energy distribution. The
     /// grid push handles the rest (a new grid fades the dancer to the sway; it rejoins at the new
-    /// grid's next bar line). The song arousal is NOT cleared here: the app pushes the new track's
-    /// value (or `nil`) at the same track change, and the two may land in either order.
+    /// grid's next bar line). The song's sections are NOT cleared here: the app pushes the new track's
+    /// sections (or none) at the same track change, and the two may land in either order.
     public func reset() {
         clockLock.withLock {
             clock.resetClock()
@@ -249,26 +250,28 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
         if trail.isEmpty { ensureAllocated(width: 1280, height: 720) }
         let deltaTime = features.deltaTime > 0 ? features.deltaTime : 1.0 / 60.0
         lastDeltaTime = deltaTime
-        let (beat, grid, generation, permitted, arousal, resetSong) = clockLock.withLock {
+        let (beat, seconds, grid, generation, permitted, sections, resetSong) = clockLock.withLock {
             defer { songResetPending = false }
             return (
                 clock.beatPosition(atRenderTime: Double(features.time)),
+                clock.playbackSeconds(atRenderTime: Double(features.time)),
                 clock.grid,
                 clock.gridGeneration,
                 clock.dancePermitted,
-                pushedArousal,
+                pushedSections,
                 songResetPending
             )
         }
         if resetSong { choreographer.resetSong() }
-        choreographer.setSongArousal(arousal)
+        choreographer.setSongSections(sections)
         let joints = choreographer.advance(
             deltaTime: Double(deltaTime),
             beat: beat,
             grid: grid,
             gridGeneration: generation,
             dancePermitted: permitted,
-            bass: Double(features.bassAtt)
+            bass: Double(features.bassAtt),
+            playbackSeconds: seconds
         )
         lastJoints = joints
         lastBeat = beat

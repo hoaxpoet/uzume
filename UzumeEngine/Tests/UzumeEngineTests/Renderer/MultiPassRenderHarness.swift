@@ -423,7 +423,7 @@ struct MultiPassRenderHarness {
                               beatsPerBar: 4, hasBarInformation: true)
         }
         dancer.setGrid(grid, streaming: false)
-        dancer.setSongArousal(kaguraSongArousal)
+        dancer.setSongSections(kaguraSongLevel.map { [KaguraSection(start: 0, level: $0)] } ?? [])
 
         let tex = try makeOutputTexture(ctx)
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -586,11 +586,11 @@ struct MultiPassRenderHarness {
     var firefliesFreezeCamera = false
 
     /// KAG.4 — the song Kagura's grid and repertoire come from: grid tempo (`nil` = no grid, the
-    /// dancer rests) and song arousal (`nil` = unknown, the middle energy and the sway). The default
+    /// dancer rests) and the song's energy level (`nil` = unknown, the middle energy and the sway; KAG.5). The default
     /// (120 BPM, unknown) is the KAG.2 flash case; the fast/energetic and calm cases reach the
     /// Charleston and the ballet rest.
     var kaguraBPM: Double? = 120
-    var kaguraSongArousal: Double?
+    var kaguraSongLevel: Int?
     /// A forced dance (`nil` = picked by the song). The flash drive's bass is steady, so no bar ranks
     /// vigorous and the pick never reaches a repertoire's top dance — forcing is how that one is measured.
     var kaguraDance: KaguraDance?

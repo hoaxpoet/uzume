@@ -10,6 +10,19 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-215128] KAG.5 — songs open on the calm dance; a seek no longer flickers (BUG-155) (M7 passed)
+
+From Matt's first KAG.5 check (*"I saw the macarena for everything I played"*):
+- **Songs open calm.** For its first four bars a song now dances its calm dance. Before, with no history to judge against, it chose the middle dance, which on calm songs is the macarena, so most songs opened on it.
+- **Seeks settle (BUG-155).** Jumping within a song made the dancer flick through dozens of dances in half a second, or hold a pose after a jump back. It now eases into its rest and picks the dance up again at the next bar line.
+
+---
+
+### [dev-2026-09-28-193210] KAG.5 — Kagura's dances follow the song's measured energy (M7 passed 2026-09-28)
+
+Kagura no longer asks the mood classifier how energetic a song is. It reads the measured energy of the part of the song playing. On local files, its three dances change at the song's energy changes: Dance Yrself Clean dances the calm three (Egyptian walk, macarena, cabbage patch) through its hush and breakdown and brings the twist in at the drop. Each stretch is judged by its loudest tenth (Matt's call). The switch waits for the next clip change, so a dance is never cut mid-move. Rests follow the same energy: ballet in calm stretches (Take Five, the openings of Warszawa and Dance Yrself Clean), the sway elsewhere (Penny Lane and the body of Warszawa now sway). The Charleston stays on any song fast enough for it, whatever the energy (Matt's call), so Take Five keeps it. On streaming the 30 s preview stands for the whole song.
+
+---
 ### [dev-2026-09-28-220809] FF.5 — Fireflies certified (the 27th): patches take turns, a smooth glow, a meadow that thins with the music
 
 Fireflies is certified on Matt's M7 of the beta playlist (*"Fireflies is a strong pass - I love it (and more importantly my wife loves it)"*). On a clear beat the meadow now settles into 2 to 4 patches that take turns, so a flash walks across the meadow one patch per beat instead of the whole meadow flashing at once (the FF.4 M7 note: *"everyone at once"*). Each firefly's glow is a smooth yellow-green light instead of a one-pixel stipple (*"fireflies look pixelated"*). Quiet stretches show a sparse meadow and it fills as the song builds, following the same 1–10 energy curve the planner uses (Matt's "A"): Dance Yrself Clean is sparse until the drop at 3:08. An irregular or unknown beat still leaves the swarm free. New engine surface: `StemFeatures.energyLevel` (float 57), the song's measured energy at the playhead, available to every scene. Known: on streaming the patches land only as close to the beat as the streaming beat grid does (Billie Jean: close, not locked — BUG-065), and a streaming song holds one density because only its preview is measured. Flash-safe (0.00 flashes/s); no golden session plan changed.

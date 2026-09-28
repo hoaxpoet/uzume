@@ -11,6 +11,7 @@ import os.log
 import Orchestrator
 import Presets
 import Renderer
+import Session
 import Shared
 
 private let logger = Logger(subsystem: "io.uzume.mac", category: "VisualizerEngine")
@@ -111,8 +112,8 @@ extension VisualizerEngine {
         // KAG.2: forget the playback clock's history so the new track's first frame resyncs. The
         // grid is NOT cleared here — on the local-file path the new track's grid is pushed BEFORE
         // this runs; the grid push itself fades the dancer to the sway until the next bar line.
-        // KAG.3: also forgets the song's energy distribution; the song arousal is written by
-        // `resetStemPipeline` beside the grid, not here.
+        // KAG.3: also forgets the song's energy distribution; the song's energy sections (KAG.5) are
+        // written by `resetStemPipeline` beside the grid, not here.
         (kaguraGeometry as? KaguraDancer)?.reset()
         // MEN.2a (`MENISCUS_PLAN.md` §4, track-change row): the surface settles back to
         // its resting state and the camera returns to the resting attitude, so a new
@@ -669,24 +670,47 @@ extension VisualizerEngine {
         pushKaguraGrid(grid)
     }
 
-    /// KAG.3 — push the song's arousal to Kagura (value or `nil`, every track change, so one track's value
-    /// never reaches the next) and write one `KAGURA_SONG` session-log line: the arousal, and the song
-    /// energy and repertoire it yields at the installed grid's tempo. `nil` means the dancer uses the
-    /// middle energy (no cache entry). The arousal is `TrackProfile.mood.arousal`, the song's median since
-    /// BUG-144 (KAG.3 had measured the same median as its own `songArousal` before that merged).
-    func pushKaguraSong(title: String, arousal: Float?, bpm: Double?) {
-        (kaguraGeometry as? KaguraDancer)?.setSongArousal(arousal.map(Double.init))
-        let energy = arousal.map { KaguraRepertoire.songEnergy(arousal: Double($0)) } ?? KaguraRepertoire.unknownEnergy
-        let repertoire = bpm.flatMap { bpm in
-            (try? KaguraClipLibrary.shared()).map { KaguraRepertoire.pick(bpm: bpm, energy: energy, library: $0) }
+    /// KAG.5 — push the song's energy sections to Kagura (sections, or none, at every track change, so one
+    /// track's energy never reaches the next) and write one `KAGURA_SONG` session-log line: what the curve
+    /// covers, the dancer's tempo, and each section's start, level, repertoire and rest. A whole-track curve
+    /// (local files) cuts at the energy changes (NRG.4); a preview (streaming) is one section; no curve
+    /// (a cache miss) is none — the dancer uses the middle energy and the sway. A track with no duration
+    /// reads its curve as a preview (one section), never as a whole track.
+    func pushKaguraSong(identity: TrackIdentity?, profile: TrackProfile?, grid: BeatGrid?) {
+        let title = identity?.title ?? "unknown"
+        let (coverage, energy) = profile?.energySections(trackDuration: identity?.duration ?? 0) ?? (.none, [])
+        let sections = energy.map { KaguraSection(start: $0.start, level: $0.loudEnd) }
+        (kaguraGeometry as? KaguraDancer)?.setSongSections(sections)
+        // The tempo the dance pick reads: the grid's median beat interval (the grid's `bpm` is a trimmed
+        // mean and can differ by a few BPM, KAG.5 task 1).
+        let tempo = Self.kaguraGrid(grid).map { 60 / $0.beatPeriod }
+        let library = try? KaguraClipLibrary.shared()
+        let described = sections.map { section -> String in
+            let start = Int(section.start)
+            let dances = tempo.flatMap { bpm in
+                library.map { KaguraRepertoire.repertoire(bpm: bpm, level: section.level, library: $0) }
+            }
+            let rest = (section.level ?? .max) <= KaguraRepertoire.calmLevel ? "ballet" : "sway"
+            return String(format: "%d:%02d level=", start / 60, start % 60) + (section.level.map(String.init) ?? "nil")
+                + " [\(dances?.map(\.rawValue).joined(separator: ", ") ?? "at first grid")] rest=\(rest)"
         }
-        let shown = arousal.map { String(format: "%.3f", $0) } ?? "nil (middle energy)"
         sessionRecorder?.log(
-            "KAGURA_SONG: track='\(title)', songArousal=\(shown), "
-            + String(format: "songEnergy=%.2f, ", energy)
-            + "gridBPM=\(bpm.map { String(format: "%.1f", $0) } ?? "none"), "
-            + "repertoire=[\(repertoire?.map(\.rawValue).joined(separator: ", ") ?? "at first grid")], "
-            + "rest=\(arousal != nil && energy < 1.0 / 3 ? "ballet" : "sway")")
+            "KAGURA_SONG: track='\(title)', curve=\(coverage.rawValue), "
+            + "tempo=\(tempo.map { String(format: "%.1f", $0) } ?? "none"), "
+            + "sections=[\(described.joined(separator: "; "))]"
+            + (sections.isEmpty ? " (middle energy, sway)" : ""))
+    }
+
+    /// Kagura's copy of a grid (`nil` for no grid, or one with fewer than two beats).
+    private static func kaguraGrid(_ grid: BeatGrid?) -> KaguraGrid? {
+        grid.flatMap {
+            KaguraGrid(
+                beats: $0.beats,
+                downbeats: $0.downbeats,
+                beatsPerBar: $0.beatsPerBar,
+                hasBarInformation: $0.hasBarInformation
+            )
+        }
     }
 
     /// KAG.2 — copy a grid install (or clear) into Kagura's geometry, whether or not Kagura is
@@ -698,14 +722,7 @@ extension VisualizerEngine {
     /// reset never touches the grid, so the order of the two does not matter.
     private func pushKaguraGrid(_ grid: BeatGrid?) {
         guard let dancer = kaguraGeometry as? KaguraDancer else { return }
-        let plain = grid.flatMap {
-            KaguraGrid(
-                beats: $0.beats,
-                downbeats: $0.downbeats,
-                beatsPerBar: $0.beatsPerBar,
-                hasBarInformation: $0.hasBarInformation
-            )
-        }
+        let plain = Self.kaguraGrid(grid)
         Task { @MainActor [weak self] in
             dancer.setGrid(plain, streaming: self?.sessionManager.currentSource?.isLocalFile != true)
         }

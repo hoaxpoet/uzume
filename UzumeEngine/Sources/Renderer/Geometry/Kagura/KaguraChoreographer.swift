@@ -31,7 +31,7 @@
 //   measured against the spike's in the KAG.2 closeout.
 //
 // KAG.3 (KAGURA_DESIGN §6–§8, §3a):
-// - **The dance** at each clip change: the song's repertoire (its arousal and the grid BPM), then the
+// - **The dance** at each clip change: the repertoire (the playing stretch's energy + grid BPM), then the
 //   bar just played ranked in the song's trailing energy picks calm / middle / vigorous. Each dance
 //   alternates its own clips. No anti-repeat term (Matt: "follow the song's energy").
 // - **Arm reach**: elbows and wrists scale about their shoulder by `KaguraEnergy.reach`. The legs are
@@ -62,6 +62,8 @@ public struct KaguraChoreographer: Sendable {
     public static let stallSeconds: Double = 0.5
     /// … where "not advanced" is moving at under this fraction of the grid tempo.
     static let stallFraction: Double = 0.25
+    /// A move of more than this in one frame, either way, is a seek (BUG-155; playing moves ≤ ~0.14 beat).
+    static let jumpBeats: Double = 1
 
     // MARK: Types
 
@@ -118,7 +120,7 @@ public struct KaguraChoreographer: Sendable {
     private let forcedDances: [KaguraDance]
     /// The unwarped rests: the sway first, then the ballet clips (KAG.3).
     let rests: [KaguraClip]
-    private let pelvis: Int, leftAnkle: Int, rightAnkle: Int
+    let pelvis: Int, leftAnkle: Int, rightAnkle: Int
     /// The joints of each arm.
     let arms: [Arm]
 
@@ -131,7 +133,8 @@ public struct KaguraChoreographer: Sendable {
     private var knownGeneration: Int?
     var energy = KaguraEnergy()
     var safetyNet = KaguraSafetyNet()
-    var songArousal: Double?
+    var songSections: [KaguraSection] = []   // KAG.5; `songPosition`: the track second last played
+    var songPosition: Double?
     /// Render seconds the beat position has not advanced.
     private var stalled: Double = 0
     /// The last pose `pose(at:)` returned (before arm reach).
@@ -201,24 +204,26 @@ public struct KaguraChoreographer: Sendable {
     ///   - grid: the installed grid.
     ///   - gridGeneration: `KaguraBeatClock.gridGeneration`; a change means a new or cleared grid.
     ///   - dancePermitted: `KaguraBeatClock.dancePermitted`.
-    ///   - bass: this frame's `FeatureVector.bassAtt`.
+    ///   - bass, playbackSeconds: `FeatureVector.bassAtt`; the track second, for the energy section (KAG.5).
     public mutating func advance( // swiftlint:disable:this function_parameter_count
         deltaTime: Double, beat: Double?, grid: KaguraGrid?, gridGeneration: Int, dancePermitted: Bool,
-        bass: Double
+        bass: Double, playbackSeconds: Double? = nil
     ) -> [SIMD3<Float>] {
         let dt = min(max(deltaTime > 0 ? deltaTime : 1.0 / 60.0, 1.0 / 240.0), 1.0 / 30.0)
+        if let playbackSeconds { songPosition = playbackSeconds }
         swayClock += dt
         energy.advance(bass: bass, deltaTime: dt)
         let pull = Float(exp(-dt / Self.leashSeconds))
         current = current.withOffset(current.offset * pull)
         previous = previous.map { $0.withOffset($0.offset * pull) }
 
-        handleGridChange(generation: gridGeneration, grid: grid)   // fades out at the OLD tempo
+        let regridded = handleGridChange(generation: gridGeneration, grid: grid)   // fades out at the OLD tempo
         if let grid { beatsPerSecond = 1 / grid.beatPeriod }
         // A clock gap under a live dance (the per-track clock reset lands a frame before the new
         // grid does) dead-reckons at the grid tempo instead of snapping the clip to its start.
         let beat = beat ?? (current.isDance && grid != nil ? lastBeat.map { $0 + beatsPerSecond * dt } : nil)
         if let beat {
+            if !regridded, let last = lastBeat, abs(beat - last) > Self.jumpBeats { handleJump() }
             // "Stopped" is advancing at under a quarter of the grid tempo: a held playhead does not
             // hold `p` exactly — the clock's phase lock creeps toward it geometrically.
             let advance = beat - (lastBeat ?? -.infinity)
@@ -247,16 +252,24 @@ public struct KaguraChoreographer: Sendable {
 
     // MARK: Scheduling
 
-    private mutating func handleGridChange(generation: Int, grid: KaguraGrid?) {
+    private mutating func handleGridChange(generation: Int, grid: KaguraGrid?) -> Bool {   // true: it changed
         defer { knownGeneration = generation }
-        guard let known = knownGeneration, known != generation else { return }
+        guard let known = knownGeneration, known != generation else { return false }
         nextCut = nil
         safetyNet.reset()
         stalled = 0
-        guard current.isDance else { return }
         // A replaced or cleared grid renumbers the beats, so the dance cannot continue on it.
         // Fade to the rest over one nominal beat; the new grid rejoins at its next bar line.
-        fadeToRest()
+        if current.isDance { fadeToRest() }
+        return true
+    }
+
+    /// BUG-155 — a seek strands the scheduled cut at the old position (forward: every skipped change, one a
+    /// frame; backward: the dance waits). Fade to the rest as for a new grid; rejoin at the next bar line.
+    private mutating func handleJump() {
+        nextCut = nil
+        stalled = 0
+        if current.isDance { fadeToRest() }
     }
 
     /// Fade to the song's rest (`nextRest`) over `seconds`, or one nominal beat, of render time. Inside
@@ -383,16 +396,5 @@ public struct KaguraChoreographer: Sendable {
         }
         let offset = segment.offset
         return raw.map { SIMD3($0.x - offset.x, $0.y, $0.z - offset.y) }
-    }
-
-    /// Midpoint of the ankles on the floor plane (x, z).
-    private func feet(_ joints: [SIMD3<Float>]) -> SIMD2<Float> {
-        let mid = (joints[leftAnkle] + joints[rightAnkle]) * 0.5
-        return SIMD2(mid.x, mid.z)
-    }
-
-    /// Pelvis floor position of a pose — the framing measure.
-    public func pelvisFloor(_ joints: [SIMD3<Float>]) -> SIMD2<Float> {
-        SIMD2(joints[pelvis].x, joints[pelvis].z)
     }
 }

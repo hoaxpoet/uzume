@@ -141,10 +141,14 @@ These are Matt's calls [§9–§11]:
 - The energy of the moment picks among them.
 - **Follow the song's energy.** There is no anti-repeat or variety term.
 
-1. **Song energy.** Take the song's arousal rank against the beta test playlist reference
-   (`ENERGY_REFERENCE`, the ten playlist songs' median arousal over windows at 20 / 50 / 80 %), interpolated
-   to 0–1.
-2. **Repertoire, fixed at track start.** For each dance, `score = |log2(rate at its best level)| +
+1. **Song energy (KAG.5, D-259).** The measured 1–10 energy level of the stretch of the song playing, on the
+   library scale: energy = (level − 1) / 9. A stretch runs between two of the song's energy changes (NRG.4)
+   and is judged by its loud end, its 90th-percentile section level (Matt, 2026-09-28). A streaming preview
+   is one stretch; with no curve the energy is the middle (0.5). *Before KAG.5: the song's arousal rank
+   against the ten beta-playlist songs (`energyReference`), retired with the mood classifier (D-259 §4).*
+2. **Repertoire, per stretch (KAG.5; fixed at track start before).** The Charleston by tempo (Matt,
+   2026-09-28, B): in its band it always takes one of the three, the vigorous third, whatever the energy.
+   Otherwise, for each dance, `score = |log2(rate at its best level)| +
    |normalised vigor − song energy|`, and the three lowest-scoring dances make the repertoire.
 3. **At each clip change** (a bar line, at most every 4 bars, sooner if the clip runs out): the song-relative
    percentile of the smoothed bass envelope over the next bar picks by tercile: the calmest, middle or most
@@ -152,7 +156,8 @@ These are Matt's calls [§9–§11]:
 4. **The handoff.** Crossfade over one beat. The incoming clip is placed so the midpoint of its ankles
    matches the outgoing clip's at the cut, and the camera stays fixed.
 
-**Three things the build must settle, with measurements, not assumptions:**
+**Three things the build must settle, with measurements, not assumptions** (the first and last are
+superseded by KAG.5's measured energy, §16):
 - **The arousal source must match the reference.** `ENERGY_REFERENCE` was measured from the per-frame
   `FeatureVector.arousal` median in production-chain captures. The planner's per-track value is
   `TrackProfile.mood.arousal`. KAG.3 must show the two agree on the playlist, or re-derive the reference
@@ -246,7 +251,7 @@ in KAG.3.
 |---|---|---|---|
 | **Moves on the beat** | cached `BeatGrid` beat times, giving continuous beat position `p(t)` | `grid` | per beat |
 | Clip-change timing | grid downbeats; every 4 beats when the bar is declined | `grid` | 1–4 bars |
-| Repertoire | `TrackProfile` arousal + grid BPM | `structural` | per song |
+| Repertoire | `TrackProfile.energySections` (each stretch's loud-end 1–10 level) + grid BPM (KAG.5) | `structural` | per energy section |
 | Dance pick at each change | `bass_att` (smoothed), song-relative percentile over the next bar | `continuous` → sampled per bar | bars |
 | Arm reach ±25 % | `bass_att`, 1.5 s EMA, song-normalised, soft-saturated | `continuous` | ~1.5 s |
 | Sway fallback | grid inter-beat-interval CV over the last 16 beats; lock state (streaming) | `structural` | sections |
@@ -551,3 +556,61 @@ CPU-side, the Filigree precedent), `PhotosensitivityCertificationTests.multiPass
 plan unchanged with Kagura in the planner. The reference README's four-item contract is scored with evidence.
 The external curated reference set planned for KAG.4 was not made (outside imagery; Matt's curation) —
 certified on the first-party anchors, the Nebula precedent.
+
+## 16. What the build settled (KAG.5)
+
+**Song energy is measured, per stretch (D-259 §4 amendment; Matt, 2026-09-28: "the next Kagura increment:
+song energy").** The mood classifier's arousal left Kagura, with `energyReference`. Each clip change reads the
+energy section playing (`TrackProfile.energySections`, pushed by the app at track start and read at the
+playback position); a new section's repertoire takes effect at the next clip change, a bar line. The calm rest
+reads the same section (ballet at level ≤ 3); a silence reads the section it interrupts.
+
+**Matt's two calls (2026-09-28).**
+- **A stretch is judged by its loud end** (B, after task 1): its 90th-percentile level, the readout's `high`.
+  The median put Dance Yrself Clean's drop at 8, and at its ~97 BPM the twist needs 9, so the drop would have
+  danced the hush's three. Costs, accepted: Teardrop's body gains the twist; a song-ending fade is judged by how
+  loud it starts (Teen Spirit's last 19 s keep the twist; Pyramid Song's and Teardrop's final stretches lose ballet).
+- **Tempo earns the Charleston** (B): any song in its band (~137–214 BPM) keeps it, whatever the energy.
+
+**Task 1's table** (`KAGURA_ENERGY_TABLE=1 … KaguraBetaPlaylistReportTests`, Matt's v17 cache entries; the
+dancer's tempo is the grid's median beat interval). Before = KAG.4 (arousal), as live at the KAG.3 M7.
+
+| Song | Tempo | Energy | Before (KAG.4) | Stretch: loud end → repertoire, rest (shipped) |
+|---|---|---|---|---|
+| Dance Yrself Clean | 96.8 | 2 → 9, typical 5 | egy / cab / twist, sway | 0:00 **2** egy / mac / cab, ballet · 3:08 **9** egy / cab / twist · 5:57 **3** calm three, ballet · 6:35 **9** twist trio · 8:18 **3** calm three, ballet |
+| B.O.B. | 150.0 | 8 → 10, 10 | cab / twist / chs, sway | 10: cab / twist / chs, sway |
+| Superstition | 100.0 | 4 → 6, 6 | egy / mac / cab, sway | 6: same |
+| Smells Like Teen Spirit | 115.4 | 5 → 8, 7 | egy / cab / twist, sway | 0:00 8 and 4:42 8: same |
+| Penny Lane | 115.4 | 5 (4 → 5) | egy / mac / cab, **ballet** | 5: same, **sway** |
+| Take Five | 176.5 | 2 (2 → 3) | mac / cab / chs, **sway** | 3: **egy** / mac / chs, **ballet** |
+| Pyramid Song | 107.1 | 4 → 10, 8 | egy / mac / cab, sway | 0:00 4 calm three · 0:22 7, 1:56 10, 4:28 10: egy / cab / twist |
+| Teardrop | 76.9 | 5 → 9, 8 | egy / mac / cab, sway | 0:00 5 same · 0:44 **9**: mac / cab / **twist** · 5:11 6 same |
+| Moonlight I | 46.9 | 1 | egy / mac / cab, ballet | 1: same |
+| Warszawa | 76.9 | 3 → 6, 5 | egy / mac / cab, **ballet** | 0:00 2: ballet · 0:23 6: **sway** |
+
+Bar shares over the playlist (1,475 bars; the bar pick splits each three in thirds): before twist 12 %, cabbage
+33 %, macarena 21 %, Egyptian 24 %, Charleston 10 %; shipped twist 16 %, cabbage 28 %, macarena **20 %**,
+Egyptian 27 %, Charleston 10 %. (The median rule would have given twist 9 %, macarena 24 %.) The typical-level
+column reproduces NRG.2's readouts exactly. The table is `KaguraRepertoireTests.build`, one row per section.
+
+**Found:** the `KAGURA_SONG` line printed the grid's trimmed-mean BPM (98.0 for Dance Yrself Clean) while the
+pick reads the median beat interval (96.8). No repertoire differed at the KAG.3 M7; the line now prints the
+tempo the pick reads.
+
+**Streaming** uses the preview's loud end as its one section (the same rule as a whole-track stretch), not the
+typical level the prompt named: B makes a stretch's loud end the measure, and a preview is one stretch.
+
+**M7 round 1 (Matt, 2026-09-28, session `2026-09-28T21-31-31Z`):** *"Penny Lane does not sway - it plays the
+macarena. In fact, I saw the macarena for everything I played. Otherwise, looks good."* Penny Lane dancing is
+correct: the sway is its rest, and its three dances are unchanged since KAG.3. The macarena was real. Excluding
+the seek burst (BUG-155) it took 23 of 68 picks, against 30 of 190 at the KAG.3 M7. Two causes:
+- Every song opened on its middle dance, because the pick has no history in its first bars and the rank read ½.
+- KAG.5 made the macarena the middle of more stretches (Dance Yrself Clean's calm sections, Take Five).
+
+**Matt's call (option A): a song opens on its calm dance for its first 4 bars** (`warmUpBars`); the bar pick
+ranks after that. Rejected: leaving it, and more calm dances (the long-term fix; the library-growth increment).
+Take Five's early run of Charleston picks (7 of its first 8, ranks at 1.00) is only partly a warm-up effect: its
+intro builds, so each new bar out-ranks the last. The warm-up covers its first two clip changes.
+
+**M7 PASSED (Matt, 2026-09-28, round 2, beta playlist on local files, session `2026-09-28T22-22-30Z`):** *"Looks good."* The log shows the macarena on 5 of 44 picks (11 %; round 1: 23 of 68), Dance Yrself Clean and Superstition opening on the Egyptian walk, and each of Matt's two seeks (to 98.9 s and 174.4 s) followed by a single rejoin 1.6–2 s later. Chain health `clean`.
+

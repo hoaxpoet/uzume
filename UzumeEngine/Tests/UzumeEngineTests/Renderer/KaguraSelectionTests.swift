@@ -1,4 +1,4 @@
-// KaguraSelectionTests — the dance pick, arm reach, the safety nets and the arousal push (KAG.3).
+// KaguraSelectionTests — the dance pick, arm reach, the safety nets and the song-energy push (KAG.3; KAG.5).
 //
 // KAGURA_DESIGN §3a, §6–§8. Structural properties of the choreography on synthetic grids (the harness),
 // except the silence rest, which is driven by a real capture's `bass_att` rows (FA #27).
@@ -32,7 +32,7 @@ struct KaguraSelectionTests {
     @Test("The pick follows a real energy staircase tercile by tercile, from the bar just played")
     func pickFollowsStaircase() throws {
         let run = try Harness.run(seconds: 108, grid: Harness.grid(bpm: 120, seconds: 108), sequence: [],
-                                  songArousal: 0.334, bass: Self.staircase)
+                                  sections: Harness.steady(6), bass: Self.staircase)
         let picks = run.choreographer.picks
         #expect(picks.count == run.pickTimes.count && picks.count >= 20)
         // Steps start at 60 / 76 / 92 s; the last pick at least a bar + the EMA's settling (4 s) inside each.
@@ -49,7 +49,7 @@ struct KaguraSelectionTests {
     @Test("A loud stretch keeps the vigorous dance — no rotation, no anti-repeat")
     func loudStretchKeepsVigorous() throws {
         let run = try Harness.run(seconds: 80, grid: Harness.grid(bpm: 120, seconds: 80), sequence: [],
-                                  songArousal: 0.609, bass: { $0 < 60 ? 0.2 + 0.08 * sin(2 * .pi * $0 / 7) : 0.45 })
+                                  sections: Harness.steady(10), bass: { $0 < 60 ? 0.2 + 0.08 * sin(2 * .pi * $0 / 7) : 0.45 })
         let loud = run.pickTimes.indices.filter { run.pickTimes[$0] >= 64 }
         let dances = loud.map { run.choreographer.chosenDances[$0] }
         let vigorous = try #require(run.choreographer.picks.last?.repertoire.last)
@@ -232,10 +232,10 @@ struct KaguraSelectionTests {
         #expect(Harness.maxStep(run.joints) < 0.06)
     }
 
-    // MARK: - The arousal push (task 2), production path
+    // MARK: - The song-energy push (KAG.3 task 2; KAG.5 levels), production path
 
-    @Test("The pushed song arousal reaches the repertoire; a track change clears it before the next arrives")
-    func arousalPush() throws {
+    @Test("The pushed song energy reaches the repertoire; a track change clears it before the next arrives")
+    func songEnergyPush() throws {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let clips = try KaguraClipLibrary.shared()
@@ -257,27 +257,26 @@ struct KaguraSelectionTests {
             cmd?.commit()
             cmd?.waitUntilCompleted()
         }
-        let expected = { (arousal: Double?) in
-            KaguraRepertoire.pick(bpm: 60 / grid.beatPeriod,
-                                  energy: arousal.map { KaguraRepertoire.songEnergy(arousal: $0) } ?? 0.5, library: clips)
+        let expected = { (level: Int?) in
+            KaguraRepertoire.pick(bpm: 60 / grid.beatPeriod, energy: KaguraRepertoire.energy(level: level), library: clips)
         }
-        #expect(expected(0.609) != expected(nil), "the fixture cannot tell them apart")
+        #expect(expected(10) != expected(nil), "the fixture cannot tell them apart")
 
-        // Track 1 (Dance Yrself Clean's songArousal): the push reaches the repertoire.
+        // Track 1 (a level-10 song): the push reaches the repertoire.
         dancer.setGrid(grid, streaming: false)
-        dancer.setSongArousal(0.609)
+        dancer.setSongSections(Harness.steady(10))
         play(12)
-        #expect(dancer.choreography.picks.last?.repertoire == expected(0.609))
+        #expect(dancer.choreography.picks.last?.repertoire == expected(10))
         // The session-log feed: each pick handed over once, with what it read and chose.
         let logged = dancer.takeNewPicks()
         #expect(!logged.isEmpty && dancer.takeNewPicks().isEmpty)
         let line = try #require(logged.last?.logLine)
         print("[kagura-log] \(line)")
-        #expect(line.hasPrefix("KAGURA_PICK: beat=") && line.contains("songArousal=0.609")
-                && line.contains("songEnergy=1.00") && line.contains("repertoire=[") && line.contains("barRank="))
+        #expect(line.hasPrefix("KAGURA_PICK: beat=") && line.contains("level=10")
+                && line.contains("repertoire=[") && line.contains("barRank="))
 
-        // Track change, cache miss: the app writes nil; the next pick reads the middle energy, not Penny Lane.
-        dancer.setSongArousal(nil)
+        // Track change, cache miss: the app writes no sections; the next pick reads the middle energy.
+        dancer.setSongSections([])
         dancer.reset()
         dancer.setGrid(grid, streaming: false)
         time = 0
@@ -286,11 +285,11 @@ struct KaguraSelectionTests {
         let afterChange = dancer.choreography.picks.dropFirst(before)
         #expect(!afterChange.isEmpty && afterChange.allSatisfy { $0.repertoire == expected(nil) })
 
-        // The next track's value: the next clip change re-picks.
-        dancer.setSongArousal(0.609)
+        // The next track's sections: the next clip change re-picks.
+        dancer.setSongSections(Harness.steady(10))
         let mark = dancer.choreography.picks.count
         play(12)
         #expect(dancer.choreography.picks.count > mark)
-        #expect(dancer.choreography.picks.last?.repertoire == expected(0.609))
+        #expect(dancer.choreography.picks.last?.repertoire == expected(10))
     }
 }

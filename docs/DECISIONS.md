@@ -6122,6 +6122,14 @@ energy value instead."*
 hears it. His ranking, or his pick among candidate orderings, is the reference; a measure that disagrees
 with his ears does not ship, whatever it correlates with.
 
+### Amendment to §4 — KAG.5, 2026-09-28 (Matt: *"the next Kagura increment: song energy"*)
+
+Kagura is the first certified scene moved off the mood classifier, by Matt's call. Its song energy is the
+measured 1–10 level of the stretch of the song playing (a whole-track curve cut at the NRG.4 energy changes;
+a streaming preview is one stretch), judged by the stretch's loud end, its 90th-percentile section level
+(Matt's pick after the beta-playlist table: the median missed Dance Yrself Clean's drop). `energyReference`
+is retired. The other certified scenes' live mood reads stay as §4 left them, each a separate call.
+
 ## D-260: Spotify track lists come from on-device screen reading, not the Web API (SCAN)
 
 **Date:** 2026-09-28 · **Increment:** SCAN.0–SCAN.5 · **Status:** Accepted ·
