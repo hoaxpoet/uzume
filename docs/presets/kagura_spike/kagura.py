@@ -513,7 +513,7 @@ FAMILIES = {   # clip list per family; the film cycles through them on bar bound
 }
 # KAG.0c (Matt: "half-time twist on slow songs"): a twist never goes to two turns per beat. On a slow
 # song it plays one turn per beat below native speed (Olive Drab 86 BPM: 0.54x) instead of double time.
-PULSE_LEVELS = {"hipyaw": (1, 2, 4)}
+PULSE_LEVELS = {"hipyaw": (1, 2, 4), "footfalls": (1, 2, 4)}   # KAG.3: nor two Charleston steps per beat
 CLIP_PULSE = {   # clips whose beat is not in the feet
     "15_04@109.5-114": "hipyaw", "15_05@110-116": "hipyaw",
     "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
@@ -521,6 +521,9 @@ CLIP_PULSE = {   # clips whose beat is not in the feet
     "90_30@3.2-9": "wrists",
     "15_04@98-104.5": "gesture", "15_05@98-104.5": "gesture",
     "14_20@8-13": "wrists", "14_20@0.25-4.25": "wrists", "14_06@0.5-4.5": "wrists",
+    # KAG.3 build (Matt: "add the Charleston"): the footfall pulse named, so it gets the build's levels below
+    # and cmd_film's per-segment pulse block (beat_events falls through to the footfall branch)
+    "93_04": "footfalls", "93_05": "footfalls",
     "94_10@2.5-8.5": "gesture", "94_13@0-6": "gesture", "94_09@8-14": "gesture",
 }
 

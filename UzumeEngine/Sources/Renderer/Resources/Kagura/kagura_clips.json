@@ -28,7 +28,7 @@
    ],
    "pulse_kind": "hipyaw",
    "pulse_map_length": 2564,
-   "pulse_map_offset": 427050,
+   "pulse_map_offset": 669600,
    "pulse_period_s": 0.379167,
    "vigor_mps": 0.655351
   },
@@ -65,7 +65,7 @@
    ],
    "pulse_kind": "hipyaw",
    "pulse_map_length": 3844,
-   "pulse_map_offset": 429614,
+   "pulse_map_offset": 672164,
    "pulse_period_s": 0.366667,
    "vigor_mps": 0.763209
   },
@@ -91,7 +91,7 @@
    ],
    "pulse_kind": "wrists",
    "pulse_map_length": 772,
-   "pulse_map_offset": 433458,
+   "pulse_map_offset": 676008,
    "pulse_period_s": 1.191667,
    "vigor_mps": 0.598305
   },
@@ -118,7 +118,7 @@
    ],
    "pulse_kind": "wrists",
    "pulse_map_length": 1028,
-   "pulse_map_offset": 434230,
+   "pulse_map_offset": 676780,
    "pulse_period_s": 1.133333,
    "vigor_mps": 0.611671
   },
@@ -158,7 +158,7 @@
    ],
    "pulse_kind": "gesture",
    "pulse_map_length": 4356,
-   "pulse_map_offset": 435258,
+   "pulse_map_offset": 677808,
    "pulse_period_s": 0.645833,
    "vigor_mps": 0.46595
   },
@@ -197,7 +197,7 @@
    ],
    "pulse_kind": "gesture",
    "pulse_map_length": 4100,
-   "pulse_map_offset": 439614,
+   "pulse_map_offset": 682164,
    "pulse_period_s": 0.641667,
    "vigor_mps": 0.424252
   },
@@ -234,7 +234,7 @@
    ],
    "pulse_kind": "gesture",
    "pulse_map_length": 3588,
-   "pulse_map_offset": 443714,
+   "pulse_map_offset": 686264,
    "pulse_period_s": 0.6875,
    "vigor_mps": 0.37787
   },
@@ -267,7 +267,7 @@
    ],
    "pulse_kind": "gesture",
    "pulse_map_length": 2564,
-   "pulse_map_offset": 447302,
+   "pulse_map_offset": 689852,
    "pulse_period_s": 0.6,
    "vigor_mps": 0.352437
   },
@@ -299,7 +299,7 @@
    ],
    "pulse_kind": "gesture",
    "pulse_map_length": 2308,
-   "pulse_map_offset": 449866,
+   "pulse_map_offset": 692416,
    "pulse_period_s": 0.625,
    "vigor_mps": 0.403295
   },
@@ -315,9 +315,120 @@
    "pulse_events_s": [],
    "pulse_kind": null,
    "pulse_map_length": 0,
-   "pulse_map_offset": 452174,
+   "pulse_map_offset": 694724,
    "pulse_period_s": null,
    "vigor_mps": 0.290441
+  },
+  {
+   "allowed_levels": [
+    1.0,
+    2.0,
+    4.0
+   ],
+   "dance": "charleston",
+   "facing_yaw_deg": -13.746123,
+   "fps": 60,
+   "frame_count": 253,
+   "id": "93_04",
+   "joints_length": 22770,
+   "joints_offset": 427050,
+   "pulse_events_s": [
+    0.041667,
+    0.466667,
+    0.816667,
+    1.491667,
+    1.816667,
+    2.166667,
+    2.783333,
+    3.125,
+    3.375,
+    3.675
+   ],
+   "pulse_kind": "footfalls",
+   "pulse_map_length": 2308,
+   "pulse_map_offset": 694724,
+   "pulse_period_s": 0.35,
+   "vigor_mps": 1.031519
+  },
+  {
+   "allowed_levels": [
+    1.0,
+    2.0,
+    4.0
+   ],
+   "dance": "charleston",
+   "facing_yaw_deg": -28.07593,
+   "fps": 60,
+   "frame_count": 273,
+   "id": "93_05",
+   "joints_length": 24570,
+   "joints_offset": 449820,
+   "pulse_events_s": [
+    0.041667,
+    0.316667,
+    0.675,
+    1.266667,
+    1.583333,
+    1.9,
+    2.475,
+    2.8,
+    3.108333,
+    3.708333,
+    4.15
+   ],
+   "pulse_kind": "footfalls",
+   "pulse_map_length": 2564,
+   "pulse_map_offset": 697032,
+   "pulse_period_s": 0.341667,
+   "vigor_mps": 1.474911
+  },
+  {
+   "allowed_levels": [],
+   "dance": "ballet",
+   "facing_yaw_deg": 72.437606,
+   "fps": 60,
+   "frame_count": 959,
+   "id": "49_09",
+   "joints_length": 86310,
+   "joints_offset": 474390,
+   "pulse_events_s": [],
+   "pulse_kind": null,
+   "pulse_map_length": 0,
+   "pulse_map_offset": 699596,
+   "pulse_period_s": null,
+   "vigor_mps": 0.082897
+  },
+  {
+   "allowed_levels": [],
+   "dance": "ballet",
+   "facing_yaw_deg": 61.828667,
+   "fps": 60,
+   "frame_count": 566,
+   "id": "49_12",
+   "joints_length": 50940,
+   "joints_offset": 560700,
+   "pulse_events_s": [],
+   "pulse_kind": null,
+   "pulse_map_length": 0,
+   "pulse_map_offset": 699596,
+   "pulse_period_s": null,
+   "vigor_mps": 0.13321
+  },
+  {
+   "allowed_levels": [],
+   "dance": "ballet",
+   "facing_yaw_deg": 54.404172,
+   "fps": 60,
+   "frame_count": 644,
+   "id": "49_22",
+   "joints_length": 57960,
+   "joints_offset": 611640,
+   "pulse_events_s": [],
+   "pulse_kind": null,
+   "pulse_map_length": 0,
+   "pulse_map_offset": 699596,
+   "pulse_period_s": null,
+   "vigor_mps": 0.108515
   }
  ],
  "cmu_sources_sha256": {
@@ -331,7 +442,14 @@
   "18.asf": "1b85e296d50b0c1bbc87b154486ea5192ec4d99748e7bd9e9fb0419a0be8214b",
   "18_15.amc": "b5fc914cce05a95c5be3113bec7495542f514b899657efe3fdc5df09d063bfa3",
   "20.asf": "1b85e296d50b0c1bbc87b154486ea5192ec4d99748e7bd9e9fb0419a0be8214b",
-  "20_01.amc": "ebbed31ee412209375f6f1521203fb4eac9d90e7ce53312616514e7505b7bf3c"
+  "20_01.amc": "ebbed31ee412209375f6f1521203fb4eac9d90e7ce53312616514e7505b7bf3c",
+  "49.asf": "2496dbef32b4e2e736699c4ea528499d3c8a1d31012974c68ae23d4a787584cb",
+  "49_09.amc": "c525a95b0ef60b2d8c51d7730e22840ca7ea499e4278f8f7d8fdfa347cf74850",
+  "49_12.amc": "0f30cf649f62a8831f0ce4ad178e17ee8e6dda57af81a2f7e176e680abb23899",
+  "49_22.amc": "badbda61c367c99d3e29e0f1a73ddb9dd3b942ae2d0653fec0e0ec009910b2bf",
+  "93.asf": "59abe28573493f3dc91dc2a5376252558b873b4a3f9cf867ace4352cb05c47b7",
+  "93_04.amc": "f0aa6132fc45733a9968281a848f4606732d081947ec82bf724d40f2c874663f",
+  "93_05.amc": "a6a165ab50d8f90d1a79b537ec052d519d578ac6d6077acf261e0133d450e140"
  },
  "credit": "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.",
  "facing_target_deg": 70.0,
