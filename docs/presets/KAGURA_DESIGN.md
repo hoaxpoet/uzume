@@ -612,5 +612,5 @@ ranks after that. Rejected: leaving it, and more calm dances (the long-term fix;
 Take Five's early run of Charleston picks (7 of its first 8, ranks at 1.00) is only partly a warm-up effect: its
 intro builds, so each new bar out-ranks the last. The warm-up covers its first two clip changes.
 
-**Status:** pending Matt's live M7 round 2 on the beta playlist (local files).
+**M7 PASSED (Matt, 2026-09-28, round 2, beta playlist on local files, session `2026-09-28T22-22-30Z`):** *"Looks good."* The log shows the macarena on 5 of 44 picks (11 %; round 1: 23 of 68), Dance Yrself Clean and Superstition opening on the Egyptian walk, and each of Matt's two seeks (to 98.9 s and 174.4 s) followed by a single rejoin 1.6–2 s later. Chain health `clean`.
 

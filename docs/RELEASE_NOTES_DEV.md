@@ -10,7 +10,7 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
-### [dev-2026-09-28-215128] KAG.5 — songs open on the calm dance; a seek no longer flickers (BUG-155) (pending live M7)
+### [dev-2026-09-28-215128] KAG.5 — songs open on the calm dance; a seek no longer flickers (BUG-155) (M7 passed)
 
 From Matt's first KAG.5 check (*"I saw the macarena for everything I played"*):
 - **Songs open calm.** For its first four bars a song now dances its calm dance. Before, with no history to judge against, it chose the middle dance, which on calm songs is the macarena, so most songs opened on it.
@@ -18,7 +18,7 @@ From Matt's first KAG.5 check (*"I saw the macarena for everything I played"*):
 
 ---
 
-### [dev-2026-09-28-193210] KAG.5 — Kagura's dances follow the song's measured energy (pending live M7)
+### [dev-2026-09-28-193210] KAG.5 — Kagura's dances follow the song's measured energy (M7 passed 2026-09-28)
 
 Kagura no longer asks the mood classifier how energetic a song is. It reads the measured energy of the part of the song playing. On local files, its three dances change at the song's energy changes: Dance Yrself Clean dances the calm three (Egyptian walk, macarena, cabbage patch) through its hush and breakdown and brings the twist in at the drop. Each stretch is judged by its loudest tenth (Matt's call). The switch waits for the next clip change, so a dance is never cut mid-move. Rests follow the same energy: ballet in calm stretches (Take Five, the openings of Warszawa and Dance Yrself Clean), the sway elsewhere (Penny Lane and the body of Warszawa now sway). The Charleston stays on any song fast enough for it, whatever the energy (Matt's call), so Take Five keeps it. On streaming the 30 s preview stands for the whole song.
 
