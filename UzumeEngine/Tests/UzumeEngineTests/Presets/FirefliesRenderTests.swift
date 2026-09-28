@@ -6,12 +6,14 @@
 // on the sRGB drawable format. Frame-mean luma is Rec.709 over the ENCODED bytes, the same
 // definition the FF.0 spike's luminance table used.
 //
-// D-157: max |Δ frame-mean luma| between consecutive frames < 0.05 — a unison flash must be
-// hundreds of tiny points, never a frame-wide lift.
+// D-157: max |Δ frame-mean luma| between consecutive frames < 0.05 — a flash must be many tiny
+// points, never a frame-wide lift.
 //
-// Always-on: a steady-beat fixture (love_rehab, K = 1 — the worst case, full unison).
+// Always-on: a steady-beat fixture (love_rehab, K = 1 — the worst case: since FF.5 a locked
+// strip of the meadow flashing on every beat; until FF.5 the whole meadow in unison).
 // Env-gated (`FIREFLIES_PARITY=1`): the spike's four captures at 1920×1080, with a PNG film of
-// each (1280×720) written to `FIREFLIES_PARITY_OUT` for `Scripts/motion_gate.sh`.
+// each (1280×720, or 1920×1080 with `FIREFLIES_FILM_HEIGHT=1080`) written to
+// `FIREFLIES_PARITY_OUT` for `Scripts/motion_gate.sh`.
 //
 // ⚠ Run the env-gated probes FILTERED (`swift test --filter Fireflies`). They hold the main actor
 // for minutes of 1080p rendering, and inside a full-suite run that starved 11 `SessionManager`
@@ -61,8 +63,8 @@ struct FirefliesRenderTests {
         return [StemFeatures](repeating: s, count: count)
     }
 
-    @Test("A locked unison never lifts the frame (D-157), steady-beat fixture")
-    func unisonIsFlashSafe() throws {
+    @Test("Locked strips never lift the frame (D-157), steady-beat fixture")
+    func lockedStripsAreFlashSafe() throws {
         let base = try #require(Bundle.module.url(forResource: "route_coverage", withExtension: nil))
         let drive = try FirefliesDrive(directory: base.appendingPathComponent("love_rehab"))
         MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
@@ -115,10 +117,13 @@ struct FirefliesRenderTests {
             guard let out else { continue }
             let dir = out.appendingPathComponent("film_\(stem)")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            // FF.5: `FIREFLIES_FILM_HEIGHT=1080` films at 1920×1080 (Matt's look check); default 720p.
+            let filmH = Int(ProcessInfo.processInfo.environment["FIREFLIES_FILM_HEIGHT"] ?? "") ?? 720
+            let filmW = filmH * 16 / 9
             var index = 0
-            _ = try MultiPassRenderHarness(width: 1280, height: 720).render(
+            _ = try MultiPassRenderHarness(width: filmW, height: filmH).render(
                 preset: "Fireflies", features: drive.features, stems: stems) { bgra -> Int in
-                    Self.writePNG(bgra, width: 1280, height: 720,
+                    Self.writePNG(bgra, width: filmW, height: filmH,
                                   to: dir.appendingPathComponent(String(format: "fireflies_seq_%05d.png", index)))
                     index += 1
                     return index
