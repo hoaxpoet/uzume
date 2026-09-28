@@ -30,6 +30,11 @@ struct FirefliesDrive {
     /// The installed grid's BPM per frame (`grid_bpm`) — what production reads from
     /// `SpectralHistoryBuffer` slot 2418. `FeatureVector` does not carry it.
     let gridBPM: [Float]
+    /// FF.5: a window of a drive (an M7 replay cut to one song under Fireflies).
+    init(features: [FeatureVector], gridBPM: [Float]) {
+        self.features = features
+        self.gridBPM = gridBPM
+    }
 
     init(directory: URL) throws {
         let series = try SessionColumnSeries.load(directory: directory)
@@ -115,7 +120,8 @@ struct FirefliesDrive {
             let flashes = swarm.flashLog ?? []
             run.t.append(swarm.now - offset)
             run.coherence.append(swarm.coherence)
-            run.onBeat.append(Self.onBeat(flashes: flashes.map(\.t), beats: beats, now: swarm.now))
+            // Lazy: scoring reads only the last 2 s, so no per-frame copy of the whole log.
+            run.onBeat.append(Self.onBeat(flashes: flashes.lazy.map(\.t), beats: beats, now: swarm.now))
             run.patchCoherence.append(swarm.patchCoherence)
             run.patchOnBeat.append(swarm.patchCount > 0
                 ? Self.patchOnBeat(flashes: flashes, ticks: swarm.tickLog ?? [], now: swarm.now)
@@ -147,7 +153,8 @@ struct FirefliesDrive {
 
     /// The spike's `beat_lock`: Re(mean e^{2πiψ}) of the flashes in the last 2 s, ψ = position
     /// inside the true beat interval. +1 all on the beat, −1 all half a beat off, ~0 random.
-    static func onBeat(flashes: [Double], beats: [Double], now: Double) -> Float {
+    static func onBeat<Times: BidirectionalCollection>(flashes: Times, beats: [Double], now: Double) -> Float
+    where Times.Element == Double {
         guard beats.count >= 2 else { return .nan }
         var sum = 0.0, n = 0
         for ft in flashes.reversed() {
@@ -378,6 +385,43 @@ struct FirefliesSpikeParityProbe {
     /// definition (on-beat ≥ 0.5 from then on, seed 7) FF.4's whole-meadow unison locked at 25.9 s
     /// (DYC 14.8 s); FF.5's strips lock at 23.1 s (DYC 12.6 s).
     static let patchFloors = (r: Float(0.8), onBeat: Float(0.7), whole: Float(0.3), share: Float(0.8), lock: 26.0)
+
+    /// FF.5 Task 7 — the lock on Matt's M7, which FF.4 could not verify: each song's RECORDED
+    /// features replayed through the swarm at its recorded clarity, 20 seeds, from the second
+    /// Fireflies was picked (`FIREFLIES_M7_WINDOWS` = `first-last` FRAME indices, comma-separated,
+    /// one per song — frames, not `wallclock_s`: an absolute timestamp read as Float is ±32 s) in
+    /// `FIREFLIES_M7_SESSION`. Report-only.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_M7_SESSION"] != nil))
+    func m7LockReplay() throws {
+        let env = ProcessInfo.processInfo.environment
+        let full = try FirefliesDrive(directory: URL(fileURLWithPath: env["FIREFLIES_M7_SESSION"] ?? ""))
+        for window in (env["FIREFLIES_M7_WINDOWS"] ?? "").split(separator: ",") {
+            let bounds = window.split(separator: "-").compactMap { Int($0) }
+            guard bounds.count == 2, bounds[0] < bounds[1], bounds[1] < full.features.count else { continue }
+            let (first, last) = (bounds[0], bounds[1])
+            let frames = first...last
+            let drive = FirefliesDrive(features: Array(full.features[first...last]),
+                                       gridBPM: Array(full.gridBPM[first...last]))
+            var locks: [Double] = [], strips: [Float] = [], wholes: [Float] = [], shares: [Float] = []
+            var patches = 0
+            for seed in UInt64(0)..<20 {
+                let run = drive.run(clarity: 1, seed: seed)
+                let end = run.t.last ?? 0
+                locks.append(run.settles(run.patchOnBeat, at: 0.5) ?? .infinity)
+                strips.append(run.mean(run.patchCoherence, from: end - 10, to: end))
+                wholes.append(run.mean(run.coherence, from: end - 10, to: end))
+                shares.append(run.turnShare(from: end - 10, to: end))
+                patches = run.patchCount
+            }
+            let mean = { (v: [Float]) in v.reduce(0, +) / Float(v.count) }
+            let sortedLocks = locks.sorted()
+            print(String(format: "[m7-replay] frames %@ (%d), grid %.1f BPM, %d strips | lock median %.1f s [%.1f, %.1f] "
+                         + "| last 10 s: per-strip R %.3f, whole R %.3f, turn share %.3f (chance %.3f)",
+                         String(window), frames.count, drive.gridBPM.last ?? 0, patches,
+                         sortedLocks[10], sortedLocks.first ?? 0, sortedLocks.last ?? 0,
+                         mean(strips), mean(wholes), mean(shares), 1 / Float(max(patches, 1))))
+        }
+    }
 
     /// FF.4 R1 (rewatch bar, legible): DYC, the swarm on the true grid vs the same grid shifted
     /// half a beat (the decoy), plus a free swarm (clarity 0) for the chance band — 20 seeds each,
