@@ -61,6 +61,10 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// Retained so `removeObserver` can be called during teardown.
     private var configChangeObserver: NSObjectProtocol?
 
+    /// LFSEEK.1 — where the next `start()` begins, in seconds into the file. Set by `seek(to:)`;
+    /// guarded by `lock`. 0 for a plain start.
+    private var startSeconds: TimeInterval = 0
+
     /// BUG087.4 — when `UZUME_LF_ANALYSIS_CLOCK=1`, the analysis funnel is driven from the
     /// decoded file at the smoothed playhead instead of from tap arrival. Nil when the flag is
     /// off, and then this path behaves exactly as it did before.
@@ -267,6 +271,24 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         }
     }
 
+    /// LFSEEK.1 — jump to `seconds` into the file. Restarts the engine at that frame through the
+    /// same `start()` every track change uses, rather than re-scheduling the live node in place:
+    /// `start()`'s teardown is the one proven against the BUG-021 / BUG-059 / BUG-078 races, and
+    /// it swaps the (player, file) pair first, so the old node's completion handler — which a
+    /// `player.stop()` fires — bails instead of advancing the queue. A paused player stays paused.
+    ///
+    /// ponytail: a full engine restart per jump (tens of ms); an in-place `scheduleSegment` if a
+    /// gap is ever audible.
+    public func seek(to seconds: TimeInterval) throws {
+        let wasPaused = isPaused
+        lock.withLock { startSeconds = max(0, seconds) }
+        try start()
+        if wasPaused { pause() }
+    }
+
+    /// Seconds into the file the player is at, as the analysis clock reads it (LFSEEK.1 test hook).
+    var playheadSeconds: Double? { lock.withLock { analysisClock }?.playheadSeconds }
+
     /// `true` while the engine + player exist and the player is not currently
     /// playing (paused state). `false` when stopped or actively playing.
     /// Used by the transport controls view model to render the right glyph
@@ -326,7 +348,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // rather than a quiet fall-back to a path that no longer exists. Before BUG087.5 this
         // returned nil and the tap took over; silently analysing nothing would render a dead
         // visualizer against playing audio, which is worse than refusing to start.
-        let clock = try PlayheadAnalysisClock.make(url: url, player: player, deliver: callback)
+        // LFSEEK.1: start where `seek(to:)` asked, clamped inside the file.
+        let startFrame = min(AVAudioFramePosition(startSeconds * format.sampleRate), max(0, file.length - 1))
+        let clock = try PlayheadAnalysisClock.make(
+            url: url,
+            player: player,
+            startFrame: startFrame,
+            deliver: callback
+        )
 
         // Test hygiene (BUG-052): under XCTest / `swift test`, mute the device
         // output so the suite never plays (churned, choppy) fixture audio through
@@ -339,7 +368,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         }
 
         try engine.start()
-        _scheduleFileLoopLocked(player: player, file: file)
+        _scheduleFileLoopLocked(player: player, file: file, from: startFrame)
         // BUG-103: `play()` reports failure by RAISING an ObjC NSException
         // ("player did not see an IO cycle"), which Swift cannot catch and which
         // terminates the process when it unwinds past a Swift frame — the whole
@@ -497,8 +526,9 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// never waits on the render thread the way `player.stop()` does), the teardown's
     /// `player.stop()` still runs outside the lock, and the completion handler below
     /// hops off the callback queue before touching the lock at all (BUG-059).
-    private func _scheduleFileLoopLocked(player: AVAudioPlayerNode, file: AVAudioFile) {
-        player.scheduleFile(file, at: nil) { [weak self, weak player, weak file] in
+    private func _scheduleFileLoopLocked(player: AVAudioPlayerNode, file: AVAudioFile,
+                                         from startFrame: AVAudioFramePosition = 0) {
+        let completion: AVAudioNodeCompletionHandler = { [weak self, weak player, weak file] in
             guard let self, let player, let file else { return }
             // BUG-059: hop OFF the AVAudioPlayerNode completion-handler queue
             // before re-scheduling / advancing. Doing this inline re-enters the
@@ -527,6 +557,18 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
                 advance?()
             }
         }
+        // LFSEEK.1: a seek plays from `startFrame` to the end; every loop pass after it is whole.
+        if startFrame > 0 {
+            player.scheduleSegment(
+                file,
+                startingFrame: startFrame,
+                frameCount: AVAudioFrameCount(file.length - startFrame),
+                at: nil,
+                completionHandler: completion
+            )
+        } else {
+            player.scheduleFile(file, at: nil, completionHandler: completion)
+        }
     }
 
     /// AVAudioEngine fires this when the audio configuration changes
@@ -544,6 +586,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // `lock` alone does NOT prevent that deadlock; it isn't in the cycle.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+            self.lock.withLock { self.startSeconds = 0 }   // LFSEEK.1: keeps "from the beginning"
             self.stop()
             do {
                 try self.start()

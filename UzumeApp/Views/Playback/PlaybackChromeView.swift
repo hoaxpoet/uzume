@@ -75,6 +75,10 @@ struct PlaybackChromeView: View {
     var onLocalFilePrev: () -> Void = {}
     var onLocalFilePlayPause: () -> Void = {}
     var onLocalFileNext: () -> Void = {}
+    /// LFSEEK.1 track bar: the current track's position and length (polled while shown), and the
+    /// jump it asks for.
+    var localFileProgress: () -> (position: TimeInterval, duration: TimeInterval)? = { nil }
+    var onLocalFileSeek: (TimeInterval) -> Void = { _ in }
 
     private var motion: Animation { UzumeAppMotion.stateChange(reduceMotion: viewModel.reduceMotion) }
 
@@ -123,7 +127,9 @@ struct PlaybackChromeView: View {
                     onStop: onLocalFileStop,
                     onPrev: onLocalFilePrev,
                     onPlayPause: onLocalFilePlayPause,
-                    onNext: onLocalFileNext
+                    onNext: onLocalFileNext,
+                    progress: localFileProgress,
+                    onSeek: onLocalFileSeek
                 )
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .center)
