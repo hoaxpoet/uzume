@@ -413,12 +413,17 @@ struct MultiPassRenderHarness {
                                  settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat)
+        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat,
+                                      dance: kaguraDance)
         dancer.ensureAllocated(width: width, height: height)
-        let span = Double(drive.last?.time ?? 0) + Double(settle) / 60 + 30
-        let beats = (0..<Int(span * 2)).map { Double($0) * 0.5 }
-        dancer.setGrid(KaguraGrid(beats: beats, downbeats: stride(from: 0, to: beats.count, by: 4).map { beats[$0] },
-                                  beatsPerBar: 4, hasBarInformation: true), streaming: false)
+        let span = Double(drive.count + settle) / 60 + 30
+        let grid = kaguraBPM.flatMap { bpm -> KaguraGrid? in
+            let beats = (0..<Int(span * bpm / 60)).map { Double($0) * 60 / bpm }
+            return KaguraGrid(beats: beats, downbeats: stride(from: 0, to: beats.count, by: 4).map { beats[$0] },
+                              beatsPerBar: 4, hasBarInformation: true)
+        }
+        dancer.setGrid(grid, streaming: false)
+        dancer.setSongArousal(kaguraSongArousal)
 
         let tex = try makeOutputTexture(ctx)
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -579,6 +584,16 @@ struct MultiPassRenderHarness {
     var firefliesCameraTimeOffset: Float = 0
     /// FF.2 — hold the Fireflies camera still (`FirefliesGeometry.freezeCamera`). Probes only.
     var firefliesFreezeCamera = false
+
+    /// KAG.4 — the song Kagura's grid and repertoire come from: grid tempo (`nil` = no grid, the
+    /// dancer rests) and song arousal (`nil` = unknown, the middle energy and the sway). The default
+    /// (120 BPM, unknown) is the KAG.2 flash case; the fast/energetic and calm cases reach the
+    /// Charleston and the ballet rest.
+    var kaguraBPM: Double? = 120
+    var kaguraSongArousal: Double?
+    /// A forced dance (`nil` = picked by the song). The flash drive's bass is steady, so no bar ranks
+    /// vigorous and the pick never reaches a repertoire's top dance — forcing is how that one is measured.
+    var kaguraDance: KaguraDance?
 
     /// FF.2 — when non-nil, every committed frame appends its command-buffer GPU time (ms,
     /// `gpuEndTime − gpuStartTime`; the readback is a CPU copy after completion, so it is

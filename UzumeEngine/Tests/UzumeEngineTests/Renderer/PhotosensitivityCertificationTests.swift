@@ -95,6 +95,14 @@ struct PhotosensitivityCertificationTests {
                            // Measured for real by MultiPassFlashHarnessTests.nebulaIsFlashSafe,
                            // where MultiPassRenderHarness allocates a live NebulaState at fragment
                            // index 6 — PR.24.
+        ,
+        "Kagura"           // feedback + particles; the dancer is CPU choreography (KaguraChoreographer)
+                           // and `kagura_ground_fragment` is only the near-black backdrop, so this
+                           // single-pass harness renders it static. Measured for real by
+                           // MultiPassFlashHarnessTests (KAG.4), 1800 frames each, every frame moving:
+                           // the dance on a 120 BPM grid 0.00 flashes/s, luma 0.00423…0.00467; the
+                           // Charleston at 166 BPM 0.00, 0.00424…0.00467; the ballet rest 0.00,
+                           // 0.00409…0.00435. Nothing brightens on the beat (D-157).
     ]
 
     // MARK: - Gate
