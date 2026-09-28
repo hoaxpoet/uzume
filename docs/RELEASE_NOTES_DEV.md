@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-210158] BUG-154 — the network-recovery tests wait for the debounce, not the clock
+
+`NetworkRecoveryCoordinatorTests` failed once in a full app-suite run (`0 == 1`, `2 == 3`): the tests slept 3 s for a 2 s debounce and asserted while the debounce task was still waiting to get back onto a busy main actor. They now await the coordinator's own `debounceTask`, so they pass however slow the machine is. A probe that adds 1.5 s to the debounce failed 4 of 7 tests before the fix and passes all 7 after. Test-only change; no budget widened.
+
 ### [dev-2026-09-28-174700] KAG.4 — Kagura certified (the 26th)
 
 Kagura, the point-light dancer, is certified on Matt's M7 of the beta playlist (*"looks much better, happy with it overall"*). It now enters planned sessions like the other certified scenes, kept off beat-irregular songs by `requires_regular_beat`. Flash-safe in all three measured cases (the dance, the Charleston, the ballet rest: 0.00 flashes/s); no golden session plan changed. Known: the macarena runs a little heavy on calm songs.
