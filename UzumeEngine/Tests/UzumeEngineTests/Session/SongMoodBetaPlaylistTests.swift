@@ -24,7 +24,7 @@ struct SongMoodBetaPlaylistTests {
         }
     }
 
-    /// (playlist EXTINF seconds, production-chain song-median arousal — KAG.0g 10, the median
+    /// (playlist EXTINF seconds, production-chain song-median arousal — KAG.0g §10, the median
     /// of three 30 s windows at 20/50/80 %). Matched by duration: FLAC entries carry no title.
     private static let reference: [(seconds: Double, arousal: Float)] = [
         (538, 0.69), (304, 0.67), (266, 0.51), (301, 0.54), (181, -0.04),
