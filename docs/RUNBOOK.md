@@ -983,7 +983,8 @@ procedure, as practiced from Skein through Cytokinesis:
      `false` — e.g. CPU-side coupling);
    - `PhotosensitivityCertificationTests.multiPassMeasured` + a real render
      function in `MultiPassFlashHarnessTests` for multi-pass/follower-state
-     scenes (the static-render guard fails loud if skipped) — measured
+     scenes, through `harness.renderOffMain` (the suite runs off the main
+     actor, FLASHOFF.1; the static-render guard fails loud if skipped) — measured
      **0.00 flashes/s** required.
 4. Non-empty `audio_routes` in the sidecar, all green (`RouteCoverageTests`
    — QG.1 requires it for certification).

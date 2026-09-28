@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-162542] FLASHOFF.1 — the flash-safety tests no longer block the rest of the suite
+
+Test infrastructure only; nothing in the app changes. The photosensitivity tests for the multi-pass scenes ran on the main thread for about four and a half minutes of every full engine run, and the session-preparation tests that also need it were close to timing out behind them. Adding one more scene's test (Fireflies, FF.4) pushed nine of them over. Those renders now run off the main thread, and the few scenes that still need it borrow it a frame at a time, so its longest wait during the suite is 0.05 s. Every scene's flash measurement is exactly what it was, and the full engine suite passes (2040 tests).
+
+---
+
 ### [dev-2026-09-28-151022] FF.4 — Fireflies' M7: not yet; patches and a smooth glow next
 
 Matt reviewed Fireflies live on the beta playlist and did not pass it. Testers found the whole meadow flashing at once overwhelming and wanted a coordinated rhythm across the swarm; Matt also saw the fireflies as pixelated. The next increment (FF.5) makes patches of the meadow take turns flashing on the beat and draws each firefly's glow smooth instead of stippled. Fireflies stays uncertified, so sessions don't plan it, but the arrow keys now reach it (`exclude_from_cycling` removed) so it can be reviewed. New tests: a WCAG flash measurement through the real draw path with the swarm locked in unison (0.00 flashes/s), and a check that the swarm follows the real beat and not a half-beat decoy.
