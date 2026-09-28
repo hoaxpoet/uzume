@@ -10073,7 +10073,8 @@ overall. macarena is a little heavy in this set, but it's ok"* … *"we can move
 **Deviations accepted at certification:** the macarena runs heavy on calm songs (Matt: "it's ok"); one
 `energyReference` point predates BUG-146 (kept — re-deriving takes the Charleston off Take Five, which Matt
 approved); the gesture dances lock looser than the twist and cabbage patch (~40–60 % on the beat, as in the
-spike); the streaming pass was on the KAG.3 build before the Charleston and ballet; the external curated
+spike); the streaming pass was on the KAG.3 build before the Charleston and ballet (Matt, asked, chose to
+certify without re-running it: "B"); the external curated
 reference set was not made (the Nebula precedent). Follow-ups: more dances (tango, salsa, fox trot, Lindy hop,
 cha-cha slide — a motion source beyond CMU) and the D-259 energy-curve move (Matt's call).
 
