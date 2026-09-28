@@ -186,7 +186,13 @@ final class SpotifyWindowFrameSource: NSObject, PlaylistFrameSource, SCStreamOut
               let image = Self.cgImage(pixels),
               let continuation = lock.withLock({ self.continuation }) else { return }
         // In memory only; `image` is released when this call returns.
-        if let frame = try? reader.read(image) { continuation.yield(frame) }
+        let start = DispatchTime.now().uptimeNanoseconds
+        guard let frame = try? reader.read(image) else { return }
+        let millis = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+        let first = frame.rows.first?.number ?? 0
+        let last = frame.rows.last?.number ?? 0
+        logger.info("SCAN frame: \(Int(millis)) ms, \(frame.rows.count) rows (#\(first)–#\(last))")
+        continuation.yield(frame)
     }
 
     // MARK: SCStreamDelegate
