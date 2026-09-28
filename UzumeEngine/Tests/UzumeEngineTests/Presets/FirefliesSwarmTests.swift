@@ -1,10 +1,11 @@
-// FirefliesSwarmTests — FF.1 behaviour gates for the Fireflies swarm model.
+// FirefliesSwarmTests — FF.1 behaviour gates for the Fireflies swarm model; FF.5 strips.
 //
 // Two tiers:
 //
 //   • Always-on: the committed `route_coverage` fixtures (real preview clips through the
 //     production chain — FA #27) drive the model, and the concept's two claims are asserted:
-//     a clear beat locks the swarm, and UNKNOWN clarity is FREE (D-257, Matt 2026-09-24).
+//     a clear beat locks the swarm — since FF.5 into 2–4 strips taking turns on the beat —
+//     and UNKNOWN clarity is FREE (D-257, Matt 2026-09-24).
 //     Plus the near-silence straggler fade and the per-track restart.
 //
 //   • Env-gated parity (`FIREFLIES_PARITY=1`): the FF.0 spike's own four captures, compared
@@ -53,13 +54,43 @@ struct FirefliesDrive {
         }
     }
 
-    /// Result of one run: per-frame (t, R, on-beat) in the spike's metric definitions.
+    /// Result of one run: per-frame (t, R, on-beat) in the spike's metric definitions, plus the
+    /// FF.5 per-strip readouts (equal to R and on-beat while the swarm is one meadow).
     struct Run {
         var t: [Double] = [], coherence: [Float] = [], onBeat: [Float] = []
+        /// Each strip's R (size-weighted), and on-beat scored against each strip's OWN ticks.
+        var patchCoherence: [Float] = [], patchOnBeat: [Float] = []
+        var patchCount = 0
+        /// The swarm's flash and target-tick logs, in run time (`t` units).
+        var flashes: [(t: Double, patch: Int)] = [], ticks: [(t: Double, patch: Int)] = []
 
         func mean(_ values: [Float], from start: Double, to end: Double) -> Float {
             let window = zip(t, values).filter { $0.0 >= start && $0.0 < end && !$0.1.isNaN }.map(\.1)
             return window.reduce(0, +) / Float(max(window.count, 1))
+        }
+
+        /// FF.5 "successive beats light different patches": of the flashes within ±¼ beat of each
+        /// tick in [start, end), the share in the strip that tick nudges. Chance, and a meadow
+        /// collapsed back into one unison, both read 1/P.
+        func turnShare(from start: Double, to end: Double) -> Float {
+            let window = ticks.filter { $0.t >= start && $0.t < end }
+            guard window.count >= 2, let first = window.first, let last = window.last else { return .nan }
+            let reach = 0.25 * (last.t - first.t) / Double(window.count - 1)
+            var own = 0, all = 0
+            for tick in window {
+                for flash in flashes where abs(flash.t - tick.t) < reach {
+                    all += 1
+                    if flash.patch == tick.patch { own += 1 }
+                }
+            }
+            return Float(own) / Float(max(all, 1))
+        }
+
+        /// When the lock arrives: the first `t` after which `values` stays ≥ `level` to the end of
+        /// the run (nil if it never settles).
+        func settles(_ values: [Float], at level: Float) -> Double? {
+            guard let lastMiss = values.indices.last(where: { !(values[$0] >= level) }) else { return t.first }
+            return lastMiss + 1 < t.count ? t[lastMiss + 1] : nil
         }
     }
 
@@ -68,6 +99,7 @@ struct FirefliesDrive {
     func run(clarity: Float, seed: UInt64 = 7, phaseShift: Float = 0) -> Run {
         let swarm = FirefliesSwarm(seed: seed)
         swarm.flashLog = []
+        swarm.tickLog = []
         var beats: [Double] = []
         var prev: Float?
         var run = Run()
@@ -80,11 +112,37 @@ struct FirefliesDrive {
             var fed = f
             fed.beatPhase01 = (f.beatPhase01 + phaseShift).truncatingRemainder(dividingBy: 1)
             swarm.advance(features: fed, clarity: clarity, gridBPM: bpm)
+            let flashes = swarm.flashLog ?? []
             run.t.append(swarm.now - offset)
             run.coherence.append(swarm.coherence)
-            run.onBeat.append(Self.onBeat(flashes: swarm.flashLog ?? [], beats: beats, now: swarm.now))
+            run.onBeat.append(Self.onBeat(flashes: flashes.map(\.t), beats: beats, now: swarm.now))
+            run.patchCoherence.append(swarm.patchCoherence)
+            run.patchOnBeat.append(swarm.patchCount > 0
+                ? Self.patchOnBeat(flashes: flashes, ticks: swarm.tickLog ?? [], now: swarm.now)
+                : run.onBeat[run.onBeat.count - 1])
+            run.patchCount = swarm.patchCount
         }
+        run.flashes = (swarm.flashLog ?? []).map { ($0.t - offset, $0.patch) }
+        run.ticks = (swarm.tickLog ?? []).map { ($0.t - offset, $0.patch) }
         return run
+    }
+
+    /// FF.5: `onBeat` per strip, each flash scored inside its OWN strip's tick interval (a strip
+    /// is nudged every P beats), pooled over the strips. +1 each strip on its own beat.
+    static func patchOnBeat(flashes: [(t: Double, patch: Int)], ticks: [(t: Double, patch: Int)], now: Double) -> Float {
+        var own: [Int: [Double]] = [:]
+        for tick in ticks { own[tick.patch, default: []].append(tick.t) }
+        var sum = 0.0, n = 0
+        for flash in flashes.reversed() {
+            guard flash.t > now - 2 else { break }
+            guard let beats = own[flash.patch], beats.count >= 2 else { continue }
+            var lo = 0, hi = beats.count
+            while lo < hi { let m = (lo + hi) / 2; if beats[m] < flash.t { lo = m + 1 } else { hi = m } }
+            let idx = min(max(lo - 1, 0), beats.count - 2)
+            sum += cos(2 * .pi * (flash.t - beats[idx]) / (beats[idx + 1] - beats[idx]))
+            n += 1
+        }
+        return n < 5 ? .nan : Float(sum / Double(n))
     }
 
     /// The spike's `beat_lock`: Re(mean e^{2πiψ}) of the flashes in the last 2 s, ψ = position
@@ -117,20 +175,48 @@ struct FirefliesSwarmTests {
         return try FirefliesDrive(directory: base.appendingPathComponent(track))
     }
 
+    /// FF.5: a clear beat locks each STRIP (per-strip R), not the whole meadow — the whole-meadow
+    /// claim moved to `patchesTakeTurns`. The per-strip floor keeps FF.1's 0.8: first measured
+    /// run, seeds 0–4, per-strip R 0.90–0.93 on all three fixtures.
     @Test("A clear beat locks the swarm; an unknown one leaves it free (D-257)",
           arguments: ["love_rehab", "so_what", "there_there"])
     func clarityGovernsTheLock(track: String) throws {
         let drive = try Self.fixture(track)
         let steady = drive.run(clarity: 1), unknown = drive.run(clarity: 0.5), irregular = drive.run(clarity: 0)
         let end = (steady.t.last ?? 0) - 5
-        let rSteady = steady.mean(steady.coherence, from: end, to: end + 5)
+        let rSteady = steady.mean(steady.patchCoherence, from: end, to: end + 5)
         let rUnknown = unknown.mean(unknown.coherence, from: end, to: end + 5)
         let rFree = irregular.mean(irregular.coherence, from: end, to: end + 5)
-        print("[fireflies] \(track): R last 5 s steady \(rSteady) unknown \(rUnknown) irregular \(rFree)")
-        #expect(rSteady > 0.8, "steady beat did not lock the swarm")
+        print("[fireflies] \(track): R last 5 s steady (per strip) \(rSteady) unknown \(rUnknown) irregular \(rFree)")
+        #expect(rSteady > 0.8, "steady beat did not lock the strips")
         #expect(rUnknown < 0.35 && rFree < 0.35, "a free swarm locked on neighbours alone")
         // Unknown is not "half coupled" — it is exactly free.
         #expect(unknown.coherence == irregular.coherence)
+    }
+
+    /// FF.5 (FIREFLIES_DESIGN §1a, Matt: "It's everyone at once — go with option A"): on a clear
+    /// beat the meadow settles into 2–4 strips that take turns, one per beat, within ~15 s.
+    /// Real fixtures (FA #27), K = 1, the default seed. Measured on the shipped model (seeds 0–4,
+    /// before any threshold existed): whole-meadow R 0.061–0.137 (FF.4's unison read 0.98); turn
+    /// share 0.963–0.990 against a chance — and collapsed-unison — level of 1/P (0.25 / 0.33);
+    /// lock (per-strip on-beat ≥ 0.5 from then on) 9.4–11.0 s love_rehab, 12.0–12.8 s so_what
+    /// and there_there. Floors: R < 0.3, share > 0.8, lock < 15 s (the design's "about 15 s").
+    /// Without the boundary rule (relay across straight strip edges; measured once, not built)
+    /// the lock took 12.1–16.0 s and the share fell to 0.92–0.99.
+    @Test("A clear beat organises the meadow into strips that take turns (FF.5)",
+          arguments: ["love_rehab", "so_what", "there_there"])
+    func patchesTakeTurns(track: String) throws {
+        let run = try Self.fixture(track).run(clarity: 1)
+        let end = (run.t.last ?? 0) - 5
+        let whole = run.mean(run.coherence, from: end, to: end + 5)
+        let share = run.turnShare(from: end - 5, to: end + 5)
+        let lock = run.settles(run.patchOnBeat, at: 0.5)
+        print(String(format: "[fireflies] %@: %d strips  whole R %.3f  turn share %.3f (chance %.3f)  lock %.1f s",
+                     track, run.patchCount, whole, share, 1 / Float(max(run.patchCount, 1)), lock ?? -1))
+        #expect((2...4).contains(run.patchCount))
+        #expect(whole < 0.3, "the whole meadow flashed together (unison)")
+        #expect(share > 0.8, "successive beats did not light successive strips")
+        #expect((lock ?? .infinity) < 15, "the strips did not lock within ~15 s")
     }
 
     @Test("Near-silence fades all but ~5 % stragglers within a few seconds")
@@ -151,11 +237,12 @@ struct FirefliesSwarmTests {
         let drive = try Self.fixture("love_rehab")
         let swarm = FirefliesSwarm()
         for (f, bpm) in zip(drive.features, drive.gridBPM) { swarm.advance(features: f, clarity: 1, gridBPM: bpm) }
-        #expect(swarm.coherence > 0.8)
+        // FF.5: the lock is per strip.
+        #expect(swarm.patchCoherence > 0.8)
         var f = try #require(drive.features.first)
         f.trackElapsedS = 0
         swarm.advance(features: f, clarity: 1, gridBPM: drive.gridBPM[0])
-        #expect(swarm.coherence < 0.2)
+        #expect(swarm.patchCoherence < 0.2)
     }
 }
 
@@ -196,42 +283,83 @@ struct FirefliesSpikeParityProbe {
         return run
     }
 
+    /// FF.1 parity on the FREE captures (Warszawa, Teardrop): unchanged since FF.1 — a free swarm
+    /// has no strips. FF.5: on the CLEAR captures (DYC, Pyramid at clarity 1) the spike is no
+    /// longer the reference (it has no strips); they report per-strip R and per-strip on-beat
+    /// against each strip's own ticks over 25–30 s, whole-meadow R, turn share and lock time,
+    /// 20 seeds, against floors set from the first measured run (see `patchFloors`).
     @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_PARITY"] == "1"))
     func coherenceMatchesTheSpike() throws {
         let out = ProcessInfo.processInfo.environment["FIREFLIES_PARITY_OUT"].map { URL(fileURLWithPath: $0) }
         let seedCount = Int(ProcessInfo.processInfo.environment["FIREFLIES_SEEDS"] ?? "") ?? 20
         for (session, stem, clarity, spikeR, spikeB) in Self.tracks {
             let drive = try FirefliesDrive(directory: Self.root.appendingPathComponent("sessions/\(session)"))
-            var rs: [Float] = [], bs: [Float] = []
+            let patched = clarity > 0.5
+            var rs: [Float] = [], bs: [Float] = [], wholes: [Float] = [], shares: [Float] = [], locks: [Double] = []
             for seed in 0..<UInt64(max(seedCount, 1)) {
                 let run = drive.run(clarity: clarity, seed: seed)
-                rs.append(run.mean(run.coherence, from: 25, to: 30))
-                bs.append(run.mean(run.onBeat, from: 25, to: 30))
+                rs.append(run.mean(patched ? run.patchCoherence : run.coherence, from: 25, to: 30))
+                bs.append(run.mean(patched ? run.patchOnBeat : run.onBeat, from: 25, to: 30))
+                wholes.append(run.mean(run.coherence, from: 25, to: 30))
+                shares.append(run.turnShare(from: 20, to: 30))
+                locks.append(run.settles(run.patchOnBeat, at: 0.5) ?? .infinity)
                 guard seed == 7 else { continue }
-                // The literal done-when: engine seed 7 against the spike's seed-7 metrics file.
-                let ref = try Self.spike(stem)
-                let refR = ref.mean(ref.coherence, from: 25, to: 30), refB = ref.mean(ref.onBeat, from: 25, to: 30)
-                print(String(format: "[parity] %@ seed 7 vs spike seed 7: R %.3f / %.3f (Δ %+.3f)  on-beat %+.3f / %+.3f (Δ %+.3f)",
-                             stem, rs[7], refR, rs[7] - refR, bs[7], refB, bs[7] - refB))
+                if !patched {
+                    // The literal done-when: engine seed 7 against the spike's seed-7 metrics file.
+                    let ref = try Self.spike(stem)
+                    let refR = ref.mean(ref.coherence, from: 25, to: 30), refB = ref.mean(ref.onBeat, from: 25, to: 30)
+                    print(String(format: "[parity] %@ seed 7 vs spike seed 7: R %.3f / %.3f (Δ %+.3f)  on-beat %+.3f / %+.3f (Δ %+.3f)",
+                                 stem, rs[7], refR, rs[7] - refR, bs[7], refB, bs[7] - refB))
+                }
                 guard let out else { continue }
-                var csv = "t,R_swarm,onbeat_true_grid\n"
+                var csv = "t,R_swarm,onbeat_true_grid,R_patch,onbeat_patch\n"
                 for i in run.t.indices {
-                    csv += String(format: "%.4f,%.4f,%.4f\n", run.t[i], run.coherence[i], run.onBeat[i])
+                    csv += String(format: "%.4f,%.4f,%.4f,%.4f,%.4f\n", run.t[i], run.coherence[i], run.onBeat[i],
+                                  run.patchCoherence[i], run.patchOnBeat[i])
                 }
                 try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
                 try csv.write(to: out.appendingPathComponent("engine_\(stem).csv"), atomically: true, encoding: .utf8)
             }
-            let r = rs.reduce(0, +) / Float(rs.count), b = bs.reduce(0, +) / Float(bs.count)
-            print(String(format: "[parity] %@ %d seeds: R %.3f (spike %.3f, Δ %+.3f)  on-beat %+.3f (spike %+.3f, Δ %+.3f)  R range [%.2f, %.2f]",
-                         stem, rs.count, r, spikeR, r - spikeR, b, spikeB, b - spikeB, rs.min() ?? 0, rs.max() ?? 0))
-            #expect(abs(r - spikeR) <= 0.1, "\(stem): seed-mean R \(r) vs spike \(spikeR)")
-            #expect(abs(b - spikeB) <= 0.1, "\(stem): seed-mean on-beat \(b) vs spike \(spikeB)")
+            let mean = { (v: [Float]) in v.reduce(0, +) / Float(v.count) }
+            let r = mean(rs), b = mean(bs)
+            guard patched else {
+                print(String(format: "[parity] %@ %d seeds: R %.3f (spike %.3f, Δ %+.3f)  on-beat %+.3f (spike %+.3f, Δ %+.3f)  R range [%.2f, %.2f]",
+                             stem, rs.count, r, spikeR, r - spikeR, b, spikeB, b - spikeB, rs.min() ?? 0, rs.max() ?? 0))
+                #expect(abs(r - spikeR) <= 0.1, "\(stem): seed-mean R \(r) vs spike \(spikeR)")
+                #expect(abs(b - spikeB) <= 0.1, "\(stem): seed-mean on-beat \(b) vs spike \(spikeB)")
+                continue
+            }
+            let lockMax = locks.max() ?? .infinity
+            print(String(format: "[parity] %@ %d seeds, strips: per-strip R %.3f [%.2f, %.2f]  per-strip on-beat %+.3f [%+.2f, %+.2f]  "
+                         + "whole R %.3f [%.2f, %.2f]  turn share %.3f [%.2f, %.2f]  lock %.1f s [%.1f, %.1f]",
+                         stem, rs.count, r, rs.min() ?? 0, rs.max() ?? 0, b, bs.min() ?? 0, bs.max() ?? 0,
+                         mean(wholes), wholes.min() ?? 0, wholes.max() ?? 0, mean(shares), shares.min() ?? 0, shares.max() ?? 0,
+                         locks.reduce(0, +) / Double(locks.count), locks.min() ?? 0, lockMax))
+            let floor = Self.patchFloors
+            #expect(r > floor.r, "\(stem): per-strip R \(r)")
+            #expect(b > floor.onBeat, "\(stem): per-strip on-beat \(b)")
+            #expect((wholes.max() ?? 1) < floor.whole, "\(stem): a seed flashed in unison")
+            #expect((shares.min() ?? 0) > floor.share, "\(stem): a seed did not take turns")
+            #expect(lockMax < floor.lock, "\(stem): a seed locked late (\(lockMax) s)")
         }
     }
 
+    /// FF.5 floors for the clear captures, set from the first measured run (20 seeds, 2026-09-28):
+    /// DYC per-strip R 0.906 [0.89, 0.92], per-strip on-beat +0.907 [+0.89, +0.93], whole R 0.088
+    /// [0.06, 0.13], turn share 0.974 [0.96, 0.98], lock 14.5 s [12.3, 16.4]; Pyramid 0.902
+    /// [0.88, 0.92], +0.824 [+0.79, +0.85], 0.078 [0.06, 0.13], 0.988 [0.98, 0.99], 23.3 s
+    /// [23.1, 24.0]. Pyramid's slow lock is the capture's, not the strips': on the same
+    /// definition (on-beat ≥ 0.5 from then on, seed 7) FF.4's whole-meadow unison locked at 25.9 s
+    /// (DYC 14.8 s); FF.5's strips lock at 23.1 s (DYC 12.6 s).
+    static let patchFloors = (r: Float(0.8), onBeat: Float(0.7), whole: Float(0.3), share: Float(0.8), lock: 26.0)
+
     /// FF.4 R1 (rewatch bar, legible): DYC, the swarm on the true grid vs the same grid shifted
     /// half a beat (the decoy), plus a free swarm (clarity 0) for the chance band — 20 seeds each,
-    /// on-beat scored against the TRUE beats over 25–30 s. The spike read +0.86 vs −0.85.
+    /// on-beat scored against the TRUE beats over 25–30 s. The spike read +0.86 vs −0.85; FF.4's
+    /// unison +0.843 ± 0.014 vs −0.841 ± 0.012. FF.5's strips (DYC: 3 strips, a 3-beat cycle):
+    /// +0.626 ± 0.039 vs −0.617 ± 0.046, chance −0.005 ± 0.018 — lower because this score sits
+    /// inside ONE beat, so a strip's phase spread over its 3-beat cycle costs 3× here (per strip,
+    /// against its own ticks, on-beat is +0.907 — `coherenceMatchesTheSpike`).
     /// Env-gated (`FIREFLIES_DECOY=1`); report + a separation floor, no swarm change.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_DECOY"] == "1"))
     func decoyIsDistinguishable() throws {
