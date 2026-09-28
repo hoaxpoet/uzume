@@ -3,9 +3,10 @@
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
 FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
-**FF.4 (M7 + certification) in progress** — prompt `prompts/FF.4-prompt.md`. Reachable by the arrow keys
-for Matt's M7 (`exclude_from_cycling` removed, FF.4 Task 2); `certified: false` until he passes it, so no
-session plans it yet.
+FF.4 (M7) closed 2026-09-28: **M7 not passed** (Matt: *"It's everyone at once — go with option A"*; §1a) ·
+**FF.5 (orchestration + smooth glow, then M7 + certification) next** — prompt `prompts/FF.5-prompt.md`.
+Reachable by the arrow keys (`exclude_from_cycling` removed at FF.4); `certified: false`, so no session
+plans it yet.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
@@ -17,13 +18,35 @@ the FF.R photographs are composition only).
 
 ## 1. The concept and its musical role
 
-**Musical role (the sentence):** *the beat grid pulls a meadow of fireflies into unison, as strongly as
-the beat is clear.*
+**Musical role (the sentence, since FF.4's M7):** *the beat grid organises a meadow of fireflies into
+patches that take turns flashing on the beat, as strongly as the beat is clear.*
+
+(Until FF.4 it read *"… pulls a meadow of fireflies into unison …"*; §1a records why it changed.)
 
 A dusk-to-night meadow under a tree line, full of small fireflies that are dark between flashes. They
-blink at random at the top of a track; neighbours nudge neighbours, so flashes relay across the meadow
-in sweeps; on a clear beat the whole meadow comes to flash as one on the beat within about 15 s. On an
-irregular beat, or one whose clarity is unknown, they stay free (D-257).
+blink at random at the top of a track; neighbours nudge neighbours, so flashes relay in sweeps; on a
+clear beat the meadow organises within about 15 s into 2–4 patches, each flashing together on its own
+beat, so a flash walks across the meadow beat by beat — every beat lights a patch, and no beat lights
+the whole meadow. On an irregular beat, or one whose clarity is unknown, they stay free (D-257).
+
+### 1a. Decided at FF.4's M7 (Matt, 2026-09-28)
+
+- **Orchestration, not unison.** Tester feedback, via Matt: *"all fireflies blinking in unison is
+  overwhelming; they would prefer some level of orchestration across the firefly swarm, so it looks
+  like a coordinated rhythm."* Asked whether the brightness or everyone-at-once was the problem: *"It's
+  everyone at once — go with option A."* Option A as put to him: *the meadow settles into 2 to 4
+  patches, each flashing together on its own beat, so a flash walks across the meadow beat by beat.
+  Every beat lights something, and each firefly still blinks about once a second. It keeps what makes
+  it fireflies: it starts random, organises itself over about 15 s, and stays free when the beat isn't
+  clear.* Rejected: a fresh patch per beat chosen by the grid (Ferrofluid Ocean's D-157 regions, taken
+  literally), because the grid would decide who flashes and the self-organising would be gone; and a
+  whole-meadow flash on beat 1, which needs a reliable bar start (BUG-065 / D-206, parked).
+- **The glow is smooth.** Matt: *"fireflies look pixelated."* Measured: FF.3 printed each halo and
+  starburst as one-screen-pixel stipple against an interleaved-gradient grain, a regular per-pixel
+  dither that reads as digital pixels rather than ink (6× crops of the 1080p still,
+  `~/Documents/uzume_spikes/fireflies/ff4/pixel_crop_*_x6.png`). His pick, *"A"*: the halo and starburst
+  become a soft continuous yellow-green light around the white core; **the world keeps its print
+  texture**.
 
 ## 2. Temporal contract
 
@@ -31,13 +54,15 @@ irregular beat, or one whose clarity is unknown, they stay free (D-257).
 |---|---|
 | Track start | Incoherent random blinks, by design (the swarm restarts on every track change). |
 | First seconds (clear beat) | Clusters, then sweeps relaying across the meadow; the swarm coheres in ~3 s. |
-| ~6–15 s (clear beat) | The unison finds the beat and stays on it: hundreds of points flash together, once per 1, 2 or 4 beats (the cycle nearest 1 s). |
-| Irregular / unknown beat | Free for the whole track: neighbour relay only, scattered clusters, no unison on a beat. |
-| Near-silence (`near_silent01`) | All but ~5 % stragglers fade out over ~1.5 s; the world stays lit and its ambient motion continues (a meadow at night does not freeze; see §4.3). |
-| Any unison | Many tiny points, never a frame-wide lift: max Δ frame-mean luma < 0.05 (D-157). |
+| ~6–15 s (clear beat) | The meadow organises into 2–4 patches that take turns: each beat, one patch flashes together and the flash walks across the meadow beat by beat. Every beat lights a patch; no beat lights them all. Each firefly still blinks every 1–2 s. (Until FF.5: the whole meadow in unison once per 1, 2 or 4 beats — rejected at FF.4's M7, §1a.) |
+| Irregular / unknown beat | Free for the whole track: neighbour relay only, scattered clusters, no patch on a beat. |
+| Near-silence (`near_silent01`) | All but ~5 % stragglers fade out over ~1.5 s; the world stays lit and its ambient motion continues (a meadow at night does not freeze; see §4.3). ⚠ **Near-silence means silence, not quiet music:** in FF.4's M7 capture (`2026-09-28T14-43-46Z`) `near_silent01` never fired over DYC's first 106 s, its quiet opening, so the full swarm flashed there. Whether quiet passages should thin the swarm is open (FF.5 prompt, DECISION). |
+| Any patch flash | Many tiny points, never a frame-wide lift: max Δ frame-mean luma < 0.05 (D-157). |
 
 The behaviour is built and gated (FF.1): `FirefliesSwarm` reproduces the spike's 20-seed coherence and
 on-beat distributions on the four parity captures. **It is not a tuning surface in FF.2.**
+FF.5 changes it on clear beats (patches, §1a); a free swarm (irregular or unknown beat) keeps the
+FF.1 behaviour and its parity gate.
 
 ## 3. The look (D-258)
 
@@ -101,6 +126,9 @@ Restated from §3, §4.2 and D-157; nothing here is newly decided.
   stays < 0.05 at 1080p through the real draw path. If a bloom breaks that, the bloom shrinks.
 - The world's composition, inks, camera and breath (FF.2) and the swarm's behaviour (FF.1) do not change.
 
+**Superseded at FF.4's M7 (§1a): the halo and starburst become a smooth glow in FF.5.** The rest of
+this paragraph stays true.
+
 **As built (FF.3).** Each lit firefly is a flat near-white printed dot, a yellow-green halo and a
 four-point starburst printed as grain coverage, and a light pool that multiplies the print around it
 (pale strokes and mist brighten toward green; the dark between strokes stays dark). The nearest
@@ -115,7 +143,7 @@ reaches, and FF.3 spends about three times FF.2's per-frame step (see ENGINEERIN
 
 | Visual layer | Primitive | Timescale | Status |
 |---|---|---|---|
-| Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. |
+| Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. FF.5: each patch is pulled toward its own tick in the cycle, so the patches take turns (§1a). |
 | Swarm visibility | `near_silent01` | ~1.5 s | Built (FF.1). Gated in `FirefliesSwarmTests`. |
 | World breath (wind in grass and trees, mist drift) | `bassAttRel` → 4 s EMA → 0.5 + 0.5·tanh(4x) (`FirefliesWorld.advance`); sets wind speed and sway (∝ breath²) and mist speed, all integrated so nothing lurches — never beat-rate | several seconds | Built (FF.2); route `world_breath`, green in `RouteCoverageTests`. Chosen over `midAttRel`/`trebAttRel`: the only one of the three whose slow average moves on all four parity captures. Visible, measured with the camera held still (`FirefliesRenderTests.breathIsVisible`): tree-crown motion 3.4× (DYC) / 1.7× (Pyramid) in full vs quiet passages. Matt, at the FF.2 still: *"might want to consider having the trees move based on musical input"* — the trees sway on this route. |
 
@@ -138,7 +166,8 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 |---|---|---|
 | FF.2 | The 3D world in the screenprint style; the swarm placed in depth through the shared camera; ambient motion | One still beside `07` accepted by Matt **first**; then films, motion gate, flash, frame budget, FF.1 parity still green |
 | FF.3 | The light: near-white core + coloured bloom, fireflies lighting the grass and mist around them, occlusion by grass/trees | Side-by-side against `09`/`07`; flash re-measured; 60 fps 1080p Release |
-| FF.4 | M7 on the beta playlist; certification; remove `exclude_from_cycling` | Matt's M7 |
+| FF.4 | M7 on the beta playlist; certification; remove `exclude_from_cycling` | Matt's M7 — **not passed 2026-09-28** (§1a). Delivered the pre-M7 packet, the WCAG flash test and reachability; not certified |
+| FF.5 | Patches take turns on the beat (§1, §2); the smooth glow (§1a); then M7 + certification (FF.4's Tasks 3–7) | Matt's look check on a film, then his M7 and one streaming pass |
 
 If FF.2/FF.3 do not reach the bar by the October 11 cutoff, Fireflies ships after the beta, never as a
 sketch.
@@ -149,5 +178,10 @@ sketch.
 - **Rubric fit:** the sidecar's `rubric_profile: full` expects PBR-cookbook materials and ≥ 4 noise
   octaves per surface; a screenprint look may meet some of that differently. Report the rubric honestly;
   never change the profile to pass it.
+- **Patches collapsing back into unison:** neighbour relay that crosses a patch boundary pulls
+  neighbouring patches together, and the whole meadow is the model's natural attractor. Each patch has
+  to self-organise on its own beat without the relay undoing the separation. Grounding: a patch is the
+  existing model (the FF.0 spike, gated at FF.1) driven on its own grid tick, so the combination to
+  prove is only what happens at the boundaries.
 - **Reference tooling:** `Scripts/compare_render.sh` reads only the repo folder, so it cannot see the
   local-only `07`; FF.2 solves that locally, never by committing the prints.
