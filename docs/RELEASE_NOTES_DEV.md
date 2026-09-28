@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-174700] KAG.4 — Kagura certified (the 26th)
+
+Kagura, the point-light dancer, is certified on Matt's M7 of the beta playlist (*"looks much better, happy with it overall"*). It now enters planned sessions like the other certified scenes, kept off beat-irregular songs by `requires_regular_beat`. Flash-safe in all three measured cases (the dance, the Charleston, the ballet rest: 0.00 flashes/s); no golden session plan changed. Known: the macarena runs a little heavy on calm songs.
+
 ### [dev-2026-09-28-153357] KAG.3 — Kagura after the first live sessions: new dances, fairer picks (pending live M7)
 
 After three live sessions (Matt, 2026-09-28): the chicken dance is out of the pick; the Charleston joins for fast songs (one step per beat, only where that is within ±25 % of its natural speed — B.O.B. and Take Five on the beta playlist); calm songs rest in slow ballet poses instead of the sway (Moonlight, Penny Lane, Warszawa; Pyramid Song keeps its sway); and each bar is ranked against the song's other bars, so calm, middle and vigorous each get their share (live, 62 % of picks had been the middle dance). Local files re-analyse once more (stem cache v18: v16 collided with BUG-144's entries). New session-log lines: `KAGURA_SONG` and `KAGURA_PICK`. Not certified.

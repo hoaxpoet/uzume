@@ -1,8 +1,9 @@
 # Kagura — Design
 
-**Status:** design written 2026-09-24 from the KAG.0 spike and Matt's calls on it. KAG.1 (clip resource)
-shipped 2026-09-25; KAG.2 (the twist, the sway, cold start, look B) built 2026-09-25, pending live M7 at
-KAG.3. What the build settled is in §14.
+**Status:** ✅ **CERTIFIED at KAG.4 (2026-09-28), the 26th.** Design written 2026-09-24 from the KAG.0 spike
+and Matt's calls on it. KAG.1 (clip resource) shipped 2026-09-25; KAG.2 (the twist, the sway, cold start, look
+B) 2026-09-25; KAG.3 (selection, arm reach, safety nets, then the Charleston and ballet) M7 PASSED 2026-09-28.
+What the builds settled is in §14 (KAG.2) and §15 (KAG.3, KAG.4).
 **Family:** `dancer` (first member) · **Rubric:** `lightweight` · **Paradigm:** particles (a
 `ParticleGeometry` conformer)
 **Name:** from the mythic origin of *kagura*, Ame-no-Uzume's drummed dance
@@ -541,3 +542,12 @@ either way). It is re-derived when the song energy moves to D-259's energy curve
 fox trot, lindy hop, etc. i'd also love to see the cha-cha slide." Constraint from the spike: CMU's salsa and
 lambada travel (they smear under look B), its Lindy/Charleston trials are 2–4.5 s, and it has no tango, fox trot
 or cha-cha slide — these need another motion source or in-place re-cuts, each watched in motion before it ships.
+
+**KAG.4 — certified, the 26th (2026-09-28).** On the KAG.3 M7 above (Matt: *"we can move to certification!"*).
+Gates: `FidelityRubricTests.certifiedPresets` (lightweight; `expectedAutomatedGate` stays `false` — the dance is
+CPU-side, the Filigree precedent), `PhotosensitivityCertificationTests.multiPassMeasured` with three real
+`MultiPassFlashHarnessTests` measurements (the dance, the Charleston, the ballet rest: 0.00 flashes/s each),
+`RouteCoverageTests` (three `bassAtt` routes green), `OrchestratorCertifiedFilterTests`, and every golden session
+plan unchanged with Kagura in the planner. The reference README's four-item contract is scored with evidence.
+The external curated reference set planned for KAG.4 was not made (outside imagery; Matt's curation) —
+certified on the first-party anchors, the Nebula precedent.

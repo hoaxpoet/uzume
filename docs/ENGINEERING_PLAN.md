@@ -268,7 +268,7 @@ beta rather than as a sketch.
 | **KAG.1** clip bake + data resource (infra, ships alone) | ✅ 2026-09-25, on `kag-1` (local) | `tools/kagura/bake_clips.py` (spike port; per-subject fps table; deterministic, two runs byte-identical), `Renderer/Resources/Kagura/` (**459 KB**, ten clips, tracked), `KaguraClipLibrary`, `SHA256SUMS`, the CMU entry in `docs/CREDITS.md`. `--check` reproduces the spike: pulse rates 158/164, 50/53, 93/94, 87, 100/96 per min; vigor 0.71/0.60/0.45/0.38/0.38 m/s. `KaguraClipLibraryTests` 7/7. Not visually verifiable (no scene yet) |
 | **KAG.2** dancer geometry, one dance | ✅ 2026-09-25, merged #274, **M7 PASSED via KAG.3 (2026-09-28)** | `KaguraBeatClock` (grid as plain data + continuous `p(t)`: smoothed playback clock + render-rate phase lock, stamped and extrapolated past the tick's one-frame lag; local file = clock only, streaming = + drift, lock-gated), `KaguraChoreographer` (warp, bar-line clip changes, one-beat handoff, ping-pong sway, causal τ 2 s leash), `KaguraDancer` + `Kagura.metal` (look B: per-elapsed-time trail, instanced core/halo, shoulder), sidecar `certified: false`, registries, `installBeatGrid` at every install site. **Pulse lock** (spike detector on the dancer's output): 100 % on the beat on love_rehab / so_what / there_there (n 44/51/48, chance 25 %); the +½-beat decoy 0 % / 100 % on the "and" — the spike's same-capture figures. Foot-slide 21.9/25.2/23.1 cm/s vs the spike's 21.3/32.2/26.0. Release 1080p, no readback: 0.216 ms GPU median. Flash 0.00/s. Golden plans unchanged. Compare sheet + motion gate (0 spikes) read. [`KAGURA_DESIGN.md`](presets/KAGURA_DESIGN.md) §14 |
 | **KAG.3** five dances, dance selection, safety nets | ✅ 2026-09-25 → 2026-09-28, on `kag-3` (local), **M7 PASSED 2026-09-28** (Matt: *"looks much better, happy with it overall"*; beta playlist local + a streaming pass) | **Arousal source:** `TrackProfile.mood` is the classifier's LAST-frame state (ρ 0.59 vs the spike's reference; 5 repertoires would move) → Matt option A: the song-level median of per-frame arousal after the first sixth (built as `TrackProfile.songArousal`, cache v16; since the main merge, `mood.arousal` itself via BUG-144 — same rule and values), reference re-derived from it (ρ 0.85; Take Five, Teardrop move). `KaguraSelection`: the spike's repertoire (README §9, §10 reproduced exactly), the bar-just-played pick over a trailing 60 s envelope (option A; 41 % agreement with the spike's lookahead picks, 42 % for the spike's own rule lagged a bar), arm reach ±25 % (band floor + 1.0/s rate limit, outside all 80 real captures), grid-CV safety net 0.08 / rejoin < 0.06 × 8 beats (sways on every irregular beta window, dances on every steady one), silence floor 0.02 (quietest music 0.065, track end 0.005) + stopped-clock fade. Gesture dances enter clips as the spike did; twist/cabbage as KAG.2 (Matt: split by dance). **Pulse lock** per dance within 10 points of the spike's lowest cut on all three captures, decoy swaps beat/"and"; twist/cabbage 100 %. Foot-slide 21.9/25.2/23.1 = KAG.2. Sidecar `requires_regular_beat`, `bassAtt` routes; `RouteCoverageTests` green, goldens unchanged. Release 1080p 0.10–0.29 ms GPU median. **After Matt's live sessions (2026-09-28):** chicken dance out, Charleston in (fast songs), ballet as calm songs' rest, bar ranked against bars (cache v18 until the main merge; now main's v17), `KAGURA_SONG`/`KAGURA_PICK` log lines. [`KAGURA_DESIGN.md`](presets/KAGURA_DESIGN.md) §15 |
-| **KAG.4** certification | ⏳ | Lightweight rubric, reference set, cert gates |
+| **KAG.4** certification | ✅ 2026-09-28, **CERTIFIED — the 26th** | On KAG.3's M7 (`2026-09-28T16-18-10Z`). `certifiedPresets` + `multiPassMeasured` (the dance / Charleston / ballet rest, 0.00 flashes/s each); routes green; no golden plan moved; reference contract scored 4/4 with evidence. External reference set not made (Nebula precedent). Entry: §Recently Completed |
 
 Open for Matt's live look (not blocking KAG.1): whether the beat lock is legible with audio (R1), and
 whether the macarena's slightly early arms read as anticipation. The Superstition D-154 false positive is
@@ -10053,6 +10053,29 @@ second harness fixture appeared. Without it, Poisson Sandbox would have landed i
 
 **Capability registry:** four new rows (persistent stage state; N-iteration stages; per-stage pixel
 format; non-finite watchdog) plus a new persistent-harness-template row.
+
+### Increment KAG.4 — Kagura certified, the 26th ✅ (2026-09-28)
+
+**Matt's M7** (`2026-09-28T16-18-10Z`, the beta playlist as local files): *"looks much better, happy with it
+overall. macarena is a little heavy in this set, but it's ok"* … *"we can move to certification!"*
+
+| evidence | |
+|---|---|
+| chain_health | **degraded** (`signal_health_band_low`), flagged per D-184: the quiet run is Moonlight Sonata itself (peaks −23 to −27 dBFS for its whole ~50 s, 16:34:20–16:35:10); every other track peaks −4 to 0 dBFS (`SIGNAL_HEALTH` lines) |
+| live | 685 s, 41,034 frames, Kagura throughout, all ten beta songs |
+| frame rate | **59.9 fps** median |
+| GPU | p50 0.11 ms / p95 0.11 ms (max 3.48) vs a 16.6 ms budget |
+| drawable | **0 failures, 0 unpresented** |
+| routes | `arm_reach`, `dance_pick`, `silence_rest` ← `bassAtt`, all green on `RouteCoverageTests`; the grid-driven moves are gated by `KaguraPulseLockReplayTests` |
+| flash | `MultiPassFlashHarnessTests`: the dance (120 BPM), the Charleston (166 BPM, forced) and the ballet rest (calm, no grid), 0.00 flashes/s each, every frame moving |
+| goldens | unchanged with Kagura certified (`GoldenSessionTests`, `OrchestratorCertifiedFilterTests` green) |
+
+**Deviations accepted at certification:** the macarena runs heavy on calm songs (Matt: "it's ok"); one
+`energyReference` point predates BUG-146 (kept — re-deriving takes the Charleston off Take Five, which Matt
+approved); the gesture dances lock looser than the twist and cabbage patch (~40–60 % on the beat, as in the
+spike); the streaming pass was on the KAG.3 build before the Charleston and ballet; the external curated
+reference set was not made (the Nebula precedent). Follow-ups: more dances (tango, salsa, fox trot, Lindy hop,
+cha-cha slide — a motion source beyond CMU) and the D-259 energy-curve move (Matt's call).
 
 ### Increment ALFVEN.CERT — Alfvén certified, the 24th ✅ (2026-09-11)
 
