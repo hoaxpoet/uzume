@@ -455,7 +455,7 @@ now (D-238):
 
 Every control declares a VoiceOver label and a hint that says what it does now.
 
-**No playback controls — streaming path only.** For connector-driven sessions (Apple Music, Spotify) Uzume does not control the source app; any "pause" button on `PlaybackView` would be a lie. **LF.5.fix carve-out (2026-05-28):** for local-file sessions Uzume IS the player, so a transport bar (Stop / Prev / Play-Pause / Next) renders at the bottom-center of `PlaybackView` whenever `currentSource?.isLocalFile == true`. The bar follows the chrome's visibility and disappears with the rest of it. UX-2 in §10 carries the same carve-out language.
+**No playback controls — streaming path only.** For connector-driven sessions (Apple Music, Spotify) Uzume does not control the source app; any "pause" button on `PlaybackView` would be a lie. **LF.5.fix carve-out (2026-05-28):** for local-file sessions Uzume IS the player, so a transport bar (Stop / Prev / Play-Pause / Next) renders at the bottom-center of `PlaybackView` whenever `currentSource?.isLocalFile == true`. **LFSEEK.1 (2026-09-28):** a track bar above the buttons shows the current track's elapsed and total time; click or drag to jump within the track, and it lands on release. Streaming sessions never show it. The bar follows the chrome's visibility and disappears with the rest of it. UX-2 in §10 carries the same carve-out language.
 
 ### 7.4 Live adaptation controls (keyboard-only, invisible to viewers)
 

@@ -1633,6 +1633,22 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment LFSEEK.1 — jump within a local-file track ✅ (2026-09-28; Matt's live check pending)
+
+**Why (Matt, 2026-09-27).** Local-file playback had no way to move within a song: the transport was Stop / Prev / Play-Pause / Next only. Streaming doesn't need one, since the streaming app owns its player. Checking NRG.4 meant listening to Dance Yrself Clean from the top to reach the 3:08 drop. Matt picked a clickable track bar over keyboard skips.
+
+**Delivered.**
+- **Track bar** (`TrackSeekBar` in `LocalFileTransportBar`): the current track's position between elapsed and total time, above the transport buttons, in local-file sessions only. Click or drag to jump; the jump lands on release, so a drag restarts the audio once. VoiceOver reads "Track position, 1:23 of 8:58", and adjusting steps ±10 s. It polls the position four times a second while shown.
+- **Player:** `LocalFilePlaybackProvider.seek(to:)` restarts the engine at the chosen frame through the same `start()` every track change uses. That teardown is the one proven against the BUG-021/059/078 races, and it swaps the (player, file) pair first, so the stopped node's completion bails instead of advancing the queue. The first pass is a `scheduleSegment` from the frame; loops after it are whole. `PlayheadAnalysisClock` adds the start frame to `sampleTime`, which counts from 0 at `play()`. A paused player stays paused.
+- **Track clock:** `MIRPipeline.seek(to:)` moves `elapsedSeconds`, the clock the plan, beat grid, stem series and recording all read, and clears the state keyed to the old position (the drift/onset lock and the first-note pulse anchor). The grid, tempo and smoothers stay. `VisualizerEngine.seekLocalFile(to:)` does both and clears the last-applied planned scene, so the new position's scene applies at once. A failed restart ends the session with the existing local-file playback toast.
+- The LF transport methods moved into `AudioInputRouter+LocalFileTransport.swift`, which keeps the router under its file-length cap.
+
+**Evidence.** `LocalFileSeekTests` on the real engine and fixture: a seek to 12 s reads the playhead at 12–13 s; a seek does not fire the queue advance; the end arrives on time after a seek near it; a paused seek stays paused; the MIR clock moves and keeps the grid.
+
+**Done-when:** ✅ tests; ⏳ Matt's live check. Open Dance Yrself Clean, drag the bar to about 3:00, and the drop at 3:08 should bring the dense scene.
+
+**Found and fixed (BUG-151, Matt: "don't flag, fix").** The end-of-track signal fired when the player had *read* the last audio (`.dataConsumed`, AVAudioPlayerNode's default), 1.0 s before it had *played* it, so each multi-file queue advance cut the song's last second. The queue advance now waits for `.dataPlayedBack`; a single-file loop keeps `.dataConsumed` so it stays seamless. The seek test requires the end ≥ 2.8 s into a 3 s remainder (the old code measured 2.0 s).
+
 ### Increment NRG.4 — scene changes land on the song's energy changes ✅ (2026-09-27; Matt's live check pending)
 
 **Delivered (D-259).**
@@ -2370,24 +2386,6 @@ harness does not exist and is recorded as not-built rather than dropped. No rend
 `FeatureVector` change; the render capability registry is unchanged.
 
 ### BUG129.1 — the chain-health peak had no ceiling, and the 0 dBFS it reported was correct ✅ (2026-09-13)
-
-`chain_health.json` read `peakDBFS: 0` with a `clean` verdict on three consecutive sessions. Read
-straight out of the float WAVs, that is the truth: peak `1.00000000`, reached by **one sample out of
-2,880,000**, second-highest at −0.24 dBFS — a limited master, not a broken capture. The ≈ −6 dBFS
-readings before it were *tap* captures; BUG087.5 retired the tap the same day, so `raw_tap.wav`
-became the decoded file at unity gain.
-
-★ **The defect was the missing half of the check** — `critical_peak` and `low_peak` are both floors,
-and nothing existed at the ceiling. Added `clipped(run=N,samples=M)` and `over_full_scale(…)`, gated
-on FLAT-TOPPING (4 consecutive samples at the rail) rather than on the peak, because gating on the
-peak would grade every loud master `degraded` and hollow out D-184. That reinterprets one of the
-bug's own verification criteria; the reasoning is recorded in the KNOWN_ISSUES entry.
-
-New reported field `maxFullScaleRun`, present even when 0 or 1 — `peakDBFS: 0` is indistinguishable
-from an unset default by eye, and that ambiguity is the whole complaint. Four new
-`ChainAnalyzerTests`; all four sessions regraded with verdicts unchanged. No renderer, preset or
-`FeatureVector` change; the render capability registry is unchanged.
-
 ### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ M7 PASSED, BUG-130 RESOLVED (2026-09-12, Matt: *"silence pauses correctly now"*)
 ### Increment DOC.12 — scheduled documentation rotation ✅ (2026-09-11)
 ### BUG087.5 — retire the tap's forwarding role ✅ (2026-09-11, Matt: *"retire the tap's forwarding role"*)
