@@ -110,7 +110,8 @@ struct GoldenSessionTests {
     // targetMotion 0.3125. Track-0 ranking: Gossamer 0.650 (energy 0.967, tempo 0.988) ·
     // Aurora Veil 0.643 · Witchlight 0.637 · Nimbus 0.630 · Skein 0.630 · Meniscus 0.610.
     // Gossamer's 60 s window has expired by each track boundary, so it takes every track-first
-    // (unchanged from the mood-era golden).
+    // (unchanged from the mood-era golden). FF.5: Fireflies (certified) enters at 0.637, third —
+    // no plan change.
 
     @Test("Session B: preset IDs match V.7.6.2 multi-segment golden sequence")
     func sessionB_presetSequence() throws {
@@ -158,7 +159,11 @@ struct GoldenSessionTests {
     //   Track 2 (BPM=115, level 7): Ferrofluid Ocean 0.656 = Fractal Tree 0.656 (tie broken by
     //                               catalog order) · Glaze 0.649.
     //   Track 3 (BPM=125, level 9): Filigree (recovered by then).
-    //   Track 4 (BPM=70,  level 3): Gossamer 0.591 · Witchlight 0.584.
+    //   Track 4 (BPM=70,  level 3): Gossamer 0.591 · Witchlight 0.584. FF.5: Fireflies (certified)
+    //                               ranks FIRST on a fresh context, 0.631, but track 3 is Filigree —
+    //                               the same `particles` family — so the family-repeat multiplier
+    //                               (0.2) sinks it and Gossamer (`sparkle`) keeps the track. No plan
+    //                               change.
     //   Track 5 (BPM=135, level 9): Cymatic Resonance (Filigree still inside its window).
 
     @Test("Session C: preset IDs match V.7.6.2 multi-segment genre-driven sequence")
