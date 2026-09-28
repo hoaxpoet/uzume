@@ -73,7 +73,7 @@ struct PreparationTrackRow: View {
         row.status == .ready ? profile : nil
     }
 
-    /// "118 BPM · A minor · calm" — the discoveries, for a heard track.
+    /// "118 BPM · A minor · energy 2 → 9" — the discoveries, for a heard track.
     static func discoveries(_ profile: TrackProfile) -> String {
         var parts: [String] = []
         if let bpm = profile.bpm, bpm > 0 {
@@ -82,7 +82,9 @@ struct PreparationTrackRow: View {
         if let key = profile.key, !key.isEmpty {
             parts.append(prettyKey(key))
         }
-        parts.append(moodWord(profile.mood))
+        if let energy = profile.energyCurve?.readout() {
+            parts.append(energyText(energy))
+        }
         return parts.joined(separator: " \u{00B7} ")
     }
 
@@ -99,14 +101,12 @@ struct PreparationTrackRow: View {
         return String(format: String(localized: "preparation.track.stems_led_by"), name)
     }
 
-    /// One word for the mood quadrant. Heard, not predicted.
-    static func moodWord(_ mood: EmotionalState) -> String {
-        switch mood.quadrant {
-        case .happy: return String(localized: "preparation.track.mood.bright")
-        case .calm:  return String(localized: "preparation.track.mood.calm")
-        case .tense: return String(localized: "preparation.track.mood.restless")
-        case .sad:   return String(localized: "preparation.track.mood.wistful")
-        }
+    /// The measured energy, 1–10 against the library: "energy 5" for a steady song, "energy 2 → 9"
+    /// for one that moves (NRG.2, D-259 — replaces the mood word, whose classifier did not generalise).
+    static func energyText(_ energy: EnergyReadout) -> String {
+        energy.isSteady
+            ? String(format: String(localized: "preparation.track.energy.level"), energy.typical)
+            : String(format: String(localized: "preparation.track.energy.range"), energy.low, energy.high)
     }
 
     /// "F# minor" → "F♯ minor", "Db major" → "D♭ major".

@@ -61,6 +61,9 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
     @Flag(name: .long, help: "BUG-066 before/after: emit old-flux vs new-flux mood (V/A) per track, not the census.")
     var moodAb: Bool = false
 
+    @Flag(name: .long, help: "NRG.2: whole-track energy curves (production analyzeMIR) instead of the census.")
+    var energy: Bool = false
+
     // MARK: - Run
 
     func run() throws {
@@ -85,6 +88,10 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
 
         if moodAb {
             try runMoodABMode(pending: pending, rootURL: rootURL, outURL: outURL)
+            return
+        }
+        if energy {
+            try runEnergyMode(pending: pending, rootURL: rootURL, outURL: outURL)
             return
         }
 
@@ -165,6 +172,56 @@ struct CorpusCensusRunnerCommand: ParsableCommand {
         }
         logLine("[mood-ab] done → \(outURL.path)")
     }
+
+    // MARK: - Energy mode (NRG.2 calibration)
+
+    /// Whole-track energy curves for the library 1–10 scale (D-259). One summary row per track in
+    /// `--out`; the full per-second curve goes to `<out>.curves.jsonl`, so the calibration pools
+    /// real per-second values rather than per-track summaries. Resumable like the census.
+    private func runEnergyMode(pending: [ManifestRow], rootURL: URL, outURL: URL) throws {
+        logLine("[energy] pending=\(pending.count) · whole tracks")
+        let header = "relpath,duration_s,native_rate,points,loud_p10,loud_p50,loud_p90,act_p10,act_p50,act_p90,error"
+        let handle = try openForAppend(outURL, headerIfNew: header)
+        let curves = try openForAppend(outURL.appendingPathExtension("curves.jsonl"), headerIfNew: "")
+        defer { try? handle.close(); try? curves.close() }
+        for (idx, mrow) in pending.enumerated() {
+            var line: String
+            do {
+                let (samples, rate) = try decodeMonoFloat32(url: rootURL.appendingPathComponent(mrow.relpath))
+                let preview = PreviewAudio(
+                    trackIdentity: TrackIdentity(title: mrow.relpath, artist: ""),
+                    pcmSamples: samples,
+                    sampleRate: Int(rate),
+                    duration: Double(samples.count) / Double(rate)
+                )
+                guard let curve = SessionPreparer.energyCurve(of: preview), !curve.loudnessDB.isEmpty else {
+                    throw CensusError("no energy curve")
+                }
+                func pct(_ values: [Float], _ fraction: Double) -> String {
+                    let sorted = values.sorted()
+                    return String(format: "%.4f", sorted[min(sorted.count - 1, Int(fraction * Double(sorted.count)))])
+                }
+                let loud = curve.loudnessDB, act = curve.activity
+                line = CensusCSV.row([
+                    mrow.relpath, String(format: "%.2f", preview.duration), String(Int(rate)), String(loud.count),
+                    pct(loud, 0.1), pct(loud, 0.5), pct(loud, 0.9), pct(act, 0.1), pct(act, 0.5), pct(act, 0.9), "",
+                ])
+                curves.write(try JSONEncoder().encode(EnergyCurveLine(relpath: mrow.relpath, loud: loud, act: act))
+                    + Data("\n".utf8))
+            } catch {
+                line = CensusCSV.row([mrow.relpath, "", "", "", "", "", "", "", "", "", errorText(error)])
+            }
+            // Curve first, then the summary row: resume keys on the summary, so a kill between the
+            // two can duplicate a curve line (dedupe by relpath) but never lose one.
+            handle.write(Data((line + "\n").utf8))
+            try? handle.synchronize()
+            if (idx + 1) % 25 == 0 { logLine("[energy] \(idx + 1)/\(pending.count)") }
+        }
+        logLine("[energy] done → \(outURL.path)")
+    }
+
+    /// One line of `<out>.curves.jsonl`.
+    private struct EnergyCurveLine: Encodable { let relpath: String; let loud: [Float]; let act: [Float] }
 
     // MARK: - Per-track analysis
 

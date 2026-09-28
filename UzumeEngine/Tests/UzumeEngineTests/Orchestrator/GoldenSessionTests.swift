@@ -1,4 +1,8 @@
-// GoldenSessionTests — three curated playlists as regression fixtures (Increment 4.4, D-034).
+// GoldenSessionTests — curated playlists as regression fixtures (Increment 4.4, D-034).
+//
+// NRG.3 (2026-09-27, D-259): fixtures state ENERGY (a steady 1–10 curve), not mood — scene
+// choice reads measured energy since BUG-148 showed the mood model is at chance. Each level was
+// chosen to ask for the density the old arousal did (0.1 + 0.8·(level−1)/9 ≈ 0.5 + 0.4·arousal).
 //
 // Every test encodes what DefaultPresetScorer + DefaultTransitionPolicy +
 // DefaultSessionPlanner *actually* produce for these inputs. Any future change
@@ -17,7 +21,7 @@ import Foundation
 import Testing
 @testable import Orchestrator
 import Presets
-import Session
+@testable import Session
 import Shared
 import simd
 
@@ -28,20 +32,18 @@ struct GoldenSessionTests {
 
     private let planner = DefaultSessionPlanner()
 
-    // MARK: — Session A: High-Energy Electronic (5 × 180 s, BPM=130, val=0.7, arous=0.8)
+    // MARK: — Session A: High-Energy Electronic (5 × 180 s, BPM=130, energy level 9)
 
-    // Scoring trace — GOLDEN.1 (2026-09-24), real 30-scene roster (25 eligible: 4
-    // diagnostic + uncertified Waveform are hard-excluded). targetTemp=0.78,
-    // targetDensity=0.82, targetMotion=0.633. makeStemBalance sets energy fields only
-    // (dev=0), so stemAffinity is 0.000 for every scene and sect is 1.000 for every
-    // scene — mood + tempo decide. Track-0 ranking:
-    //   Cymatic Resonance 0.588 (mood 0.825, tempo 0.967)
-    //   Mitosis           0.586 (mood 0.875, tempo 0.883)
-    //   Cytokinesis       0.574 · Dragon Bloom 0.569 · Glaze 0.564 · Fractal Tree 0.549
-    // Segments per track: CR (0–52 s) → Mitosis (52–125 s) → Dragon Bloom (125–180 s).
-    // Cytokinesis loses the third slot to the 0.2× family-repeat against Mitosis
-    // (both `particles`); CR is still inside its 120 s window. By each 180 s track
-    // boundary CR has recovered, so argmax restarts the same cycle every track.
+    // Scoring trace — NRG.3 (2026-09-27), real roster. Energy level 9 → target density 0.811,
+    // targetMotion 0.633; stemAffinity 0.000 / sect gated off for all. Track-0 ranking:
+    //   Filigree          0.633 (energy 0.961, tempo 0.933)
+    //   Mitosis           0.631 (energy 0.989, tempo 0.883)
+    //   Cymatic Resonance 0.613 · Cytokinesis 0.604 · Ferrofluid Ocean 0.580 · Fractal Tree 0.580
+    // NRG.4 (2026-09-27): each 180 s track now splits evenly under the scenes' caps into
+    // Filigree 60 s · Cymatic Resonance · Mitosis · Ferrofluid Ocean 40 s each, so Filigree's
+    // fatigue window has closed by every track boundary and every track opens on the argmax,
+    // Filigree. (NRG.3's uneven 40/40/40/…/stub split left it open and the openers rotated.) A
+    // steady, identical-song seed-0 fixture; seeded production plans vary the rotation.
 
     @Test("Session A: 5 tracks, no errors")
     func sessionA_producesCorrectCount() throws {
@@ -63,19 +65,10 @@ struct GoldenSessionTests {
         let session = try planner.plan(
             tracks: makeSessionA(), catalog: makeRealCatalog(), deviceTier: .tier2)
         let ids = session.tracks.map { $0.preset.id }
-        // GOLDEN.1 (2026-09-24): regenerated against the real roster. The BETA.0 expectation
-        // `[VL, Membrane ×4]` was a property of the stale 10-scene fixture (one `reaction`
-        // scene, no competition) — Membrane does not appear at all on the real roster.
-        //
-        // ⚠ Five identical track-firsts is NOT the BUG-133 monopoly back: each track runs
-        // three distinct scenes (see trace above), and it is the seed-0 argmax restarting the
-        // same cycle once CR's window expires — the track-granularity repeat BUG133.1 already
-        // recorded as a window-tuning question for Matt. Production never plans at seed 0;
-        // measured over seeds 1…24 this session draws 7–11 distinct scenes across its
-        // 15–16 segments (2–5 distinct track-firsts).
+        // NRG.3 (2026-09-27): regenerated for energy; NRG.4 for even splits (trace above).
+        // Production plans with a random seed; this seed-0 argmax pins the scorer only.
         #expect(ids == [
-            "Cymatic Resonance", "Cymatic Resonance", "Cymatic Resonance", "Cymatic Resonance",
-            "Cymatic Resonance",
+            "Filigree", "Filigree", "Filigree", "Filigree", "Filigree",
         ])
     }
 
@@ -111,22 +104,19 @@ struct GoldenSessionTests {
         }
     }
 
-    // MARK: — Session B: Mellow Jazz (5 × 180 s, BPM=85, val=0.3, arous=−0.3)
+    // MARK: — Session B: Mellow Jazz (5 × 180 s, BPM=85, energy level 4)
 
-    // Scoring trace — GOLDEN.1 (2026-09-24), real roster. targetTemp=0.62,
-    // targetDensity=0.38, targetMotion=0.3125; stemAffinity 0.000 / sect 1.000 for all.
-    // Track-0 ranking: Gossamer 0.635 (mood 0.930, tempo 0.988) · Skein 0.615 ·
-    // Nacre 0.602 · Alfvén 0.599 · Aurora Veil 0.599 · Nimbus 0.595.
-    // Segments per track: Gossamer (0–101.5 s, its maxDuration) → Skein. Gossamer's
-    // 60 s window (fatigue_risk low) has expired by the next track boundary, so it
-    // takes every track-first. Same seed-0 argmax property as Session A; seeds 1…24
-    // give 5–8 distinct scenes over the 10–12 segments.
+    // Scoring trace — NRG.3 (2026-09-27), real roster. Energy level 4 → target density 0.367,
+    // targetMotion 0.3125. Track-0 ranking: Gossamer 0.650 (energy 0.967, tempo 0.988) ·
+    // Aurora Veil 0.643 · Witchlight 0.637 · Nimbus 0.630 · Skein 0.630 · Meniscus 0.610.
+    // Gossamer's 60 s window has expired by each track boundary, so it takes every track-first
+    // (unchanged from the mood-era golden).
 
     @Test("Session B: preset IDs match V.7.6.2 multi-segment golden sequence")
     func sessionB_presetSequence() throws {
         let session = try planner.plan(
             tracks: makeSessionB(), catalog: makeRealCatalog(), deviceTier: .tier2)
-        // GOLDEN.1: unchanged by the re-mirror — Gossamer was already the winner.
+        // NRG.3: unchanged — Gossamer also wins on energy (trace above).
         #expect(session.tracks.map { $0.preset.id } == [
             "Gossamer", "Gossamer", "Gossamer", "Gossamer", "Gossamer",
         ])
@@ -135,15 +125,15 @@ struct GoldenSessionTests {
         ])
     }
 
-    @Test("Session B: all transitions are crossfade (energy=0.38 < 0.85 cut threshold QR.2)")
+    @Test("Session B: all transitions are crossfade (energy level 4 → 0.37 < 0.85 cut threshold QR.2)")
     func sessionB_allTransitionsAreCrossfade() throws {
         let session = try planner.plan(
             tracks: makeSessionB(), catalog: makeRealCatalog(), deviceTier: .tier2)
-        // energy = 0.5 + 0.4*(−0.3) = 0.38; duration = 2.0*0.62 + 0.5*0.38 ≈ 1.43 s
+        // energy = 0.1 + 0.8*(4−1)/9 = 0.367; duration = 2.0*0.633 + 0.5*0.367 ≈ 1.45 s
         for entry in session.tracks.dropFirst() {
             let t = try #require(entry.incomingTransition)
             #expect(t.style == .crossfade)
-            #expect(abs(t.duration - 1.43) < 0.05)
+            #expect(abs(t.duration - 1.45) < 0.02)
         }
     }
 
@@ -162,29 +152,27 @@ struct GoldenSessionTests {
 
     // MARK: — Session C: Genre-Diverse Mix (6 tracks, varied durations)
 
-    // Scoring trace — GOLDEN.1 (2026-09-24), real roster, track-firsts:
-    //   Track 0 (BPM=130, val=0.70, arous=0.80):  Cymatic Resonance 0.588 (= Session A).
-    //   Track 1 (BPM=80,  val=0.20, arous=-0.40): Gossamer 0.632 (mood 0.930, tempo 0.975).
-    //   Track 2 (BPM=115, val=0.50, arous=0.40):  Glaze 0.630 (mood 0.920, tempo 0.983).
-    //   Track 3 (BPM=125, val=0.60, arous=0.75):  Mitosis 0.589 (CR, used 551–603 s, is
-    //                                              still inside its 120 s window).
-    //   Track 4 (BPM=70,  val=0.30, arous=-0.50): Gossamer 0.596 (recovered, 60 s window).
-    //   Track 5 (BPM=135, val=0.75, arous=0.85):  Mitosis 0.586.
-    // Four families (geometric / sparkle / hypnotic / particles); 9 distinct scenes over
-    // 20 segments at seed 0.
+    // Scoring trace — NRG.3 (2026-09-27), real roster, track-first rankings:
+    //   Track 0 (BPM=130, level 9): Filigree 0.633 (= Session A).
+    //   Track 1 (BPM=80,  level 4): Gossamer 0.647 (energy 0.967, tempo 0.975).
+    //   Track 2 (BPM=115, level 7): Ferrofluid Ocean 0.656 = Fractal Tree 0.656 (tie broken by
+    //                               catalog order) · Glaze 0.649.
+    //   Track 3 (BPM=125, level 9): Filigree (recovered by then).
+    //   Track 4 (BPM=70,  level 3): Gossamer 0.591 · Witchlight 0.584.
+    //   Track 5 (BPM=135, level 9): Cymatic Resonance (Filigree still inside its window).
 
     @Test("Session C: preset IDs match V.7.6.2 multi-segment genre-driven sequence")
     func sessionC_presetSequence() throws {
         let session = try planner.plan(
             tracks: makeSessionC(), catalog: makeRealCatalog(), deviceTier: .tier2)
-        // GOLDEN.1: regenerated against the real roster (trace above).
+        // NRG.3: regenerated for energy (trace above).
         #expect(session.tracks.map { $0.preset.id } == [
-            "Cymatic Resonance", "Gossamer", "Glaze", "Mitosis", "Gossamer", "Mitosis",
+            "Filigree", "Gossamer", "Ferrofluid Ocean", "Filigree", "Gossamer", "Cymatic Resonance",
         ])
     }
 
     @Test("Session C: genre diversity produces ≥3 distinct preset families")
-    func sessionC_moodShiftProducesFamilyVariety() throws {
+    func sessionC_energyShiftProducesFamilyVariety() throws {
         let session = try planner.plan(
             tracks: makeSessionC(), catalog: makeRealCatalog(), deviceTier: .tier2)
         let families = Set(session.tracks.map { $0.preset.family })
@@ -193,20 +181,18 @@ struct GoldenSessionTests {
 
     // MARK: — Session D: Lumen Mosaic eligibility (BUG-004 closure verification)
 
-    // Scoring trace — GOLDEN.1 (2026-09-24), real roster. Session D locks that a scene
-    // wins when the mood matches its identity (BUG-004 closure, 2026-05-12): Lumen Mosaic
-    // is low-motion, medium-density, neutral-temperature.
+    // Scoring trace — NRG.3 (2026-09-27), real roster. Session D locks that a scene wins
+    // where its identity fits (BUG-004 closure, 2026-05-12): Lumen Mosaic is low-motion and
+    // medium-density (motion 0.25, density 0.65).
     //
-    // Track profile: BPM=75, val=0.0, arous=+0.30, single 180 s track.
-    //   targetTemp    = 0.5 + 0.4 * 0.0   = 0.50
-    //   targetDensity = 0.5 + 0.4 * 0.30  = 0.62
-    //   targetMotion  = 0.2 + 0.3 * (75-70)/40 = 0.2375
+    // Track profile: BPM=75, energy level 7, single 180 s track.
+    //   target density = 0.1 + 0.8 * 6/9 = 0.633
+    //   targetMotion   = 0.2 + 0.3 * (75-70)/40 = 0.2375
     //
-    // Ranking: Lumen Mosaic 0.824 (mood 0.985, tempo 0.988) · Alfvén 0.789 ·
-    // Gossamer 0.773 · Nimbus 0.753 · Ricercar 0.749 · Skein 0.746.
-    // Segments: Lumen Mosaic (0–100.3 s) → Alfvén → Gossamer.
+    // Ranking: Lumen Mosaic 0.823 (energy 0.983, tempo 0.988) · Alfvén 0.770 · Nebula 0.750 ·
+    // Ferrofluid Ocean 0.743 · Fractal Tree 0.743 · Nimbus 0.743.
 
-    @Test("Session D: Lumen Mosaic wins track 0 segment 0 under LM-favourable mood")
+    @Test("Session D: Lumen Mosaic wins track 0 segment 0 at an LM-favourable energy")
     func sessionD_lumenMosaicWinsFirstSegment() throws {
         let session = try planner.plan(
             tracks: makeSessionD(), catalog: makeRealCatalog(), deviceTier: .tier2)
@@ -262,17 +248,28 @@ private func makeIdentity(title: String, duration: TimeInterval = 180) -> TrackI
     TrackIdentity(title: title, artist: "GoldenArtist", duration: duration)
 }
 
+/// A profile whose energy curve holds one 1–10 level for the whole track (NRG.3, D-259) — the
+/// planner reads energy from the curve, so a steady curve is how a fixture states "this energy".
 private func makeProfile(
     bpm: Float? = nil,
-    valence: Float = 0,
-    arousal: Float = 0,
+    energyLevel: Int,
+    seconds: Int = 180,
     stemBalance: StemFeatures = .zero
 ) -> TrackProfile {
-    TrackProfile(
-        bpm: bpm,
-        mood: EmotionalState(valence: valence, arousal: arousal),
-        stemEnergyBalance: stemBalance
-    )
+    TrackProfile(bpm: bpm, stemEnergyBalance: stemBalance, energyCurve: steadyCurve(level: energyLevel, seconds: seconds))
+}
+
+/// A curve that reads `level` throughout: the library quantile whose loudness and activity both
+/// land in that level, repeated.
+private func steadyCurve(level: Int, seconds: Int) -> EnergyCurve {
+    let scale = EnergyScale.library
+    let matching = (0...100).filter {
+        scale.level(loudnessDB: scale.loudnessQuantiles[$0], activity: scale.activityQuantiles[$0]) == level
+    }
+    let q = matching[matching.count / 2]
+    return EnergyCurve(hopSeconds: 1,
+                       loudnessDB: Array(repeating: scale.loudnessQuantiles[q], count: seconds),
+                       activity: Array(repeating: scale.activityQuantiles[q], count: seconds))
 }
 
 // MARK: — Catalog Fixture
@@ -307,7 +304,7 @@ private func makeSessionA() -> [(TrackIdentity, TrackProfile)] {
     let stems = makeStemBalance(vocals: 0.30, drums: 0.40, bass: 0.40, other: 0.20)
     return (0..<5).map { i in
         (makeIdentity(title: "Elec-\(i)", duration: 180),
-         makeProfile(bpm: 130, valence: 0.7, arousal: 0.8, stemBalance: stems))
+         makeProfile(bpm: 130, energyLevel: 9, stemBalance: stems))
     }
 }
 
@@ -315,38 +312,37 @@ private func makeSessionB() -> [(TrackIdentity, TrackProfile)] {
     let stems = makeStemBalance(vocals: 0.30, drums: 0.05, bass: 0.40, other: 0.35)
     return (0..<5).map { i in
         (makeIdentity(title: "Jazz-\(i)", duration: 180),
-         makeProfile(bpm: 85, valence: 0.3, arousal: -0.3, stemBalance: stems))
+         makeProfile(bpm: 85, energyLevel: 4, stemBalance: stems))
     }
 }
 
 private typealias TrackSpec = (
     title: String, dur: TimeInterval,
-    bpm: Float, val: Float, arous: Float,
+    bpm: Float, energy: Int,
     vocals: Float, drums: Float, bass: Float, other: Float
 )
 
 private func makeSessionC() -> [(TrackIdentity, TrackProfile)] {
     let specs: [TrackSpec] = [
-        ("Elec-0",  240, 130,  0.70,  0.80, 0.30, 0.40, 0.40, 0.20),
-        ("Jazz-1",  200,  80,  0.20, -0.40, 0.35, 0.05, 0.40, 0.30),
-        ("Rock-2",  210, 115,  0.50,  0.40, 0.25, 0.35, 0.30, 0.25),
-        ("Elec-3",  230, 125,  0.60,  0.75, 0.25, 0.45, 0.45, 0.15),
-        ("Jazz-4",  180,  70,  0.30, -0.50, 0.45, 0.05, 0.35, 0.30),
-        ("Elec-5",  220, 135,  0.75,  0.85, 0.20, 0.45, 0.45, 0.20),
+        ("Elec-0",  240, 130, 9, 0.30, 0.40, 0.40, 0.20),
+        ("Jazz-1",  200,  80, 4, 0.35, 0.05, 0.40, 0.30),
+        ("Rock-2",  210, 115, 7, 0.25, 0.35, 0.30, 0.25),
+        ("Elec-3",  230, 125, 9, 0.25, 0.45, 0.45, 0.15),
+        ("Jazz-4",  180,  70, 3, 0.45, 0.05, 0.35, 0.30),
+        ("Elec-5",  220, 135, 9, 0.20, 0.45, 0.45, 0.20),
     ]
     return specs.map { p in
         let stems = makeStemBalance(vocals: p.vocals, drums: p.drums, bass: p.bass, other: p.other)
-        let profile = makeProfile(bpm: p.bpm, valence: p.val, arousal: p.arous, stemBalance: stems)
+        let profile = makeProfile(bpm: p.bpm, energyLevel: p.energy, seconds: Int(p.dur), stemBalance: stems)
         return (makeIdentity(title: p.title, duration: p.dur), profile)
     }
 }
 
-// MARK: — Session D Fixture (BUG-004 closure — LM-favourable mood profile)
+// MARK: — Session D Fixture (BUG-004 closure — LM-favourable energy profile)
 
-/// Single 180 s ambient-ish track. BPM=75, val=0.0, arous=+0.30 → moderate
-/// density target (0.62), low motion target (0.2375), neutral colour temp (0.50)
-/// — aligned to Lumen Mosaic's identity (motion 0.25, density 0.65, tempCenter 0.5).
+/// Single 180 s ambient-ish track. BPM=75, energy level 7 → moderate density target (0.633),
+/// low motion target (0.2375) — aligned to Lumen Mosaic's identity (motion 0.25, density 0.65).
 private func makeSessionD() -> [(TrackIdentity, TrackProfile)] {
     [(makeIdentity(title: "AmbientLM-0", duration: 180),
-      makeProfile(bpm: 75, valence: 0.0, arousal: 0.30))]
+      makeProfile(bpm: 75, energyLevel: 7))]
 }

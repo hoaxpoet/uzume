@@ -1633,6 +1633,49 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment NRG.4 — scene changes land on the song's energy changes ✅ (2026-09-27; Matt's live check pending)
+
+**Delivered (D-259).**
+- `EnergyCurve.energyChanges()` finds where a song's energy steps: seconds at which the true-median section level of the 20 s after differs from the 20 s before by ≥ 3 levels (the centre of the jump plateau). A stretch of 20 s or less between two changes, a brief dip or burst, is too short for its own scene, so both of its changes are dropped. `TrackProfile.energyChanges(trackDuration:)` returns them only for a whole-track curve.
+- `makeSections` cuts the track at those changes when the curve covers the whole track. Each energy section keeps the song's usual pacing: as many equal slices as `estimatedSectionCount` gives, so scene length is unchanged from NRG.3. A streaming preview keeps the equal slices.
+- Inside a section, the preset's `maxDuration` cap now splits the remainder evenly instead of leaving a stub before the change. A scene reads energy only up to its section's end, so it no longer hears the next section coming. A 1 ms epsilon on the section walk ends the zero-length tail segment NRG.3 found.
+
+**Evidence.**
+- `EnergyPlanningTests`: a step is found at the second it happens; a 15 s dip is not a change; a 40 s breakdown is two. A quiet-then-loud song changes scene exactly at the step, and no scene straddles it.
+- On the real beta playlist, Dance Yrself Clean changes at 3:08, 5:57, 6:35 and 8:18. The raw curve puts the drop at 3:08, the breakdown at 5:56 and the re-entry at 6:34, so each change lands at or within a second of them. NRG.3's "drop at ~3:15" was a misreading. Song endings now read as their fades (Teen Spirit, Pyramid Song, Teardrop, Warszawa). Steady songs (B.O.B., Superstition, Penny Lane, Take Five, Moonlight I) have no changes.
+- Golden Session A: identical steady 180 s songs now split evenly, so every track opens on the seed-0 argmax, Filigree (trace in the test). The BUG-147 cross-process pin was re-pinned and confirmed identical across two processes.
+
+**Done-when:** ✅ tests + real-playlist plan; ⏳ Matt's live check.
+
+### Increment NRG.3 — scene choice reads the energy curve ✅ (2026-09-27; Matt's live check pending)
+
+**Delivered (D-259).**
+- `PresetScorer`'s mood term became an energy term: the stretch's 1–10 level sets the target visual density (`energy01`: 0.1 + 0.8·(level−1)/9, the span the mood mapping had). The weight is still 0.30, and valence and colour temperature are out.
+- The planner reads the 30 s from each segment's start (`TrackProfile.energyLevel(at:window:trackDuration:)`). A preview curve uses the song's typical level; near the end, the last 30 s is read. The transition into the segment uses the same level, so only level 10 cuts and calmer stretches crossfade longer.
+- Removed: the `LiveAdapter` mood-driven preset override, with its event kinds, cooldown, `LiveAdapter+MoodOverride.swift`, the app's override-suppression gates, `lastClassifiedMood` and `DiagnosticHoldTests`. Reactive mode no longer scores mood. The live classifier still feeds the certified scenes (Matt: leave them alone).
+
+**Evidence.**
+- New `EnergyPlanningTests`: a quiet-then-loud song gets sparse then dense scenes. The scorer test now covers energy and pins that colour temperature is not scored.
+- Goldens re-expressed as energy levels matching the old arousal density, and regenerated with traces; Session B's and D's winners are unchanged.
+- The real beta playlist, planned from its NRG.1 curves: Dance Yrself Clean gets sparse scenes (Witchlight, Skein, Aurora Veil) through its hush, dense ones (Cymatic Resonance, Nebula, Filigree) from 3:21, Witchlight again at the 6:09 breakdown and the 8:24 fade. B.O.B. takes its one cut at level 10.
+
+**Done-when:** ✅ tests + goldens + real-playlist plan; ⏳ Matt's live check.
+
+**Found, not changed:**
+- Scene changes land on fixed segment boundaries, so the drop switches at 3:21. Done in NRG.4 (the drop is at 3:08, not ~3:15 as read here).
+- The **M key ("Toggle mood lock")** flipped a flag nothing read; removed at Matt's call (2026-09-27).
+- The segment walk can emit a zero-length tail segment at a track's end (floating-point loop edge, pre-existing, never played). Fixed in NRG.4.
+
+### Increment NRG.2 — the library 1–10 energy scale and the preparation readout ✅ (2026-09-26; Matt's look at the readout pending)
+
+**Delivered (D-259).** `EnergyScale.library`: each second's loudness and activity are ranked against the library and the ranks averaged, and the library deciles of that score are levels 1–10. Calibrated by `tools/energy_calibration.py` on `CorpusCensusRunner --energy` over the 1,000-track stratified pilot (999 decoded, 287,777 seconds; production `analyzeMIR` via `SessionPreparer.energyCurve(of:)`). `EnergyCurve.readout()` gives the 10th/90th-percentile section levels after a ±5 s running median, shown as one number when they're within one level. The preparation row shows *energy 5* or *energy 2 → 9* in place of the mood word (retired with its four strings). **Library sanity:** the median typical level by genre is classical 2, jazz 4, soul/R&B 5, folk 6, pop and rock 7, electronic 8, hip-hop 9; 22 % of songs read steady. **Beta playlist:** Dance Yrself Clean 2 → 9, B.O.B. 8 → 10, Superstition 4 → 6, Teen Spirit 5 → 8, Penny Lane 5, Take Five 2, Pyramid Song 4 → 10, Teardrop 5 → 9, Moonlight I 1, Warszawa 3 → 6. Swift and Python agree exactly on all ten.
+**Done-when:** ✅ `EnergyScaleTests`; ✅ library + beta readouts; ⏳ Matt sees the readout in the preparation view. **Not changed (follow-ups):** `PreparationAperture` still sets its churn from mood spread; `DebugOverlayView` still shows live mood; the planner still scores mood (NRG.3). **Next:** NRG.3, the planner reads the energy curve per segment, and valence leaves scene choice.
+
+### Increment BUG150.1 — the Spotify connection tests await the connect ✅ (2026-09-26)
+
+**Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
+**Done-when:** ✅ mechanism reproduced by a 500 ms latency probe (3/4 OAuth tests fail before, 16/16 pass after); ✅ app suite 476/476 + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
+
 ### Increment NRG.1 — preparation measures each song's energy curve ✅ (2026-09-26; Matt: *"the curves look right"*)
 
 **Delivered (D-259).** `TrackProfile.energyCurve`: one point per second of loudness (mean power, dB) and activity (median smoothed raw flux), built by `EnergyCurveBuilder` inside `analyzeMIR` from the frames it already analyses. The whole file is covered locally, the 30 s preview on streaming. Cache schema 16 → 17. It measures only: no 1–10 level and no scene choice yet. **Why a curve:** Matt rejected ranking whole songs (*"it depends on the part of the song — dance yourself clean is … both calm and driving"*), and confirmed the Dance Yrself Clean curve (quiet to 2:40, drop ~3:15, breakdown ~6:00, return 6:40, fade 8:20) matches the song.

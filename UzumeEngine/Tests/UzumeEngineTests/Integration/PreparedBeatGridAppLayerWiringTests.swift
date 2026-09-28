@@ -90,7 +90,7 @@ private func makePresetDescriptor() -> PresetDescriptor {
 private func makePlannedSession(tracks: [TrackIdentity]) -> PlannedSession {
     let preset = makePresetDescriptor()
     let breakdown = PresetScoreBreakdown(
-        mood: 1.0, tempoMotion: 1.0, stemAffinity: 1.0,
+        energy: 1.0, tempoMotion: 1.0, stemAffinity: 1.0,
         sectionSuitability: 1.0, familyRepeatMultiplier: 1.0,
         fatigueMultiplier: 1.0, excluded: false, exclusionReason: nil,
         familyBoost: 0.0, excludedReason: nil, total: 1.0

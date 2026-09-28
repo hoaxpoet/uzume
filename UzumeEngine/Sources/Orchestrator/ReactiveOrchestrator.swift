@@ -97,8 +97,9 @@ public struct DefaultReactiveOrchestrator: Sendable {
     public static let fullConfidenceDuration: TimeInterval = 30.0
 
     /// Minimum score advantage over the current preset to suggest a switch.
-    /// Higher than `LiveAdapter`'s 0.15 because reactive scoring is based on mood
-    /// only (no BPM, stems, or section data), warranting a more decisive threshold.
+    /// Higher than `LiveAdapter`'s 0.15 because reactive scoring runs on thin live data
+    /// (no BPM or section data, stems only once converged, energy unmeasured — NRG.3),
+    /// warranting a more decisive threshold.
     public static let minScoreGapForSwitch: Float = 0.20
 
     /// Minimum `StructuralPrediction.confidence` to treat a boundary as actionable.
@@ -121,11 +122,9 @@ public struct DefaultReactiveOrchestrator: Sendable {
 
     // MARK: - Evaluate
 
-    // swiftlint:disable function_parameter_count
     /// Evaluate live MIR data and suggest a preset switch if warranted.
     ///
     /// - Parameters:
-    ///   - liveMood: Current `EmotionalState` from the live mood classifier.
     ///   - liveBoundary: Latest `StructuralPrediction` from the live MIR pipeline.
     ///   - elapsedSessionTime: Seconds since the reactive session began (wall-clock).
     ///   - currentPreset: Currently displayed preset, or nil if none has been set.
@@ -142,7 +141,6 @@ public struct DefaultReactiveOrchestrator: Sendable {
     ///     `requires_regular_beat` are hard-excluded; `nil` = unknown (permissive).
     /// - Returns: A `ReactiveDecision` — `suggestedPreset` is nil when holding.
     public func evaluate(
-        liveMood: EmotionalState,
         liveBoundary: StructuralPrediction,
         elapsedSessionTime: TimeInterval,
         currentPreset: PresetDescriptor?,
@@ -170,10 +168,11 @@ public struct DefaultReactiveOrchestrator: Sendable {
             )
         }
 
-        // Build live profile: mood always live; stem balance from live analyzer once converged
-        // (QR.2/D-080 — avoids adversarial TrackProfile.empty penalising stem-affinity presets).
+        // Build live profile: stem balance from the live analyzer once converged (QR.2/D-080 —
+        // avoids adversarial TrackProfile.empty penalising stem-affinity presets). No mood: the
+        // classifier is at chance on unseen songs (BUG-148) and left scene choice at D-259. Energy
+        // is unmeasured in reactive mode (no prepared curve), so the scorer uses its neutral.
         var liveProfile = TrackProfile.empty
-        liveProfile.mood = liveMood
         if let stems = liveStemFeatures {
             liveProfile.stemEnergyBalance = stems
         }
@@ -231,7 +230,6 @@ public struct DefaultReactiveOrchestrator: Sendable {
             includeUncertifiedPresets: includeUncertifiedPresets
         )
     }
-    // swiftlint:enable function_parameter_count
 
     // MARK: - Helpers
 

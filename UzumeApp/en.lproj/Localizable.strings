@@ -196,10 +196,8 @@
 "preparation.track.caching"     = "Caching";
 "preparation.track.ready"       = "Ready";
 "preparation.track.bpm"         = "%d BPM";
-"preparation.track.mood.bright"   = "bright";
-"preparation.track.mood.calm"     = "calm";
-"preparation.track.mood.restless" = "restless";
-"preparation.track.mood.wistful"  = "wistful";
+"preparation.track.energy.level" = "energy %d";
+"preparation.track.energy.range" = "energy %d → %d";
 "preparation.track.stem.vocals" = "vocals";
 "preparation.track.stem.drums"  = "drums";
 "preparation.track.stem.bass"   = "bass";
