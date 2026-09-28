@@ -17,10 +17,29 @@ extension KaguraChoreographer {
         let wrist: Int
     }
 
-    /// What an auto pick read: the song's repertoire and the rank of the bar just played.
+    /// What an auto pick read and chose — also the `KAGURA_PICK` session-log line.
     public struct Pick: Sendable, Equatable {
+        /// The bar line (beat index) the dance starts on.
+        public let beat: Int
+        /// The song's arousal as pushed (`nil` = unknown → the middle energy).
+        public let songArousal: Double?
+        /// Song energy, 0…1 (§6 item 1).
+        public let songEnergy: Double
+        /// The song's three dances, calmest first.
         public let repertoire: [KaguraDance]
+        /// The bar just played, ranked in the song's trailing energy, 0…1.
         public let rank: Double
+        /// The dance the rank picked.
+        public let dance: KaguraDance
+
+        /// One session-log line.
+        public var logLine: String {
+            let arousal = songArousal.map { String(format: "%.3f", $0) } ?? "nil (middle energy)"
+            let dances = repertoire.map(\.rawValue).joined(separator: ", ")
+            let numbers = String(format: "songEnergy=%.2f, barRank=%.2f", songEnergy, rank)
+            return "KAGURA_PICK: beat=\(beat), songArousal=\(arousal), \(numbers), "
+                + "repertoire=[\(dances)] → \(dance.rawValue)"
+        }
     }
 }
 
@@ -50,12 +69,20 @@ extension KaguraChoreographer {
     }
 
     /// §6: the song's repertoire, then the bar just played ranked in the song's trailing energy.
-    mutating func pickDance(grid: KaguraGrid) -> KaguraDance {
+    mutating func pickDance(grid: KaguraGrid, beat: Int) -> KaguraDance {
         let songEnergy = songArousal.map { KaguraRepertoire.songEnergy(arousal: $0) } ?? KaguraRepertoire.unknownEnergy
         let repertoire = KaguraRepertoire.pick(bpm: 60 / grid.beatPeriod, energy: songEnergy, library: library)
         let rank = energy.rank(ofLast: Self.barSeconds(grid))
-        picks.append(Pick(repertoire: repertoire, rank: rank))
-        return KaguraRepertoire.dance(forRank: rank, in: repertoire) ?? .twist
+        let dance = KaguraRepertoire.dance(forRank: rank, in: repertoire) ?? .twist
+        picks.append(Pick(
+            beat: beat,
+            songArousal: songArousal,
+            songEnergy: songEnergy,
+            repertoire: repertoire,
+            rank: rank,
+            dance: dance
+        ))
+        return dance
     }
 
     /// Elbows and wrists scaled about their shoulder by the arm reach (§8); legs untouched.

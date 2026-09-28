@@ -637,6 +637,10 @@ extension VisualizerEngine {
                 renderTime: Double(features.time),
                 lockState: beat.lockState
             )
+            // KAG.3 — what the dance pick read and chose, once per clip change (M7 diagnostics).
+            for pick in dancer.takeNewPicks() {
+                self.sessionRecorder?.log(pick.logLine + String(format: ", playback=%.2fs", playback))
+            }
         }
     }
 
@@ -650,6 +654,24 @@ extension VisualizerEngine {
             mirPipeline.setBeatGrid(grid)
         }
         pushKaguraGrid(grid)
+    }
+
+    /// KAG.3 — push the song's arousal to Kagura (value or `nil`, every track change, so one track's value
+    /// never reaches the next) and write one `KAGURA_SONG` session-log line: the arousal, and the song
+    /// energy and repertoire it yields at the installed grid's tempo. `nil` means the dancer uses the
+    /// middle energy (no cache entry, or one written without `songArousal`).
+    func pushKaguraSong(title: String, arousal: Float?, bpm: Double?) {
+        (kaguraGeometry as? KaguraDancer)?.setSongArousal(arousal.map(Double.init))
+        let energy = arousal.map { KaguraRepertoire.songEnergy(arousal: Double($0)) } ?? KaguraRepertoire.unknownEnergy
+        let repertoire = bpm.flatMap { bpm in
+            (try? KaguraClipLibrary.shared()).map { KaguraRepertoire.pick(bpm: bpm, energy: energy, library: $0) }
+        }
+        let shown = arousal.map { String(format: "%.3f", $0) } ?? "nil (middle energy)"
+        sessionRecorder?.log(
+            "KAGURA_SONG: track='\(title)', songArousal=\(shown), "
+            + String(format: "songEnergy=%.2f, ", energy)
+            + "gridBPM=\(bpm.map { String(format: "%.1f", $0) } ?? "none"), "
+            + "repertoire=[\(repertoire?.map(\.rawValue).joined(separator: ", ") ?? "at first grid")]")
     }
 
     /// KAG.2 — copy a grid install (or clear) into Kagura's geometry, whether or not Kagura is

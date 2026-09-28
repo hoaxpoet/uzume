@@ -243,6 +243,13 @@ struct KaguraSelectionTests {
         dancer.setSongArousal(-0.426)
         play(12)
         #expect(dancer.choreography.picks.last?.repertoire == expected(-0.426))
+        // The session-log feed: each pick handed over once, with what it read and chose.
+        let logged = dancer.takeNewPicks()
+        #expect(!logged.isEmpty && dancer.takeNewPicks().isEmpty)
+        let line = try #require(logged.last?.logLine)
+        print("[kagura-log] \(line)")
+        #expect(line.hasPrefix("KAGURA_PICK: beat=") && line.contains("songArousal=-0.426")
+                && line.contains("songEnergy=0.00") && line.contains("repertoire=[") && line.contains("barRank="))
 
         // Track change, cache miss: the app writes nil; the next pick reads the middle energy, not Penny Lane.
         dancer.setSongArousal(nil)

@@ -109,6 +109,8 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     /// written under `clockLock` by the app and applied to the choreographer on the render thread.
     private var pushedArousal: Double?
     private var songResetPending = false
+    /// Picks already handed to `takeNewPicks()`. Render thread only.
+    private var picksTaken = 0
 
     private let jointCount: Int
     private var trail: [MTLTexture] = []
@@ -290,6 +292,15 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     public var trailTexture: MTLTexture? { trail.isEmpty ? nil : trail[cur] }
     /// Read-only view of the choreographer (cut beats, chosen levels).
     public var choreography: KaguraChoreographer { choreographer }
+
+    /// The dance picks made since the last call, each once — for the app's `KAGURA_PICK` session-log
+    /// line. Render thread only (the app's tick, which runs after `update`).
+    public func takeNewPicks() -> [KaguraChoreographer.Pick] {
+        let picks = choreographer.picks
+        if picks.count < picksTaken { picksTaken = 0 }   // a restart began a fresh choreographer
+        defer { picksTaken = picks.count }
+        return Array(picks.dropFirst(picksTaken))
+    }
 
     /// Encode the GPU passes for a frame whose joints are already known. `update` is this plus the
     /// choreographer; tests that need an exact, synthetic motion call it directly.

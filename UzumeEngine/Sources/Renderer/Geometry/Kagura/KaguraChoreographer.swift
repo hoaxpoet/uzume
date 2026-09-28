@@ -315,7 +315,7 @@ public struct KaguraChoreographer: Sendable {
         let incoming: Segment
         if cut.toDance {
             let dance = forcedDances.isEmpty
-                ? pickDance(grid: grid)
+                ? pickDance(grid: grid, beat: cut.beat)
                 : forcedDances[chosenDances.count % forcedDances.count]
             let choices = clipIndices[dance] ?? [0]
             let index = choices[(used[dance] ?? 0) % choices.count]
