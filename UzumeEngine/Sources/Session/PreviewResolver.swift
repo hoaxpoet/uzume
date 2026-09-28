@@ -14,6 +14,37 @@ public protocol PreviewResolving: Sendable {
     /// Returns a preview URL for the given track, or `nil` if none is available.
     /// Implementations must be safe to call concurrently.
     func resolvePreviewURL(for track: TrackIdentity) async throws -> URL?
+
+    /// Returns the preview URL plus the catalog's own names for the matched
+    /// track (SCAN.2 — a scanned title may be cut off; the catalog's is whole).
+    func resolvePreviewMatch(for track: TrackIdentity) async throws -> PreviewMatch?
+}
+
+extension PreviewResolving {
+    /// Default: URL only, no catalog names (resolvers that don't search a catalog).
+    public func resolvePreviewMatch(for track: TrackIdentity) async throws -> PreviewMatch? {
+        try await resolvePreviewURL(for: track).map { PreviewMatch(previewURL: $0) }
+    }
+}
+
+// MARK: - PreviewMatch
+
+/// A resolved preview and, when it came from a catalog search, that catalog's
+/// full title and artist for the matched track.
+public struct PreviewMatch: Sendable, Equatable {
+    /// The 30-second preview.
+    public let previewURL: URL
+    /// The catalog's title (iTunes `trackName`), when known.
+    public let catalogTitle: String?
+    /// The catalog's artist (iTunes `artistName`), when known.
+    public let catalogArtist: String?
+
+    /// Create a match.
+    public init(previewURL: URL, catalogTitle: String? = nil, catalogArtist: String? = nil) {
+        self.previewURL = previewURL
+        self.catalogTitle = catalogTitle
+        self.catalogArtist = catalogArtist
+    }
 }
 
 // MARK: - Concrete Implementation
@@ -65,8 +96,8 @@ public final class PreviewResolver: PreviewResolving, @unchecked Sendable {
     // MARK: - State
 
     private let stateLock = NSLock()
-    // nil outer = not cached; inner = .some(url) or .some(nil)
-    private var cache: [TrackIdentity: URL?] = [:]
+    // nil outer = not cached; inner = .some(match) or .some(nil)
+    private var cache: [TrackIdentity: PreviewMatch?] = [:]
 
     private static let baseURL = "https://itunes.apple.com/search"
 
@@ -79,89 +110,113 @@ public final class PreviewResolver: PreviewResolving, @unchecked Sendable {
     // MARK: - PreviewResolving
 
     public func resolvePreviewURL(for track: TrackIdentity) async throws -> URL? {
+        try await resolvePreviewMatch(for: track)?.previewURL
+    }
+
+    public func resolvePreviewMatch(for track: TrackIdentity) async throws -> PreviewMatch? {
         // Fast path: return cached result if present (including "no preview" nil).
-        if let cached = lockedCachedURL(for: track) {
+        if let cached = lockedCachedMatch(for: track) {
             return cached
         }
 
         // Fast path: Spotify already provided the preview URL in the playlist response.
         // Seed the cache and return immediately — no iTunes Search API call needed.
         if let spotifyURL = track.spotifyPreviewURL {
-            stateLock.withLock { cache[track] = .some(spotifyURL) }
-            return spotifyURL
+            let match = PreviewMatch(previewURL: spotifyURL)
+            stateLock.withLock { cache[track] = .some(match) }
+            return match
         }
 
-        // Enforce rate limit before sending a request.
-        await rateLimiter.acquire()
-
-        guard let request = buildRequest(for: track) else {
-            logger.error("Could not build iTunes search request for '\(track.title)'")
-            return nil
+        // SCAN (D-260): a title read off the screen may be cut off, so the first
+        // hit can't be trusted — ask for more and verify (ScreenReadMatchPolicy).
+        // Every other track sends the unchanged limit-1 request.
+        let reading = track.screenReading
+        let limit = reading == nil ? 1 : ScreenReadMatchPolicy.candidateLimit
+        guard let data = await search(term: "\(track.artist) \(track.title)", limit: limit, for: track) else {
+            return nil   // transient failure — uncached (PUB.2)
         }
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await networkFetcher(request)
-        } catch {
-            logger.error("iTunes Search request failed for '\(track.title)': \(error)")
-            return nil
+        var match: PreviewMatch?
+        if let reading {
+            match = ScreenReadMatchPolicy.bestMatch(in: data, for: track, reading: reading)
+            // A badge fused onto a screen-read artist ("DSZA") spoils the search
+            // term itself: one title-only retry, verified the same way.
+            if match == nil, !track.artist.isEmpty {
+                guard let retry = await search(term: track.title, limit: limit, for: track) else { return nil }
+                match = ScreenReadMatchPolicy.bestMatch(in: retry, for: track, reading: reading)
+            }
+        } else {
+            match = parseMatch(from: data)
         }
-
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            // PUB.2 (ultra-review): do NOT cache nil on a non-200 — 429/5xx are
-            // transient, and a poisoned cache entry made the D-061(d)
-            // network-recovery retry permanently unable to succeed for the
-            // track. Only a definitive 200-with-no-result means "no preview"
-            // (cached below); transient failures return nil uncached, matching
-            // the thrown-error path above.
-            logger.info("Non-200 response for '\(track.title)' — returning nil uncached (transient)")
-            return nil
-        }
-
-        let url = parsePreviewURL(from: data)
-        stateLock.withLock { cache[track] = .some(url) }
-        if let url {
-            logger.debug("Resolved preview for '\(track.title)': \(url)")
+        stateLock.withLock { cache[track] = .some(match) }
+        if let match {
+            logger.debug("Resolved preview for '\(track.title)': \(match.previewURL)")
         } else {
             logger.info("No preview URL found for '\(track.title)'")
         }
-        return url
+        return match
     }
 
     // MARK: - Private Helpers
 
     /// Returns the cached result for `track`, or `nil` if not yet cached.
     ///
-    /// Returns `URL??`:
+    /// Returns `PreviewMatch??`:
     ///  - `.none` — not in cache at all (caller must fetch)
     ///  - `.some(.none)` — cached as "no preview available"
-    ///  - `.some(.some(url))` — cached preview URL
-    private func lockedCachedURL(for track: TrackIdentity) -> URL?? {
+    ///  - `.some(.some(match))` — cached preview
+    private func lockedCachedMatch(for track: TrackIdentity) -> PreviewMatch?? {
         stateLock.withLock { cache[track] }
     }
 
-    private func buildRequest(for track: TrackIdentity) -> URLRequest? {
+    /// One rate-limited iTunes Search request. Returns the body of a 200, or nil
+    /// for a transient failure (thrown error / non-200), which callers must NOT
+    /// cache: a poisoned entry made the D-061(d) network-recovery retry
+    /// permanently unable to succeed for the track (PUB.2, ultra-review).
+    private func search(term: String, limit: Int, for track: TrackIdentity) async -> Data? {
+        // Enforce rate limit before sending a request.
+        await rateLimiter.acquire()
+        guard let request = buildRequest(term: term, limit: limit) else {
+            logger.error("Could not build iTunes search request for '\(track.title)'")
+            return nil
+        }
+        do {
+            let (data, response) = try await networkFetcher(request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                logger.info("Non-200 response for '\(track.title)' — returning nil uncached (transient)")
+                return nil
+            }
+            return data
+        } catch {
+            logger.error("iTunes Search request failed for '\(track.title)': \(error)")
+            return nil
+        }
+    }
+
+    private func buildRequest(term: String, limit: Int) -> URLRequest? {
         guard var components = URLComponents(string: Self.baseURL) else { return nil }
-        let term = "\(track.artist) \(track.title)"
         components.queryItems = [
             URLQueryItem(name: "term", value: term),
             URLQueryItem(name: "media", value: "music"),
             URLQueryItem(name: "entity", value: "song"),
-            URLQueryItem(name: "limit", value: "1")
+            URLQueryItem(name: "limit", value: String(limit))
         ]
         guard let url = components.url else { return nil }
         return URLRequest(url: url, timeoutInterval: 10)
     }
 
-    private func parsePreviewURL(from data: Data) -> URL? {
+    private func parseMatch(from data: Data) -> PreviewMatch? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let results = json["results"] as? [[String: Any]],
               let first = results.first,
-              let previewString = first["previewUrl"] as? String else {
+              let previewString = first["previewUrl"] as? String,
+              let url = URL(string: previewString) else {
             return nil
         }
-        return URL(string: previewString)
+        return PreviewMatch(
+            previewURL: url,
+            catalogTitle: first["trackName"] as? String,
+            catalogArtist: first["artistName"] as? String
+        )
     }
 }
 

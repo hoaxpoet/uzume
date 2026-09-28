@@ -10,6 +10,30 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-210158] BUG-154 — the network-recovery tests wait for the debounce, not the clock
+
+`NetworkRecoveryCoordinatorTests` failed once in a full app-suite run (`0 == 1`, `2 == 3`): the tests slept 3 s for a 2 s debounce and asserted while the debounce task was still waiting to get back onto a busy main actor. They now await the coordinator's own `debounceTask`, so they pass however slow the machine is. A probe that adds 1.5 s to the debounce failed 4 of 7 tests before the fix and passes all 7 after. Test-only change; no budget widened.
+### [dev-2026-09-28-201200] SCAN — Spotify playlists are scanned from the screen (pending Matt's live check)
+
+The Spotify tile now scans a playlist instead of asking for a link: click **Start scan**, Spotify comes forward with a small panel beside it, scroll the playlist once, and Uzume reads each row's title, artist and length from Spotify's window, on the Mac. It finishes by itself at the header's song count; skipped rows are named ("Missed 14–16. Scroll back up a little."), a scan started mid-list asks to scroll to the top, and a review list (always shown) lets you fix or remove a row before **Continue**. Screenshots dropped on the Spotify view go through the same reader. No Spotify login and no request to Spotify: the Web API's new rules limit the link connector to five people, so it survives only in developer builds (D-260). Measured on four real playlists (144 songs): every row read, 99.2 % identified, no wrong songs; two live scans in the Release build took 8–10 s for 32–38 songs. Matt's live check found one wrong artist in 38 (the first, half-visible reading of a row stuck — BUG-153); a row's text is now voted across every frame that saw it, and his re-scan of that playlist read all 38 rows correctly (5.3 s). Screen-read rows use a stricter catalog lookup (title, artist and length must agree, or the song is left out rather than guessed). The same measurement found the existing first-hit lookup landing on the wrong song for 8 % of those playlists (BUG-152, open). The screen-recording permission text now says the scan reads track names in the Spotify window.
+
+### [dev-2026-09-28-174700] KAG.4 — Kagura certified (the 26th)
+
+Kagura, the point-light dancer, is certified on Matt's M7 of the beta playlist (*"looks much better, happy with it overall"*). It now enters planned sessions like the other certified scenes, kept off beat-irregular songs by `requires_regular_beat`. Flash-safe in all three measured cases (the dance, the Charleston, the ballet rest: 0.00 flashes/s); no golden session plan changed. Known: the macarena runs a little heavy on calm songs.
+
+### [dev-2026-09-28-153357] KAG.3 — Kagura after the first live sessions: new dances, fairer picks (pending live M7)
+
+After three live sessions (Matt, 2026-09-28): the chicken dance is out of the pick; the Charleston joins for fast songs (one step per beat, only where that is within ±25 % of its natural speed — B.O.B. and Take Five on the beta playlist); calm songs rest in slow ballet poses instead of the sway (Moonlight, Penny Lane, Warszawa; Pyramid Song keeps its sway); and each bar is ranked against the song's other bars, so calm, middle and vigorous each get their share (live, 62 % of picks had been the middle dance). Local files re-analyse once more (stem cache v18: v16 collided with BUG-144's entries). New session-log lines: `KAGURA_SONG` and `KAGURA_PICK`. Not certified.
+
+### [dev-2026-09-26-015632] KAG.3 — Kagura dances five dances and picks them from the song (pending live M7)
+
+Kagura now chooses between the twist, cabbage patch, chicken dance, macarena and Egyptian walk. The song's energy and tempo pick three at track start. At each bar-line clip change, the bass of the bar just played picks the calm, middle or vigorous one (Matt's option A; the local file and streaming behave the same). The arms swell by up to 25 % with the bass. The dancer sways through beat-irregular stretches, through silence, and when playback stops. The song's energy is a new song-level arousal measured in preparation, because the existing `TrackProfile.mood` is the last second or two of the track (BUG-143 handles that separately). **Local files re-analyse once** (stem cache schema v16). The sidecar now declares `requires_regular_beat`, so the planner keeps Kagura off beat-irregular songs when uncertified scenes are shown. Not certified (KAG.4).
+### [dev-2026-09-28-162542] FLASHOFF.1 — the flash-safety tests no longer block the rest of the suite
+
+Test infrastructure only; nothing in the app changes. The photosensitivity tests for the multi-pass scenes ran on the main thread for about four and a half minutes of every full engine run, and the session-preparation tests that also need it were close to timing out behind them. Adding one more scene's test (Fireflies, FF.4) pushed nine of them over. Those renders now run off the main thread, and the few scenes that still need it borrow it a frame at a time, so its longest wait during the suite is 0.05 s. Every scene's flash measurement is exactly what it was, and the full engine suite passes (2040 tests).
+
+---
+
 ### [dev-2026-09-28-151022] FF.4 — Fireflies' M7: not yet; patches and a smooth glow next
 
 Matt reviewed Fireflies live on the beta playlist and did not pass it. Testers found the whole meadow flashing at once overwhelming and wanted a coordinated rhythm across the swarm; Matt also saw the fireflies as pixelated. The next increment (FF.5) makes patches of the meadow take turns flashing on the beat and draws each firefly's glow smooth instead of stippled. Fireflies stays uncertified, so sessions don't plan it, but the arrow keys now reach it (`exclude_from_cycling` removed) so it can be reviewed. New tests: a WCAG flash measurement through the real draw path with the swarm locked in unison (0.00 flashes/s), and a check that the swarm follows the real beat and not a half-beat decoy.

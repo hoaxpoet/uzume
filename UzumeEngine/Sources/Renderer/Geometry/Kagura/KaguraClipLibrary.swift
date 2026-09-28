@@ -11,9 +11,13 @@ import simd
 
 // MARK: - KaguraDance
 
-/// A dance in Kagura's library (KAGURA_DESIGN §4). `sway` is the unwarped fallback.
+/// A dance in Kagura's library (KAGURA_DESIGN §4). `sway` and `ballet` are unwarped rests (KAG.3: ballet
+/// is the calm songs' rest, the sway everyone else's); `charleston` joined at KAG.3 for fast songs.
 public enum KaguraDance: String, Sendable, Codable, CaseIterable {
-    case twist, cabbage, chicken, macarena, egyptian, sway
+    case twist, cabbage, chicken, macarena, egyptian, sway, charleston, ballet
+
+    /// Whether the dance is an unwarped rest rather than a beat-warped dance.
+    public var isRest: Bool { self == .sway || self == .ballet }
 }
 
 // MARK: - KaguraClipError
@@ -77,10 +81,17 @@ public struct KaguraClip: Sendable {
     }
 
     /// Clip seconds at pulse position `pulse` (0 = the first pulse event), by linear lookup in the
-    /// pulse-index map, clamped to the map. Returns 0 for a clip without a pulse (the sway).
+    /// pulse-index map. Past the last pulse it continues at the last pulse's rate (the spike's PCHIP
+    /// extrapolates; `pose(at:)` then clamps at the clip's end); before the first it clamps.
+    /// Returns 0 for a clip without a pulse (the sway).
     public func clipTime(atPulse pulse: Double) -> Double {
         guard let last = pulseMap.indices.last else { return 0 }
-        let x = min(max(pulse * Double(samplesPerPulse), 0), Double(last))
+        let position = pulse * Double(samplesPerPulse)
+        if position > Double(last), last >= samplesPerPulse {
+            let perPulse = Double(pulseMap[last] - pulseMap[last - samplesPerPulse])
+            return Double(pulseMap[last]) + (position - Double(last)) / Double(samplesPerPulse) * perPulse
+        }
+        let x = min(max(position, 0), Double(last))
         let i0 = Int(x)
         let i1 = min(i0 + 1, last)
         let frac = x - Double(i0)

@@ -13,6 +13,12 @@
 
 ## Spotify connector setup (U.11 — OAuth PKCE)
 
+> **Developer builds only since SCAN (D-260, 2026-09-28).** Spotify's February 2026 Web API rules cap a
+> Development Mode app at **5 hand-added users**, and Extended Quota needs a registered business with
+> ≥ 250,000 monthly users — so this connector can serve at most five people. The Spotify tile's primary
+> flow is now the on-device playlist scan (`UX_SPEC.md §4.4`); this paste-a-link flow is reachable only
+> in DEBUG builds via "Paste a link instead". The setup below still applies to it.
+
 Uzume uses Spotify's Authorization Code + PKCE flow (user-level OAuth). The user logs in once via their system browser; the refresh token is stored in the macOS Keychain and used silently on subsequent launches.
 
 **One-time developer setup:**
@@ -983,7 +989,8 @@ procedure, as practiced from Skein through Cytokinesis:
      `false` — e.g. CPU-side coupling);
    - `PhotosensitivityCertificationTests.multiPassMeasured` + a real render
      function in `MultiPassFlashHarnessTests` for multi-pass/follower-state
-     scenes (the static-render guard fails loud if skipped) — measured
+     scenes, through `harness.renderOffMain` (the suite runs off the main
+     actor, FLASHOFF.1; the static-render guard fails loud if skipped) — measured
      **0.00 flashes/s** required.
 4. Non-empty `audio_routes` in the sidecar, all green (`RouteCoverageTests`
    — QG.1 requires it for certification).

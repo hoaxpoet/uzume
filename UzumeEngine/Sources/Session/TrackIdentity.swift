@@ -4,7 +4,7 @@
 // Equality and hashing are based on the seven identity fields only.
 // `spotifyPreviewURL` and `spotifyArtworkURL` are resolution hints that do
 // NOT participate in equality or hashing — they are transparent to the
-// cache key contract.
+// cache key contract. `screenReading` (SCAN) is a hint of the same kind.
 
 import Foundation
 
@@ -71,6 +71,12 @@ public struct TrackIdentity: Sendable, Codable {
     /// of the cache key.
     public let spotifyArtworkURL: URL?
 
+    /// What the playlist screen reader saw (SCAN, D-260), or `nil` for every
+    /// other source. Its presence switches `PreviewResolver` to a wider,
+    /// verified search: a title read off the screen may be cut off, so the
+    /// catalog's first hit cannot be trusted. Not part of the cache key.
+    public let screenReading: ScreenReading?
+
     // MARK: - Codable
 
     /// Excludes `spotifyPreviewURL` and `spotifyArtworkURL` from the serialized
@@ -91,6 +97,7 @@ public struct TrackIdentity: Sendable, Codable {
         musicBrainzID = try container.decodeIfPresent(String.self, forKey: .musicBrainzID)
         spotifyPreviewURL = nil  // hint is never persisted
         spotifyArtworkURL = nil  // hint is never persisted
+        screenReading = nil      // hint is never persisted
     }
 
     // MARK: - Init
@@ -107,6 +114,7 @@ public struct TrackIdentity: Sendable, Codable {
     ///   - musicBrainzID: MusicBrainz recording ID (optional).
     ///   - spotifyPreviewURL: Spotify-provided preview URL hint (optional, not part of identity).
     ///   - spotifyArtworkURL: Spotify-provided album-art URL hint (optional, not part of identity).
+    ///   - screenReading: What the playlist screen reader saw (optional, not part of identity).
     public init(
         title: String,
         artist: String,
@@ -116,7 +124,8 @@ public struct TrackIdentity: Sendable, Codable {
         spotifyID: String? = nil,
         musicBrainzID: String? = nil,
         spotifyPreviewURL: URL? = nil,
-        spotifyArtworkURL: URL? = nil
+        spotifyArtworkURL: URL? = nil,
+        screenReading: ScreenReading? = nil
     ) {
         self.title = title
         self.artist = artist
@@ -127,6 +136,29 @@ public struct TrackIdentity: Sendable, Codable {
         self.musicBrainzID = musicBrainzID
         self.spotifyPreviewURL = spotifyPreviewURL
         self.spotifyArtworkURL = spotifyArtworkURL
+        self.screenReading = screenReading
+    }
+}
+
+// MARK: - ScreenReading
+
+/// A track's title and artist exactly as a streaming app displayed them (SCAN).
+public struct ScreenReading: Sendable, Hashable {
+    /// The title as displayed, ellipsis removed.
+    public let title: String
+    /// The title ended in an ellipsis: only this prefix of the real title is known.
+    public let titleCutOff: Bool
+    /// The artist line as displayed (all credits), ellipsis removed. May be empty.
+    public let artistLine: String
+    /// The artist line ended in an ellipsis.
+    public let artistCutOff: Bool
+
+    /// Create a screen reading.
+    public init(title: String, titleCutOff: Bool, artistLine: String, artistCutOff: Bool = false) {
+        self.title = title
+        self.titleCutOff = titleCutOff
+        self.artistLine = artistLine
+        self.artistCutOff = artistCutOff
     }
 }
 

@@ -163,7 +163,7 @@ Three tiles:
 | Tile | Subtitle | Connector | Available when |
 |---|---|---|---|
 | Apple Music | "Pick a playlist you're playing" | `AppleMusicAppleScriptConnector` | Apple Music app is running |
-| Spotify | "Paste a Spotify playlist link" | `SpotifyWebAPIConnector` | Always (paste flow) |
+| Spotify | "Scan a playlist you have open in Spotify" | `PlaylistScreenReader` (on-device screen reading, SCAN / D-260) | Always (the view itself handles Spotify not running) |
 | Local folder | "Point at a folder of tracks" | `LocalFolderConnector` (future — Increment MD.6+ prerequisite) | Feature flag off in v1 |
 
 If Apple Music isn't running, its tile is disabled with caption "Open Apple Music first" and a button to launch it. Don't auto-launch — that's presumptuous.
@@ -188,32 +188,41 @@ UI response per case:
 
 ### 4.4 Spotify flow
 
-**Rewritten at U.11a (2026-09-23).** This section described the pre-U.11 connector — client-credentials, "No OAuth", public playlists only — for as long as U.11 had been shipped. `RUNBOOK.md §Spotify connector setup` was correct throughout; this was the copy that drifted. Nothing gates prose, so nothing caught it (same failure family as BUG-138); it was found from outside, while the website was sourcing a docs page against both files.
+**Rewritten at SCAN (2026-09-28, D-260).** Spotify playlists are read **off the screen, on the Mac**: the user scrolls the playlist once in the Spotify app while Uzume reads the track names in Spotify's window, or drops screenshots of it. No Spotify login, no request to any Spotify server. Why: Spotify's February 2026 Web API rules cap a Development Mode app at 5 hand-added users (Extended Quota needs a registered business with ≥ 250,000 monthly users), so the paste-a-link connector below works for at most 5 people.
 
-**The connector is user-level OAuth.** `SpotifyOAuthPlaylistConnector` wraps `SpotifyWebAPIConnector(tokenProvider:)` with a PKCE token provider (`ConnectorPickerView.swift`). `SpotifyOAuthTokenProvider` runs Authorization Code + PKCE with scopes `playlist-read-private playlist-read-collaborative`, redirecting to `uzume://spotify-callback` (routed in `UzumeApp.swift`); the refresh token lives in the Keychain and later launches refresh silently. **Private and collaborative playlists the logged-in user can reach are therefore in scope** — the "public playlists only, v2 feature" line this section used to carry was never true after U.11. Developer setup (client ID in the gitignored `Uzume.local.xcconfig`) is in `RUNBOOK.md`, which stays canonical for it.
+`SpotifyScanView` + `SpotifyScanViewModel`. Copy is locked (UX contract, SCAN prompt).
 
-UI: single text field captioned "Paste a Spotify playlist link." Placeholder: `https://open.spotify.com/playlist/...`. Accepts any URL variant (`spotify:playlist:...`, `open.spotify.com/playlist/...`, with or without query params). The paste field is focused on appear.
+**Spotify not running.** "Open Spotify and go to the playlist you want." with an **Open Spotify** button. Never auto-launch — mirror the Apple Music pattern. Launching or quitting Spotify moves the view between this state and the next.
 
-Validation on paste, one state each (`SpotifyConnectionViewModel.State`):
+**Spotify running.**
+- Headline: "Scan a playlist from Spotify."
+- Body: "Open the playlist in Spotify, then start the scan. You'll scroll through it once."
+- Primary button: **Start scan**.
+- Secondary, a drop target: "Or drop screenshots of the playlist here." (also offered while Spotify isn't running).
 
-- Valid playlist URL → a preview card, `Continue` button
-- Valid track/album/artist URL (not playlist) → per-kind copy: "That's a [track/album/artist], not a playlist…"
-- Malformed → "That doesn't look like a Spotify playlist link."
-- Playlist not reachable → "Uzume couldn't find that playlist. It may be private or deleted."
-- Playlist private to someone else → "That playlist is private. Paste a link to a public playlist."
+**Permission (only if not already granted).** Checked with `CGPreflightScreenCaptureAccess()` **at scan start**, not only at onboarding. "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere." with an **Allow Access** button (`CGRequestScreenCaptureAccess()`) and "Already allowed it? Open System Settings". Same mechanics and return detection as §3.2.
 
-Login, when the user is not yet authenticated (U.11):
+**Scan panel** — a small floating, non-activating panel beside Spotify's window; Spotify comes to the front and stays the active app so the user can scroll it. Capture is **Spotify's window only**, in memory, only while the panel is open.
+- Instruction: "Scroll through your playlist from top to bottom."
+- Live count: "27 of 38 songs"; "27 songs" when the header count wasn't read.
+- First row seen isn't #1 (and #1 not yet read): "Scroll to the top of the playlist first."
+- Rows skipped above the furthest one read: "Missed 14–16. Scroll back up a little."
+- No "widen the window" tip: SCAN.0 measured cut-off titles resolving 25 of 26 once resolution is verified, so the contract's conditional tip is left out (`SCAN_FEASIBILITY_2026-09-28.md`).
+- **Done** is always available. The scan finishes by itself when every song in the header count has been read.
+- **Cancel** / Esc returns to the Spotify view. Esc works when the panel has focus (clicking it gives focus without activating Uzume); Esc typed into Spotify goes to Spotify — catching it would need the Accessibility permission, which the scan deliberately does not use.
+- Stops immediately on Done, Cancel, Esc, or Spotify quitting.
 
-- `.requiresLogin` → "Log in to Spotify" headline, the body explaining the login is saved, and a **Log in with Spotify** button; tapping opens the system browser
-- `.waitingForCallback` → "Waiting for Spotify…" and a spinner until the redirect lands
-- `.authFailure` → "Couldn't connect to Spotify. Check your configuration and try again." A DEBUG build substitutes the missing-client-ID instruction instead
+**Review** (Uzume comes back to the front) — always shown (D-260 decision 2, default A):
+- Heading: "Found 38 songs from [Playlist name]"; "Found 38 songs" when the name wasn't read.
+- The list: row number, title, artist (a cut-off reading keeps its "…"). Rows Uzume is unsure of carry "Check this one". Missing numbers are listed: "Missing: 14–16".
+- Fix a row's text (pencil), remove a row (minus), **Scan again**.
+- **Continue** starts preparation (`startSession(preFetchedTracks:source: .spotifyScan(playlistName:))`). The music plays in Spotify, so the session is a Spotify session everywhere that matters (the ASH.2 Normalize Volume toast, `ReadyView` copy).
 
-Rate-limit handling: the Web API rate-limits the user token. If hit during `.connecting`, show "Spotify is being slow — still trying" plus "attempt N of 3" (auto-retry backoff `[2 s, 5 s, 15 s]`). If three attempts fail: "Couldn't reach Spotify. Check your network or try a different source."
+**Resolution.** Rows resolve through `PreviewResolver`'s verified screen-read lookup: a match must agree with the title shown (a prefix when cut off), the artist and the row's duration, or the row is left out rather than guessed. The match's full catalog title and artist are carried onto the plan so the now-playing matcher compares whole names.
 
-**Two things this section promised that the build does not do.** Recorded rather than deleted, because both are product intent and neither is mine to drop silently:
+**Copy rules.** §9.5 applies: no jargon ("OCR", "Vision", "capture" never appear), no apologies, every problem state offers an action.
 
-1. **The preview card names nothing.** This section specified "Found [Playlist Name] — [N] tracks"; `previewCard` renders "Spotify playlist recognized" above the playlist **ID** in monospace. The user confirms they pasted the right link by reading a base-62 string, which is the opposite of the intent. The name and count are one API call the connector is about to make anyway.
-2. **There is no logout.** Keychain-stored credentials with no UI to clear them; the only route is Keychain Access (`io.uzume.spotify`). `RUNBOOK.md` records this as a developer workaround, which is not the same as a user-facing decision.
+**Paste-a-link (history, developer builds only).** The U.11 flow — paste a playlist URL, log in with Spotify (PKCE OAuth), preview card, per-kind rejection copy, rate-limit backoff `[2 s, 5 s, 15 s]` — is kept intact (`SpotifyConnectionView`, `SpotifyWebAPIConnector`, `SpotifyOAuthTokenProvider`) but reachable only in DEBUG builds, via "Paste a link instead" on the scan view (D-260 decision 1, default A): testers never meet a login that fails for them. Its two recorded gaps (the preview card names nothing; there is no logout) stand. Developer setup: `RUNBOOK.md §Spotify connector setup`.
 
 ### 4.5 Cancel at any point
 
@@ -666,6 +675,7 @@ This is the canonical mapping from internal error states to user-facing language
 | Cause | User copy | Primary CTA | Secondary |
 |---|---|---|---|
 | `CGPreflightScreenCaptureAccess() == false` | "Uzume needs permission to hear music playing on your Mac." | "Open System Settings" | "Why?" (reveals explainer) |
+| Screen permission missing at scan start (SCAN) | "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere." | "Allow Access" | "Already allowed it? Open System Settings" |
 | AppleScript permission denied | "Uzume needs permission to talk to Apple Music. You can grant this in System Settings → Privacy & Security → Automation." | "Open System Settings" | "Skip to Spotify" |
 | Sandbox preventing capture | (should not occur — app sandbox is disabled per RUNBOOK) | Dev-facing log only | — |
 
@@ -684,6 +694,14 @@ This is the canonical mapping from internal error states to user-facing language
 | Spotify auth failure (missing/bad credentials) | "Uzume couldn't reach Spotify right now. Check your network or try Apple Music." | "Try again" | "Use Apple Music" |
 | Spotify Client ID absent from the build (**DEBUG builds only** — developer-setup failure, not an end-user one; Release falls back to the generic auth-failure row above) | "No Spotify Client ID in this build. Create UzumeApp/Uzume.local.xcconfig containing “SPOTIFY_CLIENT_ID = <your client id>”, then build again." | (developer action) | — |
 | Empty playlist | "That playlist doesn't have any tracks yet." | "Pick a different playlist" | — |
+| Spotify not running (scan) | "Open Spotify and go to the playlist you want." | "Open Spotify" | "Or drop screenshots of the playlist here." |
+| Spotify quit during a scan | "Spotify closed during the scan. Open it and start the scan again." | "Open Spotify" | drop target |
+| Spotify window not visible (minimised, another Space) | "Uzume couldn't see the Spotify window. Make sure it's open on screen, then start the scan again." | "Start scan" | drop target |
+| Dropped images hold no playlist | "Uzume couldn't find a playlist in those images. Drop screenshots of the Spotify playlist, or start a scan." | "Start scan" | drop target |
+| Done pressed before any row was read | "No songs were read. Open the playlist in Spotify, start the scan, and scroll through it." | "Start scan" | drop target |
+| Rows skipped during a scan (panel) | "Missed 14–16. Scroll back up a little." | (the user scrolls; clears when read) | "Done" |
+| Scan started mid-list (panel) | "Scroll to the top of the playlist first." | (the user scrolls; clears when #1 is read) | "Done" |
+| Rows never read (review) | "Missing: 14–16" | "Scan again" | "Continue" without them |
 
 ### 9.3 Preparation errors (state: `.preparing`)
 

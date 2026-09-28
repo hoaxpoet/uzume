@@ -68,9 +68,9 @@ struct FirefliesRenderTests {
     func lockedStripsAreFlashSafe() throws {
         let base = try #require(Bundle.module.url(forResource: "route_coverage", withExtension: nil))
         let drive = try FirefliesDrive(directory: base.appendingPathComponent("love_rehab"))
-        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-        defer { MultiPassRenderHarness.firefliesGridBPM = nil }
-        let luma = try MultiPassRenderHarness().render(
+        var harness = MultiPassRenderHarness()
+        harness.firefliesGridBPM = drive.gridBPM
+        let luma = try harness.render(
             preset: "Fireflies", features: drive.features,
             stems: Self.stems(drive.features.count, clarity: 1), reduce: Self.meanLuma)
         let report = LumaReport(luma, fps: 43)
@@ -106,9 +106,9 @@ struct FirefliesRenderTests {
             let drive = try FirefliesDrive(
                 directory: FirefliesSpikeParityProbe.root.appendingPathComponent("sessions/\(session)"))
             let stems = Self.stems(drive.features.count, clarity: clarity)
-            MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-            defer { MultiPassRenderHarness.firefliesGridBPM = nil }
-            let luma = try MultiPassRenderHarness(width: 1920, height: 1080).render(
+            var harness = MultiPassRenderHarness(width: 1920, height: 1080)
+            harness.firefliesGridBPM = drive.gridBPM
+            let luma = try harness.render(
                 preset: "Fireflies", features: drive.features, stems: stems, reduce: Self.meanLuma)
             let report = LumaReport(luma, fps: 43)
             print(String(format: "[fireflies-flash] %@ 1920×1080 K-in %.1f  mean %.4f  per-s range %.4f  maxΔ %.4f",
@@ -122,7 +122,9 @@ struct FirefliesRenderTests {
             let filmH = Int(ProcessInfo.processInfo.environment["FIREFLIES_FILM_HEIGHT"] ?? "") ?? 720
             let filmW = filmH * 16 / 9
             var index = 0
-            _ = try MultiPassRenderHarness(width: filmW, height: filmH).render(
+            var film = MultiPassRenderHarness(width: filmW, height: filmH)
+            film.firefliesGridBPM = drive.gridBPM
+            _ = try film.render(
                 preset: "Fireflies", features: drive.features, stems: stems) { bgra -> Int in
                     Self.writePNG(bgra, width: filmW, height: filmH,
                                   to: dir.appendingPathComponent(String(format: "fireflies_seq_%05d.png", index)))
@@ -149,15 +151,12 @@ struct FirefliesRenderTests {
             .appendingPathComponent("sessions/fixturegen-01_Dance_Yrself_Clean"))
         let window = 1212..<1232
         let features = Array(drive.features.prefix(window.upperBound))
-        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-        defer {
-            MultiPassRenderHarness.firefliesGridBPM = nil
-            MultiPassRenderHarness.firefliesCameraTimeOffset = 0
-        }
         for (tag, offset) in [("a", Float(0)), ("b", Float(23.5))] {
-            MultiPassRenderHarness.firefliesCameraTimeOffset = offset
+            var harness = MultiPassRenderHarness(width: 1920, height: 1080)
+            harness.firefliesGridBPM = drive.gridBPM
+            harness.firefliesCameraTimeOffset = offset
             var index = 0
-            let luma = try MultiPassRenderHarness(width: 1920, height: 1080).render(
+            let luma = try harness.render(
                 preset: "Fireflies", features: features, stems: Self.stems(features.count, clarity: 1)
             ) { bgra -> Float in
                 defer { index += 1 }
@@ -176,10 +175,10 @@ struct FirefliesRenderTests {
             .appendingPathComponent("sessions/fixturegen-08_-_Warszawa"))
         let freeWindow = 1204..<1214
         let freeFeatures = Array(free.features.prefix(freeWindow.upperBound))
-        MultiPassRenderHarness.firefliesGridBPM = free.gridBPM
-        MultiPassRenderHarness.firefliesCameraTimeOffset = 0
+        var harness = MultiPassRenderHarness(width: 1920, height: 1080)
+        harness.firefliesGridBPM = free.gridBPM
         var index = 0
-        _ = try MultiPassRenderHarness(width: 1920, height: 1080).render(
+        _ = try harness.render(
             preset: "Fireflies", features: freeFeatures, stems: Self.stems(freeFeatures.count, clarity: 0.5)
         ) { bgra -> Int in
             defer { index += 1 }
@@ -213,12 +212,10 @@ struct FirefliesRenderTests {
             s.energyLevel = RenderPipeline.energyLevel(levels, at: 170 + f.trackElapsedS)
             return s
         }
-        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-        defer { MultiPassRenderHarness.firefliesGridBPM = nil }
+        var harness = MultiPassRenderHarness(width: 1920, height: 1080)
+        harness.firefliesGridBPM = drive.gridBPM
         var index = 0
-        let luma = try MultiPassRenderHarness(width: 1920, height: 1080).render(
-            preset: "Fireflies", features: drive.features, stems: stems
-        ) { bgra -> Float in
+        let luma = try harness.render(preset: "Fireflies", features: drive.features, stems: stems) { bgra -> Float in
             Self.writePNG(bgra, width: 1920, height: 1080,
                           to: out.appendingPathComponent(String(format: "fireflies_seq_%05d.png", index)))
             index += 1
@@ -240,10 +237,10 @@ struct FirefliesRenderTests {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let drive = try FirefliesDrive(directory: FirefliesSpikeParityProbe.root
             .appendingPathComponent("sessions/fixturegen-Warszawa_tail"))
-        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-        defer { MultiPassRenderHarness.firefliesGridBPM = nil }
+        var harness = MultiPassRenderHarness(width: 1280, height: 720)
+        harness.firefliesGridBPM = drive.gridBPM
         var index = 0
-        let luma = try MultiPassRenderHarness(width: 1280, height: 720).render(
+        let luma = try harness.render(
             preset: "Fireflies", features: drive.features, stems: Self.stems(drive.features.count, clarity: 0.5)
         ) { bgra -> Float in
             Self.writePNG(bgra, width: 1280, height: 720,
@@ -267,16 +264,14 @@ struct FirefliesRenderTests {
     func frameCostAt1080p() throws {
         let drive = try FirefliesDrive(directory: FirefliesSpikeParityProbe.root
             .appendingPathComponent("sessions/fixturegen-01_Dance_Yrself_Clean"))
-        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-        MultiPassRenderHarness.gpuTimesMs = []
-        defer {
-            MultiPassRenderHarness.firefliesGridBPM = nil
-            MultiPassRenderHarness.gpuTimesMs = nil
-        }
-        _ = try MultiPassRenderHarness(width: 1920, height: 1080, readback: false).render(
+        var harness = MultiPassRenderHarness(width: 1920, height: 1080, readback: false)
+        harness.firefliesGridBPM = drive.gridBPM
+        let log = GPUTimeLog()
+        harness.gpuTimes = log
+        _ = try harness.render(
             preset: "Fireflies", features: drive.features, stems: Self.stems(drive.features.count, clarity: 1)
         ) { _ in 0 }
-        let gpu = (MultiPassRenderHarness.gpuTimesMs ?? []).dropFirst(60).sorted()
+        let gpu = log.ms.dropFirst(60).sorted()
 
         let ctx = try MetalContext()
         let geo = try FirefliesGeometry(device: ctx.device, library: try ShaderLibrary(context: ctx).library,
@@ -306,15 +301,12 @@ struct FirefliesRenderTests {
         for (session, stem) in [("fixturegen-01_Dance_Yrself_Clean", "dyc"), ("fixturegen-02_Pyramid_Song", "pyramid")] {
             let drive = try FirefliesDrive(directory: FirefliesSpikeParityProbe.root
                 .appendingPathComponent("sessions/\(session)"))
-            MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
-            MultiPassRenderHarness.firefliesFreezeCamera = true
-            defer {
-                MultiPassRenderHarness.firefliesGridBPM = nil
-                MultiPassRenderHarness.firefliesFreezeCamera = false
-            }
+            var harness = MultiPassRenderHarness(width: 640, height: 360)
+            harness.firefliesGridBPM = drive.gridBPM
+            harness.firefliesFreezeCamera = true
             var prev: [UInt8]?
             let band = 640 * 85 * 4
-            let motion = try MultiPassRenderHarness(width: 640, height: 360).render(
+            let motion = try harness.render(
                 preset: "Fireflies", features: drive.features, stems: Self.stems(drive.features.count, clarity: 1)
             ) { bgra -> Float in
                 defer { prev = Array(bgra[0..<band]) }

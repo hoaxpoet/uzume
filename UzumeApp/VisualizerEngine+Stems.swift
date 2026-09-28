@@ -721,6 +721,9 @@ extension VisualizerEngine {
             let installGrid = octaveCorrectedGrid(cached.beatGrid, title: identity.title)
             // BUG-007.8: pass per-track grid-vs-onset offset as initial drift bias.
             installBeatGrid(installGrid.offsetBy(0), initialDriftMs: cached.gridOnsetOffsetMs)
+            // KAG.3 — the song's arousal picks Kagura's repertoire. Written on BOTH branches (value
+            // here, nil below) so a previous track's value can never reach this one.
+            pushKaguraSong(title: identity.title, arousal: cached.trackProfile.mood.arousal, bpm: installGrid.bpm)
             logCachedInstall(cached: cached, title: identity.title, replacedExisting: replacedExisting)
         } else {
             pipeline.setStemFeatures(.zero, live: false)   // BUG-064: not-live until convergence
@@ -733,6 +736,7 @@ extension VisualizerEngine {
             pipeline.setCachedBassProportion(0.15)
             mirPipeline.setLoudnessProfile(nil)   // DYN.1c: no cache entry → fixed surge band
             installBeatGrid(nil)
+            pushKaguraSong(title: identity?.title ?? "unknown", arousal: nil, bpm: nil)   // KAG.3 — see above
             let trackDesc = identity.map { "'\($0.title)'" } ?? "unknown"
             logger.info(
                 "BEAT_GRID_INSTALL: source=none, track=\(trackDesc) — no cache entry, live inference will be allowed"

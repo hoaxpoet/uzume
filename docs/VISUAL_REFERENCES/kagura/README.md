@@ -4,13 +4,16 @@
 **Render pipeline:** feedback, particles (a `ParticleGeometry` conformer; KAGURA_DESIGN §8)
 **Rubric:** lightweight — stylized point-light figure (exempt from full detail-cascade + material-count requirements)
 **Last curated:** 2026-09-25, port anchors from the KAG.0 spike films whose look (B) Matt chose
+**Certified:** KAG.4, 2026-09-28, on Matt's M7 (session `2026-09-28T16-18-10Z`) — contract scored below
 
 ## Reference images
 
 These are **source-render anchors, not the certification set.** Kagura is a port of the spike's look B,
 which Matt picked from these films (KAG.0, README §3–§5). KAG.2's still sheet compares the build against
 them for faithfulness to the approved look. The curated external set (point-light displays, light painting)
-lands at KAG.4 per KAGURA_DESIGN §11.
+planned for KAG.4 (KAGURA_DESIGN §11) was **not** made at certification — it needs outside imagery and Matt's
+curation; certified on the first-party anchors (the Nebula precedent). The ballet rest and the Charleston
+(KAG.3) have no reference image; Matt judged them live.
 
 | File | Annotation (what to learn from this image) |
 |---|---|
@@ -20,10 +23,12 @@ lands at KAG.4 per KAGURA_DESIGN §11.
 
 ## Stylization contract
 
-- [ ] **Color modulation:** none on the beat. Points warm white (`255, 236, 214`), trails amber (`255, 170, 110`), ground `4, 5, 9`. Luminance stays steady (D-157): the beat moves the pose, it never flashes.
-- [ ] **Audio coverage:** the dance's pulse (for the twist, each hip-turn extreme) lands on the cached grid's beats; the figure is always moving while the music plays.
-- [ ] **Readability at silence:** the sway — slow, calm, never frozen (a frozen human reads as a dropped frame).
-- [ ] **Readability at peak energy:** still one legible human figure; trails fade in 0.4 s, so the body never dissolves into streaks.
+Scored by hand at KAG.4 (lightweight: these four), against the evidence named:
+
+- [x] **Color modulation:** none on the beat. Points warm white (`255, 236, 214`), trails amber (`255, 170, 110`), ground `4, 5, 9`. Luminance stays steady (D-157): the beat moves the pose, it never flashes. *Evidence: `MultiPassFlashHarnessTests` — the dance, the Charleston and the ballet rest each 0.00 flashes/s over 1800 frames, mean luma 0.0041–0.0047.*
+- [x] **Audio coverage:** the dance's pulse lands on the cached grid's beats; the figure is always moving while the music plays. *Evidence: `KaguraPulseLockReplayTests` — twist and cabbage 100 % on the beat, the gesture dances and the Charleston within 10 points of the spike; the decoy swaps beat and "and". Matt, M7: "the twist is synced beautifully". The gesture dances lock looser (~40–60 %), by nature.*
+- [x] **Readability at silence:** a rest — the sway, or on calm songs ballet — slow, calm, never frozen. *Evidence: `KaguraSelectionTests` / `KaguraRestTests` (no frozen frames through silence, a stopped clock and rest changes); Matt, live: the Pyramid Song sway "looks like the dancer warming up".*
+- [x] **Readability at peak energy:** still one legible human figure; trails fade in 0.4 s. *Evidence: the compare sheet and motion gates (KAG.3); the chicken dance's vertical tail-wiggle streaks, the busiest frames, left the pick at KAG.3.*
 
 ## Anti-references
 
@@ -34,8 +39,9 @@ lands at KAG.4 per KAGURA_DESIGN §11.
 
 ## Audio routing notes
 
-- Grid beat position → the time-warp (the twist's hip-turns pinned to beats), KAGURA_DESIGN §5.
-- Irregular grid or no lock yet (streaming cold start) → the sway, §3a / §7.
+- Grid beat position → the time-warp (each dance's pulse pinned to beats), KAGURA_DESIGN §5.
+- Song arousal + grid BPM → the three-dance repertoire; `bassAtt` (1.5 s envelope) → the dance pick per bar, arm reach, and the silence rest (§6, §8, §15).
+- Irregular grid, silence, a stopped clock or no lock yet (streaming cold start) → the rest: ballet on calm songs, the sway elsewhere (§3a / §7 / §15).
 
 ## Provenance
 

@@ -295,10 +295,15 @@ public struct PlannedSession: Sendable {
     /// Returns `nil` when no track matches or when more than one matches
     /// (ambiguity — caller falls back to the partial identity rather than
     /// risk pinning the wrong cache entry). (BUG-006.2)
+    ///
+    /// When no track matches exactly, tolerant fallbacks run (a scanned
+    /// playlist's titles can be cut off — SCAN.2); see
+    /// `PlannedSession+NameMatching.swift`.
     public func canonicalIdentity(matchingTitle title: String, artist: String) -> TrackIdentity? {
         let matches = tracks.filter {
             $0.track.title == title && $0.track.artist == artist
         }
+        if matches.isEmpty { return fallbackCanonicalIdentity(matchingTitle: title, artist: artist) }
         guard matches.count == 1 else { return nil }
         return matches[0].track
     }

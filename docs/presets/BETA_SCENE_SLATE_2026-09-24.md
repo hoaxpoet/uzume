@@ -57,7 +57,7 @@ and Lantern leave the window** and become the first post-beta entries.
 
 | Lane | Order | Honest read for Oct 11 |
 |---|---|---|
-| **4 · Kagura** | KAG.0 spike → design doc → build | **Plausible.** Point-lights are cheap to render. The risks are whether the retimed capture reads as dancing, and beat-grid quality. |
+| **4 · Kagura** | KAG.0 spike → design doc → build | **Plausible.** Point-lights are cheap to render. The risks are whether the retimed capture reads as dancing, and beat-grid quality. **✅ Certified KAG.4, 2026-09-28 — the 26th.** |
 | **5 · Goldengrove** | GG.0 spike (growth timing only) → only then look work | **Unlikely to certify by Oct 11.** Matt **shelved** it on 2026-06-01 (`GOLDENGROVE_PLAN.md` banner): *"Do not revive without a fundamentally stronger, signal-grounded musical hook."* The proposed hook is new since then. **On the local-file path the whole track is analysed before playback, so the bloom can be *scheduled* to arrive with the song's measured peak**; streaming falls back to the live `spectral_level_rise` / `spectral_section_ratio` envelope, which did not exist in June. GG.0 tests that hook on cheap geometry before any painterly work. Hero fidelity still needs the mesh G-buffer path, which was deleted at RECON.15. |
 
 **Session prompts for the first wave:** `prompts/BETA.0-prompt.md`, `prompts/KAG.0-prompt.md`,

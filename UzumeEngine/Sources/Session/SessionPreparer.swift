@@ -460,7 +460,7 @@ public final class SessionPreparer: ObservableObject {
         // download overlaps the previous track's analysis instead of running
         // back-to-back. Analysis stays strictly in playlist order (one StemSeparator
         // call at a time — BUG-031) and the readiness prefix logic is unchanged.
-        typealias FetchResult = Result<(PreviewAudio, PreFetchedTrackProfile?), Error>
+        typealias FetchResult = Result<FetchedTrack, Error>
         var fetchTasks: [Int: Task<FetchResult, Never>] = [:]
         defer { for task in fetchTasks.values { task.cancel() } }
 
@@ -512,8 +512,11 @@ public final class SessionPreparer: ObservableObject {
             launchFetch(index + Self.prefetchWindow)   // keep the window full
 
             do {
-                let (preview, profile) = try fetchResult.get()
-                let data = try await analyzeFetched(preview, profile: profile, track: track)
+                let fetched = try fetchResult.get()
+                let data = Self.naming(
+                    try await analyzeFetched(fetched.preview, profile: fetched.profile, track: track),
+                    after: fetched.match
+                )
                 trackStatuses[track] = .analyzing(stage: .caching)
                 cache.store(data, for: track)
                 trackProfiles[track] = data.trackProfile
@@ -607,12 +610,13 @@ public final class SessionPreparer: ObservableObject {
     /// network). Sets `.resolving` / `.downloading`. Throws the same errors the old
     /// `prepareTrack` did, so the consumer's failure classification (and
     /// `networkFailedTracks` membership) is unchanged.
-    private func fetchTrack(_ track: TrackIdentity) async throws -> (PreviewAudio, PreFetchedTrackProfile?) {
-        // Resolve 30-second preview URL.
+    private func fetchTrack(_ track: TrackIdentity) async throws -> FetchedTrack {
+        // Resolve 30-second preview URL (+ the catalog's own names — SCAN.2).
         trackStatuses[track] = .resolving
-        guard let url = try await resolver.resolvePreviewURL(for: track) else {
+        guard let match = try await resolver.resolvePreviewMatch(for: track) else {
             throw SessionPreparationError.noPreviewURL(track.title)
         }
+        let url = match.previewURL
 
         // Download + parallel metadata fetch (Round 26, 2026-05-15): the fetcher hits
         // Soundcharts / iTunes Search / MusicBrainz — same I/O class as the download.
@@ -623,7 +627,9 @@ public final class SessionPreparer: ObservableObject {
         async let previewTask = downloader.download(track: track, from: url)
         async let profileTask: PreFetchedTrackProfile? = {
             guard let fetcher = self.metadataFetcher else { return nil }
-            let trackMetadata = TrackMetadata(title: track.title, artist: track.artist)
+            // A scanned title can be cut off; the catalog's full name finds more metadata.
+            let trackMetadata = TrackMetadata(
+                title: match.catalogTitle ?? track.title, artist: match.catalogArtist ?? track.artist)
             return await fetcher.prefetch(for: trackMetadata)
         }()
         guard let preview = await previewTask else {
@@ -631,7 +637,25 @@ public final class SessionPreparer: ObservableObject {
             throw SessionPreparationError.downloadFailed(track.title)
         }
         let prefetchedProfile = await profileTask
-        return (preview, prefetchedProfile)
+        return FetchedTrack(preview: preview, profile: prefetchedProfile, match: match)
+    }
+
+    /// The network half's output: the preview, its prefetched metadata, and the match it came from.
+    struct FetchedTrack {
+        let preview: PreviewAudio
+        let profile: PreFetchedTrackProfile?
+        let match: PreviewMatch
+    }
+
+    /// SCAN.2: carry the catalog's full title/artist from the preview match onto the
+    /// profile — a scanned title can be cut off, and the now-playing matcher compares
+    /// against these (`PlannedSession+NameMatching`). No catalog names → unchanged.
+    static func naming(_ data: CachedTrackData, after match: PreviewMatch) -> CachedTrackData {
+        guard match.catalogTitle != nil || match.catalogArtist != nil else { return data }
+        var profile = data.trackProfile
+        profile.catalogTitle = match.catalogTitle
+        profile.catalogArtist = match.catalogArtist
+        return data.with(trackProfile: profile)
     }
 
     /// PREPPERF.2 ①: the analysis half — stem separation → MIR → beat grid → cache

@@ -4,7 +4,9 @@
 // `.render`, the calls the app makes), driven by the committed route-coverage captures: the
 // capture's own playback clock pushed after each update (the app's tick) and the matching Beat
 // This! reference grid (FA #27). Writes:
-//   <root>/<track>/kagura_seq_NNNN.png     every frame, for Scripts/motion_gate.sh
+//   <root>/<track>/kagura_seq_NNNN.png     every frame, for Scripts/motion_gate.sh — the dance chosen
+//                                          by the song (KAG.3 `auto`), on the capture's own `bass_att`
+//   <root>/forced_<dance>/…                love_rehab with one dance forced, one sequence per dance
 //   <root>/kagura_<track>_24s.png          a 720×720 centre crop at 24 s — reference 01's moment
 //   <root>/kagura_sway_8s.png              the no-grid sway at 8 s — reference 02's moment
 // The 720×720 crops are exact: the framing scales with drawable HEIGHT and centres on the width,
@@ -41,28 +43,31 @@ struct KaguraMotionSequenceTests {
         let root = URL(fileURLWithPath: "/tmp/uzume_visual").appendingPathComponent(stamp)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
-        for track in KaguraFixture.tracks {
+        let runs: [(String, String, KaguraDance?)] = KaguraFixture.tracks.map { ($0, $0, nil) }
+            + [KaguraDance.twist, .cabbage, .chicken, .macarena, .egyptian].map { ("love_rehab", "forced_\($0.rawValue)", $0) }
+        for (track, name, dance) in runs {
             let fixture = try KaguraFixture.load(track)
-            let dir = root.appendingPathComponent(track)
+            let dir = root.appendingPathComponent(name)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             var lastFrame: [UInt8] = []
             var changed = 0
-            try Self.render(seconds: fixture.duration, grid: try fixture.grid(),
+            try Self.render(seconds: fixture.duration, grid: try fixture.grid(), dance: dance,
+                            bass: fixture.bass(at:),
                             clock: { time in fixture.row(at: time).map { fixture.playback[$0] } }) { index, bgra in
                 if bgra != lastFrame { changed += 1 }
                 lastFrame = bgra
                 try Self.writePNG(bgra, to: dir.appendingPathComponent(String(format: "kagura_seq_%04d.png", index)))
                 if index == Int(24 * Self.fps) {
-                    try Self.writePNG(bgra, to: root.appendingPathComponent("kagura_\(track)_24s.png"), square: true)
+                    try Self.writePNG(bgra, to: root.appendingPathComponent("kagura_\(name)_24s.png"), square: true)
                 }
             }
-            print("[kagura] \(track): frames → \(dir.path); \(changed) changed frames")
-            #expect(changed > Int(fixture.duration * Self.fps) - 5, "\(track): the sequence froze")
-            #expect(lastFrame.contains { $0 > 40 }, "\(track): the final frame is blank")
+            print("[kagura] \(name): frames → \(dir.path); \(changed) changed frames")
+            #expect(changed > Int(fixture.duration * Self.fps) - 5, "\(name): the sequence froze")
+            #expect(lastFrame.contains { $0 > 40 }, "\(name): the final frame is blank")
         }
 
         // The sway: no grid at all (reference 02's case — irregular grid / cold start).
-        try Self.render(seconds: 8.5, grid: nil, clock: { $0 }) { index, bgra in
+        try Self.render(seconds: 8.5, grid: nil, bass: { _ in 0.2 }, clock: { $0 }) { index, bgra in
             if index == Int(8 * Self.fps) {
                 try Self.writePNG(bgra, to: root.appendingPathComponent("kagura_sway_8s.png"), square: true)
             }
@@ -77,11 +82,13 @@ struct KaguraMotionSequenceTests {
 
     /// 60 fps: update (choreography + trail + composite), render (shoulder) into an sRGB target,
     /// read back, then push the clock (the app's tick runs after update).
-    private static func render(seconds: Double, grid: KaguraGrid?, clock: (Double) -> Double?,
+    private static func render(seconds: Double, grid: KaguraGrid?, dance: KaguraDance? = nil,
+                               bass: (Double) -> Double, clock: (Double) -> Double?,
                                frame: (Int, [UInt8]) throws -> Void) throws {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat)
+        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat,
+                                      dance: dance)
         dancer.ensureAllocated(width: width, height: height)
         dancer.setGrid(grid, streaming: false)
         let desc = MTLTextureDescriptor.texture2DDescriptor(
@@ -95,6 +102,7 @@ struct KaguraMotionSequenceTests {
             var features = FeatureVector()
             features.time = Float(time)
             features.deltaTime = Float(1 / fps)
+            features.bassAtt = Float(bass(time))
             let cmd = try #require(ctx.commandQueue.makeCommandBuffer())
             dancer.update(features: features, stemFeatures: StemFeatures(), commandBuffer: cmd)
             let rpd = MTLRenderPassDescriptor()

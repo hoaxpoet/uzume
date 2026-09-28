@@ -331,9 +331,11 @@ Database* — http://mocap.cs.cmu.edu/
 
 **Specific artifact:** ASF/AMC trials `05_12`, `15_04`, `15_05`, `18_15`, `20_01` and
 `143_35` (with the subject skeletons `05.asf`, `15.asf`, `18.asf`, `20.asf`, `143.asf`),
-retrieved 2026-09-25. Their SHA-256s are pinned in `tools/kagura/cmu_sources.sha256`.
+retrieved 2026-09-25; and (KAG.3) the Charleston trials `93_04`, `93_05` and the ballet trials
+`49_09`, `49_12`, `49_22` (skeletons `93.asf`, `49.asf`), retrieved 2026-09-28. Their SHA-256s are
+pinned in `tools/kagura/cmu_sources.sha256`.
 
-**What ships:** only derived tracks, never the capture files. For each of ten windows cut
+**What ships:** only derived tracks, never the capture files. For each of fifteen windows cut
 from those trials: 15 joint positions (the Johansson point-light set) per frame, resampled
 to 60 fps, turned to a common facing, re-centred and stored as float16, plus pulse events
 and a pulse-index map detected from the motion. The raw ASF/AMC files are not in the

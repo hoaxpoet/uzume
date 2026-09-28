@@ -51,7 +51,8 @@ MAP_SAMPLES_PER_PULSE = 64
 # AMC files carry no frame rate. CMU captures most subjects at 120 fps but the salsa subjects 60/61 at
 # 60 (the KAG.0 erratum: assuming 120 played them at double speed). Only subjects checked by hand are
 # listed; the bake refuses any other subject rather than guess.
-SUBJECT_FPS = {"05": 120.0, "15": 120.0, "18": 120.0, "20": 120.0, "143": 120.0}
+SUBJECT_FPS = {"05": 120.0, "15": 120.0, "18": 120.0, "20": 120.0, "143": 120.0,
+               "93": 120.0, "49": 120.0}   # KAG.3: Charleston, ballet ("Animated 120" on mocap.cs.cmu.edu)
 CREDIT = ("The data used in this project was obtained from mocap.cs.cmu.edu. "
           "The database was created with funding from NSF EIA-0196217.")
 
@@ -179,6 +180,71 @@ def point_lights(cache, trial):
 
 # MARK: - Pulse detectors (verbatim from the spike's beat_events; the footfall default is unused here)
 
+# KAG.3 — the footfall pulse (the Charleston), verbatim from the spike's default `beat_events` branch.
+
+def _contacts(P, names, fps):
+    """Per-ankle contact mask: ankle within 4 cm of its floor and moving < 0.35 m/s vertically."""
+    out = {}
+    for side in "lr":
+        a = P[:, names.index(side + "ankle")]
+        h = a[:, 1] - np.percentile(a[:, 1], 5)
+        vy = np.gradient(a[:, 1]) * fps
+        raw = (h < 0.04) & (np.abs(vy) < 0.35)
+        # debounce: close gaps < 80 ms, then drop contacts shorter than 80 ms
+        from scipy.ndimage import binary_closing, binary_opening
+        w = np.ones(max(1, int(round(0.08 * fps))), bool)
+        out[side] = binary_opening(binary_closing(raw, w), w)
+    return out
+
+
+def footfalls(P, names, fps):
+    """Contact-onset times (either foot), seconds."""
+    c = _contacts(P, names, fps)
+    ev = []
+    for side in "lr":
+        ev.extend((np.flatnonzero(np.diff(c[side].astype(int)) == 1) + 1) / fps)
+    return np.sort(np.array(ev))
+
+
+def clip_tempo(P, names, fps=MOCAP_FPS):
+    """Beat period from the autocorrelation of pelvis vertical velocity (40-200 BPM)."""
+    from scipy.signal import find_peaks
+    from scipy.ndimage import gaussian_filter1d
+    y = P[:, names.index("pelvis"), 1]
+    vy = np.gradient(y) * fps
+    vy = vy - vy.mean()
+    ac = np.correlate(vy, vy, "full")[len(vy) - 1:]
+    ac /= ac[0]
+    ff = footfalls(P, names, fps)
+    train = np.zeros(len(P)); train[np.clip((ff * fps).astype(int), 0, len(P) - 1)] = 1
+    train = gaussian_filter1d(train, 0.03 * fps); train -= train.mean()
+    if train.any():
+        acf = np.correlate(train, train, "full")[len(train) - 1:]
+        ac = 0.5 * ac + 0.5 * acf / acf[0]
+    lo, hi = int(fps * 60 / 220), int(fps * 60 / 40)
+    pk, _ = find_peaks(ac[lo:hi])
+    if not len(pk):
+        return None
+    pk = pk + lo
+    best = pk[np.argmax(ac[pk])]
+    # prefer the shortest lag with >= 80 % of the best peak (the beat, not the bar)
+    for p in pk:
+        if ac[p] >= 0.8 * ac[best]:
+            best = p
+            break
+    # parabolic refinement
+    a, b, c = ac[best - 1], ac[best], ac[best + 1]
+    lag = best + 0.5 * (a - c) / (a - 2 * b + c)
+    period = lag / fps
+    # beat phase: pelvis-height minima (the "down" of each step) snapped near the lattice
+    mins, _ = find_peaks(-y, distance=max(1, int(0.6 * lag)))
+    ibi = np.diff(mins) / fps
+    good = ibi[(ibi > 0.6 * period) & (ibi < 1.4 * period)]
+    stability = float(np.std(good) / np.mean(good)) if len(good) > 3 else float("nan")
+    return {"bpm": 60 / period, "period": period, "ac": float(b), "cv": stability,
+            "downs": mins / fps, "falls": ff}
+
+
 def _extrema(sig, fps):
     """Both local maxima and minima of a smoothed, detrended signal (15 % prominence), seconds."""
     from scipy.ndimage import gaussian_filter1d
@@ -221,6 +287,19 @@ def beat_events(P, names, fps=MOCAP_FPS, pulse=None):
         wy = gaussian_filter1d(P[:, names.index("lwrist"), 1] + P[:, names.index("rwrist"), 1], fps * 0.03)
         ev = find_peaks(-wy, distance=int(0.2 * fps), prominence=np.ptp(wy) * 0.15)[0] / fps
         return ev, float(np.median(np.diff(ev))), "arm-circle bottoms"
+    if pulse == "footfalls":
+        info = clip_tempo(P, names, fps)
+        ff = info["falls"] if info else np.array([])
+        if len(ff) >= 6:
+            med = np.median(np.diff(ff))
+            keep = [ff[0]]
+            for t in ff[1:]:
+                if t - keep[-1] > 0.4 * med:
+                    keep.append(t)
+            ev = np.array(keep)
+            return ev, float(np.median(np.diff(ev))), "footfalls"
+        downs = info["downs"] if info else np.array([0.0, len(P) / fps])
+        return downs, float(info["period"] if info else 1.0), "pelvis-downs"
     raise ValueError(f"unknown pulse {pulse!r}")
 
 
@@ -264,14 +343,18 @@ FAMILIES = {
     "macarena": ["143_35@0.3-10.6"],
     "egyptian": ["15_04@98-104.5", "15_05@98-104.5"],
     "sway": ["05_12"],
+    # KAG.3 (Matt, 2026-09-28: "add the Charleston and ballet") — whole trials; see KAGURA_DESIGN §15
+    "charleston": ["93_04", "93_05"],
+    "ballet": ["49_09", "49_12", "49_22"],   # unwarped: the calm songs' rest, in place of the sway
 }
 # Twist never goes to two turns per beat (KAG.0c, Matt: "half-time twist on slow songs").
-PULSE_LEVELS = {"hipyaw": (1, 2, 4)}
+PULSE_LEVELS = {"hipyaw": (1, 2, 4), "footfalls": (1, 2, 4)}   # nor two Charleston steps per beat (KAG.3)
 CLIP_PULSE = {
     "15_04@109.5-114": "hipyaw", "15_05@110-116": "hipyaw",
     "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
     "18_15@1-12.8": "gesture", "20_01@0-10.7": "gesture", "143_35@0.3-10.6": "gesture",
     "15_04@98-104.5": "gesture", "15_05@98-104.5": "gesture",
+    "93_04": "footfalls", "93_05": "footfalls",
 }
 
 # MARK: - Bake

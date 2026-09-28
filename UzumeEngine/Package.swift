@@ -226,6 +226,16 @@ let package = Package(
             ],
             path: "Sources/PrepTimingRunner"
         ),
+        .target(
+            name: "ScanBenchCore",
+            dependencies: ["Session"],
+            path: "Sources/ScanBenchCore"
+        ),
+        .executableTarget(
+            name: "ScanBench",
+            dependencies: ["Session", "ScanBenchCore"],
+            path: "Sources/ScanBench"
+        ),
         .executableTarget(
             name: "ChainHealthAnalyzer",
             dependencies: ["Shared"],
@@ -236,7 +246,7 @@ let package = Package(
             dependencies: [
                 "Shared", "Audio", "DSP", "ML", "Presets",
                 "Renderer", "Session", "Orchestrator", "Diagnostics",
-                "CorpusCensusRunner", "TonalDumper", "PresetSessionReplay",
+                "CorpusCensusRunner", "TonalDumper", "PresetSessionReplay", "ScanBenchCore",
             ],
             path: "Tests/UzumeEngineTests",
             resources: [
@@ -245,6 +255,7 @@ let package = Package(
                 .copy("Fixtures/fbs"),
                 .copy("Fixtures/panns_reference"),
                 .copy("Fixtures/route_coverage"),
+                .copy("Fixtures/playlist_scan"),
             ]
         ),
     ]
