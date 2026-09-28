@@ -246,7 +246,6 @@ final class SpotifyScanViewModel: ObservableObject {
     // MARK: Review
 
     private func enterReview(_ result: PlaylistScanAccumulator) {
-        ScanDiagnostics.logReview(result.rows, name: result.playlistName, missing: result.gaps)
         reviewRows = result.rows
         reviewName = result.playlistName
         reviewMissing = result.gaps

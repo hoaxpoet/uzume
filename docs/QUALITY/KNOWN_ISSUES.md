@@ -354,7 +354,7 @@ future consumers and is independently regression-tested.
 
 **Fix (`832e8102`).** Identical readings of a row pool their confidence and the most-supported reading wins (ties: the more confident single reading); a frame's first and last rows count ×0.8 (the last row is whole when the Recommended shelf shows). `PlaylistScanAccumulatorTests.oneOffMisreadOutvoted` fails on the old accumulator ("NikkiR" sticks) and passes now; the fixture gate is unchanged (144/144, 124/125, 0 wrong).
 
-**Verification.** 1. ✅ Automated, above. 2. ✅ Manual: Matt's re-scan (Release, 15:21:30–15:21:36, 22 frames, 5.3 s) — the logged review diffs 38/38 against the Exportify CSV, 0 differing, 0 missing; row 9 "Prizefighter — Youth Lagoon" from 8 readings; row 16 "Nikki" (the offline bench's one misread) also right.
+**Verification.** 1. ✅ Automated, above. 2. ✅ Manual: Matt's re-scan (Release, 15:21:30–15:21:36, 22 frames, 5.3 s) — the logged review diffs 38/38 against the Exportify CSV, 0 differing, 0 missing; row 9 "Prizefighter — Youth Lagoon" from 8 readings; row 16 "Nikki" (the offline bench's one misread) also right. The per-row log lines added to diagnose it (`ScanDiagnostics`) were removed after verification; the per-frame timing line stays.
 
 ### BUG-152 — the streaming preview lookup lands on another song for 8 % of rows (2026-09-28)
 
