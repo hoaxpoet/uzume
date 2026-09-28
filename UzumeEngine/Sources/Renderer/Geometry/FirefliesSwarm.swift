@@ -16,6 +16,17 @@
 //   • near-silence: all but 5 % stragglers fade to 2 % visibility, τ 1.5 s. The world
 //     behind stays lit (D-037); that is the preset fragment's job, not this file's.
 //
+// FF.5 — PATCHES TAKE TURNS on a clear beat (FIREFLIES_DESIGN §1a, Matt at FF.4's M7: "It's
+// everyone at once — go with option A"). While K > 0 the meadow is P upright strips (2–4, left
+// → right on `posU`, edges waving with height; a firefly belongs to the strip it is drifting
+// through), every firefly's cycle is P beats, and grid tick n nudges strip n mod P only — so
+// each beat lights one strip and the flash walks across the meadow. The BOUNDARY RULE: the neighbour relay stays inside a
+// strip. That makes the strips P disjoint copies of the gated model above, each on its own
+// tick; the whole-meadow attractor (§8) exists only through relay across an edge, so it is
+// removed rather than resisted. A firefly drifting over an edge joins its new strip out of
+// phase and is pulled in the way every firefly is at cold start. At K = 0 nothing here runs:
+// one meadow, relay everywhere, the 1/2/4-beat cycle — FF.1 exactly.
+//
 // K is the track's beat clarity (`stems.beatClarity01`, BC.1 / D-257) mapped so that
 // UNKNOWN behaves as FREE — Matt, 2026-09-24: "unknown stays free".
 //
@@ -70,16 +81,22 @@ public final class FirefliesSwarm: @unchecked Sendable {
     public private(set) var now: Double = 0
     /// Current beat coupling, 0 (free) … 1 (full).
     public private(set) var coupling: Float = 0
-    /// Beats per flash cycle (1, 2 or 4 — the cycle nearest 1 s).
+    /// Beats per flash cycle: free, 1, 2 or 4 (the cycle nearest 1 s); in patches, `patchCount`.
     public private(set) var cycleBeats = 1
+    /// Strips taking turns (2–4) while the beat is clear and a grid is installed; 0 = one meadow.
+    public private(set) var patchCount = 0
+    /// Each firefly's strip, set once per frame from `posU`.
+    private(set) var patch = [Int](repeating: 0, count: count)
     /// The installed grid's beat period the natural periods are built on; nil with no grid.
     public private(set) var beatPeriod: Float?
     private var prevBeatPhase: Float?
     private var prevTrackElapsed: Float = 0
     private var tickIndex = 0
 
-    /// When non-nil, every flash appends its time (`now` units). Harness-only.
-    public var flashLog: [Double]?
+    /// When non-nil, every flash appends its time (`now` units) and strip. Harness-only.
+    public var flashLog: [(t: Double, patch: Int)]?
+    /// When non-nil, every TARGET tick appends its time and the strip it nudges (−1: all).
+    public var tickLog: [(t: Double, patch: Int)]?
 
     private var rng: SplitMix64
     private var hits = [Int32](repeating: 0, count: count)
@@ -111,6 +128,7 @@ public final class FirefliesSwarm: @unchecked Sendable {
         }
         beatPeriod = nil
         cycleBeats = 1
+        patchCount = 0
         prevBeatPhase = nil
         tickIndex = 0
     }
@@ -126,7 +144,7 @@ public final class FirefliesSwarm: @unchecked Sendable {
         prevTrackElapsed = frame.trackElapsedS
         // 1 → 1, 0.5 (unknown) → 0, 0 → 0.
         coupling = min(max(2 * clarity - 1, 0), 1)
-        installTempo(bpm: gridBPM)
+        installTempo(bpm: gridBPM, patched: coupling > 0)
 
         let tickAt = beatTick(phase: frame.beatPhase01, dt: dt)
 
@@ -149,13 +167,16 @@ public final class FirefliesSwarm: @unchecked Sendable {
     }
 
     /// Detects a `beatPhase01` wrap (a grid tick) inside this frame and returns its offset into
-    /// the frame (seconds) when it is a TARGET tick — every m-th beat, the spike's `ticks[::m]`.
+    /// the frame (seconds) and the strip it nudges when it is a TARGET tick. Free: every m-th
+    /// beat, the spike's `ticks[::m]`, nudging all (−1). In patches: every beat, strip n mod P.
     /// No target ticks while no grid is installed.
-    private func beatTick(phase: Float, dt: Float) -> Float? {
+    private func beatTick(phase: Float, dt: Float) -> (at: Float, patch: Int)? {
         defer { prevBeatPhase = phase }
         guard let prev = prevBeatPhase, phase < prev - 0.5, beatPeriod != nil else { return nil }
         defer { tickIndex += 1 }
-        return tickIndex % cycleBeats == 0 ? (1 - prev) / (phase + 1 - prev) * dt : nil
+        let at = (1 - prev) / (phase + 1 - prev) * dt
+        if patchCount > 0 { return (at, tickIndex % patchCount) }
+        return tickIndex % cycleBeats == 0 ? (at, -1) : nil
     }
 
     /// Builds the natural periods on the installed grid's tempo — the spike's `grid_bpm`, one
@@ -171,23 +192,32 @@ public final class FirefliesSwarm: @unchecked Sendable {
     ///     early ticks run 2.6 % slow) and delays coupling ~5 s: on-beat +0.78 vs +0.84.
     /// Given the grid tempo from t = 0, the engine reproduces the spike's seed distributions
     /// on all four parity captures (FF.1 closeout), so the model port itself is faithful.
-    private func installTempo(bpm: Float) {
-        guard bpm > 0 else { beatPeriod = nil; return }          // no grid: free, keep periods
+    ///
+    /// FF.5: also re-built when the swarm enters or leaves patches (clarity crossing 0.5).
+    private func installTempo(bpm: Float, patched: Bool) {
+        guard bpm > 0 else { beatPeriod = nil; patchCount = 0; return }  // no grid: free, keep periods
         let beat = 60 / bpm
-        if let current = beatPeriod, abs(current - beat) < 1e-4 { return }
+        // Patches: the most strips (2–4) whose P-beat cycle stays ≤ 2 s, so the walk has as many
+        // steps as a 1–2 s firefly cycle allows (98 BPM → 3, 126 → 4). Below 60 BPM, 2 strips
+        // run longer than 2 s — ponytail: accepted, no such clear-beat track in the beta set.
+        let patches = patched ? ([4, 3, 2].first { Float($0) * beat <= 2 } ?? 2) : 0
+        if let current = beatPeriod, abs(current - beat) < 1e-4, patches == patchCount { return }
         beatPeriod = beat
+        patchCount = patches
         tickIndex = 0
-        // Beats per flash cycle: 1, 2 or 4, whichever puts the period nearest 1 s.
-        cycleBeats = [1, 2, 4].min { abs(log(Float($0) * beat)) < abs(log(Float($1) * beat)) } ?? 1
+        // Free: beats per flash cycle 1, 2 or 4, whichever puts the period nearest 1 s.
+        cycleBeats = patches > 0 ? patches
+            : [1, 2, 4].min { abs(log(Float($0) * beat)) < abs(log(Float($1) * beat)) } ?? 1
         for i in 0..<Self.count { period[i] = Float(cycleBeats) * beat * spread[i] }
     }
 
     /// One substep of `simulate_frame`: advance clocks, music nudge, flash + relay.
-    private func substep(_ sdt: Float, start: Float, tickAt: Float?, time: Double) {
+    private func substep(_ sdt: Float, start: Float, tickAt: (at: Float, patch: Int)?, time: Double) {
         for i in 0..<Self.count { clock[i] += sdt / period[i] }
 
-        if coupling > 0, let tick = tickAt, tick >= start, tick < start + sdt {
-            for i in 0..<Self.count {
+        if coupling > 0, let tick = tickAt, tick.at >= start, tick.at < start + sdt {
+            tickLog?.append((time, tick.patch))
+            for i in 0..<Self.count where tick.patch < 0 || patch[i] == tick.patch {
                 let wrap = clock[i] > 0.5 ? 1 - clock[i] : -clock[i]
                 clock[i] += coupling * Self.epsBeat * wrap
                 // Late → shorten; removes the steady lead the neighbour nudges leave.
@@ -202,7 +232,7 @@ public final class FirefliesSwarm: @unchecked Sendable {
             flashT[i] = time
         }
         guard !fired.isEmpty else { return }
-        flashLog?.append(contentsOf: repeatElement(time, count: fired.count))
+        flashLog?.append(contentsOf: fired.map { (time, patchCount > 0 ? patch[$0] : -1) })
         // ncase applies the pull once per flashing neighbour: clock *= (1 + pull)^hits.
         for i in fired {
             for k in Int(neighbourStart[i])..<Int(neighbourStart[i + 1]) { hits[Int(neighbours[k])] += 1 }
@@ -219,6 +249,8 @@ public final class FirefliesSwarm: @unchecked Sendable {
     /// radius-sized cells: each firefly tests the 3 × 3 cells around its own (~60 candidates)
     /// instead of all 600. The neighbour SETS are identical to a full pair scan.
     ///
+    /// FF.5: in patches, a neighbour in another strip is not a neighbour (the boundary rule).
+    ///
     /// FF.1: the full O(N²) scan was 0.6 ms/frame at `-O` but 79 ms at `-Onone` — 80 % of it
     /// in this loop's range iteration — and the Debug-built `PresetFrameBudgetTests` measured
     /// the preset at 15× the roster median. The grid is the fix for both configurations.
@@ -228,6 +260,13 @@ public final class FirefliesSwarm: @unchecked Sendable {
         let rows = max(1, Int((1 / cell).rounded(.up)))
         func cellOf(_ i: Int) -> (Int, Int) {
             (min(cols - 1, max(0, Int(posU[i] * aspect / cell))), min(rows - 1, max(0, Int(posV[i] / cell))))
+        }
+        for i in 0..<Self.count {
+            // The strip edges wave with height (±0.05 of the width, ~1.2 waves over the meadow) so
+            // a lit strip reads as a patch, not a ruled column. Clamped, not wrapped, at the meadow's
+            // ends: a wrapped edge made an orphan group at the far left flash with the right strip.
+            let across = posU[i] + 0.05 * sin(2 * .pi * 2 * posV[i])
+            patch[i] = patchCount > 0 ? min(patchCount - 1, max(0, Int(across * Float(patchCount)))) : 0
         }
         // Counting sort of firefly indices by cell.
         cellStart = [Int32](repeating: 0, count: cols * rows + 1)
@@ -257,7 +296,7 @@ public final class FirefliesSwarm: @unchecked Sendable {
                         let j = Int(cellItems[k])
                         k += 1
                         let dx = posU[j] * aspect - xi, dy = posV[j] - yi
-                        if j != i, dx * dx + dy * dy < r2 { neighbours.append(Int32(j)) }
+                        if j != i, dx * dx + dy * dy < r2, patch[j] == patch[i] { neighbours.append(Int32(j)) }
                     }
                 }
             }
@@ -295,13 +334,27 @@ public final class FirefliesSwarm: @unchecked Sendable {
     }
 
     /// Swarm coherence R = |mean e^{2πiθ}| (1 = unison).
-    public var coherence: Float {
+    public var coherence: Float { Self.order(clock[...]) }
+
+    /// FF.5: each strip's R, weighted by its size — 1 when every strip flashes together. Equals
+    /// `coherence` when the swarm is one meadow.
+    public var patchCoherence: Float {
+        guard patchCount > 0 else { return coherence }
+        var sum: Float = 0
+        for strip in 0..<patchCount {
+            let members = clock.indices.filter { patch[$0] == strip }.map { clock[$0] }
+            sum += Self.order(members[...]) * Float(members.count)
+        }
+        return sum / Float(Self.count)
+    }
+
+    private static func order(_ phases: ArraySlice<Float>) -> Float {
         var re: Float = 0, im: Float = 0
-        for phase in clock {
+        for phase in phases {
             re += cos(2 * .pi * phase)
             im += sin(2 * .pi * phase)
         }
-        return (re * re + im * im).squareRoot() / Float(Self.count)
+        return phases.isEmpty ? 0 : (re * re + im * im).squareRoot() / Float(phases.count)
     }
 }
 
