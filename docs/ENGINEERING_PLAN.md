@@ -2245,52 +2245,7 @@ harness does not exist and is recorded as not-built rather than dropped. No rend
 `FeatureVector` change; the render capability registry is unchanged.
 
 ### BUG129.1 — the chain-health peak had no ceiling, and the 0 dBFS it reported was correct ✅ (2026-09-13)
-
-`chain_health.json` read `peakDBFS: 0` with a `clean` verdict on three consecutive sessions. Read
-straight out of the float WAVs, that is the truth: peak `1.00000000`, reached by **one sample out of
-2,880,000**, second-highest at −0.24 dBFS — a limited master, not a broken capture. The ≈ −6 dBFS
-readings before it were *tap* captures; BUG087.5 retired the tap the same day, so `raw_tap.wav`
-became the decoded file at unity gain.
-
-★ **The defect was the missing half of the check** — `critical_peak` and `low_peak` are both floors,
-and nothing existed at the ceiling. Added `clipped(run=N,samples=M)` and `over_full_scale(…)`, gated
-on FLAT-TOPPING (4 consecutive samples at the rail) rather than on the peak, because gating on the
-peak would grade every loud master `degraded` and hollow out D-184. That reinterprets one of the
-bug's own verification criteria; the reasoning is recorded in the KNOWN_ISSUES entry.
-
-New reported field `maxFullScaleRun`, present even when 0 or 1 — `peakDBFS: 0` is indistinguishable
-from an unset default by eye, and that ambiguity is the whole complaint. Four new
-`ChainAnalyzerTests`; all four sessions regraded with verdicts unchanged. No renderer, preset or
-`FeatureVector` change; the render capability registry is unchanged.
-
 ### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ M7 PASSED, BUG-130 RESOLVED (2026-09-12, Matt: *"silence pauses correctly now"*)
-
-`PlayheadAnalysisClock.tick()` delivers a tick's worth of zeros when the playhead is not moving —
-paused (no render time) or stopped (smoothed position not advancing). Before, every guard returned
-and, with the tap retired at BUG087.5, the last `FeatureVector` re-published indefinitely: 1617
-frames of byte-identical bands in session `2026-09-11T21-00-42Z` while playback was stopped, on
-every preset.
-
-★ **The fix belongs at the input, not at the publisher.** Clearing the published vector on the
-pause path would create a second definition of silence that has to be kept in step with the chain's
-own; feeding zeros in at the top of the funnel means the existing AGC, band smoothers and
-`nearSilent01` produce silence here exactly as they do for real musical silence on streaming.
-
-The silence is bounded at 1.5 s: `MIRPipeline.elapsedSeconds` accumulates analysis `dt` and the live
-drift tracker indexes the cached `BeatGrid` by it, so unbounded silence would walk the grid forward
-by the whole pause. Bounded, a pause costs ≤ 1.5 s of grid phase and what stays frozen afterwards is
-frozen at silence. The zero-cost version needs the analysis callback to carry "no playhead" — a
-change to the contract shared with `SystemAudioCapture`, named as the upgrade path in the code.
-
-A stall also resets `PlaybackClockSmoother` and re-seeds the cursor (otherwise the smoother's 0.25 s
-dead-reckon overshoot turns a resume into another quarter-second of silence), and the seeding tick
-delivers silence rather than returning. Gate: `PlayheadAnalysisClockTests` steps `tick()` through
-playing → stopped → paused → resumed. Streaming is unaffected — its tap already delivers real zeros.
-`LoopingFileReader` moved to its own file: this increment plus BUG-131's teardown barrier, landing
-in the same file minutes apart, crossed the 400-line lint budget together. Nothing moved but the
-type. No renderer, shader, preset or `FeatureVector` change; the render capability registry is
-unchanged.
-
 ### Increment DOC.12 — scheduled documentation rotation ✅ (2026-09-11)
 ### BUG087.5 — retire the tap's forwarding role ✅ (2026-09-11, Matt: *"retire the tap's forwarding role"*)
 ### BUG087.4 — decouple the analysis clock from tap arrival (local-file path) ✅ M7 PASSED, default-on, BUG-087 RESOLVED (2026-09-11, Matt: *"I like it. It's punchy."*)
