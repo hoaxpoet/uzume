@@ -528,7 +528,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// hops off the callback queue before touching the lock at all (BUG-059).
     private func _scheduleFileLoopLocked(player: AVAudioPlayerNode, file: AVAudioFile,
                                          from startFrame: AVAudioFramePosition = 0) {
-        let completion: AVAudioNodeCompletionHandler = { [weak self, weak player, weak file] in
+        let completion: AVAudioPlayerNodeCompletionHandler = { [weak self, weak player, weak file] _ in
             guard let self, let player, let file else { return }
             // BUG-059: hop OFF the AVAudioPlayerNode completion-handler queue
             // before re-scheduling / advancing. Doing this inline re-enters the
@@ -557,6 +557,11 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
                 advance?()
             }
         }
+        // LFSEEK.1: when the queue advances at the end, wait until the audio has PLAYED OUT. The
+        // default (`.dataConsumed`) fires once the player has READ the last audio — measured 1.0 s
+        // early — so the next track cut off each song's last second. A single-file loop keeps
+        // `.dataConsumed`: re-arming while the tail still plays is what makes the loop seamless.
+        let callbackType: AVAudioPlayerNodeCompletionCallbackType = onFileEnded == nil ? .dataConsumed : .dataPlayedBack
         // LFSEEK.1: a seek plays from `startFrame` to the end; every loop pass after it is whole.
         if startFrame > 0 {
             player.scheduleSegment(
@@ -564,10 +569,11 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
                 startingFrame: startFrame,
                 frameCount: AVAudioFrameCount(file.length - startFrame),
                 at: nil,
+                completionCallbackType: callbackType,
                 completionHandler: completion
             )
         } else {
-            player.scheduleFile(file, at: nil, completionHandler: completion)
+            player.scheduleFile(file, at: nil, completionCallbackType: callbackType, completionHandler: completion)
         }
     }
 

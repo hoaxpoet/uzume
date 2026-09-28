@@ -39,12 +39,14 @@ struct LocalFileSeekTests {
         #expect((12...13).contains(at), "playhead read \(at) s after a seek to 12 s")
 
         // A second seek to 3 s before the end: the old node's stop must not read as end-of-file
-        // (that would skip the track), and the real end arrives a few seconds later. The player
-        // reports the end once it has READ the last audio (`.dataConsumed`, the pre-existing EOF
-        // semantics), a little before it has played it — so the remainder must outlast that read.
+        // (that would skip the track), and the end arrives when the last 3 s have PLAYED — not
+        // when the player has read them, which was 1.0 s early and cut every song's last second.
         try provider.seek(to: duration - 3)
+        let sought = Date()
         #expect(ended.wait(timeout: .now() + 0.3) == .timedOut, "the seek itself fired the queue advance")
         #expect(ended.wait(timeout: .now() + 5) == .success, "no end-of-file within 5 s of a seek to 3 s before it")
+        let heard = Date().timeIntervalSince(sought)
+        #expect(heard >= 2.8, "the queue advanced \(heard) s into a 3 s remainder — the tail was cut")
     }
 
     @Test("seeking while paused stays paused")
