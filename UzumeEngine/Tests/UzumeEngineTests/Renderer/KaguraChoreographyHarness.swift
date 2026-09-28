@@ -24,6 +24,8 @@ enum KaguraChoreographyHarness {
         var swayInFade: [Bool] = []
         /// Per frame: whether the grid-CV safety net held the dancer (§7).
         var irregular: [Bool] = []
+        /// Per frame: the rest clip's id (the sway `05_12`, or a ballet clip), `nil` while dancing.
+        var rest: [String?] = []
         /// Render time of each auto pick, parallel to `choreographer.picks`.
         var pickTimes: [Double] = []
         var choreographer: KaguraChoreographer
@@ -76,6 +78,7 @@ enum KaguraChoreographyHarness {
             run.fading.append(run.choreographer.isFading)
             run.swayInFade.append(run.choreographer.fadeTouchesSway)
             run.irregular.append(run.choreographer.gridIrregular)
+            run.rest.append(run.choreographer.currentRest?.id)
             clock.ingest(playbackSeconds: playback(time), renderTime: time, lockState: lockState(time))
         }
         return run

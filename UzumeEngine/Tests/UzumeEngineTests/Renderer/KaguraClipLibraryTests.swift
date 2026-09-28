@@ -20,6 +20,8 @@ struct KaguraClipLibraryTests {
         ("143_35@0.3-10.6", .macarena),
         ("15_04@98-104.5", .egyptian), ("15_05@98-104.5", .egyptian),
         ("05_12", .sway),
+        ("93_04", .charleston), ("93_05", .charleston),   // KAG.3: fast songs
+        ("49_09", .ballet), ("49_12", .ballet), ("49_22", .ballet),   // KAG.3: calm songs' rest
     ]
 
     /// `face_camera`'s target: camera yaw 35°, turned a further 35° (the three-quarter facing).
@@ -41,7 +43,7 @@ struct KaguraClipLibraryTests {
 
     // MARK: - Decode
 
-    @Test("every clip decodes: the library's ten clips, 15 joints at 60 fps")
+    @Test("every clip decodes: the library's fifteen clips, 15 joints at 60 fps")
     func everyClipDecodes() {
         #expect(library.clips.map(\.id) == Self.expected.map(\.id))
         #expect(library.clips.map(\.dance) == Self.expected.map(\.dance))
@@ -75,7 +77,7 @@ struct KaguraClipLibraryTests {
     @Test("every pulse map is strictly monotone and passes through its pulse events")
     func pulseMapsAreMonotone() {
         for clip in library.clips {
-            guard clip.dance != .sway else {
+            guard !clip.dance.isRest else {
                 #expect(clip.pulseKind == nil && clip.pulseMap.isEmpty && clip.pulsePeriod == nil)
                 continue
             }
@@ -89,7 +91,7 @@ struct KaguraClipLibraryTests {
 
     @Test("each clip's pulse rate is within ±2 per minute of its manifest value")
     func pulseRateMatchesManifest() throws {
-        for clip in library.clips where clip.dance != .sway {
+        for clip in library.clips where !clip.dance.isRest {
             let period = try #require(clip.pulsePeriod)
             let intervals = (0..<Int(clip.pulseSpan)).map {
                 clip.clipTime(atPulse: Double($0 + 1)) - clip.clipTime(atPulse: Double($0))
@@ -101,10 +103,10 @@ struct KaguraClipLibraryTests {
         }
     }
 
-    @Test("twist clips never list the ×½ level; the other dances do")
+    @Test("twist and Charleston clips never list the ×½ level; the other dances do")
     func twistExcludesHalfTime() {
-        for clip in library.clips where clip.dance != .sway {
-            if clip.dance == .twist {
+        for clip in library.clips where !clip.dance.isRest {
+            if clip.dance == .twist || clip.dance == .charleston {
                 #expect(clip.allowedLevels == [1, 2, 4], "\(clip.id)")
             } else {
                 #expect(clip.allowedLevels == [0.5, 1, 2, 4], "\(clip.id)")

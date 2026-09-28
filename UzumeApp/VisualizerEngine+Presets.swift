@@ -671,7 +671,8 @@ extension VisualizerEngine {
             "KAGURA_SONG: track='\(title)', songArousal=\(shown), "
             + String(format: "songEnergy=%.2f, ", energy)
             + "gridBPM=\(bpm.map { String(format: "%.1f", $0) } ?? "none"), "
-            + "repertoire=[\(repertoire?.map(\.rawValue).joined(separator: ", ") ?? "at first grid")]")
+            + "repertoire=[\(repertoire?.map(\.rawValue).joined(separator: ", ") ?? "at first grid")], "
+            + "rest=\(arousal != nil && energy < 1.0 / 3 ? "ballet" : "sway")")
     }
 
     /// KAG.2 — copy a grid install (or clear) into Kagura's geometry, whether or not Kagura is

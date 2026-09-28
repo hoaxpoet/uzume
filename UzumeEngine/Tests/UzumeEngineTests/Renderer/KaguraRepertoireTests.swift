@@ -47,15 +47,16 @@ struct KaguraRepertoireTests {
 
     /// The build (Matt, 2026-09-25, option A): `TrackProfile.songArousal` and the grid BPM from the shipping
     /// local-file preparation (PrepTimingRunner, Release), against `KaguraRepertoire.energyReference`, picking
-    /// from the four dances left after the chicken dance went (Matt, 2026-09-28). The spike's rule (oracle:
-    /// `kagura.py` with `DANCES` minus chicken) yields two repertoires on this playlist.
+    /// from the dances after the chicken dance went and the Charleston came (Matt, 2026-09-28). The spike's
+    /// rule, with the Charleston eligible only at one step per beat within 0.8–1.25× natural speed and its
+    /// vigor capped at the others' top (oracle: kagura.py, KAG.3), puts it on B.O.B. and Take Five only.
     static let build: [Row] = [
         ("Dance Yrself Clean", 98.0, 0.609, [.egyptian, .cabbage, .twist]),
-        ("B.O.B.", 153.8, 0.569, [.macarena, .cabbage, .twist]),
+        ("B.O.B.", 153.8, 0.569, [.cabbage, .twist, .charleston]),
         ("Superstition", 101.4, 0.206, [.egyptian, .macarena, .cabbage]),
         ("Smells Like Teen Spirit", 117.3, 0.597, [.egyptian, .cabbage, .twist]),
         ("Penny Lane", 113.3, -0.426, [.egyptian, .macarena, .cabbage]),
-        ("Take Five", 171.4, 0.327, [.egyptian, .macarena, .cabbage]),
+        ("Take Five", 171.4, 0.327, [.macarena, .cabbage, .charleston]),
         ("Pyramid Song", 95.2, 0.334, [.egyptian, .macarena, .cabbage]),
         ("Teardrop", 78.8, 0.479, [.egyptian, .macarena, .cabbage]),
         ("Moonlight I", 44.5, -0.355, [.egyptian, .macarena, .cabbage]),

@@ -95,6 +95,7 @@ struct KaguraPulseLockReplayTests {
         let joint = { (name: String) in try #require(clips.jointNames.firstIndex(of: name)) }
         let leftHip = try joint("lhip"), rightHip = try joint("rhip")
         let leftWrist = try joint("lwrist"), rightWrist = try joint("rwrist"), pelvis = try joint("pelvis")
+        let leftAnkle = try joint("lankle"), rightAnkle = try joint("rankle")
         let arms = try ["lwrist", "rwrist", "lelbow", "relbow"].map(joint)
         let pulse = try #require(clips.clips(for: dance).first?.pulseKind)
         let truth = fixture.beats
@@ -114,6 +115,8 @@ struct KaguraPulseLockReplayTests {
                 events = KaguraSpikeDetector.hipYawEvents(frames, leftHip: leftHip, rightHip: rightHip, fps: 30)
             case "wrists":
                 events = KaguraSpikeDetector.wristBottoms(frames, leftWrist: leftWrist, rightWrist: rightWrist, fps: 30)
+            case "footfalls":
+                events = KaguraSpikeDetector.footfallEvents(frames, leftAnkle: leftAnkle, rightAnkle: rightAnkle, fps: 30)
             default:
                 events = KaguraSpikeDetector.gestureLandings(
                     frames, pelvis: pelvis, arms: arms, fps: 30, beatPeriod: driven.beatPeriod)
@@ -182,18 +185,21 @@ extension KaguraPulseLockReplayTests {
             .chicken: [(49, 32), (42, 34), (41, 26), (41, 29), (44, 29)],
             .macarena: [(51, 0), (50, 5), (42, 2), (45, 3), (41, 3)],
             .egyptian: [(39, 61), (40, 60), (45, 55), (44, 56), (36, 64)],
+            .charleston: [(53, 21), (47, 17), (52, 19), (51, 16), (53, 21)],
         ],
         "so_what": [
             .cabbage: [(94, 0), (100, 0), (100, 0), (100, 0), (94, 0)],
             .chicken: [(49, 24), (49, 24), (48, 26), (45, 30), (45, 23)],
             .macarena: [(38, 47), (41, 37), (39, 41), (39, 39), (36, 39)],
             .egyptian: [(42, 56), (41, 59), (40, 55), (48, 52), (46, 52)],
+            .charleston: [(52, 19), (49, 18), (55, 22), (52, 18), (47, 21)],
         ],
         "there_there": [
             .cabbage: [(100, 0), (100, 0), (100, 0), (94, 0), (100, 0)],
             .chicken: [(51, 31), (51, 30), (51, 32), (47, 25), (31, 28)],
             .macarena: [(38, 45), (41, 37), (40, 40), (33, 44), (33, 43)],
             .egyptian: [(29, 71), (40, 57), (39, 59), (37, 61), (36, 64)],
+            .charleston: [(56, 18), (55, 16), (53, 18), (50, 17), (49, 18)],
         ],
     ]
 
@@ -204,7 +210,7 @@ extension KaguraPulseLockReplayTests {
     static let decoySwing = 5.0
 
     static let cases: [(String, KaguraDance)] = KaguraFixture.tracks.flatMap { track in
-        [KaguraDance.cabbage, .chicken, .macarena, .egyptian].map { (track, $0) }
+        [KaguraDance.cabbage, .chicken, .macarena, .egyptian, .charleston].map { (track, $0) }
     }
 
     @Test("Each dance locks to the grid no worse than the spike on the same capture", arguments: cases)
@@ -242,5 +248,28 @@ extension KaguraPulseLockReplayTests {
         #expect(landings.map { Int(($0 * fps).rounded()) } == [6, 15, 25, 34, 44, 53, 62, 71, 88, 97, 106, 116, 125, 135, 144],
                 "\(landings)")
         #expect(KaguraSpikeDetector.gradient([0, 1, 4, 9, 7, 7.5]) == [1, 2, 4, 1.5, -0.75, 0.5])
+        // `_contacts`' morphology (scipy binary_closing then binary_opening, ones(n), border 0).
+        let raw: [Bool] = [0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1].map { $0 == 1 }
+        let cleaned = { (n: Int) in
+            KaguraSpikeDetector.dilate(KaguraSpikeDetector.erode(
+                KaguraSpikeDetector.erode(KaguraSpikeDetector.dilate(raw, n), n), n), n).map { $0 ? 1 : 0 }
+        }
+        #expect(cleaned(2) == [0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+        #expect(cleaned(3) == [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0])
+        #expect(cleaned(10) == [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0])
+        // `footfalls`: two feet lifted by a half-sine for 45 % of each 0.6 s cycle, half a cycle apart.
+        let feet = (0..<150).map { i -> [SIMD3<Float>] in
+            let time = Double(i) / 30
+            let lift = { (phase: Double) -> Float in
+                let cycle = (time / 0.6 + phase).truncatingRemainder(dividingBy: 1)
+                return Float((cycle < 0.45 ? 0.12 * sin(.pi * cycle / 0.45) : 0) + 0.002 * sin(2 * .pi * 7 * time))
+            }
+            var joints = [SIMD3<Float>](repeating: .zero, count: 15)
+            joints[11].y = lift(0)
+            joints[14].y = lift(0.5)
+            return joints
+        }
+        let falls = KaguraSpikeDetector.footfalls(feet, ankles: [11, 14], fps: 30).map { Int(($0 * 30).rounded()) }
+        #expect(falls == [1, 9, 18, 27, 36, 45, 54, 63, 72, 81, 90, 99, 108, 117, 126, 135, 144], "\(falls)")
     }
 }
