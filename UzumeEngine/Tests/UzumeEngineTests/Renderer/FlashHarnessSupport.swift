@@ -15,6 +15,8 @@
 // spiking to the measured real p99 (~0.85) — not to an unphysical 1.0.
 
 import Foundation
+import Testing
+@testable import Renderer
 @testable import Shared
 
 // MARK: - FlashHarnessSupport
@@ -189,5 +191,40 @@ enum FlashHarnessSupport {
     private static let srgbToLinear: [Double] = (0..<256).map { byte in
         let c = Double(byte) / 255.0
         return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+    }
+
+    // MARK: - Shared assertion
+
+    /// Print the per-preset evidence line and assert flash-safety. Fails LOUD on a static
+    /// render — a static frame is never asserted "safe" (that would be a vacuous pass for a
+    /// safety gate); it means the harness did not reach the preset's real response. Shared by
+    /// the `@MainActor` multi-pass suite and the nonisolated Fireflies suite (FF.4).
+    static func assertFlashSafe(name: String, luma: [Double]) {
+        let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: fps)
+        let lo = luma.min() ?? 0, hi = luma.max() ?? 0
+        let range = hi - lo
+        let mean = luma.reduce(0, +) / Double(max(luma.count, 1))
+        let responded = range >= responsiveLumaRange
+
+        print(String(
+            format: "[flash-safety] %@: %@ | peak %.2f flashes/s (%d transitions) — %@ | luma %.3f…%.3f (Δ%.3f, mean %.3f) [limit 3.0]",
+            name, responded ? "MEASURED" : "UNMEASURED(static)",
+            report.peakFlashesPerSecond, report.transitionCount,
+            report.isSafe ? "SAFE" : "UNSAFE", lo, hi, range, mean))
+
+        #expect(
+            responded,
+            """
+            '\(name)' rendered static (Δ\(String(format: "%.4f", range))) under the worst-case beat+stem train — \
+            the harness is not reaching its real multi-pass response, so the measurement is INVALID (not safe). \
+            Fix the harness setup; do not weaken this guard.
+            """)
+        #expect(
+            report.isSafe,
+            """
+            '\(name)' peaks at \(String(format: "%.2f", report.peakFlashesPerSecond)) flashes/s (limit 3) under a \
+            \(String(format: "%.1f", accentHz)) Hz worst-case beat train — exceeds Harding/WCAG 2.3.1. \
+            P1 safety finding: bring to Matt, do NOT tune away (the certified motion was hand-built safe, D-157/D-158).
+            """)
     }
 }

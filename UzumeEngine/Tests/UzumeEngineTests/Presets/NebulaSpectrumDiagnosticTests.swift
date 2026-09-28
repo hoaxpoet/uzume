@@ -411,10 +411,8 @@ struct NebulaSpectrumDiagnosticTests {
         // track is not representative of it.
         let stride = max(1, mags.count / 6)
         let picked = Swift.stride(from: 0, to: mags.count, by: stride).prefix(6).map { mags[$0] }
-        MultiPassRenderHarness.realSpectrum = picked
-        defer { MultiPassRenderHarness.realSpectrum = nil }
-
-        let harness = MultiPassRenderHarness(width: 960, height: 540)
+        var harness = MultiPassRenderHarness(width: 960, height: 540)
+        harness.realSpectrum = picked
         var frame = 0
         // Sample the feature rows at the same fractional positions as the spectra, so a
         // frame's picture and its audio state come from the same moment of the track.
