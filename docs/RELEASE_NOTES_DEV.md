@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-201200] SCAN — Spotify playlists are scanned from the screen (pending Matt's live check)
+
+The Spotify tile now scans a playlist instead of asking for a link: click **Start scan**, Spotify comes forward with a small panel beside it, scroll the playlist once, and Uzume reads each row's title, artist and length from Spotify's window, on the Mac. It finishes by itself at the header's song count; skipped rows are named ("Missed 14–16. Scroll back up a little."), a scan started mid-list asks to scroll to the top, and a review list (always shown) lets you fix or remove a row before **Continue**. Screenshots dropped on the Spotify view go through the same reader. No Spotify login and no request to Spotify: the Web API's new rules limit the link connector to five people, so it survives only in developer builds (D-260). Measured on four real playlists (144 songs): every row read, 99.2 % identified, no wrong songs; two live scans in the Release build took 8–10 s for 32–38 songs. Matt's live check found one wrong artist in 38 (the first, half-visible reading of a row stuck — BUG-153); a row's text is now voted across every frame that saw it, and his re-scan of that playlist read all 38 rows correctly (5.3 s). Screen-read rows use a stricter catalog lookup (title, artist and length must agree, or the song is left out rather than guessed). The same measurement found the existing first-hit lookup landing on the wrong song for 8 % of those playlists (BUG-152, open). The screen-recording permission text now says the scan reads track names in the Spotify window.
+
 ### [dev-2026-09-28-174700] KAG.4 — Kagura certified (the 26th)
 
 Kagura, the point-light dancer, is certified on Matt's M7 of the beta playlist (*"looks much better, happy with it overall"*). It now enters planned sessions like the other certified scenes, kept off beat-irregular songs by `requires_regular_beat`. Flash-safe in all three measured cases (the dance, the Charleston, the ballet rest: 0.00 flashes/s); no golden session plan changed. Known: the macarena runs a little heavy on calm songs.

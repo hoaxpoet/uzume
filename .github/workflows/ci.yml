@@ -119,6 +119,9 @@ jobs:
       # NOTE: `--filter` matches the TYPE name (struct/class), NOT the
       # @Suite("display") string — `PresetScorer` matches `struct
       # PresetScorerTests`; `DefaultPresetScorer` would match nothing.
+      # SCAN (D-260): the scan logic suites run here; PlaylistScanFixtureTests (real
+      # screenshots outside the repo) and ScanSessionHandoffTests (Metal) do NOT —
+      # the filters above are chosen not to match them.
       # UNDER-COVERS BY DESIGN: a new pure-logic suite is NOT run until added
       # here. Widening to a full-suite-minus-skip-list is the CLEAN.5.1 Option-B
       # follow-up (prove the macos-26 runner has a working Metal device first).
@@ -138,7 +141,14 @@ jobs:
             --filter TransitionPolicy \
             --filter BeatCardBuilder \
             --filter WeightChecksumTests \
-            --filter MIRSampleRateReconfigureTests
+            --filter MIRSampleRateReconfigureTests \
+            --filter PlaylistScanRowAssembly \
+            --filter PlaylistScanAccumulator \
+            --filter PlaylistScanIdentity \
+            --filter ScreenReadMatchPolicy \
+            --filter PreviewResolverScreenRead \
+            --filter ScannedNowPlayingMatch \
+            --filter ScanSourceParity
 
       - name: User-facing string lint (D-091)
         run: Scripts/check_user_strings.sh

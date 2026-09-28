@@ -64,7 +64,9 @@ struct ConnectingViewCancelTests {
             .appleMusicCurrentPlaylist,
             .appleMusicPlaylistURL("https://music.apple.com/playlist/abc"),
             .spotifyCurrentQueue,
-            .spotifyPlaylistURL("https://open.spotify.com/playlist/abc")
+            .spotifyPlaylistURL("https://open.spotify.com/playlist/abc"),
+            .spotifyScan(playlistName: "Scanned"),
+            .spotifyScan(playlistName: nil)
         ]
         for src in sources {
             let view = ConnectingView(source: src, onCancel: { calls += 1 })

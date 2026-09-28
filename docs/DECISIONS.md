@@ -141,6 +141,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-257 | Accepted | **Beat clarity reaches the GPU as one track-scoped float** (`StemFeatures.beat_clarity01`, 1 steady / 0 irregular / 0.5 unknown, from the D-154 flag); **Fireflies maps unknown to free** and lives in the **dusk meadow** (BC.1 + FF.0, Matt 2026-09-24) |
 | D-258 | Accepted | **Fireflies' look is a stylized screenprint rendered from a real 3D scene** — Daniel Danger's night prints, blue palette, hero `07`; supersedes FF.0's photographic / matte-painting bar; addendum: the world breathes with slow energy, never the beat (FF.R2 / FF.2 prompt, Matt 2026-09-25) |
 | D-259 | Accepted | **Scenes are chosen by measured energy, not by the mood classifier** — a 1–10 energy level plus the song's range; valence leaves scene choice; certified scenes' live mood routes untouched for now (BUG-148, Matt 2026-09-26) |
+| D-260 | Accepted | **Spotify track lists come from on-device screen reading, not the Web API** — the user scrolls the playlist once while Uzume reads Spotify's window (or drops screenshots); no Spotify request, no login; screen-read rows resolve through a verified catalog lookup (SCAN, 2026-09-28) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6120,3 +6121,48 @@ energy value instead."*
 **Evidence obligation.** An energy measure is admitted only if it ranks the beta playlist the way Matt
 hears it. His ranking, or his pick among candidate orderings, is the reference; a measure that disagrees
 with his ears does not ship, whatever it correlates with.
+
+## D-260: Spotify track lists come from on-device screen reading, not the Web API (SCAN)
+
+**Date:** 2026-09-28 · **Increment:** SCAN.0–SCAN.5 · **Status:** Accepted ·
+**Demotes:** the paste-a-link Spotify connector (U.11 OAuth, `SpotifyWebAPIConnector`) to developer builds.
+
+**Why.** Spotify's February 2026 Web API rules cap a Development Mode app at 5 hand-added users, and
+Extended Quota now needs a registered business with ≥ 250,000 monthly users. The paste-a-link
+connector therefore works for at most 5 people, while Matt expects most users to come through
+Spotify — and the planned session is the product. Ruled out: reading the public embed page
+(prohibited by Spotify's User Guidelines, item 5); oEmbed (title only, no artist); copy-paste from
+the Spotify app (the clipboard holds bare track URLs only — verified in Notes).
+
+**The decision.**
+1. **Spotify playlists are read off the screen, on the Mac.** The user clicks *Start scan*, Spotify
+   comes forward with a small floating panel beside it, and the user scrolls the playlist once.
+   Apple Vision (`VNRecognizeTextRequest`, a system framework — no bundled model, consistent with
+   D-009) reads each row's number, title, artist and duration. Screenshots dropped on the Spotify
+   view go through the same reader. **No request to any Spotify server; no Spotify account on our side.**
+2. **Capture is Spotify's window only** (a ScreenCaptureKit window filter, never a display), in
+   memory, only while the panel is open, never written or sent. Permission is checked at scan start
+   (`CGPreflightScreenCaptureAccess`), not only at onboarding. No Accessibility API, no synthetic
+   input, no AppleScript UI scripting — the user scrolls.
+3. **Screen-read rows resolve through a verified lookup.** A title read off the screen is often cut
+   off, and the catalog's first hit for a shortened title is frequently another song. Screen-read
+   tracks (`TrackIdentity.screenReading`) ask iTunes for 25 candidates and accept only one whose
+   title matches what was shown (a prefix when cut off), whose primary artist matches (tolerating a
+   fused video badge), and whose length matches the row's duration — else no match, never a guess.
+   Every other track's request is unchanged. The match's full catalog title/artist ride on
+   `TrackProfile.catalogTitle`/`catalogArtist` so the now-playing matcher compares whole names.
+4. **The review list always appears** (decision 2, default A for the beta): the user sees what was
+   read, fixes or removes rows, then *Continue* starts preparation.
+5. **Paste-a-link stays in developer builds only** (decision 1, default A): testers see only Scan.
+   `SpotifyWebAPIConnector`, the OAuth provider and their tests are kept intact.
+
+**Evidence (SCAN.0, `docs/diagnostics/SCAN_FEASIBILITY_2026-09-28.md`).** Four real playlists, 144
+rows, Release on the Mac mini: coverage **100 %** (no silent misses), identification **99.2 %**,
+wrong song **0.0 %**, **209 ms** a frame. Before the verified lookup the same reading played the
+wrong song for 7.4 % of rows (1 in 5 cut-off titles). The first-hit lookup the streaming path still
+uses lands on a different song for 8 % of these playlists' own ground truth (BUG-152).
+
+**Limits (KNOWN_ISSUES).** English Spotify UI for the "N songs" count; default list view measured,
+compact view synthetic-only; no 100+ song capture; the Spotify web player is not read; a very small
+window truncates harder.
+
