@@ -536,7 +536,8 @@ extension DocIntegrityTests {
         "FBS": "Ferrofluid Ocean",
         "AV": "Aurora Veil",
         "FTR": "Fractal Tree",
-        "CR": "Cymatic Resonance"
+        "CR": "Cymatic Resonance",
+        "FF": "Fireflies"
     ]
 
     /// A row is exempt when it SAYS why it is still open against a certified preset. The phrase

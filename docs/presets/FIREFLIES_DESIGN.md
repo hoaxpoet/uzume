@@ -4,9 +4,9 @@
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
 FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
 FF.4 (M7) closed 2026-09-28: **M7 not passed** (Matt: *"It's everyone at once — go with option A"*; §1a) ·
-**FF.5 (orchestration + smooth glow, then M7 + certification) next** — prompt `prompts/FF.5-prompt.md`.
-Reachable by the arrow keys (`exclude_from_cycling` removed at FF.4); `certified: false`, so no session
-plans it yet.
+**FF.5 ✅ CERTIFIED 2026-09-28, the 27th** — patches take turns, the smooth glow, the meadow thinning with the
+music (Matt's M7: *"Fireflies is a strong pass - I love it (and more importantly my wife loves it)"*; streaming
+passed with the engine's grid limit recorded, BUG-065). Sessions plan it.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
@@ -186,9 +186,7 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 - **Performance:** 60 fps at 1080p in Release. The Debug-built `PresetFrameBudgetTests` also times any
   CPU-side model at `-Onone` (FF.1 lesson), so CPU work must be cheap in both configurations.
 - **Silence:** never black (D-037); the world coasts (§4.3).
-- **Rotation:** reachable by the arrow keys since FF.4 Task 2 (`exclude_from_cycling` removed so Matt's
-  build can show it for the M7); `certified: false` until the M7 and the streaming pass, so the planner,
-  the reactive picker and Shift+→ skip it unless "Show uncertified scenes" is on.
+- **Rotation:** certified at FF.5; the planner, the reactive picker and the arrow keys all reach it.
 
 ## 7. Increments
 | ID | Delivers | Gate |
@@ -196,7 +194,7 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 | FF.2 | The 3D world in the screenprint style; the swarm placed in depth through the shared camera; ambient motion | One still beside `07` accepted by Matt **first**; then films, motion gate, flash, frame budget, FF.1 parity still green |
 | FF.3 | The light: near-white core + coloured bloom, fireflies lighting the grass and mist around them, occlusion by grass/trees | Side-by-side against `09`/`07`; flash re-measured; 60 fps 1080p Release |
 | FF.4 | M7 on the beta playlist; certification; remove `exclude_from_cycling` | Matt's M7 — **not passed 2026-09-28** (§1a). Delivered the pre-M7 packet, the WCAG flash test and reachability; not certified |
-| FF.5 | Patches take turns on the beat (§1, §2); the smooth glow (§1a); then M7 + certification (FF.4's Tasks 3–7) | Matt's look check on a film, then his M7 and one streaming pass |
+| FF.5 | Patches take turns on the beat (§1, §2); the smooth glow (§1a); the meadow thins with the music; then M7 + certification (FF.4's Tasks 3–7) | ✅ look check *"yes to both"*; M7 *"a strong pass"*; streaming *"close, but does not lock"* on Billie Jean — the grid, BUG-065 — accepted ("a"). **Certified, the 27th** |
 
 If FF.2/FF.3 do not reach the bar by the October 11 cutoff, Fireflies ships after the beta, never as a
 sketch.
