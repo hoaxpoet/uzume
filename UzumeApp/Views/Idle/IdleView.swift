@@ -83,10 +83,11 @@ struct IdleView: View {
                 //
                 // Route by SOURCE, not tracks.isEmpty:
                 // - Spotify: always use preFetchedTracks (even if empty) to avoid
-                //   SessionManager re-fetching via client-credentials (→ 401).
+                //   SessionManager re-fetching via client-credentials (→ 401). A
+                //   scanned playlist (SCAN) has no fetch at all — its rows ARE the tracks.
                 // - Apple Music / other: no pre-fetched tracks; SM fetches itself.
                 switch source {
-                case .spotifyPlaylistURL, .spotifyCurrentQueue:
+                case .spotifyPlaylistURL, .spotifyCurrentQueue, .spotifyScan:
                     await engine.sessionManager.startSession(preFetchedTracks: tracks, source: source)
                 default:
                     await engine.sessionManager.startSession(source: source)

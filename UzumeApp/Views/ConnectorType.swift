@@ -29,7 +29,7 @@ enum ConnectorType: String, CaseIterable, Codable, Hashable {
     var systemImage: String {
         switch self {
         case .appleMusic:  return "music.note.list"
-        case .spotify:     return "link"
+        case .spotify:     return "text.viewfinder"
         case .localFolder: return "folder.fill"
         }
     }

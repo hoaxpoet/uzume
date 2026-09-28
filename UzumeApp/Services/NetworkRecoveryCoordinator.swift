@@ -54,7 +54,9 @@ final class NetworkRecoveryCoordinator {
     private let reachability: any ReachabilityPublishing
 
     private var cancellables = Set<AnyCancellable>()
-    private var debounceTask: Task<Void, Never>?
+
+    /// The pending debounce → recovery task. Internal so tests await it instead of sleeping (BUG-154).
+    private(set) var debounceTask: Task<Void, Never>?
 
     // MARK: - Init
 

@@ -275,6 +275,25 @@ Open for Matt's live look (not blocking KAG.1): whether the beat lock is legible
 whether the macarena's slightly early arms read as anticipation. The Superstition D-154 false positive is
 tracked as its own beat-sync task, not inside Kagura.
 
+### Lane · SCAN — Spotify playlists from the screen (D-260)
+
+Spotify's February 2026 Web API rules cap the paste-a-link connector at 5 users, so Spotify playlists are
+now read off the screen on the Mac: the user scrolls the playlist once while Uzume reads Spotify's window
+(or drops screenshots). No Spotify request, no login. Prompt `prompts/SCAN-prompt.md`; branch `scan`.
+
+| ID | Status | Done-when |
+|---|---|---|
+| **SCAN.0** accuracy gate | ✅ 2026-09-28 — **PASS** | `ScanBench` (Release, Mac mini) over 4 real playlists / 144 rows: coverage **100 %** (0 silent), identification **99.2 %** (124/125), wrong song **0.0 %**, **209 ms** a frame; strict (vs the reference lookup) 89.0 % — 11 rows' reference itself lands on another song (BUG-152). Two parser iterations + a verified screen-read lookup (wrong songs 7.4 % → 0). [`SCAN_FEASIBILITY_2026-09-28.md`](diagnostics/SCAN_FEASIBILITY_2026-09-28.md) |
+| **SCAN.1** reading core | ✅ 2026-09-28 | `Session/PlaylistScan/` (recognizer, parser, pane-remembering reader, incremental accumulator). `PlaylistScanLogicTests` (synthetic observations, CI) + `PlaylistScanFixtureTests` (real screenshots, fixture-gated, reproduces 144/144 · 124/125 · 0 wrong offline) |
+| **SCAN.2** hand-off | ✅ 2026-09-28 | `PlaylistSource.spotifyScan(playlistName:)` at parity with the paste-link source (display name, `isSpotify` → Normalize Volume toast, IdleView pre-fetched route, ConnectingView copy, connector refusal); catalog title/artist carried onto `TrackProfile`; now-playing matcher falls back to normalized/catalog names then whole-word prefix. A synthetic scan reaches `.ready` (`ScanSessionHandoffTests`) |
+| **SCAN.3** review + screenshot drop | ✅ 2026-09-28 | `SpotifyScanView` / `ScanReviewView` / `SpotifyScanViewModel`; strings externalized; `SpotifyScanViewModelTests` (16, every phase, fakes) |
+| **SCAN.4** live scan | ✅ 2026-09-28 — **live in Release on this Mac**; BUG-153 fixed + re-scan 38/38 | ScreenCaptureKit on Spotify's window only; non-activating panel. Matt's two live scans (Release, `SCAN frame` log): fixture 4 (32 songs) **10.3 s**, 44 frames, 205 ms median / 705 max; fixture 3 (38 songs) **8.3 s**, 36 frames, 226 / 642 ms — both auto-finished at the header count. **Accuracy:** Matt on the fixture-3 scan: *"it just misread one track (Prizefighter - has the wrong artist, which should be Youth Lagoon)"* → **BUG-153** (the first, edge-of-frame reading of a row stuck), fixed `832e8102` (readings voted across frames, edge rows discounted); **re-scan diffs 38/38 against the CSV** (5.3 s, 22 frames). A live wide window (Album column, sidebar rows aligned with the list, an open context menu) found two parser gaps, fixed with regression fixtures |
+| **SCAN.5** Spotify tile | ✅ 2026-09-28 | Scan is the Spotify flow; paste-a-link only in DEBUG builds ("Paste a link instead"), decision 1 default A; connector + OAuth kept |
+| **SCAN.6** Matt's live check | ✅ 2026-09-28 — step 1 ✅ (TC 27 re-scan, Matt: *"step 1 done"* — 38/38 by CSV diff). Step 2 dropped — Matt: *"why do i have to do #2? I have already done one pass where the list was scrolled partway down and I needed to scroll up. i have already given you a long playlist. and creating a new playlist with featured is a waste of my time."* Covered instead by: fixtures 32–40 songs + three live scans (100+ untested, SCAN-LIM); fixture 1's "So Many Ways (feat. …)" identified at SCAN.0; the mid-list prompt by Matt's pass + `SpotifyScanViewModelTests.startedMidList` (the retained frame logs all start at #1). Steps 3 (screenshot drop) and 4 (one session played through) ✅ — Matt: *"steps 3 and 4 done. both look good"* | Three real playlists (one long, one with "feat." titles, one started mid-list), one screenshot drop, one session played through — verdict recorded verbatim here |
+
+**DECISION-NEEDED defaults built (D-260):** 1 → **A** (paste-link hidden from tester builds, kept in developer
+builds); 2 → **A** (the review list always appears).
+
 ## Phase PR — Preset review remediation ⏸ superseded by Phase BETA (Matt, 2026-09-24; D-255) (opened 2026-09-04 from Matt's full-roster review, scope calls below)
 
 Matt watched the roster end to end against **David Bowie — *Low*** (local FLAC,
@@ -1650,6 +1669,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 - BUG-155: a seek replayed every skipped clip change, one per frame (36 in 0.6 s). It now fades to the rest and rejoins at the next bar line.
 
 **Done-when:** ✅ tests + table; ⏳ Matt's M7 round 2 on the beta playlist (local files).
+
+### Increment BUG154.1 — the network-recovery tests await the debounce ✅ (2026-09-28)
+
+**Delivered.** BUG-154 (P3) was filed from one `closeout_evidence.sh` failure on `scan` and fixed in one increment as P3 allows. Every wait in `NetworkRecoveryCoordinatorTests` now awaits the coordinator's `debounceTask` (made `private(set)`) instead of sleeping `recoveryDebounceSecs + 1 s`. Test-only change; no product behaviour changed.
+**Done-when:** ✅ mechanism reproduced by a 1.5 s latency probe (4/7 fail before, 7/7 pass after); ✅ three consecutive full app-suite runs + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
 
 ### Increment FLASHOFF.1 — the multi-pass flash suite off the main actor ✅ (2026-09-28, stacked on `ff-4`)
 

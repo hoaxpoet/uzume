@@ -113,6 +113,22 @@ public struct CachedTrackData: Sendable {
         )
     }
 
+    /// SCAN.2 — copy carrying an amended profile (the catalog's full title/artist from the
+    /// preview match, known only after resolution — see `TrackProfile.catalogTitle`).
+    public func with(trackProfile: TrackProfile) -> CachedTrackData {
+        CachedTrackData(
+            stemWaveforms: stemWaveforms,
+            stemFeatures: stemFeatures,
+            trackProfile: trackProfile,
+            beatGrid: beatGrid,
+            drumsBeatGrid: drumsBeatGrid,
+            gridOnsetOffsetMs: gridOnsetOffsetMs,
+            instrumentFamilySeries: instrumentFamilySeries,
+            loudnessProfile: loudnessProfile,
+            stemFeatureSeries: stemFeatureSeries
+        )
+    }
+
     /// LFSTEM.1 — copy carrying a full-file stem series. Same shape and same reason as
     /// `with(loudnessProfile:)`: only the local-file call site knows the decode covered the
     /// whole track, and `analyzePreview` is shared with streaming.

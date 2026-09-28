@@ -58,6 +58,14 @@ public struct TrackProfile: Sendable, Codable {
     /// nil for profiles written before schema v17.
     public var energyCurve: EnergyCurve?
 
+    /// The catalog's full title and artist for this track, from the preview
+    /// match (SCAN.2, D-260). A scanned playlist row can carry a cut-off title
+    /// ("Is It Because You Kn…"); the now-playing matcher compares against these
+    /// instead. nil when the preview did not come from a catalog search.
+    public var catalogTitle: String?
+    /// See `catalogTitle`.
+    public var catalogArtist: String?
+
     // MARK: - Init
 
     public init(

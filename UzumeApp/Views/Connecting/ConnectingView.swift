@@ -71,6 +71,8 @@ struct ConnectingView: View {
             return "music.note.list"
         case .spotifyCurrentQueue?, .spotifyPlaylistURL?:
             return "link"
+        case .spotifyScan?:
+            return "text.viewfinder"
         case .none:
             return "waveform"
         }
@@ -80,7 +82,7 @@ struct ConnectingView: View {
         switch source {
         case .appleMusicCurrentPlaylist?, .appleMusicPlaylistURL?:
             return String(localized: "connecting.appleMusic.subtext")
-        case .spotifyCurrentQueue?, .spotifyPlaylistURL?:
+        case .spotifyCurrentQueue?, .spotifyPlaylistURL?, .spotifyScan?:
             return String(localized: "connecting.spotify.subtext")
         case .none:
             return String(localized: "connecting.subtext")
