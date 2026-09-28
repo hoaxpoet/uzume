@@ -523,3 +523,21 @@ sixth, the same rule and values as KAG.3's `songArousal` (confirmed by that sess
 the field is gone: Kagura reads `mood.arousal`, `energyReference` is unchanged, and the cache is main's v17
 (KAG.3's v18 entries re-analyse once). Main's D-259 energy curve (`TrackProfile.energyCurve`) is not yet
 Kagura's input — moving the song energy onto it changes which songs get which dances, a call for Matt.
+
+**M7 PASSED (Matt, 2026-09-28, beta playlist, local files; session `2026-09-28T16-18-10Z`):** *"looks much
+better, happy with it overall. macarena is a little heavy in this set, but it's ok."* Next: certification
+(KAG.4). The session, from its `KAGURA_SONG` / `KAGURA_PICK` lines: every song got its intended repertoire;
+ballet rests on Penny Lane, Moonlight I and Warszawa; the Charleston on B.O.B. and Take Five; 190 picks split
+calm 65 / middle 60 / vigorous 65 (twist 38, cabbage 55, Egyptian 52, macarena 30, Charleston 15). Chain health
+`degraded` (`signal_health_band_low`), as in every local session that day.
+
+**The reference keeps one pre-BUG-146 point.** After the main merge, BUG-146 (MIR at 44.1 kHz whatever the
+file's rate) moved Superstition's song arousal from 0.206 to 0.494; the other nine are unchanged. Re-deriving
+`energyReference` would move Take Five to energy 0.333 — off the Charleston and onto the calm-rest boundary —
+which is not what Matt approved at M7, so the constant stays as approved (Superstition's repertoire is the same
+either way). It is re-derived when the song energy moves to D-259's energy curve.
+
+**Library growth (Matt, at M7):** "the preset will ultimately benefit from more dances, like the tango, salsa,
+fox trot, lindy hop, etc. i'd also love to see the cha-cha slide." Constraint from the spike: CMU's salsa and
+lambada travel (they smear under look B), its Lindy/Charleston trials are 2–4.5 s, and it has no tango, fox trot
+or cha-cha slide — these need another motion source or in-place re-cuts, each watched in motion before it ships.
