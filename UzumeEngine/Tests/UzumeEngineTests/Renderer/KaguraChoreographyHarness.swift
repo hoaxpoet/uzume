@@ -44,21 +44,25 @@ enum KaguraChoreographyHarness {
                                        beatsPerBar: bars ? beatsPerBar : 1, hasBarInformation: bars))
     }
 
+    /// A steady song: one section at `level` (`nil` = unknown energy).
+    static func steady(_ level: Int?) -> [KaguraSection] { [KaguraSection(start: 0, level: level)] }
+
     /// Run `seconds` at 60 fps.
     /// - Parameters:
     ///   - sequence: dances forced in turn (default: the twist alone, KAG.2); empty = pick by the song.
+    ///   - sections: the song's energy sections (KAG.5), read at the playback clock.
     ///   - bass: `bassAtt` at render time `t` (default steady music, never silent, reach 1).
     ///   - playback: the playback clock at `t` (default `t`; hold it to stop the clock).
     ///   - regrid: may replace the grid at render time `t`.
     static func run(seconds: Double, grid: KaguraGrid?, streaming: Bool = false,
-                    sequence: [KaguraDance] = [.twist], songArousal: Double? = nil,
+                    sequence: [KaguraDance] = [.twist], sections: [KaguraSection] = [],
                     bass: (Double) -> Double = { _ in 0.2 },
                     playback: (Double) -> Double = { $0 },
                     lockState: (Double) -> Int = { _ in 0 },
                     regrid: ((Double) -> KaguraGrid??)? = nil) throws -> Run {
         let lib = try KaguraClipLibrary.shared()
         var run = Run(choreographer: try #require(KaguraChoreographer(library: lib, sequence: sequence)))
-        run.choreographer.setSongArousal(songArousal)
+        run.choreographer.setSongSections(sections)
         var clock = KaguraBeatClock()
         clock.setGrid(grid, streaming: streaming)
         for frame in 0..<Int(seconds * fps) {
@@ -68,7 +72,8 @@ enum KaguraChoreographyHarness {
             let picks = run.choreographer.picks.count
             let pose = run.choreographer.advance(
                 deltaTime: 1 / fps, beat: beat, grid: clock.grid, gridGeneration: clock.gridGeneration,
-                dancePermitted: clock.dancePermitted, bass: bass(time))
+                dancePermitted: clock.dancePermitted, bass: bass(time),
+                playbackSeconds: clock.playbackSeconds(atRenderTime: time))
             if run.choreographer.picks.count > picks { run.pickTimes.append(time) }
             run.joints.append(pose)
             run.dancing.append(run.choreographer.isDancing)

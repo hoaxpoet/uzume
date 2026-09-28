@@ -31,7 +31,7 @@
 //   measured against the spike's in the KAG.2 closeout.
 //
 // KAG.3 (KAGURA_DESIGN §6–§8, §3a):
-// - **The dance** at each clip change: the song's repertoire (its arousal and the grid BPM), then the
+// - **The dance** at each clip change: the repertoire (the playing stretch's energy + grid BPM), then the
 //   bar just played ranked in the song's trailing energy picks calm / middle / vigorous. Each dance
 //   alternates its own clips. No anti-repeat term (Matt: "follow the song's energy").
 // - **Arm reach**: elbows and wrists scale about their shoulder by `KaguraEnergy.reach`. The legs are
@@ -131,7 +131,8 @@ public struct KaguraChoreographer: Sendable {
     private var knownGeneration: Int?
     var energy = KaguraEnergy()
     var safetyNet = KaguraSafetyNet()
-    var songArousal: Double?
+    var songSections: [KaguraSection] = []   // KAG.5; `songPosition`: the track second last played
+    var songPosition: Double?
     /// Render seconds the beat position has not advanced.
     private var stalled: Double = 0
     /// The last pose `pose(at:)` returned (before arm reach).
@@ -201,12 +202,13 @@ public struct KaguraChoreographer: Sendable {
     ///   - grid: the installed grid.
     ///   - gridGeneration: `KaguraBeatClock.gridGeneration`; a change means a new or cleared grid.
     ///   - dancePermitted: `KaguraBeatClock.dancePermitted`.
-    ///   - bass: this frame's `FeatureVector.bassAtt`.
+    ///   - bass, playbackSeconds: `FeatureVector.bassAtt`; the track second, for the energy section (KAG.5).
     public mutating func advance( // swiftlint:disable:this function_parameter_count
         deltaTime: Double, beat: Double?, grid: KaguraGrid?, gridGeneration: Int, dancePermitted: Bool,
-        bass: Double
+        bass: Double, playbackSeconds: Double? = nil
     ) -> [SIMD3<Float>] {
         let dt = min(max(deltaTime > 0 ? deltaTime : 1.0 / 60.0, 1.0 / 240.0), 1.0 / 30.0)
+        if let playbackSeconds { songPosition = playbackSeconds }
         swayClock += dt
         energy.advance(bass: bass, deltaTime: dt)
         let pull = Float(exp(-dt / Self.leashSeconds))

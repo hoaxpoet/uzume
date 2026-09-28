@@ -434,7 +434,8 @@ struct FidelityRubricGateTests {
         // (peaks −23 to −27 dBFS for its whole ~50 s); every other track peaks near 0 dBFS.
         // Accepted at certification: the macarena runs heavy on calm songs; one energyReference
         // point predates BUG-146 (Superstition), kept because re-deriving takes the Charleston off
-        // Take Five, which Matt approved (KAGURA_DESIGN §15).
+        // Take Five, which Matt approved (KAGURA_DESIGN §15). KAG.5 retired energyReference: the
+        // measured energy of each part of the song picks the dances (D-259 §4 amendment).
         "Kagura"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {

@@ -145,12 +145,11 @@ struct PrepTimingRunner: AsyncParsableCommand {
         if let previewSeconds {
             try worker.runPreviewControl(url: url, seconds: previewSeconds, sink: sink)
         } else if let result = await LocalFilePreparationPipeline.run(inputs: worker.inputs(for: url, sink: sink)) {
-            // KAG.3 — the profile values Kagura reads: the song's arousal (`mood`, BUG-144) and grid BPM.
-            let profile = result.cached.trackProfile
+            // KAG.5 — the profile values Kagura reads: the song's measured energy (D-259) and grid BPM.
+            let readout = result.cached.trackProfile.energyCurve?.readout()
             profileNote = String(
-                format: "  arousal %.3f valence %.3f grid %.1f BPM",
-                profile.mood.arousal,
-                profile.mood.valence,
+                format: "  energy %@ grid %.1f BPM",
+                readout.map { "\($0.low) → \($0.high) (typical \($0.typical))" } ?? "none",
                 result.cached.beatGrid.bpm
             )
         }

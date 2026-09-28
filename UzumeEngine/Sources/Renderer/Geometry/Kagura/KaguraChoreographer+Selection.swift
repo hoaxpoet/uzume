@@ -21,10 +21,8 @@ extension KaguraChoreographer {
     public struct Pick: Sendable, Equatable {
         /// The bar line (beat index) the dance starts on.
         public let beat: Int
-        /// The song's arousal as pushed (`nil` = unknown → the middle energy).
-        public let songArousal: Double?
-        /// Song energy, 0…1 (§6 item 1).
-        public let songEnergy: Double
+        /// The measured level of the stretch playing (`nil` = unknown → the middle energy).
+        public let level: Int?
         /// The song's three dances, calmest first.
         public let repertoire: [KaguraDance]
         /// The bar just played, ranked in the song's trailing energy, 0…1.
@@ -34,10 +32,9 @@ extension KaguraChoreographer {
 
         /// One session-log line.
         public var logLine: String {
-            let arousal = songArousal.map { String(format: "%.3f", $0) } ?? "nil (middle energy)"
+            let shown = level.map(String.init) ?? "nil (middle energy)"
             let dances = repertoire.map(\.rawValue).joined(separator: ", ")
-            let numbers = String(format: "songEnergy=%.2f, barRank=%.2f", songEnergy, rank)
-            return "KAGURA_PICK: beat=\(beat), songArousal=\(arousal), \(numbers), "
+            return "KAGURA_PICK: beat=\(beat), level=\(shown), " + String(format: "barRank=%.2f, ", rank)
                 + "repertoire=[\(dances)] → \(dance.rawValue)"
         }
     }
@@ -52,15 +49,20 @@ extension KaguraChoreographer {
         levels.min { abs(log(pulsePeriod / ($0 * beatPeriod))) < abs(log(pulsePeriod / ($1 * beatPeriod))) } ?? 1
     }
 
-    /// The song's arousal (`TrackProfile.mood.arousal`, the song's median (BUG-144)), or `nil` while unknown — the repertoire then
-    /// uses the middle energy, and re-picks at the next clip change once it arrives (§6).
-    public mutating func setSongArousal(_ arousal: Double?) { songArousal = arousal }
+    /// The song's energy sections (KAG.5; empty while unknown — the repertoire then uses the middle
+    /// energy). Each clip change reads the section playing, so a new section's repertoire takes effect at
+    /// the next clip change (a bar line), never mid-clip (§6).
+    public mutating func setSongSections(_ sections: [KaguraSection]) { songSections = sections }
 
     /// A new track: forget the song's energy distribution (the grid push handles the dance itself).
     public mutating func resetSong() {
         energy.reset()
-        songArousal = nil
+        songSections = []
+        songPosition = nil
     }
+
+    /// The measured level of the stretch playing now (`nil` = unknown).
+    public var songLevel: Int? { KaguraRepertoire.section(at: songPosition, in: songSections)?.level }
 
     /// Seconds in one bar (4 beats when the grid declined the bar, D-210) — the window the dance
     /// pick and the silence rest read.
@@ -70,14 +72,13 @@ extension KaguraChoreographer {
 
     /// §6: the song's repertoire, then the bar just played ranked in the song's trailing energy.
     mutating func pickDance(grid: KaguraGrid, beat: Int) -> KaguraDance {
-        let songEnergy = songArousal.map { KaguraRepertoire.songEnergy(arousal: $0) } ?? KaguraRepertoire.unknownEnergy
-        let repertoire = KaguraRepertoire.pick(bpm: 60 / grid.beatPeriod, energy: songEnergy, library: library)
+        let level = songLevel
+        let repertoire = KaguraRepertoire.repertoire(bpm: 60 / grid.beatPeriod, level: level, library: library)
         let rank = energy.rank(ofLast: Self.barSeconds(grid))
         let dance = KaguraRepertoire.dance(forRank: rank, in: repertoire) ?? .twist
         picks.append(Pick(
             beat: beat,
-            songArousal: songArousal,
-            songEnergy: songEnergy,
+            level: level,
             repertoire: repertoire,
             rank: rank,
             dance: dance
@@ -106,22 +107,22 @@ extension KaguraChoreographer {
     /// Where a rest clip ping-pongs: the spike's 20 ms short of its end.
     static func restTurn(_ clip: KaguraClip) -> Double { max(clip.duration - swayTurnInset, 1e-3) }
 
-    /// Whether the song is calm: a known arousal in the calm third of the energy scale (the dance pick's
-    /// own tercile). Unknown arousal is not calm — the dancer keeps the sway.
+    /// Whether the stretch playing is calm: a known level at or under `calmLevel` (KAG.5). A silence has
+    /// no level of its own, so it reads the section it interrupts. Unknown is not calm — the sway.
     var songIsCalm: Bool {
-        guard let songArousal else { return false }
-        return KaguraRepertoire.songEnergy(arousal: songArousal) < 1.0 / 3
+        guard let level = songLevel else { return false }
+        return level <= KaguraRepertoire.calmLevel
     }
 
-    /// The rest to enter now: the next ballet clip on a calm song (rotating), else the sway.
+    /// The rest to enter now: the next ballet clip in a calm stretch (rotating), else the sway.
     mutating func nextRest() -> Int {
         guard songIsCalm, rests.count > 1 else { return 0 }
         balletTurns += 1
         return 1 + (balletTurns - 1) % (rests.count - 1)
     }
 
-    /// Whether the current rest should change: the song's calm and the rest disagree (energy arrived, or
-    /// a new track), or a ballet clip has played once forward and back (the next one takes over).
+    /// Whether the current rest should change: the stretch's calm and the rest disagree (energy arrived, a
+    /// new section, or a new track), or a ballet clip has played once forward and back (the next one takes over).
     func restNeedsChange() -> Bool {
         guard case let .rest(clip, start, _) = current else { return false }
         if (clip > 0) != (songIsCalm && rests.count > 1) { return true }

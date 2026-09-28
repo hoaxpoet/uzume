@@ -4,7 +4,7 @@
 // windows at 20 / 50 / 80 % of each `tools/data/beta_test_playlist.m3u` song; not in git). Each capture's
 // grid is built from its own `beatPhase01` / `barPhase01_permille` wraps, exactly as the spike's
 // `load_session` does, and the choreographer runs on the capture's playback clock and `bass_att`, with the
-// song's `TrackProfile.songArousal`. Printed per capture: how much of it the safety net swayed (README §11
+// song's measured energy (KAG.5: its whole-song loud end, from the energy table below). Printed per capture: how much of it the safety net swayed (README §11
 // is the spike's per-window verdict) and the dance picked at each clip change, with its time, for the
 // agreement check against the spike's `--family auto` (KAGURA_DESIGN §6; a report, not a gate).
 
@@ -18,10 +18,9 @@ import Testing
 @Suite("Kagura beta-playlist report (KAG.3, opt-in)")
 struct KaguraBetaPlaylistReportTests {
 
-    /// `TrackProfile.songArousal` per playlist position (KaguraRepertoireTests.build).
-    static let songArousal: [Int: Double] = [
-        1: 0.609, 2: 0.569, 3: 0.206, 4: 0.597, 5: -0.426, 6: 0.327, 7: 0.334, 8: 0.479, 9: -0.355, 10: 0.040,
-    ]
+    /// The song's loud-end level (its readout's `high`, KAG.5 task 1) per playlist position — a stand-in for
+    /// the capture's own section, which a 30 s capture cannot place.
+    static let songLevel: [Int: Int] = [1: 9, 2: 10, 3: 6, 4: 8, 5: 5, 6: 3, 7: 10, 8: 9, 9: 1, 10: 6]
 
     @Test("Safety net + dance pick on the beta captures")
     func report() throws {
@@ -43,7 +42,8 @@ struct KaguraBetaPlaylistReportTests {
             let song = Int(name.dropFirst("fixturegen-b".count).prefix(2)) ?? 0
             let row = { (at: Double) in max(0, (time.lastIndex { $0 <= at }) ?? 0) }
             let run = try KaguraChoreographyHarness.run(
-                seconds: time.last ?? 0, grid: grid, sequence: [], songArousal: Self.songArousal[song],
+                seconds: time.last ?? 0, grid: grid, sequence: [],
+                sections: KaguraChoreographyHarness.steady(Self.songLevel[song]),
                 bass: { bass[row($0)] }, playback: { playback[row($0)] })
             let frames = Double(max(run.dancing.count, 1))
             let danced = Double(run.dancing.filter { $0 }.count) / frames
@@ -73,21 +73,13 @@ struct KaguraBetaPlaylistReportTests {
         ("Moonlight I", 426), ("Warszawa", 384),
     ]
 
-    /// The Charleston per Matt's call (2026-09-28, B): a song in its tempo band keeps it as one of its
-    /// three whatever the energy; energy picks the other two. (Probe-local until task 5 ships it.)
-    static func pickB(bpm: Double, level: Int, library: KaguraClipLibrary) -> [KaguraDance] {
-        let energy = Double(level - 1) / 9
-        let others = KaguraRepertoire.dances.filter { !KaguraRepertoire.fastSongDances.contains($0) }
-        let eligible = KaguraRepertoire.pick(bpm: bpm, energy: energy, library: library, count: 5).contains(.charleston)
-        return eligible
-            ? KaguraRepertoire.pick(bpm: bpm, energy: energy, library: library, count: 2, from: others) + [.charleston]
-            : KaguraRepertoire.pick(bpm: bpm, energy: energy, library: library, from: others)
-    }
-
-    /// Task 1 (KAG.5): each beta song's energy sections, the repertoire and rest per section under the
-    /// section rule and the per-song-typical rule, and each dance's share of bars over the playlist under
-    /// the current (arousal) rule and both new rules. Report-only. `KAGURA_ENERGY_TABLE=1`; the cache is
-    /// `KAGURA_ENERGY_CACHE` or the app's `~/Library/Application Support/Uzume/StemCache`.
+    /// Task 1 (KAG.5), as shipped: each beta song's energy sections (`TrackProfile.energySections`) with
+    /// each one's loud-end level, repertoire (`KaguraRepertoire.repertoire`, the Charleston by tempo) and
+    /// rest, beside the median level task 1 first measured; the per-song-typical rule; and each dance's
+    /// share of bars over the playlist under each rule. Task 1's run also printed the KAG.4 arousal rule
+    /// (KAGURA_DESIGN §16 keeps it). Report-only: `KAGURA_ENERGY_TABLE=1`; the cache is
+    /// `KAGURA_ENERGY_CACHE` or the app's `~/Library/Application Support/Uzume/StemCache`. The `row:`
+    /// lines are `KaguraRepertoireTests.build`.
     ///
     /// Bar shares assume the bar pick splits each repertoire's bars in thirds — it ranks each bar among
     /// the song's bars, so each tercile holds a third (KAG.3 M7: calm 65 / middle 60 / vigorous 65 of 190).
@@ -109,6 +101,7 @@ struct KaguraBetaPlaylistReportTests {
             for dance in repertoire { bars[rule, default: [:]][dance, default: 0] += count / Double(repertoire.count) }
         }
         let names = { (rep: [KaguraDance]) in rep.map(\.rawValue).joined(separator: "/") }
+        let rest = { (level: Int?) in (level ?? 10) <= KaguraRepertoire.calmLevel ? "ballet" : "sway" }
         for song in Self.playlist {
             let entry = try #require(entries.first { abs(($0.decodedDuration ?? 0) - song.seconds) < 2 },
                                      "no cached curve for \(song.title)")
@@ -122,46 +115,34 @@ struct KaguraBetaPlaylistReportTests {
             let profile = entry.trackProfile
             let curve = try #require(profile.wholeTrackCurve(trackDuration: duration))
             let readout = try #require(curve.readout())
-            // Current rule: the mood classifier's arousal against energyReference.
-            let arousal = Double(profile.mood.arousal)
-            let arousalEnergy = KaguraRepertoire.songEnergy(arousal: arousal)
-            let current = KaguraRepertoire.pick(bpm: bpm, energy: arousalEnergy, library: library)
-            let currentRest = arousalEnergy < 1.0 / 3 ? "ballet" : "sway"
-            credit("current", current, duration / barSeconds)
-            // Per-song typical.
-            let typicalA = KaguraRepertoire.pick(bpm: bpm, energy: Double(readout.typical - 1) / 9, library: library)
-            let typicalB = Self.pickB(bpm: bpm, level: readout.typical, library: library)
-            let typicalRest = readout.typical <= 3 ? "ballet" : "sway"
-            credit("typical", typicalB, duration / barSeconds)
-            print(String(format: "[kagura-energy] %@ | grid %.1f BPM (stored %.1f) | energy %d → %d, typical %d | arousal %.3f → %.2f",
-                         song.title, bpm, beatGrid.bpm, readout.low, readout.high, readout.typical, arousal, arousalEnergy))
-            print("[kagura-energy]   current (arousal): \(names(current)), \(currentRest)")
-            print("[kagura-energy]   typical: A \(names(typicalA)) | B \(names(typicalB)), \(typicalRest)")
-            // Which level earns which repertoire at this tempo: where the twist comes in.
-            let sweep = (1...10).map { "\($0):" + names(Self.pickB(bpm: bpm, level: $0, library: library)) }
+            let typical = KaguraRepertoire.repertoire(bpm: bpm, level: readout.typical, library: library)
+            credit("typical", typical, duration / barSeconds)
+            print(String(format: "[kagura-energy] %@ | dancer tempo %.1f BPM (stored %.1f) | energy %d → %d, typical %d",
+                         song.title, bpm, beatGrid.bpm, readout.low, readout.high, readout.typical))
+            print("[kagura-energy]   typical: \(names(typical)), \(rest(readout.typical))")
+            let sweep = (1...10).map { "\($0):" + names(KaguraRepertoire.repertoire(bpm: bpm, level: $0, library: library)) }
             print("[kagura-energy]   by level: \(sweep.joined(separator: " "))")
-            // Sections: cut at the NRG.4 energy changes.
-            let edges = [0] + profile.energyChanges(trackDuration: duration) + [duration]
-            for (start, end) in zip(edges, edges.dropFirst()) {
-                let level = curve.level(from: start, to: end)
-                let rep = level.map { Self.pickB(bpm: bpm, level: $0, library: library) }
-                    ?? KaguraRepertoire.pick(bpm: bpm, energy: KaguraRepertoire.unknownEnergy, library: library)
-                let rest = (level ?? 10) <= 3 ? "ballet" : "sway"
-                credit("section", rep, (end - start) / barSeconds)
-                // Alternative read: the section's loud end (its 90th-percentile level, the readout's "high").
-                let timed = curve.timedSectionLevels()
-                let inSection = timed[min(Int(start), timed.count)..<min(Int(end.rounded(.up)), timed.count)]
-                    .compactMap { $0 }.sorted()
-                let high = inSection.isEmpty ? nil : inSection[Int(0.9 * Double(inSection.count - 1))]
-                let highRep = high.map { Self.pickB(bpm: bpm, level: $0, library: library) } ?? rep
-                credit("section-high", highRep, (end - start) / barSeconds)
-                print(String(format: "[kagura-energy]   section %d:%02d–%d:%02d level %@: %@, %@ | high %@: %@, %@",
-                             Int(start) / 60, Int(start) % 60, Int(end) / 60, Int(end) % 60,
-                             level.map(String.init) ?? "nil", names(rep), rest,
-                             high.map(String.init) ?? "nil", names(highRep), (high ?? 10) <= 3 ? "ballet" : "sway"))
+            let (coverage, sections) = profile.energySections(trackDuration: duration)
+            #expect(coverage == .whole)
+            let ends = sections.dropFirst().map(\.start) + [duration]
+            for (section, end) in zip(sections, ends) {
+                let median = curve.level(from: section.start, to: end)
+                let medianRep = KaguraRepertoire.repertoire(bpm: bpm, level: median, library: library)
+                let shipped = KaguraRepertoire.repertoire(bpm: bpm, level: section.loudEnd, library: library)
+                credit("section median", medianRep, (end - section.start) / barSeconds)
+                credit("section loud end (shipped)", shipped, (end - section.start) / barSeconds)
+                let start = Int(section.start)
+                print(String(format: "[kagura-energy]   %d:%02d–%d:%02d loud end %@: %@, %@ | median %@: %@, %@",
+                             start / 60, start % 60, Int(end) / 60, Int(end) % 60,
+                             section.loudEnd.map(String.init) ?? "nil", names(shipped), rest(section.loudEnd),
+                             median.map(String.init) ?? "nil", names(medianRep), rest(median)))
+                let row = shipped.map { "." + $0.rawValue }.joined(separator: ", ")
+                print(String(format: "[kagura-energy]   row: (\"%@ %d:%02d\", %.1f, %@, [%@], %@),", song.title,
+                             start / 60, start % 60, bpm, section.loudEnd.map(String.init) ?? "nil", row,
+                             rest(section.loudEnd) == "ballet" ? "true" : "false"))
             }
         }
-        for rule in ["current", "typical", "section", "section-high"] {
+        for rule in ["typical", "section median", "section loud end (shipped)"] {
             let shares = bars[rule] ?? [:]
             let total = shares.values.reduce(0, +)
             let line = KaguraRepertoire.dances.map { dance in

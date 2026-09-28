@@ -2,9 +2,10 @@
 //
 // Ported from the KAG.0 spike (`docs/presets/kagura_spike/kagura.py`), the behavioural oracle (FA #73):
 //
-// - **Repertoire (KAGURA_DESIGN §6 items 1–2)** — `song_energy`, `dance_profile`, `pick_repertoire`
-//   verbatim. The inputs are the song's arousal and the grid BPM; the dance profiles come from the
-//   KAG.1 manifest (vigor, pulse period, allowed levels), which the bake reproduced from the spike.
+// - **Repertoire (KAGURA_DESIGN §6 items 1–2)** — `dance_profile`, `pick_repertoire` verbatim. The inputs
+//   are the measured energy level of the stretch playing (D-259; KAG.5 retired the spike's
+//   `song_energy` mood rank) and the grid BPM; the dance profiles come from the KAG.1 manifest
+//   (vigor, pulse period, allowed levels), which the bake reproduced from the spike.
 // - **Energy (§6 item 3, §8)** — the spike's envelope: `bass_att` through a 1.5 s EMA (per elapsed
 //   time, never per frame — BUG-097). The spike ranked and normalised it against a whole 30 s window
 //   with lookahead; no whole-track `bass_att` exists on either path (§6 correction), so both read a
@@ -19,7 +20,22 @@ import Foundation
 
 // MARK: - KaguraRepertoire
 
-/// The song's three dances, from its arousal and tempo (spike `pick_repertoire`).
+/// One stretch of the song, between two of its energy changes (NRG.4), and its measured energy (D-259).
+public struct KaguraSection: Sendable, Equatable {
+    /// Seconds into the track the stretch starts.
+    public let start: Double
+    /// The stretch's 1–10 level on the library scale — its loud end, the 90th-percentile level (Matt,
+    /// 2026-09-28, KAG.5: a stretch is judged by its loudest tenth). `nil` = unknown.
+    public let level: Int?
+
+    public init(start: Double, level: Int?) {
+        self.start = start
+        self.level = level
+    }
+}
+
+/// The song's three dances, from the measured energy of the stretch playing and the tempo (spike
+/// `pick_repertoire`).
 public enum KaguraRepertoire {
 
     /// The dances the repertoire picks from. The chicken dance is out (Matt, 2026-09-28, after three M7
@@ -38,31 +54,24 @@ public enum KaguraRepertoire {
     /// The spike's `DANCES` (README §9, §10 are reproduced against these).
     public static let spikeDances: [KaguraDance] = [.twist, .cabbage, .chicken, .macarena, .egyptian]
 
-    /// Song-level arousal of the ten `tools/data/beta_test_playlist.m3u` songs — the median per-frame arousal
-    /// after the first sixth, from the shipping local-file preparation (Release, KAG.3 2026-09-25; now
-    /// `TrackProfile.mood.arousal` itself, BUG-144, same rule and values), ascending. Song energy is a song's
-    /// interpolated rank among these. Re-derived at KAG.3 from the spike's KAG.0g constant (production-chain
-    /// window medians), because the two disagree in scale (§6; Matt's option A). A constant with
-    /// provenance — re-derive it if the playlist changes, never tune it.
-    /// Moonlight I, Penny Lane, Superstition, Warszawa, Take Five, Pyramid Song, Teardrop, B.O.B.,
-    /// Smells Like Teen Spirit, Dance Yrself Clean.
-    public static let energyReference: [Double] = [
-        -0.426, -0.355, 0.040, 0.206, 0.327, 0.334, 0.479, 0.569, 0.597, 0.609,
-    ]
-
-    /// Song energy with no arousal yet: the middle of the reference (§6; KAG.3 task 2).
+    /// Song energy with no measured level (no cache entry, or a stretch with no audible second): the
+    /// middle of the scale (§6; KAG.3 task 2).
     public static let unknownEnergy = 0.5
 
-    /// `song_energy`: 0…1, the interpolated rank of `arousal` among `reference` (clamped at the ends).
-    public static func songEnergy(arousal: Double, reference: [Double] = energyReference) -> Double {
-        let ref = reference.sorted()
-        guard let first = ref.first, let last = ref.last, ref.count > 1 else { return unknownEnergy }
-        if arousal <= first { return 0 }
-        if arousal >= last { return 1 }
-        let upper = ref.firstIndex { $0 > arousal } ?? ref.count - 1
-        let lower = upper - 1
-        let frac = ref[upper] > ref[lower] ? (arousal - ref[lower]) / (ref[upper] - ref[lower]) : 0
-        return (Double(lower) + frac) / Double(ref.count - 1)
+    /// Levels at or under this are calm: the rest is ballet (Matt, 2026-09-28). The calm third of the
+    /// 1–10 scale, the dance pick's own tercile: `energy(level: 3)` = 0.22, `energy(level: 4)` = 0.33.
+    public static let calmLevel = 3
+
+    /// Song energy, 0…1, from a stretch's measured 1–10 level on the library scale (D-259; KAG.5). The
+    /// library scale is already a rank (deciles of 1,000 songs), so no playlist reference is needed.
+    public static func energy(level: Int?) -> Double {
+        level.map { Double(min(max($0, 1), 10) - 1) / 9 } ?? unknownEnergy
+    }
+
+    /// The stretch of the song playing at `seconds` into the track: the last section starting at or before
+    /// it (the first section before the clock is known). `nil` with no sections.
+    public static func section(at seconds: Double?, in sections: [KaguraSection]) -> KaguraSection? {
+        sections.last { $0.start <= (seconds ?? 0) } ?? sections.first
     }
 
     /// A dance's `dance_profile`.
@@ -91,7 +100,7 @@ public enum KaguraRepertoire {
         let vigor: Double
     }
 
-    /// `pick_repertoire(bpm, arousal, k=3)`: the `k` lowest-scoring dances, calmest first.
+    /// `pick_repertoire(bpm, energy, k=3)`: the `k` lowest-scoring dances, calmest first.
     /// Score = |log₂ playback rate at the best level| + |library-normalised vigor − song energy|.
     public static func pick(
         bpm: Double, energy: Double, library: KaguraClipLibrary, count: Int = 3, from dances: [KaguraDance] = dances
@@ -112,6 +121,19 @@ public enum KaguraRepertoire {
         // numpy's `sorted` is stable: ties keep `DANCES` order.
         let best = scored.sorted { ($0.score, $0.index) < ($1.score, $1.index) }.prefix(count)
         return best.sorted { ($0.vigor, $0.index) < ($1.vigor, $1.index) }.map(\.dance)
+    }
+
+    /// The three dances for a stretch at `level` (KAG.5), calmest first. A fast-song dance in its tempo band
+    /// always takes one of the three, whatever the energy (Matt, 2026-09-28, B: "tempo earns the
+    /// Charleston"); energy picks the rest by `pick`. Its capped vigor sorts it last, so the bar pick
+    /// gives it the vigorous third: a quiet fast song kicks on its loud bars only.
+    public static func repertoire(
+        bpm: Double, level: Int?, library: KaguraClipLibrary, count: Int = 3
+    ) -> [KaguraDance] {
+        let energy = energy(level: level)
+        let fast = pick(bpm: bpm, energy: energy, library: library, count: dances.count).filter(fastSongDances.contains)
+        let others = dances.filter { !fastSongDances.contains($0) }
+        return pick(bpm: bpm, energy: energy, library: library, count: max(count - fast.count, 0), from: others) + fast
     }
 
     /// The dance for a bar whose energy ranks `rank` (0…1) in the song: calm, middle or vigorous by

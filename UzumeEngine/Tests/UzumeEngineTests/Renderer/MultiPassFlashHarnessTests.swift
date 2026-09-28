@@ -175,18 +175,19 @@ struct MultiPassFlashHarnessTests {
         // worst-case train's bass is steady — no bar ranks vigorous, so the pick alone never reaches it.
         var fast = harness
         fast.kaguraBPM = 166
-        fast.kaguraSongArousal = 0.609
+        fast.kaguraSongLevel = 10   // KAG.5: was Dance Yrself Clean's arousal, the same energy (1.0)
         fast.kaguraDance = .charleston
         try await assertKaguraFlashSafe("Kagura (Charleston)", fast)
     }
 
     @Test("Kagura is flash-safe resting in ballet (a calm song with no grid)")
     func kagura_balletRest_isFlashSafe() async throws {
-        // KAG.4 — Penny Lane's song arousal and no grid: the dancer rests in ballet the whole time,
+        // KAG.4 — a calm song (level 1; KAG.5: was Penny Lane's arousal, the same energy 0) and no grid:
+        // the dancer rests in ballet the whole time,
         // rotating its three clips with 1.5 s crossfades.
         var calm = harness
         calm.kaguraBPM = nil
-        calm.kaguraSongArousal = -0.426
+        calm.kaguraSongLevel = 1
         try await assertKaguraFlashSafe("Kagura (ballet rest)", calm)
     }
 
