@@ -226,6 +226,16 @@ let package = Package(
             ],
             path: "Sources/PrepTimingRunner"
         ),
+        .target(
+            name: "ScanBenchCore",
+            dependencies: ["Session"],
+            path: "Sources/ScanBenchCore"
+        ),
+        .executableTarget(
+            name: "ScanBench",
+            dependencies: ["Session", "ScanBenchCore"],
+            path: "Sources/ScanBench"
+        ),
         .executableTarget(
             name: "ChainHealthAnalyzer",
             dependencies: ["Shared"],
