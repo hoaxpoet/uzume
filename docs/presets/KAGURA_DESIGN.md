@@ -600,5 +600,17 @@ tempo the pick reads.
 **Streaming** uses the preview's loud end as its one section (the same rule as a whole-track stretch), not the
 typical level the prompt named: B makes a stretch's loud end the measure, and a preview is one stretch.
 
-**Status:** pending Matt's live M7 on the beta playlist (local files).
+**M7 round 1 (Matt, 2026-09-28, session `2026-09-28T21-31-31Z`):** *"Penny Lane does not sway - it plays the
+macarena. In fact, I saw the macarena for everything I played. Otherwise, looks good."* Penny Lane dancing is
+correct: the sway is its rest, and its three dances are unchanged since KAG.3. The macarena was real. Excluding
+the seek burst (BUG-155) it took 23 of 68 picks, against 30 of 190 at the KAG.3 M7. Two causes:
+- Every song opened on its middle dance, because the pick has no history in its first bars and the rank read ½.
+- KAG.5 made the macarena the middle of more stretches (Dance Yrself Clean's calm sections, Take Five).
+
+**Matt's call (option A): a song opens on its calm dance for its first 4 bars** (`warmUpBars`); the bar pick
+ranks after that. Rejected: leaving it, and more calm dances (the long-term fix; the library-growth increment).
+Take Five's early run of Charleston picks (7 of its first 8, ranks at 1.00) is only partly a warm-up effect: its
+intro builds, so each new bar out-ranks the last. The warm-up covers its first two clip changes.
+
+**Status:** pending Matt's live M7 round 2 on the beta playlist (local files).
 

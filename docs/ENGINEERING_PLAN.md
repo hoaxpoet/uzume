@@ -1645,7 +1645,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Evidence.** The task 1 table on Matt's v17 entries reproduces NRG.2's readouts exactly (KAGURA_DESIGN §16). Dance Yrself Clean: calm three and ballet in the hush, breakdown and fade; twist trio at the drop and re-entry. Take Five: Egyptian / macarena / Charleston, with a ballet rest. Macarena share 21 % → 20 %. New harness tests: a 2 → 9 step switches at the first clip change (2 s after the step at 120 BPM) within the per-dance bounds, with no frozen frames. Warszawa's opening silence rests in ballet and its body's silence in the sway.
 
-**Done-when:** ✅ tests + table; ⏳ Matt's M7 on the beta playlist (local files).
+**M7 round 1 (session `2026-09-28T21-31-31Z`):** *"I saw the macarena for everything I played. Otherwise, looks good."* Fixed on Matt's calls:
+- Songs open on the calm dance for 4 bars (option A). Every song had opened on its middle dance, the macarena on calm sets.
+- BUG-155: a seek replayed every skipped clip change, one per frame (36 in 0.6 s). It now fades to the rest and rejoins at the next bar line.
+
+**Done-when:** ✅ tests + table; ⏳ Matt's M7 round 2 on the beta playlist (local files).
 
 ### Increment FLASHOFF.1 — the multi-pass flash suite off the main actor ✅ (2026-09-28, stacked on `ff-4`)
 
