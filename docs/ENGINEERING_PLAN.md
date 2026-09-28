@@ -1633,6 +1633,22 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment LFSEEK.1 — jump within a local-file track ✅ (2026-09-28; Matt's live check pending)
+
+**Why (Matt, 2026-09-27).** Local-file playback had no way to move within a song: the transport was Stop / Prev / Play-Pause / Next only. Streaming doesn't need one, since the streaming app owns its player. Checking NRG.4 meant listening to Dance Yrself Clean from the top to reach the 3:08 drop. Matt picked a clickable track bar over keyboard skips.
+
+**Delivered.**
+- **Track bar** (`TrackSeekBar` in `LocalFileTransportBar`): the current track's position between elapsed and total time, above the transport buttons, in local-file sessions only. Click or drag to jump; the jump lands on release, so a drag restarts the audio once. VoiceOver reads "Track position, 1:23 of 8:58", and adjusting steps ±10 s. It polls the position four times a second while shown.
+- **Player:** `LocalFilePlaybackProvider.seek(to:)` restarts the engine at the chosen frame through the same `start()` every track change uses. That teardown is the one proven against the BUG-021/059/078 races, and it swaps the (player, file) pair first, so the stopped node's completion bails instead of advancing the queue. The first pass is a `scheduleSegment` from the frame; loops after it are whole. `PlayheadAnalysisClock` adds the start frame to `sampleTime`, which counts from 0 at `play()`. A paused player stays paused.
+- **Track clock:** `MIRPipeline.seek(to:)` moves `elapsedSeconds`, the clock the plan, beat grid, stem series and recording all read, and clears the state keyed to the old position (the drift/onset lock and the first-note pulse anchor). The grid, tempo and smoothers stay. `VisualizerEngine.seekLocalFile(to:)` does both and clears the last-applied planned scene, so the new position's scene applies at once. A failed restart ends the session with the existing local-file playback toast.
+- The LF transport methods moved into `AudioInputRouter+LocalFileTransport.swift`, which keeps the router under its file-length cap.
+
+**Evidence.** `LocalFileSeekTests` on the real engine and fixture: a seek to 12 s reads the playhead at 12–13 s; a seek does not fire the queue advance; the end arrives on time after a seek near it; a paused seek stays paused; the MIR clock moves and keeps the grid.
+
+**Done-when:** ✅ tests; ⏳ Matt's live check. Open Dance Yrself Clean, drag the bar to about 3:00, and the drop at 3:08 should bring the dense scene.
+
+**Found, not changed.** The end-of-track signal fires when the player has *read* the last audio (`.dataConsumed`, AVAudioPlayerNode's default), about 1 s before it has *played* it: 2.0 s after a seek to 3 s from the end. In a multi-file queue, the next track likely starts about a second early, cutting each song's last second. It predates this increment; Matt's call whether to fix it (`.dataPlayedBack`).
+
 ### Increment NRG.4 — scene changes land on the song's energy changes ✅ (2026-09-27; Matt's live check pending)
 
 **Delivered (D-259).**
