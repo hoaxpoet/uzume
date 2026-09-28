@@ -484,6 +484,9 @@ def cmd_tempo(a):
 FAMILIES = {   # clip list per family; the film cycles through them on bar boundaries
     "salsa": ["60_03", "61_02", "60_08"],
     "lindy": ["93_05", "103_05", "93_07"],
+    # KAG.3 (Matt, 2026-09-28: "render the Charleston films") — the chicken dance's replacement candidate:
+    # the two in-place Charleston trials (footfall pulse, 171-176 steps/min native), whole trials
+    "charleston": ["93_04", "93_05"],
     "modern": ["05_02", "05_11"],
     "sway": ["05_12"],
     # KAG.0b — planted-feet dances cut from the mixed trials 15_04 / 15_05 (windows found by

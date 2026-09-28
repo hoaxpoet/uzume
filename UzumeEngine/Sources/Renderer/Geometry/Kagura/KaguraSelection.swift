@@ -178,20 +178,26 @@ public struct KaguraEnergy: Sendable {
         reach += min(max(reachTarget - reach, -limit), limit)
     }
 
-    /// The song-relative energy of the last `seconds` (one bar): the mean rank of those samples within
-    /// the window, 0…1 (spike `erank[w].mean()`). `unknownEnergy` with fewer than two samples.
+    /// The song-relative energy of the last `seconds` (one bar), 0…1: the bar's mean envelope ranked among
+    /// the means of every bar-long stretch in the window (Matt, 2026-09-28, step 2). The spike averaged
+    /// the per-sample ranks of the bar's moments (`erank[w].mean()`); an average of ranks crowds toward
+    /// ½, and live it put 62 % of picks in the middle third (49 of 79, session 2026-09-28T13-56-00Z) —
+    /// on energetic songs the cabbage patch, with the twist 1 change in 21. Ranking a bar against bars
+    /// gives each third its share while a loud stretch still ranks loud (no rotation term).
+    /// `unknownEnergy` until the window holds two bars' worth of stretches.
     public func rank(ofLast seconds: Double) -> Double {
-        guard samples.count > 1 else { return KaguraRepertoire.unknownEnergy }
-        let recent = samples.suffix(max(1, Int((seconds * Self.sampleRate).rounded())))
-        let sorted = samples.sorted()
-        let denominator = Double(samples.count - 1)
-        let ranks = recent.map { value -> Double in
-            // argsort(argsort): a value's index in the sorted window (ties by position — take the middle).
-            let below = Double(Self.lowerBound(sorted, value))
-            let atOrBelow = Double(Self.upperBound(sorted, value))
-            return min((below + atOrBelow - 1) / 2 / denominator, 1)
-        }
-        return ranks.reduce(0, +) / Double(ranks.count)
+        let length = max(1, Int((seconds * Self.sampleRate).rounded()))
+        guard samples.count > length else { return KaguraRepertoire.unknownEnergy }
+        var prefix = [0.0]
+        prefix.reserveCapacity(samples.count + 1)
+        for value in samples { prefix.append(prefix[prefix.count - 1] + value) }
+        let means = (length...samples.count).map { (prefix[$0] - prefix[$0 - length]) / Double(length) }
+        guard let latest = means.last else { return KaguraRepertoire.unknownEnergy }
+        let sorted = means.sorted()
+        // The bar's position among the bars (ties take the middle of their run).
+        let below = Double(Self.lowerBound(sorted, latest))
+        let atOrBelow = Double(Self.upperBound(sorted, latest))
+        return min((below + atOrBelow - 1) / 2 / Double(sorted.count - 1), 1)
     }
 
     /// The unlimited reach this frame's envelope asks for.

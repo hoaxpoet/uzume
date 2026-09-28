@@ -488,3 +488,12 @@ macarena, Egyptian; `spikeDances` keeps the spike's five for the README reproduc
 stay in the KAG.1 resource. On the beta playlist that leaves two repertoires: Egyptian / cabbage / twist
 (Dance Yrself Clean, Smells Like Teen Spirit; B.O.B. gets macarena for Egyptian) and Egyptian / macarena /
 cabbage (the other seven). The cabbage patch is now in every repertoire.
+
+**The bar is ranked against bars (Matt, 2026-09-28, step 2).** The spike's `erank[w].mean()` averaged the
+per-sample ranks of the bar's moments, and an average of ranks crowds toward ½: live, 49 of 79 picks (62 %)
+fell in the middle third, and on energetic songs the cabbage patch took 17 of 21 changes (Dance Yrself Clean)
+with the twist at 1. `KaguraEnergy.rank(ofLast:)` now ranks the bar's mean envelope among the means of every
+bar-long stretch in the trailing window. On 90 s of real music (the route-coverage captures back to back),
+bars split calm 23 / middle 26 / vigorous 51 % (the per-sample rule, by pick: 8 / 60 / 32); the vigorous share
+there is the captures getting louder one after another, which a trailing window rightly calls loud. A loud
+stretch still keeps the vigorous dance; there is no rotation term.

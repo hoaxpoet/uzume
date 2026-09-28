@@ -41,7 +41,7 @@ struct KaguraSelectionTests {
             let last = try #require(inside.last, "no pick inside the step at \(start) s")
             let pick = picks[last]
             print("[kagura-pick] step \(start) s: rank \(pick.rank) → \(run.choreographer.chosenDances[last]) of \(pick.repertoire)")
-            #expect(Int(pick.rank * 3) == tercile, "step at \(start) s ranked \(pick.rank)")
+            #expect(min(Int(pick.rank * 3), 2) == tercile, "step at \(start) s ranked \(pick.rank)")
             #expect(run.choreographer.chosenDances[last] == pick.repertoire[tercile])
         }
     }
@@ -56,6 +56,31 @@ struct KaguraSelectionTests {
         print("[kagura-pick] loud stretch: \(dances) (vigorous = \(vigorous))")
         #expect(loud.count >= 3)
         #expect(dances.allSatisfy { $0 == vigorous }, "the loud stretch rotated away from \(vigorous): \(dances)")
+    }
+
+    @Test("On real music, calm, middle and vigorous each get a fair share of the bars (Matt, step 2)")
+    func tercileBalance() throws {
+        // The three route-coverage captures' `bass_att`, back to back (90 s of real music, FA #27), ranked
+        // bar by bar (2 s at 120 BPM) the way every pick ranks the bar just played. Every bar, not only
+        // the ones that fell on a clip change: ~35 ranks instead of ~22 picks, so a third's share is not
+        // sampling noise. From 20 s: before that the window holds too few bars to rank against.
+        let captures = try KaguraFixture.tracks.map { try KaguraFixture.load($0) }
+        var energy = KaguraEnergy()
+        var ranks: [Double] = []
+        let fps = 60.0, bar = 2.0
+        for frame in 0..<Int(90 * fps) {
+            let time = Double(frame) / fps
+            let index = min(Int(time / 30), captures.count - 1)
+            energy.advance(bass: captures[index].bass(at: time - 30 * Double(index)), deltaTime: 1 / fps)
+            if time >= 20, frame % Int(bar * fps) == 0 { ranks.append(energy.rank(ofLast: bar)) }
+        }
+        let shares = (0..<3).map { tercile in
+            Double(ranks.filter { min(Int($0 * 3), 2) == tercile }.count) / Double(max(ranks.count, 1))
+        }
+        print(String(format: "[kagura-balance] n=%d bars: calm %.0f %% / middle %.0f %% / vigorous %.0f %%",
+                     ranks.count, shares[0] * 100, shares[1] * 100, shares[2] * 100))
+        #expect(ranks.count >= 30)
+        #expect(shares.allSatisfy { $0 >= 0.2 }, "a third is starved: \(shares)")
     }
 
     // MARK: - Continuity (per dance)
