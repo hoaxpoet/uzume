@@ -142,7 +142,14 @@ struct ConnectorPickerView: View {
                 onUseSpotifyInstead: { viewModel.switchConnector(to: .spotify) }
             )
         case .spotify:
-            spotifyDestination
+            // SCAN.5 (D-260): Scan is the Spotify flow. Paste-a-link works for at most
+            // 5 people (Spotify's Development Mode cap), so only developer builds keep it
+            // (decision 1, default A); SpotifyWebAPIConnector + OAuth stay intact.
+            #if DEBUG
+            SpotifyScanWrapper(onConnect: onConnect, pasteLink: spotifyPasteLinkDestination)
+            #else
+            SpotifyScanWrapper<EmptyView>(onConnect: onConnect, pasteLink: nil)
+            #endif
         case .localFolder:
             // GAP A (2026-05-28): replaces the LF.4-era "Coming later" stub
             // with the dedicated file / folder / playlist picker.
@@ -159,7 +166,7 @@ struct ConnectorPickerView: View {
     /// inline in a `@ViewBuilder` property is destroyed on every body re-evaluation;
     /// `@StateObject` inside the wrapper ensures it lives for the view's full lifetime.
     @ViewBuilder
-    private var spotifyDestination: some View {
+    private var spotifyPasteLinkDestination: some View {
         if let oauth = spotifyOAuth {
             OAuthSpotifyConnectionWrapper(
                 oauth: oauth,
@@ -175,6 +182,29 @@ struct ConnectorPickerView: View {
                 onUseAppleMusicInstead: { viewModel.switchConnector(to: .appleMusic) }
             )
         }
+    }
+}
+
+// MARK: - SpotifyScanWrapper
+
+/// Owns the `SpotifyScanViewModel` as a `@StateObject` so an in-flight scan survives
+/// parent re-evaluations (same reason as the two wrappers below). `pasteLink` is the
+/// developer-build paste-a-link flow, pushed from "Paste a link instead"; nil hides it.
+private struct SpotifyScanWrapper<PasteLink: View>: View {
+
+    let onConnect: @Sendable ([TrackIdentity], PlaylistSource) async -> Void
+    let pasteLink: PasteLink?
+
+    @StateObject private var viewModel = SpotifyScanViewModel(spotify: SystemSpotifyApp(), panel: ScanPanelController())
+    @State private var showPasteLink = false
+
+    var body: some View {
+        SpotifyScanView(
+            viewModel: viewModel,
+            onConnect: onConnect,
+            onPasteLinkInstead: pasteLink == nil ? nil : { showPasteLink = true }
+        )
+        .navigationDestination(isPresented: $showPasteLink) { pasteLink }
     }
 }
 

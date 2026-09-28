@@ -501,7 +501,7 @@
 "connector.type.apple_music.title"          = "Apple Music";
 "connector.type.apple_music.subtitle"       = "Read your current Apple Music playlist";
 "connector.type.spotify.title"              = "Spotify";
-"connector.type.spotify.subtitle"           = "Connect with a Spotify playlist link";
+"connector.type.spotify.subtitle"           = "Scan a playlist you have open in Spotify";
 "connector.type.local_folder.title"         = "Local files";
 "connector.type.local_folder.subtitle"      = "Play a file, folder, or playlist from disk";
 
