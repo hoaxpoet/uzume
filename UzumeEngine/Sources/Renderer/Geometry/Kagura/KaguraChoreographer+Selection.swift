@@ -25,8 +25,10 @@ extension KaguraChoreographer {
         public let level: Int?
         /// The song's three dances, calmest first.
         public let repertoire: [KaguraDance]
-        /// The bar just played, ranked in the song's trailing energy, 0…1.
+        /// The bar just played, ranked in the song's trailing energy, 0…1 (0 while warming up).
         public let rank: Double
+        /// The song's first `warmUpBars`: too little history to rank a bar, so the calm dance.
+        public let warmingUp: Bool
         /// The dance the rank picked.
         public let dance: KaguraDance
 
@@ -34,7 +36,8 @@ extension KaguraChoreographer {
         public var logLine: String {
             let shown = level.map(String.init) ?? "nil (middle energy)"
             let dances = repertoire.map(\.rawValue).joined(separator: ", ")
-            return "KAGURA_PICK: beat=\(beat), level=\(shown), " + String(format: "barRank=%.2f, ", rank)
+            let ranked = warmingUp ? "barRank=warm-up, " : String(format: "barRank=%.2f, ", rank)
+            return "KAGURA_PICK: beat=\(beat), level=\(shown), " + ranked
                 + "repertoire=[\(dances)] → \(dance.rawValue)"
         }
     }
@@ -70,17 +73,25 @@ extension KaguraChoreographer {
         Double(grid.knowsBars ? grid.beatsPerBar : 4) * grid.beatPeriod
     }
 
-    /// §6: the song's repertoire, then the bar just played ranked in the song's trailing energy.
+    /// A song's first bars: the pick has too little history to rank a bar (Matt, 2026-09-28, KAG.5 M7,
+    /// option A). Before, the rank read the middle, and the middle of every calm set is the macarena, so
+    /// the macarena opened most songs (session 2026-09-28T21-31-31Z).
+    public static let warmUpBars: Double = 4
+
+    /// §6: the song's repertoire, then the bar just played ranked in the song's trailing energy — during
+    /// the warm-up, the calm dance.
     mutating func pickDance(grid: KaguraGrid, beat: Int) -> KaguraDance {
         let level = songLevel
         let repertoire = KaguraRepertoire.repertoire(bpm: 60 / grid.beatPeriod, level: level, library: library)
-        let rank = energy.rank(ofLast: Self.barSeconds(grid))
+        let warmingUp = energy.windowFill < Self.warmUpBars * Self.barSeconds(grid)
+        let rank = warmingUp ? 0 : energy.rank(ofLast: Self.barSeconds(grid))
         let dance = KaguraRepertoire.dance(forRank: rank, in: repertoire) ?? .twist
         picks.append(Pick(
             beat: beat,
             level: level,
             repertoire: repertoire,
             rank: rank,
+            warmingUp: warmingUp,
             dance: dance
         ))
         return dance
@@ -133,6 +144,17 @@ extension KaguraChoreographer {
     public var currentRest: KaguraClip? {
         if case let .rest(clip, _, _) = current { return rests[clip] }
         return nil
+    }
+
+    /// Midpoint of the ankles on the floor plane (x, z).
+    func feet(_ joints: [SIMD3<Float>]) -> SIMD2<Float> {
+        let mid = (joints[leftAnkle] + joints[rightAnkle]) * 0.5
+        return SIMD2(mid.x, mid.z)
+    }
+
+    /// Pelvis floor position of a pose — the framing measure.
+    public func pelvisFloor(_ joints: [SIMD3<Float>]) -> SIMD2<Float> {
+        SIMD2(joints[pelvis].x, joints[pelvis].z)
     }
 
     /// Elbows and wrists scaled about their shoulder by the arm reach (§8); legs untouched.

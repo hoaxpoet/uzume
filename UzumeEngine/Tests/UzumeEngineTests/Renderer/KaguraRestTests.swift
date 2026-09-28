@@ -105,6 +105,43 @@ struct KaguraRestTests {
         try Self.expectWithinBounds(run, bpm: 76.9, library: try KaguraClipLibrary.shared())
     }
 
+    // MARK: - Seeks (BUG-155) and the warm-up (KAG.5 M7, option A)
+
+    @Test("A seek fades to the rest and rejoins at the next bar line — no replayed cuts, forward or back",
+          arguments: [(31.3, 110.0), (61.3, -40.0)])   // mid-clip, past the clip change's crossfade
+    func seekRejoins(at seek: Double, by jump: Double) throws {
+        let lib = try KaguraClipLibrary.shared()
+        let run = try Harness.run(seconds: 90, grid: Harness.grid(bpm: 120, seconds: 200), sequence: [],
+                                  sections: Harness.steady(6), bass: { 0.2 + 0.08 * sin(2 * .pi * $0 / 7) },
+                                  playback: { $0 < seek ? $0 : $0 + jump })
+        let after = run.pickTimes.filter { $0 >= seek && $0 < seek + 1 }
+        let index = { (seconds: Double) in Int(seconds * Self.fps) }
+        print("[kagura-seek] \(jump > 0 ? "forward" : "back") at \(seek) s: \(after.count) picks in the next second; "
+              + "dancing again at \(run.dancing[index(seek)...].firstIndex(of: true).map { Double($0) / Self.fps } ?? -1) s")
+        #expect(run.dancing[index(seek) - 1], "not dancing before the seek")
+        #expect(after.count <= 1, "a seek replayed \(after.count) clip changes in one second")
+        #expect(run.rest[index(seek) + 2] != nil, "the seek did not fade to the rest")
+        // Rejoins within a bar (2 s) and a beat of fade, and keeps dancing.
+        #expect(run.dancing[index(seek + 3)...].allSatisfy { $0 }, "did not rejoin the dance after the seek")
+        try Self.expectWithinBounds(run, bpm: 120, library: lib)
+        #expect(Harness.frozenFrames(run).isEmpty, "\(Harness.frozenFrames(run).count) frozen frames")
+    }
+
+    @Test("A song opens on its calm dance for its first bars, then the bar pick ranks")
+    func warmUpOpensCalm() throws {
+        let grid = try Harness.grid(bpm: 120, seconds: 60)
+        let run = try Harness.run(seconds: 40, grid: grid, sequence: [], sections: Harness.steady(5),
+                                  bass: { 0.2 + 0.08 * sin(2 * .pi * $0 / 7) })
+        let picks = run.choreographer.picks
+        let warmUp = KaguraChoreographer.warmUpBars * KaguraChoreographer.barSeconds(grid)
+        let early = picks.indices.filter { run.pickTimes[$0] < warmUp }
+        print("[kagura-warmup] \(early.count) warm-up picks: \(early.map { picks[$0].dance.rawValue }); "
+              + "first ranked \(picks.first { !$0.warmingUp }?.logLine ?? "none")")
+        #expect(!early.isEmpty && early.allSatisfy { picks[$0].warmingUp && picks[$0].dance == picks[$0].repertoire.first })
+        #expect(picks.indices.filter { run.pickTimes[$0] >= warmUp + 0.1 }.allSatisfy { !picks[$0].warmingUp })
+        #expect(picks.first?.logLine.contains("barRank=warm-up") == true)
+    }
+
     @Test("Every handoff into and out of the Charleston stays under its per-dance bound", arguments: [140.0, 171.0])
     func charlestonHandoffs(bpm: Double) throws {
         let lib = try KaguraClipLibrary.shared()
