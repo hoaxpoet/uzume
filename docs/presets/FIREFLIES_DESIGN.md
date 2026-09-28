@@ -1,8 +1,9 @@
 # Fireflies — Design
 
 **Status:** FF.0 (spike) ✅ · FF.R / FF.R2 (references) ✅ · FF.1 (behaviour port) ✅ merged #273 ·
-**FF.2 (the world) next** · FF.3 (the light) · FF.4 (M7 + certification). `certified: false`,
-`exclude_from_cycling: true` until FF.3.
+FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
+FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
+**FF.4 (M7 + certification) next** — prompt `prompts/FF.4-prompt.md`. `certified: false`, `exclude_from_cycling: true` until FF.4.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
@@ -84,13 +85,37 @@ freezes and never goes black (D-037).
 music's slow energy** — the wind stirs the grass and the mist moves more in louder, fuller passages,
 swelling over several seconds, never pulsing on the beat (§5 row 3).
 
+### 4.4 The light (FF.3) — product requirements
+Restated from §3, §4.2 and D-157; nothing here is newly decided.
+- **Each firefly is a light:** a near-white core and a coloured bloom, the brightest thing in the frame
+  (`09`), and the scene's only warm colour. **The bloom is yellow-green**, the swarm's own
+  colour (Matt, 2026-09-26: "A").
+- **Light only on what is right around it** (`07`, `04`): grass strokes, mist and nearby branches
+  brighten within a short radius of a lit firefly; the rest of the print is untouched.
+- **Occlusion:** a firefly behind a tree trunk, a branch or a foreground grass stalk is hidden by it.
+- **Depth of field:** the nearest fireflies read as soft, out-of-focus discs.
+- **Timing:** the light rises and falls with the flash (40 ms rise, 0.11 s decay) — it never lingers.
+- **Never a frame-wide lift (D-157):** a unison flash is hundreds of small lights; max Δ frame-mean luma
+  stays < 0.05 at 1080p through the real draw path. If a bloom breaks that, the bloom shrinks.
+- The world's composition, inks, camera and breath (FF.2) and the swarm's behaviour (FF.1) do not change.
+
+**As built (FF.3).** Each lit firefly is a flat near-white printed dot, a yellow-green halo and a
+four-point starburst printed as grain coverage, and a light pool that multiplies the print around it
+(pale strokes and mist brighten toward green; the dark between strokes stays dark). The nearest
+fireflies (≲ 6 m) are soft discs of the thin-lens circle of confusion. Occlusion is painter's order in
+0.5 m depth bands. Known limit: a light cannot brighten the **near-black** ink of the nearest trunks
+(multiplying near-black stays near-black), so those trunks stay silhouettes beside a light, as in
+`07`; the mid and far trees, the grass and the mist do catch it. The pools' screen reach is capped so
+a unison cannot tile the foreground — the flash budget (D-157) is what limits how far the light
+reaches, and FF.3 spends about three times FF.2's per-frame step (see ENGINEERING_PLAN FF.3).
+
 ## 5. Audio routing (one primitive per layer, FA #67)
 
 | Visual layer | Primitive | Timescale | Status |
 |---|---|---|---|
 | Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. |
 | Swarm visibility | `near_silent01` | ~1.5 s | Built (FF.1). Gated in `FirefliesSwarmTests`. |
-| World breath (wind, mist) | a slow continuous deviation primitive (D-026), heavily smoothed — never beat-rate | several seconds | **Decided: yes** (Matt, "B", 2026-09-25). Built in FF.2; declared in `audio_routes` and gated. |
+| World breath (wind in grass and trees, mist drift) | `bassAttRel` → 4 s EMA → 0.5 + 0.5·tanh(4x) (`FirefliesWorld.advance`); sets wind speed and sway (∝ breath²) and mist speed, all integrated so nothing lurches — never beat-rate | several seconds | Built (FF.2); route `world_breath`, green in `RouteCoverageTests`. Chosen over `midAttRel`/`trebAttRel`: the only one of the three whose slow average moves on all four parity captures. Visible, measured with the camera held still (`FirefliesRenderTests.breathIsVisible`): tree-crown motion 3.4× (DYC) / 1.7× (Pyramid) in full vs quiet passages. Matt, at the FF.2 still: *"might want to consider having the trees move based on musical input"* — the trees sway on this route. |
 
 The beat belongs to the fireflies alone; the world listens only on a much slower timescale, so the two
 never fight — and a free track (irregular or unknown beat) still has a visible connection to the music.
@@ -102,7 +127,7 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 - **Performance:** 60 fps at 1080p in Release. The Debug-built `PresetFrameBudgetTests` also times any
   CPU-side model at `-Onone` (FF.1 lesson), so CPU work must be cheap in both configurations.
 - **Silence:** never black (D-037); the world coasts (§4.3).
-- **Rotation:** stays `certified: false` + `exclude_from_cycling: true` until FF.3.
+- **Rotation:** stays `certified: false` + `exclude_from_cycling: true` until FF.4 (M7 + certification).
 
 ## 7. Increments
 | ID | Delivers | Gate |

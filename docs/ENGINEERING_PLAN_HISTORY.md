@@ -24,6 +24,7 @@ from an unset default by eye, and that ambiguity is the whole complaint. Four ne
 `ChainAnalyzerTests`; all four sessions regraded with verdicts unchanged. No renderer, preset or
 `FeatureVector` change; the render capability registry is unchanged.
 
+
 ### BUG130.1 — a stopped local file reads as silence, not as a frozen frame ✅ M7 PASSED, BUG-130 RESOLVED (2026-09-12, Matt: *"silence pauses correctly now"*)
 
 `PlayheadAnalysisClock.tick()` delivers a tick's worth of zeros when the playhead is not moving —

@@ -38,11 +38,12 @@ public enum KaguraRepertoire {
     /// The spike's `DANCES` (README §9, §10 are reproduced against these).
     public static let spikeDances: [KaguraDance] = [.twist, .cabbage, .chicken, .macarena, .egyptian]
 
-    /// Song-level arousal of the ten `tools/data/beta_test_playlist.m3u` songs (`TrackProfile.songArousal`,
-    /// the shipping local-file preparation, Release, KAG.3 2026-09-25), ascending. Song energy is a song's
+    /// Song-level arousal of the ten `tools/data/beta_test_playlist.m3u` songs — the median per-frame arousal
+    /// after the first sixth, from the shipping local-file preparation (Release, KAG.3 2026-09-25; now
+    /// `TrackProfile.mood.arousal` itself, BUG-144, same rule and values), ascending. Song energy is a song's
     /// interpolated rank among these. Re-derived at KAG.3 from the spike's KAG.0g constant (production-chain
-    /// window medians), because the build reads `songArousal` and the two disagree in scale (§6; Matt's
-    /// option A). A constant with provenance — re-derive it if the playlist changes, never tune it.
+    /// window medians), because the two disagree in scale (§6; Matt's option A). A constant with
+    /// provenance — re-derive it if the playlist changes, never tune it.
     /// Moonlight I, Penny Lane, Superstition, Warszawa, Take Five, Pyramid Song, Teardrop, B.O.B.,
     /// Smells Like Teen Spirit, Dance Yrself Clean.
     public static let energyReference: [Double] = [

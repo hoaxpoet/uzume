@@ -110,6 +110,24 @@ struct NearTieSamplingTests {
         #expect(a.tracks.map { $0.preset.id } == b.tracks.map { $0.preset.id })
     }
 
+    /// BUG-147: `deterministic()` above compares two plans inside ONE process, so it passed while
+    /// the noise hashed `presetID.hashValue` — randomly seeded per launch. Only a value pinned in
+    /// source can catch that; on the old code this failed on every run with a different string.
+    @Test("Same seed, same plan ACROSS processes — the value is pinned in source (BUG-147)")
+    func pinnedAcrossProcesses() throws {
+        let fingerprint = try (1...12).map { seed -> String in
+            let session = try planner.plan(tracks: [track(0), track(1), track(2)], catalog: catalog(),
+                                           deviceTier: .tier1, seed: UInt64(seed),
+                                           includeUncertifiedPresets: true)
+            return session.tracks.map { $0.preset.id }.joined(separator: ",")
+        }.joined(separator: "|")
+        // Re-pin ONLY on a deliberate change to the noise, scorer or segmenting; every nonzero-seed plan
+        // moves with it. NRG.4 (2026-09-27) re-pinned: even splits within a section move segment times.
+        #expect(fingerprint ==
+            "Near3,Near1,Near1|MidBand,Near0,Near3|Near3,Near3,Near0|Near0,Near0,Near2|Near1,Near1,Near1|Near0,Near1,Near0|" +
+            "Near2,Near1,Near1|Near3,Near3,Near3|Near2,Near3,MidBand|Near3,Near2,Near2|Near0,Near0,Near1|MidBand,Near1,MidBand")
+    }
+
     @Test("Seed 0 stays a pure argmax, so the unseeded goldens still pin the scorer")
     func unseededIsArgmax() throws {
         let ids = try (0..<5).map { _ -> String in

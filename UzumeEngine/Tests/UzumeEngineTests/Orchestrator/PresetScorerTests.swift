@@ -70,22 +70,30 @@ struct PresetScorerTests {
                 "Install idiom .first(where: > 0) must skip the 0-scored diagnostic")
     }
 
-    // MARK: 3 — Mood mismatch penalized
+    // MARK: 3 — Energy sets the density a stretch asks for (NRG.3, D-259)
 
-    @Test("Sad track (valence -0.8) scores higher against cool-palette preset")
-    func moodMismatchPenalized() {
-        // target_temp = 0.5 + 0.4 * (-0.8) = 0.18 (cool)
-        let warmPreset = makePreset(name: "Warm", family: .reaction,
-                                    colorTemperatureRange: SIMD2(0.7, 0.95))
-        let coolPreset = makePreset(name: "Cool", family: .fractal,
-                                    colorTemperatureRange: SIMD2(0.1, 0.3))
-        let track   = makeTrack(bpm: 90, valence: -0.8, arousal: 0.0)
-        let context = makeContext()
+    @Test("A quiet stretch prefers a sparse preset; a driving stretch prefers a dense one")
+    func energyLevelSetsDensityTarget() {
+        let sparse = makePreset(name: "Sparse", family: .reaction, visualDensity: 0.15)
+        let dense  = makePreset(name: "Dense", family: .fractal, visualDensity: 0.85)
+        let track  = makeTrack(bpm: 90)
+        let quiet   = PresetScoringContext(deviceTier: .tier2, energyLevel: 2)
+        let driving = PresetScoringContext(deviceTier: .tier2, energyLevel: 9)
 
-        let warmScore = scorer.score(preset: warmPreset, track: track, context: context)
-        let coolScore = scorer.score(preset: coolPreset, track: track, context: context)
+        #expect(scorer.score(preset: sparse, track: track, context: quiet)
+                > scorer.score(preset: dense, track: track, context: quiet))
+        #expect(scorer.score(preset: dense, track: track, context: driving)
+                > scorer.score(preset: sparse, track: track, context: driving))
+    }
 
-        #expect(coolScore > warmScore, "Cool palette should win against a sad (low-valence) track")
+    @Test("Colour temperature no longer moves the score — valence left scene choice (D-259)")
+    func colourTemperatureIsNotScored() {
+        let warm = makePreset(name: "Warm", family: .reaction, colorTemperatureRange: SIMD2(0.7, 0.95))
+        let cool = makePreset(name: "Cool", family: .fractal, colorTemperatureRange: SIMD2(0.1, 0.3))
+        let context = PresetScoringContext(deviceTier: .tier2, energyLevel: 5)
+        let track = makeTrack(bpm: 90)
+        #expect(scorer.score(preset: warm, track: track, context: context)
+                == scorer.score(preset: cool, track: track, context: context))
     }
 
     // MARK: 4 — Same-family repeat penalized ≥ 3×

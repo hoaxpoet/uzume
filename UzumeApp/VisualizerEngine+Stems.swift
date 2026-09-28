@@ -712,7 +712,7 @@ extension VisualizerEngine {
             installBeatGrid(installGrid.offsetBy(0), initialDriftMs: cached.gridOnsetOffsetMs)
             // KAG.3 — the song's arousal picks Kagura's repertoire. Written on BOTH branches (value
             // here, nil below) so a previous track's value can never reach this one.
-            pushKaguraSong(title: identity.title, arousal: cached.trackProfile.songArousal, bpm: installGrid.bpm)
+            pushKaguraSong(title: identity.title, arousal: cached.trackProfile.mood.arousal, bpm: installGrid.bpm)
             logCachedInstall(cached: cached, title: identity.title, replacedExisting: replacedExisting)
         } else {
             pipeline.setStemFeatures(.zero, live: false)   // BUG-064: not-live until convergence

@@ -227,13 +227,19 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///                       stems are at the separator's 44.1 kHz, so every non-44.1 kHz
     ///                       v13/v14 entry holds a time-scaled drums grid (48 kHz: tempo x1.088) that
     ///                       feeds the D-154 beat-irregularity gate. Data again — re-analyse.
-    ///   v18 (KAG.3) — adds `TrackProfile.songArousal`, the song-level arousal Kagura picks its
-    ///                       dances from. Entries without it decode nil, which dances every cached
-    ///                       local file at the neutral middle energy, silently — re-analyse. It was
-    ///                       v16 until BUG-144 wrote v16 entries WITHOUT the field (its v16 means a
-    ///                       song-level `mood`) and Matt's KAG.3 local M7 (2026-09-28) hit them on 9
-    ///                       of 10 tracks; main is v17 (NRG.1), so KAG.3 takes v18.
-    public static let currentSchemaVersion: Int = 18
+    ///   v16 (BUG-144) — `TrackProfile.mood` was the classifier's state at the LAST frame (the
+    ///                       audio's final second or two); it is now the song's median after the
+    ///                       first sixth. Every v15 mood describes the fade-out — re-analyse.
+    ///                       Same bump (unmerged branch), BUG-145: `TrackProfile.bpm` was the
+    ///                       MIR BeatDetector's IOI tempo, 130–143 on every song (sub-bass onsets
+    ///                       firing at their cooldown); it is now the grid's octave-folded
+    ///                       tempo, nil when the D-154 gate calls the beat irregular. Same bump,
+    ///                       BUG-146: MIR (mood, key, centroid) now runs at 44.1 kHz whatever the
+    ///                       file's rate; every non-44.1 kHz v15 mood was skewed by the rate.
+    ///   v17 (NRG.1, D-259) — adds `TrackProfile.energyCurve`, the measured loudness + activity
+    ///                       curve scene choice will read instead of mood. v16 entries decode
+    ///                       with it nil — re-analyse so every cached song has one.
+    public static let currentSchemaVersion: Int = 17
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

@@ -72,14 +72,4 @@ public protocol PlaybackActionRouter: AnyObject, Sendable {
     /// U.6b semantic: pops the undo stack (≥5 entries) and restores the previous
     /// `PlannedSession` snapshot.
     @MainActor func undoLastAdaptation()
-
-    /// Toggle the mood-lock gate.
-    ///
-    /// When locked, the live adapter's mood-override path is disabled — the plan
-    /// continues executing even if measured valence/arousal diverges significantly.
-    /// Useful when Uzume mis-classifies the mood of an unusual track.
-    @MainActor func toggleMoodLock()
-
-    /// Whether mood lock is currently active. Published so the UI can reflect state.
-    @MainActor var isMoodLocked: Bool { get }
 }

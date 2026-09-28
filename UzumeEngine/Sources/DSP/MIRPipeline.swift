@@ -771,3 +771,20 @@ extension MIRPipeline {
         onDiagnostic?(line)   // DYN.3.1 — the copy that survives into session.log
     }
 }
+
+// MARK: - LFSEEK.1 seek
+
+extension MIRPipeline {
+
+    /// LFSEEK.1 — the listener jumped within the track (local files). Moves the track clock —
+    /// which the plan, the beat grid and the stem series are all read by — to `seconds`, and
+    /// clears the state keyed to the old position: the drift/onset lock and the first-note pulse
+    /// anchor. The installed grid, tempo and smoothers stay; it is the same song.
+    public func seek(to seconds: Double) {
+        liveDriftTracker.reset()
+        beatPulseClock.resetAnchor()
+        lock.lock()
+        elapsedSeconds = max(0, seconds)
+        lock.unlock()
+    }
+}

@@ -31,8 +31,8 @@ struct PlanRankingDumpTests {
             print("[plan-dump] tier \(tier) — empty history (the opener context):")
             for (d, b) in rows {
                 let ex = b.excluded ? "  EXCLUDED: \(b.exclusionReason ?? "?")" : ""
-                print(String(format: "[plan-dump]   %-22@ total %.3f  mood %.2f tempo %.2f aff %.2f sect %.2f fam×%.2f fat×%.2f boost %.2f%@",
-                             d.name as NSString, b.total, b.mood, b.tempoMotion, b.stemAffinity, b.sectionSuitability,
+                print(String(format: "[plan-dump]   %-22@ total %.3f  energy %.2f tempo %.2f aff %.2f sect %.2f fam×%.2f fat×%.2f boost %.2f%@",
+                             d.name as NSString, b.total, b.energy, b.tempoMotion, b.stemAffinity, b.sectionSuitability,
                              b.familyRepeatMultiplier, b.fatigueMultiplier, b.familyBoost, ex as NSString))
             }
             if let w = rows.firstIndex(where: { $0.0.name == "Witchlight" }) {

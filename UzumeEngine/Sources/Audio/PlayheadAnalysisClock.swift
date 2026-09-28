@@ -156,6 +156,9 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
         queue.sync { }
     }
 
+    /// The raw playhead in seconds into the file — the LFSEEK.1 test hook for the seek offset.
+    var playheadSeconds: Double? { position() }
+
     // MARK: - Private
 
     /// Driven by `timer`; `internal` only so the regression test can step it deterministically
@@ -244,9 +247,12 @@ extension PlayheadAnalysisClock {
     /// `deliver` is nil only when a caller starts the provider without setting `onAudioSamples` —
     /// a source with no analysis consumer, which is legitimate (playback only), so that case
     /// produces a silent clock rather than an error.
+    /// LFSEEK.1: `startFrame` is where the player's schedule begins in the file — `sampleTime`
+    /// counts from 0 at `play()` whatever frame that is, so the position adds it back.
     static func make(
         url: URL,
         player: AVAudioPlayerNode,
+        startFrame: AVAudioFramePosition = 0,
         deliver: ((UnsafePointer<Float>, Int, Float, UInt32) -> Void)?
     ) throws -> PlayheadAnalysisClock {
         let own = try AVAudioFile(forReading: url)
@@ -262,7 +268,7 @@ extension PlayheadAnalysisClock {
                       let playerTime = player.playerTime(forNodeTime: nodeTime),
                       playerTime.isSampleTimeValid,
                       playerTime.sampleRate > 0 else { return nil }
-                return Double(playerTime.sampleTime) / playerTime.sampleRate
+                return Double(startFrame + playerTime.sampleTime) / playerTime.sampleRate
             },
             deliver: deliver ?? { _, _, _, _ in }
         )

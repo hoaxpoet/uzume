@@ -425,7 +425,7 @@ QR.2 / D-080 implementation faithful at `:190-194` (`liveProfile.stemEnergyBalan
 |---|---|---|---|
 | `NudgeDirection` enum (`.previous / .next`) | `production-active` | `DefaultPlaybackActionRouter:325, 405`; `PlaybackShortcutRegistry:304, 312, 320, 328` | D-050 |
 | `PlaybackActionRouter` protocol | `production-active` | `DefaultPlaybackActionRouter` conformer; consumed via `actionRouter: PlaybackActionRouter` in `PlaybackShortcutRegistry` | D-050 / D-058 (U.6b semantics) |
-| `moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation` / `toggleMoodLock` / `isMoodLocked` | `production-active` | `PlaybackShortcutRegistry` keyboard wiring (`Services/PlaybackShortcutRegistry.swift:246, 280, 288, 296, 304, 312, 320, 328, 336, 344`) | U.6b / D-058 |
+| `moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation` (`toggleMoodLock` / `isMoodLocked` removed at NRG.3) | `production-active` | `PlaybackShortcutRegistry` keyboard wiring (`Services/PlaybackShortcutRegistry.swift:246, 280, 288, 296, 304, 312, 320, 328, 336, 344`) | U.6b / D-058 |
 
 All seven methods are wired through to keyboard shortcuts via `PlaybackShortcutRegistry`. The concrete `DefaultPlaybackActionRouter` (App layer) was fully wired in U.6b per `ENGINEERING_PLAN.md:934-948`.
 

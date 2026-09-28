@@ -50,10 +50,6 @@ struct AdaptationFields: Sendable {
 @MainActor
 final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendable {
 
-    // MARK: - Mood Lock (non-stub, wired in U.6)
-
-    @Published private(set) var isMoodLocked: Bool = false
-
     // MARK: - U.6b Adaptation Preferences
 
     /// Additive boost per aesthetic family. Capped at 0.3; pressing `+` twice is idempotent.
@@ -457,11 +453,6 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         onRestorePlan(snapshot)
         toastBridge?.emitAck("Undone")
         logger.info("U.6b: undoLastAdaptation — plan restored (history remaining: \(self.adaptationHistory.count))")
-    }
-
-    func toggleMoodLock() {
-        isMoodLocked.toggle()
-        logger.info("PlaybackActionRouter: moodLock = \(self.isMoodLocked)")
     }
 
     // MARK: - Private Helpers

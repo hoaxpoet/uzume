@@ -197,7 +197,7 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
         }
     }
 
-    /// The song's arousal (`TrackProfile.songArousal`), or `nil` when the track has none. The app
+    /// The song's arousal (`TrackProfile.mood.arousal`, the song's median (BUG-144)), or `nil` when the track has none. The app
     /// writes it at every track change on both paths — a value, or `nil` — so a previous track's
     /// arousal never reaches the next one's repertoire (CLAUDE.md §What NOT To Do).
     public func setSongArousal(_ arousal: Double?) {

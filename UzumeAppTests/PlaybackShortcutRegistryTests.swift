@@ -9,14 +9,12 @@ import Testing
 
 @MainActor
 private final class StubActionRouter: PlaybackActionRouter, @unchecked Sendable {
-    var isMoodLocked: Bool = false
     var moreLikeThisCount = 0
     var lessLikeThisCount = 0
     var reshuffleCount = 0
     var nudgeCalls: [(NudgeDirection, Bool)] = []
     var rePlanCount = 0
     var undoCount = 0
-    var toggleMoodLockCount = 0
 
     func moreLikeThis() { moreLikeThisCount += 1 }
     func lessLikeThis() { lessLikeThisCount += 1 }
@@ -24,7 +22,6 @@ private final class StubActionRouter: PlaybackActionRouter, @unchecked Sendable 
     func presetNudge(_ direction: NudgeDirection, immediate: Bool) { nudgeCalls.append((direction, immediate)) }
     func rePlanSession() { rePlanCount += 1 }
     func undoLastAdaptation() { undoCount += 1 }
-    func toggleMoodLock() { toggleMoodLockCount += 1; isMoodLocked.toggle() }
 }
 
 @MainActor
@@ -58,7 +55,7 @@ struct PlaybackShortcutRegistryTests {
     @Test func registryCoversAllExpectedIDs() {
         let (registry, _) = makeRegistry()
         let expectedIDs: Set<String> = [
-            "fullscreenToggle", "fullscreenSecondary", "overlayToggle", "moodLock",
+            "fullscreenToggle", "fullscreenSecondary", "overlayToggle",
             "endSession", "helpOverlay",
             "moreLikeThis", "lessLikeThis", "reshuffleUpcoming",
             "presetNudgeNext", "presetNudgePrev", "presetCutNext", "presetCutPrev",
@@ -78,9 +75,7 @@ struct PlaybackShortcutRegistryTests {
         router.presetNudge(.previous, immediate: true)
         router.rePlanSession()
         router.undoLastAdaptation()
-        router.toggleMoodLock()
         #expect(router.moreLikeThisCount == 1)
         #expect(router.nudgeCalls.count == 2)
-        #expect(router.toggleMoodLockCount == 1)
     }
 }

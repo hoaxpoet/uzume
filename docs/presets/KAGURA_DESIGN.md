@@ -517,3 +517,9 @@ stretch still keeps the vigorous dance; there is no rotation term.
   3 for the look: M7 judges whether its held poses read as dance or as a freeze.
 - Survey leftovers, not added: Indian dance (subject 94; mostly travels, and its in-place windows lock like the
   gesture dances), jumping jacks (every CMU run is ≤ 3 jacks), side twists (exercise), moonwalk (travels).
+
+**Main merged in (2026-09-28).** BUG-144 on main makes `TrackProfile.mood` the song's median after the first
+sixth, the same rule and values as KAG.3's `songArousal` (confirmed by that session to three decimals), so
+the field is gone: Kagura reads `mood.arousal`, `energyReference` is unchanged, and the cache is main's v17
+(KAG.3's v18 entries re-analyse once). Main's D-259 energy curve (`TrackProfile.energyCurve`) is not yet
+Kagura's input — moving the song energy onto it changes which songs get which dances, a call for Matt.

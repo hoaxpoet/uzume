@@ -13,12 +13,11 @@ import Shared
 
 /// Result of `analyzeMIR` — avoids a large tuple return type.
 private struct MIRAnalysisResult {
-    var bpm: Float?
     var key: String?
     var mood: EmotionalState
-    var songArousal: Float?
     var centroidAvg: Float
     var sectionCount: Int
+    var energyCurve: EnergyCurve?
 }
 
 // MARK: - Analysis Pipeline
@@ -96,13 +95,9 @@ extension SessionPreparer {
             )
         }
 
-        // Step 4: Offline MIR analysis (BPM, key, mood, centroid).
+        // Step 4: Offline MIR analysis (key, mood, centroid), at 44.1 kHz (BUG-146).
         let mir = probe.measure(PrepStage.mir) {
-            analyzeMIR(
-                samples: preview.pcmSamples,
-                sampleRate: preview.sampleRate,
-                classifier: classifier
-            )
+            analyzeMIR(preview: preview, classifier: classifier)
         }
 
         // Steps 5 + 6: offline beat grids (full mix + drums stem), with metadata meter override.
@@ -132,14 +127,14 @@ extension SessionPreparer {
         }
 
         let profile = TrackProfile(
-            bpm: mir.bpm,
+            bpm: storedTempo(grid: beatGrid, drums: drumsBeatGrid),
             key: mir.key,
             mood: mir.mood,
-            songArousal: mir.songArousal,
             spectralCentroidAvg: mir.centroidAvg,
             genreTags: [],
             stemEnergyBalance: stemFeatures,
-            estimatedSectionCount: mir.sectionCount
+            estimatedSectionCount: mir.sectionCount,
+            energyCurve: mir.energyCurve
         )
 
         return CachedTrackData(
@@ -268,10 +263,10 @@ extension SessionPreparer {
     /// rate (~43 frames/second at 44100 Hz). At 30 seconds this yields ~1290 frames,
     /// enough for `BeatDetector` and `ChromaExtractor` to converge on stable values.
     nonisolated private static func analyzeMIR(
-        samples: [Float],
-        sampleRate: Int,
+        preview: PreviewAudio,
         classifier: any MoodClassifying
     ) -> MIRAnalysisResult {
+        let (samples, sampleRate) = mirInput(preview)
         let fftSize = 1024
         let binCount = fftSize / 2   // 512
 
@@ -279,7 +274,7 @@ extension SessionPreparer {
         // FFTMagnitudeKernel — byte-identical to the live FFTProcessor (BUG-066 / MOOD-FLUX.3).
         guard let fft = try? FFTMagnitudeKernel(fftSize: fftSize) else {
             return MIRAnalysisResult(
-                bpm: nil, key: nil, mood: .neutral, songArousal: nil, centroidAvg: 0, sectionCount: 0
+                key: nil, mood: .neutral, centroidAvg: 0, sectionCount: 0, energyCurve: nil
             )
         }
 
@@ -290,7 +285,8 @@ extension SessionPreparer {
         var centroidSum: Float = 0
         var frameCount = 0
         var moodAccumulator = MoodFeatureAccumulator()   // DYN.7
-        var arousalTrace: [Float] = []   // KAG.3 — per-frame arousal for `songArousal`
+        var moodTrace: [EmotionalState] = []             // BUG-144
+        var energy = EnergyCurveBuilder(frameSeconds: dt) // NRG.1 (D-259)
         var offset = 0
 
         while offset + fftSize <= samples.count {
@@ -308,6 +304,10 @@ extension SessionPreparer {
             let fv = mir.process(magnitudes: fft.magnitudes, fps: fps, time: time, deltaTime: dt)
             centroidSum += fv.spectralCentroid
             frameCount += 1
+            samples.withUnsafeBufferPointer {
+                energy.add(frame: UnsafeBufferPointer(rebasing: $0[offset..<offset + fftSize]),
+                           flux: mir.rawSmoothedFlux)
+            }
 
             // DYN.7 — the SAME measurement the live path makes. Previously this fed the
             // classifier INSTANTANEOUS features every 30th frame while live fed a 1.67 s
@@ -328,7 +328,7 @@ extension SessionPreparer {
             // the cadence no longer sets the smoothing — it only sets the cost, and the
             // forward pass is a 10→64→32→16→2 MLP over a 30 s window.
             if let state = try? classifier.classify(features: smoothed, deltaTime: dt) {
-                arousalTrace.append(state.arousal)
+                moodTrace.append(state)
             }
 
             offset += fftSize
@@ -347,12 +347,18 @@ extension SessionPreparer {
         // StructuralAnalyzer for diagnostics, unread.)
 
         return MIRAnalysisResult(
-            bpm: mir.stableBPM,
             key: mir.stableKey,
-            mood: classifier.currentState,
-            songArousal: TrackProfile.songArousal(perFrame: arousalTrace),
+            mood: songMood(moodTrace),
             centroidAvg: centroidAvg,
-            sectionCount: sectionCount
+            sectionCount: sectionCount,
+            energyCurve: energy.build()
         )
+    }
+
+    /// A song's energy curve through the exact production analysis (NRG.2 calibration, D-259) —
+    /// the same `analyzeMIR` pass preparation runs, without stems or beat grids, so the library
+    /// calibration measures what the app stores rather than a copy of it.
+    nonisolated public static func energyCurve(of preview: PreviewAudio) -> EnergyCurve? {
+        analyzeMIR(preview: preview, classifier: MoodClassifier()).energyCurve
     }
 }

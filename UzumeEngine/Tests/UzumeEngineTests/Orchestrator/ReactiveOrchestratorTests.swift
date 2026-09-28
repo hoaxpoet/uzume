@@ -1,14 +1,10 @@
 // ReactiveOrchestratorTests — unit tests for DefaultReactiveOrchestrator (Increment 4.6).
 //
-// Scoring math verified inline in comments. Key threshold: gap > 0.20 for reactive switch.
-//
-// Scoring formula (no BPM, no stems, no section, no history in these tests):
-//   raw = 0.30*moodScore + 0.20*tempoMotion(0.5→1.0 for nil BPM) + 0.25*stemAffinity(0.5) + 0.25*section(1.0)
-//       = 0.30*moodScore + 0.575
-//
-//   targetTemp    = 0.5 + 0.4 * valence
-//   targetDensity = 0.5 + 0.4 * arousal
-//   moodScore     = (1-|center-targetTemp| + 1-|density-targetDensity|) / 2
+// Scoring with nothing measured (NRG.3: no mood, no energy curve, no BPM, no stems, no section):
+//   raw = (0.30*energy + 0.20*tempoMotion + 0.25*stemAffinity) / 0.75   (section weight gated off)
+//   energy      = 1 - |visualDensity - 0.5|     (unmeasured energy → neutral target 0.5)
+//   tempoMotion = 1 - |motionIntensity - 0.5|   (nil BPM → neutral target 0.5)
+//   stemAffinity is equal for every preset here, so a gap = 0.4*Δenergy + 0.267*ΔtempoMotion.
 
 import Foundation
 import Testing
@@ -30,7 +26,6 @@ struct ReactiveOrchestratorTests {
     @Test("Returns hold with nil suggestion during 0–15 s listening window")
     func listening_state_always_holds() {
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: strongBoundary(),
             elapsedSessionTime: 10.0,
             currentPreset: nil,
@@ -61,27 +56,15 @@ struct ReactiveOrchestratorTests {
                 "30 s → 1.0")
     }
 
-    // MARK: 3 — Ramping state suggests best preset for live mood
+    // MARK: 3 — Ramping state suggests the better-scoring preset
 
     @Test("Suggests better-matching preset during ramping state when score gap > 0.20")
-    func ramping_suggests_best_preset_for_live_mood() throws {
-        // Live happy/energetic: valence=0.7, arousal=0.7
-        //   targetTemp = 0.5 + 0.4*0.7 = 0.78
-        //   targetDensity = 0.78
-        //
-        // CurrentPreset: center=0.10, density=0.10
-        //   moodScore = (1-|0.10-0.78| + 1-|0.10-0.78|)/2 = 0.32
-        //   total = 0.30*0.32 + 0.575 = 0.671
-        //
-        // AltPreset: center=0.78, density=0.78
-        //   moodScore = 1.0, total = 0.875
-        //
-        // gap = 0.875 - 0.671 = 0.204 > 0.20 ✓
+    func ramping_suggests_better_scoring_preset() throws {
+        // largeGapCatalog: gap 0.33 > 0.20 (see the catalog builders).
         let catalog = largeGapCatalog()
         let currentDesc = catalog[0]  // CurrentPreset
 
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: noBoundarySignal(),
             elapsedSessionTime: 20.0,
             currentPreset: currentDesc,
@@ -96,22 +79,13 @@ struct ReactiveOrchestratorTests {
 
     // MARK: 4 — No switch when score gap is too small
 
-    @Test("Holds current preset when gap is 0.03 (< 0.20) and no boundary signal")
+    @Test("Holds current preset when gap is 0.02 (< 0.20) and no boundary signal")
     func no_switch_when_score_gap_too_small() {
-        // Live (valence=0.7, arousal=0.7): targetTemp=0.78, targetDensity=0.78
-        //
-        // CurrentPreset: center=0.68, density=0.68
-        //   moodScore = (0.90 + 0.90)/2 = 0.90
-        //   total = 0.30*0.90 + 0.575 = 0.845
-        //
-        // AltPreset: center=0.78, density=0.78 → total=0.875
-        //
-        // gap = 0.875 - 0.845 = 0.030 < 0.20 ✓  boundary confidence = 0.0 < 0.5 ✓
+        // smallGapCatalog: gap 0.02 < 0.20, boundary confidence 0.0 < 0.5 → hold.
         let catalog = smallGapCatalog()
         let currentDesc = catalog[0]  // CurrentPreset
 
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: noBoundarySignal(),
             elapsedSessionTime: 60.0,
             currentPreset: currentDesc,
@@ -125,15 +99,14 @@ struct ReactiveOrchestratorTests {
 
     // MARK: 5 — Boundary alone does not fire when gap < minBoundaryScoreGap (QR.2/D-080)
 
-    @Test("Holds when boundary fires but gap is only 0.03 (< minBoundaryScoreGap 0.05)")
+    @Test("Holds when boundary fires but gap is only 0.02 (< minBoundaryScoreGap 0.05)")
     func boundary_requires_minimum_score_gap() {
         // QR.2/D-080: boundary-only switches require scoreGap > minBoundaryScoreGap (0.05).
-        // smallGapCatalog gap = 0.030 < 0.05 → boundary gate fails → hold.
+        // smallGapCatalog gap = 0.02 < 0.05 → boundary gate fails → hold.
         let catalog = smallGapCatalog()
         let currentDesc = catalog[0]  // CurrentPreset
 
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: strongBoundary(predictedNextBoundary: 10.0),
             elapsedSessionTime: 60.0,
             currentPreset: currentDesc,
@@ -142,21 +115,20 @@ struct ReactiveOrchestratorTests {
         )
 
         #expect(decision.suggestedPreset == nil,
-                "Gap 0.03 < minBoundaryScoreGap 0.05: boundary must not trigger switch")
+                "Gap 0.02 < minBoundaryScoreGap 0.05: boundary must not trigger switch")
     }
 
     // MARK: 6 — Boundary schedules transition at correct session time
 
     @Test("scheduleTransitionAt equals elapsedSessionTime + predictedNextBoundary")
     func boundary_schedules_transition_at_correct_time() {
-        // mediumGapCatalog: gap ≈ 0.06 > minBoundaryScoreGap (0.05) but < 0.20 (score gate).
+        // mediumGapCatalog: gap 0.08 > minBoundaryScoreGap (0.05) but < 0.20 (score gate).
         // elapsedSessionTime = 45.0, predictedNextBoundary = 3.5, confidence = 0.8 ≥ 0.5
         // → boundary gate fires; scheduleTransitionAt = 3.5 + 45.0 = 48.5
         let catalog = mediumGapCatalog()
         let currentDesc = catalog[0]
 
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: strongBoundary(predictedNextBoundary: 3.5),
             elapsedSessionTime: 45.0,
             currentPreset: currentDesc,
@@ -178,7 +150,6 @@ struct ReactiveOrchestratorTests {
         // No current preset → skip score comparison entirely; always suggest top-ranked.
         // Score gap gate does not apply — there is nothing to compare against.
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: noBoundarySignal(),
             elapsedSessionTime: 20.0,
             currentPreset: nil,
@@ -196,7 +167,6 @@ struct ReactiveOrchestratorTests {
     @Test("Returns hold with nil suggestion when catalog is empty")
     func empty_catalog_returns_hold() {
         let decision = orchestrator.evaluate(
-            liveMood: EmotionalState(valence: 0.7, arousal: 0.7),
             liveBoundary: strongBoundary(),
             elapsedSessionTime: 60.0,
             currentPreset: nil,
@@ -228,57 +198,32 @@ private func strongBoundary(predictedNextBoundary: Float = 10.0) -> StructuralPr
 }
 
 // MARK: - Catalog Builders
+//
+// AltPreset sits on both neutral targets (density 0.5, motion 0.5) and scores 1.0 on each; the
+// gap to CurrentPreset comes from how far CurrentPreset sits off them.
 
-/// Large-gap catalog (test 3).
-///
-/// With live (valence=0.7, arousal=0.7): targetTemp=0.78, targetDensity=0.78
-///   CurrentPreset: center=0.10, density=0.10  → total=0.671
-///   AltPreset:     center=0.78, density=0.78  → total=0.875
-///   gap = 0.204 > 0.20 ✓
+/// Large-gap catalog (test 3): Current density 0.0 + motion 0.0 → gap = 0.4*0.5 + 0.267*0.5 = 0.33 > 0.20.
 private func largeGapCatalog() -> [PresetDescriptor] {
     [
-        makePreset(name: "CurrentPreset", family: .reaction,
-                   colorTempRange: SIMD2(0.05, 0.15),   // center = 0.10
-                   visualDensity: 0.10),
-        makePreset(name: "AltPreset", family: .geometric,
-                   colorTempRange: SIMD2(0.73, 0.83),   // center = 0.78
-                   visualDensity: 0.78),
+        makePreset(name: "CurrentPreset", family: .reaction, motionIntensity: 0.0, visualDensity: 0.0),
+        makePreset(name: "AltPreset", family: .geometric, motionIntensity: 0.5, visualDensity: 0.5),
     ]
 }
 
-/// Medium-gap catalog (test 6).
-///
-/// With live (valence=0.7, arousal=0.7): targetTemp=0.78, targetDensity=0.78
-///   CurrentPreset: center=0.58, density=0.58
-///     moodScore = 1 - |0.58 - 0.78| = 0.80  → total = 0.30*0.80 + 0.575 = 0.815
-///   AltPreset: center=0.78, density=0.78 → moodScore=1.0, total=0.875
-///   gap ≈ 0.060 > minBoundaryScoreGap (0.05) but < minScoreGapForSwitch (0.20)
-///   → score gate fails; boundary gate fires.
+/// Medium-gap catalog (test 6): Current density 0.30 → gap = 0.4*0.2 = 0.08 — above
+/// minBoundaryScoreGap (0.05), below minScoreGapForSwitch (0.20): only the boundary gate fires.
 private func mediumGapCatalog() -> [PresetDescriptor] {
     [
-        makePreset(name: "CurrentPreset", family: .reaction,
-                   colorTempRange: SIMD2(0.53, 0.63),   // center = 0.58
-                   visualDensity: 0.58),
-        makePreset(name: "AltPreset", family: .geometric,
-                   colorTempRange: SIMD2(0.73, 0.83),   // center = 0.78
-                   visualDensity: 0.78),
+        makePreset(name: "CurrentPreset", family: .reaction, visualDensity: 0.30),
+        makePreset(name: "AltPreset", family: .geometric, visualDensity: 0.5),
     ]
 }
 
-/// Small-gap catalog (tests 4, 5, 7).
-///
-/// With live (valence=0.7, arousal=0.7): targetTemp=0.78, targetDensity=0.78
-///   CurrentPreset: center=0.68, density=0.68  → total=0.845
-///   AltPreset:     center=0.78, density=0.78  → total=0.875
-///   gap = 0.030 < minBoundaryScoreGap (0.05) — both score and boundary gates fail.
+/// Small-gap catalog (tests 4, 5, 7): Current density 0.45 → gap = 0.4*0.05 = 0.02 — below both gates.
 private func smallGapCatalog() -> [PresetDescriptor] {
     [
-        makePreset(name: "CurrentPreset", family: .reaction,
-                   colorTempRange: SIMD2(0.63, 0.73),   // center = 0.68
-                   visualDensity: 0.68),
-        makePreset(name: "AltPreset", family: .geometric,
-                   colorTempRange: SIMD2(0.73, 0.83),   // center = 0.78
-                   visualDensity: 0.78),
+        makePreset(name: "CurrentPreset", family: .reaction, visualDensity: 0.45),
+        makePreset(name: "AltPreset", family: .geometric, visualDensity: 0.5),
     ]
 }
 

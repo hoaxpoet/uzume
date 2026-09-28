@@ -57,31 +57,6 @@ public extension PlannedSession {
             )
         }
 
-        if let override = adaptation.presetOverride {
-            let current = updatedTracks[trackIndex]
-            // Patch the first segment — this preserves D-035 single-segment behaviour for
-            // every existing preset and is the deterministic choice for multi-segment tracks
-            // where LiveAdapter does not currently track the active segment index.
-            var segments = current.segments
-            let first = segments[0]
-            segments[0] = PlannedPresetSegment(
-                preset: override.preset,
-                presetScore: override.score,
-                scoreBreakdown: first.scoreBreakdown,
-                plannedStartTime: first.plannedStartTime,
-                plannedEndTime: first.plannedEndTime,
-                incomingTransition: first.incomingTransition,
-                terminationReason: first.terminationReason
-            )
-            updatedTracks[trackIndex] = PlannedTrack(
-                track: current.track,
-                trackProfile: current.trackProfile,
-                segments: segments,
-                plannedStartTime: current.plannedStartTime,
-                plannedEndTime: current.plannedEndTime
-            )
-        }
-
         return PlannedSession(
             deviceTier: deviceTier,
             tracks: updatedTracks,
