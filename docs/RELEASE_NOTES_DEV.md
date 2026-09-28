@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-153357] KAG.3 — Kagura after the first live sessions: new dances, fairer picks (pending live M7)
+
+After three live sessions (Matt, 2026-09-28): the chicken dance is out of the pick; the Charleston joins for fast songs (one step per beat, only where that is within ±25 % of its natural speed — B.O.B. and Take Five on the beta playlist); calm songs rest in slow ballet poses instead of the sway (Moonlight, Penny Lane, Warszawa; Pyramid Song keeps its sway); and each bar is ranked against the song's other bars, so calm, middle and vigorous each get their share (live, 62 % of picks had been the middle dance). Local files re-analyse once more (stem cache v18: v16 collided with BUG-144's entries). New session-log lines: `KAGURA_SONG` and `KAGURA_PICK`. Not certified.
+
 ### [dev-2026-09-26-015632] KAG.3 — Kagura dances five dances and picks them from the song (pending live M7)
 
 Kagura now chooses between the twist, cabbage patch, chicken dance, macarena and Egyptian walk. The song's energy and tempo pick three at track start. At each bar-line clip change, the bass of the bar just played picks the calm, middle or vigorous one (Matt's option A; the local file and streaming behave the same). The arms swell by up to 25 % with the bass. The dancer sways through beat-irregular stretches, through silence, and when playback stops. The song's energy is a new song-level arousal measured in preparation, because the existing `TrackProfile.mood` is the last second or two of the track (BUG-143 handles that separately). **Local files re-analyse once** (stem cache schema v16). The sidecar now declares `requires_regular_beat`, so the planner keeps Kagura off beat-irregular songs when uncertified scenes are shown. Not certified (KAG.4).

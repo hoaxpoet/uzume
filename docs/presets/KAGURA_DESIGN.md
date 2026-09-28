@@ -497,3 +497,23 @@ bar-long stretch in the trailing window. On 90 s of real music (the route-covera
 bars split calm 23 / middle 26 / vigorous 51 % (the per-sample rule, by pick: 8 / 60 / 32); the vigorous share
 there is the captures getting louder one after another, which a trailing window rightly calls loud. A loud
 stretch still keeps the vigorous dance; there is no rotation term.
+
+**The Charleston and ballet join (Matt, 2026-09-28: "add the Charleston and ballet").** From the CMU survey
+(`kagura_spike/README.md` context; films on the Extreme SSD, `uzume_spikes/kagura/charleston/` and `cmu2/`):
+- **Charleston** (`93_04`, `93_05`, whole trials, footfall pulse — the spike's default `beat_events` branch, now
+  in the bake). A fast-song dance: in its films one step per beat puts 86 % / 94 % of footfalls on the beat on
+  B.O.B. / Take Five, but at 98–117 BPM the level rule halves it and the 4 s clip runs out mid-bar. So the bake
+  excludes ×½ (as for the twist) and the pick admits it only at one step per beat within 0.8–1.25× natural
+  speed (≈ 137–214 BPM). Its vigor (1.25 m/s, the twist's 0.71) is capped at the top of the others' scale;
+  uncapped it stretched the scale, gave Dance Yrself Clean a 0.56× Charleston in place of the twist and kept it
+  off Take Five. On the beta playlist it joins B.O.B. (cabbage, twist, Charleston) and Take Five (macarena,
+  cabbage, Charleston); every other repertoire is unchanged. Pulse lock (forced, route captures at 118–135 BPM,
+  0.67× speed): 63–76 % on the beat against the spike's 47–56 %, decoy swaps.
+- **Ballet** (`49_09`, `49_12`, `49_22`, unwarped). Matt's pick: **the calm songs' rest** — wherever the dancer
+  would rest (no grid, unlocked, uneven beat, silence, stopped clock) on a song whose energy is in the calm
+  third, it does ballet, rotating the three clips with 1.5 s crossfades after each clip's forward-and-back
+  cycle; Pyramid Song (middle energy, whose sway Matt liked) and energetic or unknown songs keep the sway. On
+  the beta playlist: Moonlight I, Penny Lane, Warszawa. Its feet slide 1.2 cm/s (the sway 3.4). Grounding level
+  3 for the look: M7 judges whether its held poses read as dance or as a freeze.
+- Survey leftovers, not added: Indian dance (subject 94; mostly travels, and its in-place windows lock like the
+  gesture dances), jumping jacks (every CMU run is ≤ 3 jacks), side twists (exercise), moonwalk (travels).
