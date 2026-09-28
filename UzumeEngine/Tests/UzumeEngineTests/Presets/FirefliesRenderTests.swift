@@ -26,6 +26,7 @@ import Metal
 import Testing
 import UniformTypeIdentifiers
 @testable import Renderer
+@testable import Session
 @testable import Shared
 
 @Suite("Fireflies render (FF.1)")
@@ -188,6 +189,45 @@ struct FirefliesRenderTests {
             }
             return index
         }
+    }
+
+    /// FF.5 — the meadow fills at DYC's drop (Matt's "A"). The capture is 2:50–3:20 of the song
+    /// through the production chain (`fixturegen-DYC_drop`); the energy levels are the WHOLE song's,
+    /// as local-file preparation measures them (`PreviewAudio.fromLocalFile` → `analyzeMIR`'s
+    /// curve → `energyLevelsPerSecond`), read at 170 s + the capture's clock. Clarity 1. 1080p PNG
+    /// film + D-157 to `FIREFLIES_DROP_OUT`; `FIREFLIES_DROP_AUDIO` is the song file.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FIREFLIES_DROP_OUT"] != nil))
+    func dropFilm() throws {
+        let env = ProcessInfo.processInfo.environment
+        let out = URL(fileURLWithPath: env["FIREFLIES_DROP_OUT"] ?? "")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let song = try PreviewAudio.fromLocalFile(at: URL(fileURLWithPath: env["FIREFLIES_DROP_AUDIO"] ?? ""))
+        let curve = try #require(SessionPreparer.energyCurve(of: song))
+        let levels = TrackProfile(energyCurve: curve).energyLevelsPerSecond(trackDuration: song.duration)
+        print("[fireflies-drop] levels 160–220 s: " + levels[160..<220].map { String(Int($0)) }.joined(separator: " "))
+        let drive = try FirefliesDrive(directory: FirefliesSpikeParityProbe.root
+            .appendingPathComponent("sessions/fixturegen-DYC_drop"))
+        let stems = drive.features.map { f -> StemFeatures in
+            var s = StemFeatures.zero
+            s.beatClarity01 = 1
+            s.energyLevel = RenderPipeline.energyLevel(levels, at: 170 + f.trackElapsedS)
+            return s
+        }
+        MultiPassRenderHarness.firefliesGridBPM = drive.gridBPM
+        defer { MultiPassRenderHarness.firefliesGridBPM = nil }
+        var index = 0
+        let luma = try MultiPassRenderHarness(width: 1920, height: 1080).render(
+            preset: "Fireflies", features: drive.features, stems: stems
+        ) { bgra -> Float in
+            Self.writePNG(bgra, width: 1920, height: 1080,
+                          to: out.appendingPathComponent(String(format: "fireflies_seq_%05d.png", index)))
+            index += 1
+            return Self.meanLuma(bgra)
+        }
+        let report = LumaReport(luma, fps: 43)
+        print(String(format: "[fireflies-drop] 1920×1080  mean %.4f  per-s range %.4f  maxΔ %.4f",
+                     report.mean, report.maxPerSecondRange, report.maxStep))
+        #expect(report.maxStep < 0.05)
     }
 
     /// FF.2 Task 5 — the world at near-silence. Warszawa's tail ends in ~4.8 s of

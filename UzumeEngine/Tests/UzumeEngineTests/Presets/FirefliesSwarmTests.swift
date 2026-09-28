@@ -219,6 +219,32 @@ struct FirefliesSwarmTests {
         #expect((lock ?? .infinity) < 15, "the strips did not lock within ~15 s")
     }
 
+    /// FF.5 (Matt, 2026-09-28: "A" — thin with the music). love_rehab at clarity 1 under a steady
+    /// quiet (level 2), full (9) and unknown (0) section energy.
+    @Test("Quiet music thins the meadow to a few lights in every patch; the beat behaviour is unchanged")
+    func quietMusicThinsTheMeadow() throws {
+        let drive = try Self.fixture("love_rehab")
+        let quiet = FirefliesSwarm(), full = FirefliesSwarm(), unknown = FirefliesSwarm()
+        for (f, bpm) in zip(drive.features, drive.gridBPM) {
+            quiet.advance(features: f, clarity: 1, gridBPM: bpm, energyLevel: 2)
+            full.advance(features: f, clarity: 1, gridBPM: bpm, energyLevel: 9)
+            unknown.advance(features: f, clarity: 1, gridBPM: bpm, energyLevel: 0)
+        }
+        let shown = { (swarm: FirefliesSwarm) in swarm.vis.indices.filter { swarm.vis[$0] > 0.5 } }
+        #expect(shown(full).count == FirefliesSwarm.count && shown(unknown).count == FirefliesSwarm.count)
+        #expect((50...70).contains(shown(quiet).count), "level 2 shows ~10 %: \(shown(quiet).count)")
+        for strip in 0..<quiet.patchCount {
+            #expect(shown(quiet).filter { quiet.patch[$0] == strip }.count >= 5, "strip \(strip) went dark")
+        }
+        // Visibility only: the clocks — so the strips, their turns and their lock — are identical.
+        #expect(quiet.clock == unknown.clock && full.clock == unknown.clock)
+        #expect(FirefliesSwarm.shownShare(energyLevel: 5) == 0.55)
+        // The renderer's per-frame sample of the installed levels (`RenderPipeline.energyLevel`).
+        #expect(RenderPipeline.energyLevel([], at: 3) == 0)
+        #expect(RenderPipeline.energyLevel([6], at: 200) == 6)
+        #expect(RenderPipeline.energyLevel([2, 3, 9], at: 1.5) == 3 && RenderPipeline.energyLevel([2, 3, 9], at: 99) == 9)
+    }
+
     @Test("Near-silence fades all but ~5 % stragglers within a few seconds")
     func nearSilenceLeavesStragglers() {
         let swarm = FirefliesSwarm()
