@@ -16,16 +16,18 @@
 //   • near-silence: all but 5 % stragglers fade to 2 % visibility, τ 1.5 s. The world
 //     behind stays lit (D-037); that is the preset fragment's job, not this file's.
 //
-// FF.5 — PATCHES TAKE TURNS on a clear beat (FIREFLIES_DESIGN §1a, Matt at FF.4's M7: "It's
-// everyone at once — go with option A"). While K > 0 the meadow is P upright strips (2–4, left
-// → right on `posU`, edges waving with height; a firefly belongs to the strip it is drifting
-// through), every firefly's cycle is P beats, and grid tick n nudges strip n mod P only — so
-// each beat lights one strip and the flash walks across the meadow. The BOUNDARY RULE: the neighbour relay stays inside a
-// strip. That makes the strips P disjoint copies of the gated model above, each on its own
-// tick; the whole-meadow attractor (§8) exists only through relay across an edge, so it is
-// removed rather than resisted. A firefly drifting over an edge joins its new strip out of
-// phase and is pulled in the way every firefly is at cold start. At K = 0 nothing here runs:
-// one meadow, relay everywhere, the 1/2/4-beat cycle — FF.1 exactly.
+// FF.5 — PATCHES TAKE TURNS on a clear beat (FIREFLIES_DESIGN §1a, §5; Matt: "It's everyone at
+// once — go with option A"). While K > 0 the meadow is P upright strips (2–4, left → right on
+// `posU`, edges waving with height), each firefly's cycle is P beats, and tick n nudges strip
+// n mod P only, so the flash walks across the meadow. BOUNDARY RULE: relay stays inside a strip,
+// making the strips P disjoint copies of the gated model; the whole-meadow attractor (§8) needs
+// relay across an edge. At K = 0 nothing here runs — FF.1 exactly.
+//
+// FF.5 — THE MEADOW THINS WITH THE MUSIC (Matt, 2026-09-28: "A"). The share shown follows the
+// song's measured section energy (`stems.energyLevel`, D-259): 10 % at level ≤ 2, all at ≥ 8,
+// unknown (0) all. Who hides is a fixed golden-ratio rank (no random draw), so a sparse meadow is
+// a few lights in every patch; hidden fireflies keep their clocks and relay (visibility only, like
+// the stragglers), so the beat behaviour is untouched. Not the world's 4 s breath (FA #67).
 //
 // K is the track's beat clarity (`stems.beatClarity01`, BC.1 / D-257) mapped so that
 // UNKNOWN behaves as FREE — Matt, 2026-09-24: "unknown stays free".
@@ -59,6 +61,10 @@ public final class FirefliesSwarm: @unchecked Sendable {
     static let silentVisibility: Float = 0.02
     static let silenceTau: Float = 1.5
     static let maxSubstep: Float = 1.0 / 120.0
+    /// FF.5: each firefly's place in the thinning order, 0…1 (golden-ratio sequence).
+    static let rank: [Float] = (0..<count).map {
+        Float((Double($0) * 0.618_033_988_75).truncatingRemainder(dividingBy: 1))
+    }
     /// Natural period while no grid is installed.
     static let defaultPeriod: Float = 1.0
 
@@ -136,8 +142,9 @@ public final class FirefliesSwarm: @unchecked Sendable {
     // MARK: - Advance
 
     /// Advance one render frame. `clarity` is `stems.beatClarity01` (1 steady, 0 irregular,
-    /// 0.5 unknown); `gridBPM` is the installed grid's tempo, 0 when none.
-    public func advance(features frame: FeatureVector, clarity: Float, gridBPM: Float) {
+    /// 0.5 unknown); `gridBPM` is the installed grid's tempo, 0 when none; `energyLevel` is
+    /// `stems.energyLevel` (1–10, 0 unknown).
+    public func advance(features frame: FeatureVector, clarity: Float, gridBPM: Float, energyLevel: Float = 0) {
         let dt = min(max(frame.deltaTime, 0), 0.1)
         guard dt > 0 else { return }
         if frame.trackElapsedS < prevTrackElapsed - 1 { restart() }
@@ -148,11 +155,14 @@ public final class FirefliesSwarm: @unchecked Sendable {
 
         let tickAt = beatTick(phase: frame.beatPhase01, dt: dt)
 
-        // Near-silence: fade to stragglers (spike: before simulate_frame).
+        // Near-silence: fade to stragglers (spike: before simulate_frame). FF.5: and thin with
+        // the section energy, on the same fade.
         let silent = frame.nearSilent01 > 0.5
+        let shown = Self.shownShare(energyLevel: energyLevel)
         let keep = 1 - exp(-dt / Self.silenceTau)
         for i in 0..<Self.count {
-            let target: Float = silent && !straggler[i] ? Self.silentVisibility : 1
+            let hidden = (silent && !straggler[i]) || Self.rank[i] >= shown
+            let target: Float = hidden ? Self.silentVisibility : 1
             vis[i] += (target - vis[i]) * keep
         }
 
@@ -164,6 +174,11 @@ public final class FirefliesSwarm: @unchecked Sendable {
         }
         now += Double(dt)
         drift(dt)
+    }
+
+    /// FF.5: the share of the swarm shown at a section energy level (1–10; 0 unknown → all).
+    static func shownShare(energyLevel: Float) -> Float {
+        energyLevel <= 0 ? 1 : 0.1 + 0.9 * min(max((energyLevel - 2) / 6, 0), 1)
     }
 
     /// Detects a `beatPhase01` wrap (a grid tick) inside this frame and returns its offset into

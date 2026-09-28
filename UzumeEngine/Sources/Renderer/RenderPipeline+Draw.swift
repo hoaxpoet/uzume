@@ -101,7 +101,12 @@ extension RenderPipeline {
         // Snapshot all subsystem state atomically before branching.
         let particles      = particleLock.withLock { particleGeometry }
         let activePipeline = pipelineLock.withLock { pipelineState }
-        let stemFeatures   = stemFeaturesLock.withLock { latestStemFeatures }
+        // FF.5 — the track's energy level at the playhead, patched into this frame's snapshot.
+        let stemFeatures   = stemFeaturesLock.withLock { () -> StemFeatures in
+            var stems = latestStemFeatures
+            stems.energyLevel = Self.energyLevel(trackEnergyLevels, at: features.trackElapsedS)
+            return stems
+        }
         let meshGen        = meshLock.withLock { meshGenerator }
         let ppChain        = postProcessLock.withLock { postProcessChain }
         let rmPipeline     = rayMarchLock.withLock { rayMarchPipeline }

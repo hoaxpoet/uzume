@@ -321,8 +321,12 @@ extension PresetLoader {
             // (the D-154 flag). Preserved across live stem pushes.
             float beat_clarity01;
 
-            // Padding to 256 bytes (floats 57–64).
-            float _pad15, _pad16;
+            // Float 57 — FF.5 section energy: the track's measured 1–10 level over the 10 s
+            // centred on the playhead (D-259); 0 = unknown. Sampled per frame.
+            float energy_level;
+
+            // Padding to 256 bytes (floats 58–64).
+            float _pad16;
             float _pad17, _pad18, _pad19, _pad20, _pad21, _pad22;
         };
 

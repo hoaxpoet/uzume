@@ -171,6 +171,26 @@ extension TrackProfile {
         wholeTrackCurve(trackDuration: trackDuration)?.energyChanges().filter { $0 < trackDuration } ?? []
     }
 
+    /// FF.5 — each second's energy level (1–10): the median over the 10 s centred on it, 1 where
+    /// all of that is digital silence. A preview curve (streaming) gives ONE value, the song's
+    /// typical level, standing for the whole track. Empty with no curve. What the renderer
+    /// installs per track (`RenderPipeline.setTrackEnergyLevels`) and reads at the playhead.
+    public func energyLevelsPerSecond(trackDuration: TimeInterval) -> [Float] {
+        guard let curve = energyCurve else { return [] }
+        guard let whole = wholeTrackCurve(trackDuration: trackDuration) else {
+            return curve.readout().map { [Float($0.typical)] } ?? []
+        }
+        let timed = whole.timedSectionLevels()
+        let hop = Double(whole.hopSeconds)
+        let seconds = Int((Double(timed.count) * hop).rounded(.up))
+        return (0..<seconds).map { second in
+            let first = max(0, Int((Double(second) - 5) / hop))
+            let last = min(timed.count, Int(((Double(second) + 5) / hop).rounded(.up)))
+            let levels = first < last ? timed[first..<last].compactMap { $0 }.sorted() : []
+            return levels.isEmpty ? 1 : Float(levels[(levels.count - 1) / 2])
+        }
+    }
+
     /// The curve when it covers the whole track (not a 30 s preview), else nil.
     public func wholeTrackCurve(trackDuration: TimeInterval) -> EnergyCurve? {
         guard let curve = energyCurve, trackDuration > 0 else { return nil }

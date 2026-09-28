@@ -221,9 +221,17 @@ public struct StemFeatures: Sendable, Equatable {
     /// (`RenderPipeline.setBeatClarity`), preserved across live stem pushes; not Codable.
     public var beatClarity01: Float
 
-    // --- Floats 57–64: padding to 256 bytes (8 floats) ---
+    // --- Float 57: FF.5 section energy (D-259) ---
+    /// The track's measured energy level (1–10, `EnergyScale.library`) over the 10 s centred on
+    /// the playhead, from its prepared `EnergyCurve`; the song's typical level when only a preview
+    /// was measured (streaming); 0 = unknown. Installed per track
+    /// (`RenderPipeline.setTrackEnergyLevels`) and sampled at `trackElapsedS` every frame;
+    /// renderer-transient, not Codable.
+    public var energyLevel: Float
+
+    // --- Floats 58–64: padding to 256 bytes (7 floats) ---
     // swiftlint:disable identifier_name
-    var _sfPad15: Float; var _sfPad16: Float
+    var _sfPad16: Float
     var _sfPad17: Float; var _sfPad18: Float; var _sfPad19: Float; var _sfPad20: Float
     var _sfPad21: Float; var _sfPad22: Float
     // swiftlint:enable identifier_name
@@ -268,7 +276,7 @@ public struct StemFeatures: Sendable, Equatable {
         self.brassActivity = 0; self.brassActivityDev = 0
         self.woodwindsActivity = 0; self.woodwindsActivityDev = 0
         self.percussionActivity = 0; self.percussionActivityDev = 0
-        self.beatClarity01 = 0; self._sfPad15 = 0; self._sfPad16 = 0
+        self.beatClarity01 = 0; self.energyLevel = 0; self._sfPad16 = 0
         self._sfPad17 = 0; self._sfPad18 = 0; self._sfPad19 = 0; self._sfPad20 = 0
         self._sfPad21 = 0; self._sfPad22 = 0
     }

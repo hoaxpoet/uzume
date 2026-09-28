@@ -625,6 +625,11 @@ extension VisualizerEngine {
         // BC.1 — the same flag, to the GPU (`StemFeatures.beatClarity01`). Written on EVERY
         // call, identity or not, so no track inherits the previous one's value.
         pipeline.setBeatClarity(beatIrregular: currentTrackBeatIrregular)
+        // FF.5 — the track's measured energy per second (`StemFeatures.energyLevel`), the same
+        // every-call contract: no curve → [] (unknown), never the previous track's.
+        let profile = identity.flatMap { stemCache?.trackProfile(for: $0) }
+        pipeline.setTrackEnergyLevels(
+            profile?.energyLevelsPerSecond(trackDuration: identity?.duration ?? 0) ?? [])
 
         // Clear the per-frame analyzer's source waveforms so stems don't
         // leak across tracks. Next separation will repopulate them.
