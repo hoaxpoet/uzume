@@ -1653,6 +1653,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG154.1 — the network-recovery tests await the debounce ✅ (2026-09-28)
+
+**Delivered.** BUG-154 (P3) was filed from one `closeout_evidence.sh` failure on `scan` and fixed in one increment as P3 allows. Every wait in `NetworkRecoveryCoordinatorTests` now awaits the coordinator's `debounceTask` (made `private(set)`) instead of sleeping `recoveryDebounceSecs + 1 s`. Test-only change; no product behaviour changed.
+**Done-when:** ✅ mechanism reproduced by a 1.5 s latency probe (4/7 fail before, 7/7 pass after); ✅ three consecutive full app-suite runs + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
+
 ### Increment FLASHOFF.1 — the multi-pass flash suite off the main actor ✅ (2026-09-28, stacked on `ff-4`)
 
 **Why.** `MultiPassFlashHarnessTests` was `@MainActor` and held the main actor ~270 s of a full engine run (268.9 s measured), within ~15 s of the point where SessionManager / ProgressiveReadiness / lifecycle tests miss their readiness hang caps (FF.4: one more 27 s render failed 9 of them, 2 of 2 runs). Any new flash test was a step toward that cliff.

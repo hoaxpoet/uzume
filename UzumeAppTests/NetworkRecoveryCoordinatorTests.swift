@@ -6,6 +6,8 @@
 //  3. false→true→false→true within debounce window → only one attempt (idempotent).
 //  4. After maxRecoveryAttempts reached → additional online events do not count further.
 //  5. resetForNewSession() resets counter and cancels pending debounce.
+//
+// Every wait awaits the coordinator's own `debounceTask`, never the wall clock (BUG-154).
 
 import Combine
 import Foundation
@@ -75,9 +77,8 @@ struct NetworkRecoveryCoordinatorTests {
         fix.reachability.setOnline(false)
         fix.reachability.setOnline(true)
 
-        // Allow debounce to settle — we yield to give the coordinator's Task a chance to run
-        // through the guard (which should reject the attempt).
-        try? await Task.sleep(for: .milliseconds(50))
+        // Let the debounce run through the guard (which should reject the attempt).
+        await fix.coordinator.debounceTask?.value
 
         #expect(fix.coordinator.recoveryAttemptCount == 0)
     }
@@ -90,9 +91,7 @@ struct NetworkRecoveryCoordinatorTests {
         fix.reachability.setOnline(false)
         fix.reachability.setOnline(true)
 
-        // Wait past the debounce window so the Task runs.
-        let debouncePlus = NetworkRecoveryCoordinator.recoveryDebounceSecs + 1.0
-        try? await Task.sleep(for: .seconds(debouncePlus))
+        await fix.coordinator.debounceTask?.value
 
         #expect(fix.coordinator.recoveryAttemptCount == 1)
     }
@@ -109,9 +108,8 @@ struct NetworkRecoveryCoordinatorTests {
         fix.reachability.setOnline(false)
         fix.reachability.setOnline(true)
 
-        // Wait past ONE full debounce window.
-        let debouncePlus = NetworkRecoveryCoordinator.recoveryDebounceSecs + 1.0
-        try? await Task.sleep(for: .seconds(debouncePlus))
+        // Await the surviving (second) debounce.
+        await fix.coordinator.debounceTask?.value
 
         // Second online event cancelled the first Task — only one attempt should have fired.
         #expect(fix.coordinator.recoveryAttemptCount == 1)
@@ -120,13 +118,12 @@ struct NetworkRecoveryCoordinatorTests {
     @Test("recovery cap: attempts stop after maxRecoveryAttempts")
     func test_recoveryCap_stopsAt3() async {
         let fix = makeFixture(initialState: .preparing)
-        let debounce = NetworkRecoveryCoordinator.recoveryDebounceSecs + 1.0
 
-        // Drive 4 online recovery cycles, each waiting for the full debounce.
+        // Drive 4 online recovery cycles, each awaiting its debounce.
         for _ in 0..<4 {
             fix.reachability.setOnline(false)
             fix.reachability.setOnline(true)
-            try? await Task.sleep(for: .seconds(debounce))
+            await fix.coordinator.debounceTask?.value
         }
 
         // Should be capped at maxRecoveryAttempts, not 4.
@@ -136,13 +133,12 @@ struct NetworkRecoveryCoordinatorTests {
     @Test("resetForNewSession resets counter and state guard works after reset")
     func test_resetForNewSession_resetsCount() async {
         let fix = makeFixture(initialState: .preparing)
-        let debounce = NetworkRecoveryCoordinator.recoveryDebounceSecs + 1.0
 
         // Exhaust the cap.
         for _ in 0..<NetworkRecoveryCoordinator.maxRecoveryAttempts {
             fix.reachability.setOnline(false)
             fix.reachability.setOnline(true)
-            try? await Task.sleep(for: .seconds(debounce))
+            await fix.coordinator.debounceTask?.value
         }
         #expect(fix.coordinator.recoveryAttemptCount == NetworkRecoveryCoordinator.maxRecoveryAttempts)
 
@@ -153,7 +149,7 @@ struct NetworkRecoveryCoordinatorTests {
         // After reset, a new online event should count again.
         fix.reachability.setOnline(false)
         fix.reachability.setOnline(true)
-        try? await Task.sleep(for: .seconds(debounce))
+        await fix.coordinator.debounceTask?.value
 
         #expect(fix.coordinator.recoveryAttemptCount == 1)
     }
@@ -165,13 +161,14 @@ struct NetworkRecoveryCoordinatorTests {
         // Kick off a debounce (but don't wait for it to complete).
         fix.reachability.setOnline(false)
         fix.reachability.setOnline(true)
+        let pending = fix.coordinator.debounceTask
 
         // Cancel immediately before the 2s debounce elapses.
         fix.coordinator.resetForNewSession()
+        #expect(fix.coordinator.debounceTask == nil)
 
-        // Wait past the original debounce window.
-        let debouncePlus = NetworkRecoveryCoordinator.recoveryDebounceSecs + 1.0
-        try? await Task.sleep(for: .seconds(debouncePlus))
+        // Await the cancelled task to its end.
+        await pending?.value
 
         // The cancelled task should not have incremented the count.
         #expect(fix.coordinator.recoveryAttemptCount == 0)
