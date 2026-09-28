@@ -10,9 +10,11 @@
 //     ground between the strokes stays dark. No light list, no per-pixel loop over lights: the
 //     cost is the pools' own area.
 //   • the FIREFLY itself (`fireflies_sprite_*`) — a flat near-white printed dot (the core), and a
-//     yellow-green halo with a four-point starburst PRINTED as coverage: the radial profile plus
-//     the spokes are thresholded against the paper grain, the same line-screen rule as the world
-//     (`ff_print`), so the glow is stipple in the glow ink rather than an airbrushed Gaussian.
+//     yellow-green halo with a four-point starburst as a SMOOTH light: the radial profile plus
+//     the spokes, continuous. FF.3 printed them as coverage against the paper grain, one-pixel
+//     stipple that read as digital pixels (Matt, FF.4 M7: "fireflies look pixelated" → "A", a
+//     smooth glow; FIREFLIES_DESIGN §1a). The grain's expected coverage equals the profile, so
+//     the smooth glow carries the same light on average. The world keeps its print texture.
 //     Near fireflies are out of focus: the dot becomes a soft disc of the thin-lens circle of
 //     confusion, its intensity divided by its area (sprite bokeh — MJP, "How To Fake Bokeh";
 //     Samaritan, GDC 2011), and the starburst fades with the focus.
@@ -72,12 +74,6 @@ static inline FFSpriteOut ff_quad(FFSprite s, float extent, uint vid, float aspe
     return out;
 }
 
-/// Interleaved gradient noise (Jimenez 2014) — the world's paper grain (`ff_grain` in
-/// `Presets/Shaders/Fireflies.metal`); keep the two in step.
-static inline float ff_light_grain(float2 px) {
-    return fract(52.9829189 * fract(dot(px, float2(0.06711056, 0.00583715))));
-}
-
 // MARK: - The firefly
 
 vertex FFSpriteOut fireflies_sprite_vertex(
@@ -109,14 +105,13 @@ fragment float4 fireflies_sprite_fragment(FFSpriteOut in [[stage_in]])
     float energy = max(focus * focus, 0.22);
     float3 light = mix(halo_ink * 1.6, core_ink, focus) * (in.coreAmp * energy * disc);
 
-    // The halo and starburst, printed: coverage of the glow ink where the profile clears the grain.
+    // The halo and starburst: a smooth light in the glow ink (FF.5 — no grain threshold).
     if (in.haloAmp > 0.0) {
         float s = r / in.haloR;
         float ang = atan2(in.local.y, in.local.x) + in.spin;
         float spokes = pow(abs(cos(2.0 * ang)), 18.0) + 0.5 * pow(abs(cos(2.0 * ang + 0.785398)), 40.0);
-        float want = in.haloAmp * (exp(-s * s) + 0.85 * spokes * exp(-1.1 * s)) * focus;
-        float cov = saturate((want - ff_light_grain(in.position.xy)) / 0.05 + 0.5);
-        light += halo_ink * cov * (1.0 - disc);
+        float glow = in.haloAmp * (exp(-s * s) + 0.85 * spokes * exp(-1.1 * s)) * focus;
+        light += halo_ink * saturate(glow) * (1.0 - disc);
     }
     return float4(light, 0.0);
 }
