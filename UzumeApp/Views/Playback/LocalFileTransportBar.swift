@@ -27,8 +27,36 @@ struct LocalFileTransportBar: View {
     let onPrev: () -> Void
     let onPlayPause: () -> Void
     let onNext: () -> Void
+    /// LFSEEK.1: the current track's position and length, and the jump the track bar asks for.
+    var progress: () -> (position: TimeInterval, duration: TimeInterval)? = { nil }
+    var onSeek: (TimeInterval) -> Void = { _ in }
 
     var body: some View {
+        VStack(spacing: 10) {
+            TrackSeekBar(progress: progress, onSeek: onSeek)
+            buttons
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: UzumeAppRadius.lg, style: .continuous)
+                .fill(UzumeAppColor.surfaceRaised)
+                .shadow(
+                    color: UzumeAppShadow.raisedColor,
+                    radius: UzumeAppShadow.raisedRadius,
+                    x: 0,
+                    y: UzumeAppShadow.raisedY
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: UzumeAppRadius.lg, style: .continuous)
+                .stroke(UzumeAppColor.line, lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(Self.accessibilityID)
+    }
+
+    private var buttons: some View {
         HStack(spacing: 14) {
             MutedTransportButton(
                 glyph: AnyShape(StopGlyph()),
@@ -59,24 +87,84 @@ struct LocalFileTransportBar: View {
                 action: onNext
             )
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: UzumeAppRadius.lg, style: .continuous)
-                .fill(UzumeAppColor.surfaceRaised)
-                .shadow(
-                    color: UzumeAppShadow.raisedColor,
-                    radius: UzumeAppShadow.raisedRadius,
-                    x: 0,
-                    y: UzumeAppShadow.raisedY
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: UzumeAppRadius.lg, style: .continuous)
-                .stroke(UzumeAppColor.line, lineWidth: 1)
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(Self.accessibilityID)
+    }
+}
+
+// MARK: - TrackSeekBar (LFSEEK.1)
+
+/// The current track's position, elapsed and total time either side. Click or drag to jump; the
+/// jump lands on release, so a drag across the track restarts the audio once, not per step. It
+/// polls `progress` four times a second while shown rather than publishing a clock at render rate.
+struct TrackSeekBar: View {
+
+    static let accessibilityID = "uzume.playback.lfTransport.seek"
+
+    let progress: () -> (position: TimeInterval, duration: TimeInterval)?
+    let onSeek: (TimeInterval) -> Void
+
+    /// Where the pointer is while dragging (0…1); nil otherwise.
+    @State private var dragFraction: Double?
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+            let now = progress()
+            let duration = now?.duration ?? 0
+            let fraction = dragFraction ?? (duration > 0 ? (now?.position ?? 0) / duration : 0)
+            HStack(spacing: 10) {
+                Text(verbatim: Self.clock(fraction * duration))
+                    .frame(width: 38, alignment: .trailing)
+                track(fraction: fraction, duration: duration)
+                Text(verbatim: Self.clock(duration))
+                    .frame(width: 38, alignment: .leading)
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundColor(UzumeAppColor.textTertiary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(localized: "playback.transport.seek.a11y"))
+            .accessibilityHint(String(localized: "playback.transport.seek.tooltip"))
+            .accessibilityValue(String(
+                format: String(localized: "playback.transport.seek.value"),
+                Self.clock(fraction * duration),
+                Self.clock(duration)
+            ))
+            .accessibilityAdjustableAction { direction in
+                guard duration > 0 else { return }
+                let step: TimeInterval = direction == .increment ? 10 : -10
+                onSeek(min(max(0, fraction * duration + step), duration))
+            }
+            .accessibilityIdentifier(Self.accessibilityID)
+        }
+        .frame(width: 300)
+    }
+
+    private func track(fraction: Double, duration: TimeInterval) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(UzumeAppColor.line)
+                Capsule().fill(UzumeAppColor.accent)
+                    .frame(width: geo.size.width * min(max(fraction, 0), 1))
+            }
+            .frame(height: 4)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { dragFraction = min(max($0.location.x / geo.size.width, 0), 1) }
+                    .onEnded { value in
+                        let landed = min(max(value.location.x / geo.size.width, 0), 1)
+                        dragFraction = nil
+                        if duration > 0 { onSeek(landed * duration) }
+                    }
+            )
+        }
+        .frame(height: 16)
+        .help(String(localized: "playback.transport.seek.tooltip"))
+    }
+
+    /// m:ss.
+    static func clock(_ seconds: TimeInterval) -> String {
+        let whole = max(0, Int(seconds))
+        return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 }
 

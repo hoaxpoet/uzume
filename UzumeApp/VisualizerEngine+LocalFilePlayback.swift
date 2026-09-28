@@ -488,6 +488,43 @@ extension VisualizerEngine: LocalFilePreparing {
         advanceLocalFileQueue(direction: .backward)
     }
 
+    // MARK: - LFSEEK.1 track bar
+
+    /// Seconds into the current local-file track and its length, for the transport's track bar;
+    /// nil outside a local-file session or before the track's length is known. The position is the
+    /// track clock everything else reads (`mir.elapsedSeconds`), so the bar shows what the scenes see.
+    @MainActor
+    var localFileTrackProgress: (position: TimeInterval, duration: TimeInterval)? {
+        guard sessionManager.currentSource?.isLocalFile == true,
+              let duration = lastResolvedTrackIdentity?.duration, duration > 0 else { return nil }
+        // A single-file queue loops, and the clock runs on across the loop.
+        return (mirPipeline.elapsedSeconds.truncatingRemainder(dividingBy: duration), duration)
+    }
+
+    /// Jump within the current local-file track. The player restarts at `seconds`, and the track
+    /// clock the plan, beat grid and stem series read is moved with it — without that the scenes
+    /// would carry on from where the listener jumped away. The new position's planned scene applies
+    /// at once (its first-apply path), rather than waiting out the min-dwell from the old position.
+    @MainActor
+    func seekLocalFile(to seconds: TimeInterval) {
+        guard sessionManager.currentSource?.isLocalFile == true,
+              #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter else { return }
+        do {
+            try audioRouter.seekLocalFilePlayback(to: seconds)
+        } catch {
+            // The restart failed, so nothing is playing: the same surface as a failed start.
+            let name = lastResolvedTrackIdentity?.title ?? ""
+            lfLogger.error("[LFSEEK.1] seek failed: \(error.localizedDescription, privacy: .public)")
+            sessionRecorder?.log("WIRING: seekLocalFile FAILED to=\(seconds) error='\(error.localizedDescription)'")
+            userFacingErrorSubject.send(.localFilePlaybackFailed(fileName: name))
+            sessionManager.endSession()
+            return
+        }
+        mirPipeline.seek(to: seconds)
+        orchestratorLock.withLock { lastAppliedPlannedPresetID = nil }
+        sessionRecorder?.log("WIRING: seekLocalFile to=\(String(format: "%.1f", seconds))s")
+    }
+
     /// Stop LF playback and end the session. Drives the transport bar's Stop
     /// button. Equivalent to clicking "End session" on the existing chrome —
     /// triggers the D-LF5-2 .ended observer to tear down the audio router.

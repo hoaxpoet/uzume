@@ -14,8 +14,9 @@ import Session
 /// Each field is in [0, 1] except where noted. A total of 0 always accompanies
 /// `excluded = true`; inspect `exclusionReason` to understand why.
 public struct PresetScoreBreakdown: Sendable, Hashable {
-    /// Mood compatibility: tracks target color temperature and density against preset range. 0–1.
-    public let mood: Float
+    /// Energy fit (NRG.3, D-259): the stretch's measured 1–10 energy level sets a target visual
+    /// density, scored against the preset's `visual_density`. 0–1.
+    public let energy: Float
     /// Tempo / motion match: BPM-derived target motion vs preset motion_intensity. 0–1.
     public let tempoMotion: Float
     /// Stem affinity match: how well the dominant stems in the track align with the preset's responsive stems. 0–1.
@@ -45,7 +46,8 @@ public struct PresetScoreBreakdown: Sendable, Hashable {
 /// Preset scoring on the weighted sub-score model.
 ///
 /// ## Weight rationale (D-032)
-/// - **mood (0.30)**: highest weight — the primary axis of Orchestrator fit.
+/// - **energy (0.30)**: highest weight — the primary axis of Orchestrator fit. It was mood until
+///   D-259 (BUG-148: the mood model is at chance on held-out songs); measured energy replaced it.
 /// - **stemAffinity (0.25)**: second highest — stems are the most reliable audio signal.
 /// - **sectionSuitability (0.25)**: equal to stems — structural fit matters as much.
 /// - **tempoMotion (0.20)**: slightly lower — motion maps to BPM but BPM is often missing.
@@ -57,7 +59,7 @@ public struct DefaultPresetScorer: Sendable {
 
     // MARK: Weight constants
 
-    internal static let weightMood: Float              = 0.30
+    internal static let weightEnergy: Float            = 0.30
     internal static let weightTempoMotion: Float       = 0.20
     internal static let weightStemAffinity: Float      = 0.25
     internal static let weightSectionSuitability: Float = 0.25
@@ -121,7 +123,7 @@ public struct DefaultPresetScorer: Sendable {
         // -- Hard exclusions -------------------------------------------------
         if let (reason, tag) = exclusionReasonAndTag(preset: preset, track: track, context: context) {
             return PresetScoreBreakdown(
-                mood: 0,
+                energy: 0,
                 tempoMotion: 0,
                 stemAffinity: 0,
                 sectionSuitability: 0,
@@ -136,7 +138,8 @@ public struct DefaultPresetScorer: Sendable {
         }
 
         // -- Sub-scores -------------------------------------------------------
-        let moodScore       = moodSubScore(preset: preset, track: track)
+        let energyLevel     = context.energyLevel ?? track.energyCurve?.readout()?.typical
+        let energyScore     = energySubScore(preset: preset, level: energyLevel)
         let tempoScore      = tempoMotionSubScore(preset: preset, track: track)
         let affinityScore   = stemAffinitySubScore(preset: preset, track: track)
         let sectionScore    = sectionSuitabilitySubScore(preset: preset, context: context)
@@ -153,12 +156,12 @@ public struct DefaultPresetScorer: Sendable {
         // verbatim for the day sections return.
         let raw: Float
         if context.currentSection == nil {
-            let live = Self.weightMood + Self.weightTempoMotion + Self.weightStemAffinity
-            raw = (Self.weightMood * moodScore
+            let live = Self.weightEnergy + Self.weightTempoMotion + Self.weightStemAffinity
+            raw = (Self.weightEnergy * energyScore
                 + Self.weightTempoMotion * tempoScore
                 + Self.weightStemAffinity * affinityScore) / live
         } else {
-            raw = Self.weightMood * moodScore
+            raw = Self.weightEnergy * energyScore
                 + Self.weightTempoMotion * tempoScore
                 + Self.weightStemAffinity * affinityScore
                 + Self.weightSectionSuitability * sectionScore
@@ -171,7 +174,7 @@ public struct DefaultPresetScorer: Sendable {
         let total = min(1, max(0, raw * familyMult * fatigueMult + boost))
 
         return PresetScoreBreakdown(
-            mood: moodScore,
+            energy: energyScore,
             tempoMotion: tempoScore,
             stemAffinity: affinityScore,
             sectionSuitability: sectionScore,
@@ -256,21 +259,19 @@ public struct DefaultPresetScorer: Sendable {
 
     // MARK: - Sub-Scores
 
-    /// Mood compatibility: maps track valence/arousal to target preset temperature and density.
-    private func moodSubScore(preset: PresetDescriptor, track: TrackProfile) -> Float {
-        let valence = track.mood.valence  // -1..+1
-        let arousal = track.mood.arousal  // -1..+1
+    /// Energy fit (NRG.3, D-259): the stretch's 1–10 level sets the target visual density —
+    /// sparse scenes for quiet passages, dense ones for driving ones. Valence left scene choice
+    /// with the mood model; there is no colour-temperature term.
+    private func energySubScore(preset: PresetDescriptor, level: Int?) -> Float {
+        1 - abs(preset.visualDensity - Self.energy01(level))
+    }
 
-        // Map valence → warm colour target: warm when happy, cool when sad.
-        let targetTemp    = max(0, min(1, 0.5 + 0.4 * valence))
-        // Map arousal → visual density target: busier when energised.
-        let targetDensity = max(0, min(1, 0.5 + 0.4 * arousal))
-
-        let presetTempCenter = (preset.colorTemperatureRange.x + preset.colorTemperatureRange.y) / 2
-        let tempScore    = 1 - abs(presetTempCenter - targetTemp)
-        let densityScore = 1 - abs(preset.visualDensity - targetDensity)
-
-        return (tempScore + densityScore) / 2
+    /// A 1–10 energy level on the 0.1…0.9 axis the scorer and the transition policy share (the
+    /// span the mood mapping had, so the 0.85 cut threshold keeps its meaning: only level 10
+    /// cuts). nil — no measured energy — is the neutral 0.5.
+    public static func energy01(_ level: Int?) -> Float {
+        guard let level else { return 0.5 }
+        return 0.1 + 0.8 * Float(min(10, max(1, level)) - 1) / 9
     }
 
     /// Tempo / motion match: piecewise linear BPM → target motion intensity.

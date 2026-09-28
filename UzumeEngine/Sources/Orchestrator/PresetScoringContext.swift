@@ -117,6 +117,11 @@ public struct PresetScoringContext: Sendable {
     /// in-progress presets for testing. Defaults to false for backward-compat (D-053).
     public let includeUncertifiedPresets: Bool
 
+    /// The measured 1–10 energy level of the stretch being chosen for (NRG.3, D-259) — the planner
+    /// sets it per segment from `TrackProfile.energyLevel(at:window:trackDuration:)`. nil falls back
+    /// to the song's typical level, then to the neutral middle when nothing was measured.
+    public let energyLevel: Int?
+
     // MARK: - Init
 
     public init(
@@ -131,7 +136,8 @@ public struct PresetScoringContext: Sendable {
         familyBoosts: [PresetCategory: Float] = [:],
         temporarilyExcludedFamilies: Set<PresetCategory> = [],
         sessionExcludedPresets: Set<String> = [],
-        includeUncertifiedPresets: Bool = false
+        includeUncertifiedPresets: Bool = false,
+        energyLevel: Int? = nil
     ) {
         self.deviceTier = deviceTier
         self.frameBudgetMs = frameBudgetMs ?? deviceTier.frameBudgetMs
@@ -145,6 +151,7 @@ public struct PresetScoringContext: Sendable {
         self.temporarilyExcludedFamilies = temporarilyExcludedFamilies
         self.sessionExcludedPresets = sessionExcludedPresets
         self.includeUncertifiedPresets = includeUncertifiedPresets
+        self.energyLevel = energyLevel
     }
 
     // MARK: - Factory

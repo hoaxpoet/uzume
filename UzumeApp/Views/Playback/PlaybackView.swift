@@ -142,7 +142,9 @@ struct PlaybackView: View {
                 onLocalFileStop: { engine.stopLocalFilePlayback() },
                 onLocalFilePrev: { engine.skipToPreviousLocalFileTrack() },
                 onLocalFilePlayPause: { engine.togglePauseLocalFile() },
-                onLocalFileNext: { engine.skipToNextLocalFileTrack() }
+                onLocalFileNext: { engine.skipToNextLocalFileTrack() },
+                localFileProgress: { engine.localFileTrackProgress },
+                onLocalFileSeek: { engine.seekLocalFile(to: $0) }
             )
 
             // Layer 3.5: Audio-stall overlay card (silent-tap family,

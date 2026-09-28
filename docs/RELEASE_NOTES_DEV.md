@@ -10,6 +10,25 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-135038] LFSEEK.1 — jump within a local-file track
+
+Local-file sessions had no way to move within a song. The transport bar now has a track bar above its buttons, showing the current track's elapsed and total time. Click or drag to jump; the audio restarts once, where you let go. The scenes, the beat and the stems jump with it, and the new position's planned scene comes up right away. If you were paused, you stay paused. Streaming sessions don't show it, because the streaming app owns its player. Also fixed (BUG-151): in a multi-song local session the next song started about a second early, cutting each song's last second. It now starts when the last audio has played. Still to do: Matt's live check.
+
+### [dev-2026-09-27-220250] NRG.4 — scenes change when the music does
+
+Scene changes used to land on fixed intervals, so in Dance Yrself Clean the drop at 3:08 got its dense scene at 3:21. Preparation now finds where each song's energy steps up or down and holds (a drop, a breakdown, a re-entry), and the planner changes scene there. Dance Yrself Clean now changes at 3:08, 5:57 and 6:35, within a second of the music. A dip shorter than about 20 seconds doesn't trigger a change. Scene length is otherwise the same as before, and a stretch no longer ends on a stub of a scene just before a change. Streaming previews, whose place in the song is unknown, keep the fixed intervals. The M key ("Toggle mood lock"), which did nothing, is gone (NRG.3). Still to do: Matt's live listen.
+
+### [dev-2026-09-27-182327] NRG.3 — scenes follow the song's energy as it moves
+
+Scene choice now reads each song's measured energy for the stretch a scene will play over, instead of the mood model's single guess. A quiet opening gets a sparse scene and the drop after it a dense one. In Dance Yrself Clean on the beta playlist, the hush gets Witchlight, Skein and Aurora Veil; from 3:21 the drop gets Cymatic Resonance, Nebula and Filigree; the 6:09 breakdown returns to Witchlight. Transitions follow energy too: calm stretches crossfade longer, and only the most energetic moments (level 10) cut. The live re-planning that fired when the mood model's reading drifted is removed, because it was re-planning on noise. The certified scenes' own use of mood is unchanged for now. Still to do: Matt's live listen.
+
+### [dev-2026-09-26-231257] NRG.1–2 — songs get a measured energy curve and a 1–10 energy readout instead of a mood word
+
+The mood word in the preparation view ("restless", "wistful", …) came from a model that turned out to be no better than chance on songs it hadn't seen (BUG-148). Preparation now measures each song's energy over time instead, one point per second of loudness and activity. The view shows it on a 1–10 scale calibrated across the library: one number for a steady song ("energy 5"), or the low → high range for one that moves ("energy 2 → 9", Dance Yrself Clean's quiet opening and its drop). Across a 1,000-song sample of the library, the typical level runs from classical 2 to hip-hop 9. Scene choice doesn't use it yet; that's NRG.3. **Local files re-analyse once** (stem cache schema v17).
+### [dev-2026-09-26-224055] BUG-150 — the Spotify connection tests wait for the connect, not the clock
+
+`connectLoginRequiredUnauthenticated` failed once when the app tests ran right after the engine suite: it slept 400 ms after `connect()` and asserted while the connect was still running. Every wait in the two Spotify view-model suites was a fixed sleep. They now await the view model's own debounce and connect tasks, so they pass however slow the machine is. A probe that adds 500 ms of connector latency failed 3 of 4 OAuth tests before the fix and passes all 16 after. Test-only change; no budget widened, and the suites run about 15 s faster.
+
 ### [dev-2026-09-25-214737] BUG-147 — a planner seed reproduces its plan in any process
 
 The seeded planner noise (D-047) hashed preset ids with `String.hashValue`, which Swift randomizes per launch, so the same seed planned differently in every process. Users never saw it, because the app picks a fresh random seed for each plan and each Regenerate. It did mean a logged seed could not be replayed and seeded offline measurements (BUG-144) were not reproducible. The noise now uses FNV-1a over the id's UTF-8 bytes, and the scorer sums stem affinities in sorted order instead of `Set` order. `NearTieSamplingTests.pinnedAcrossProcesses` pins a seeded plan in source. Every nonzero-seed plan changes once; seed 0 is unchanged.

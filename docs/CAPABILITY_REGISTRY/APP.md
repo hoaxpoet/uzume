@@ -175,7 +175,7 @@ Top-level files (1):
 Services/ (23):
 - `AccessibilityLabels.swift` — Centralised VoiceOver labels under `"a11y.*"` keys.
 - `AccessibilityState.swift` — `@MainActor ObservableObject`; combines system `NSWorkspace.accessibilityDisplayShouldReduceMotion` with `ReducedMotionPreference` from `SettingsStore`. Publishes `reduceMotion`, `beatAmplitudeScale: Float`. Per-frame gating queries `shouldExecuteMVWarp(presetEnabled:)` / `shouldExecuteSSGI`. U.9 / D-054.
-- `DefaultPlaybackActionRouter.swift` — Concrete `PlaybackActionRouter` per D-050 / U.6b. `AdaptationFields` snapshot type. 7 router methods (`moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation` / `toggleMoodLock`). Family-boost cap `0.3`, family-exclusion window `600s`, ambient-hint window `90s`, override ceiling `8s`, undo capacity `8`. Static `live(engine:toastBridge:onShowPlanPreview:)` factory captures weak engine references.
+- `DefaultPlaybackActionRouter.swift` — Concrete `PlaybackActionRouter` per D-050 / U.6b. `AdaptationFields` snapshot type. 6 router methods (`moreLikeThis` / `lessLikeThis` / `reshuffleUpcoming` / `presetNudge(_:immediate:)` / `rePlanSession` / `undoLastAdaptation`). Family-boost cap `0.3`, family-exclusion window `600s`, ambient-hint window `90s`, override ceiling `8s`, undo capacity `8`. Static `live(engine:toastBridge:onShowPlanPreview:)` factory captures weak engine references.
 - `DisplayManager.swift` — `@MainActor ObservableObject` for screen tracking + window-move with fullscreen-quirk handling. Publishes `allScreens`, `currentScreen`, `primaryScreen`. `attach(to:)`, `moveToSecondaryDisplay()`, `moveToPrimaryDisplay()`. Plus `onScreensAdded` / `onScreensRemoved` callbacks consumed by `MultiDisplayToastBridge`.
 - `FirstAudioDetector.swift` — `@MainActor ObservableObject`; subscribes to `AudioSignalState` publisher; sets `hasDetectedAudio` after ≥ 250 ms sustained `.active` state. Per UX_SPEC §6.3.
 - `FullscreenObserver.swift` — `@MainActor ObservableObject` wrapping `NSWindow.didEnterFullScreenNotification` / `didExitFullScreenNotification`; publishes `isFullscreen: Bool`.
@@ -187,7 +187,7 @@ Services/ (23):
 - `PlaybackErrorBridge.swift` — Routes UX_SPEC §9.4 audio-signal errors to `ToastManager` with condition-ID semantics. `silenceToastThresholdSeconds: 15`.
 - `PlaybackErrorConditionTracker.swift` — Lightweight register of asserted condition IDs. `assert` / `clear` / `isAsserted` / `reset`.
 - `PlaybackKeyMonitor.swift` — `NSEvent.addLocalMonitorForEvents` install/uninstall for in-session keyboard shortcuts. Routes via `PlaybackShortcutRegistry`.
-- `PlaybackShortcutRegistry.swift` — Declarative shortcut catalog. `ShortcutCategory` enum (`.playback / .liveAdaptation / .developer`). `PlaybackShortcut(id:key:modifiers:label:category:action:)`. Wires Shift+→ / Shift+← (presetNudge), `+` / `-` (moreLikeThis / lessLikeThis), `R` (reshuffle), `Z` (undo), `M` (mood-lock), plus diagnostic shortcuts (beat-phase / audio-latency / bar-phase / spider / preset cycling).
+- `PlaybackShortcutRegistry.swift` — Declarative shortcut catalog. `ShortcutCategory` enum (`.playback / .liveAdaptation / .developer`). `PlaybackShortcut(id:key:modifiers:label:category:action:)`. Wires Shift+→ / Shift+← (presetNudge), `+` / `-` (moreLikeThis / lessLikeThis), `R` (reshuffle), `Z` (undo), plus diagnostic shortcuts (beat-phase / audio-latency / bar-phase / spider / preset cycling).
 - `PreparationETAEstimator.swift` — Rolling EMA over per-stage durations (resolving / downloading / stemSeparation / caching). `minSamplesRequired: 3`, `emaAlpha: 0.3`.
 - `PresetScoringContextProvider.swift` — Canonical builder of `PresetScoringContext` for Orchestrator scoring calls. Resolves `DeviceTierOverride` (`.auto`/`.forceTier1`/`.forceTier2`) against detected hardware tier. U.8 Part C.
 - `ReachabilityMonitor.swift` — `NWPathMonitor` wrapper with 1 s debounce. `ReachabilityPublishing` protocol + `StubReachabilityMonitor` test-double pair.
@@ -266,7 +266,7 @@ The engine's primary owner type: a `final class VisualizerEngine: ObservableObje
 | `currentTrackIndex: @Published Int?` | `production-active` | `PlaybackChromeViewModel` (bound via publisher in ContentView) | D-091 |
 | `arachneState`, `gossamerState`, `auroraVeilState`, `lumenPatternEngine`, `ferrofluidParticles`, `ferrofluidMesh`, `spectralCartographOverlay`, `currentRayMarchPipeline`, `murmurationGeometry` | `production-active` | `applyPreset` set/clear; per-frame tick closures | Per-preset increments |
 | `presetCompletionCancellable` + `currentSegmentStartTime` + `presetCompletionAdvanceCount` | `production-active` | `wirePresetCompletionSubscription`; `handlePresetCompletionEvent` | D-095 / V.7.6.2 |
-| `diagnosticPresetLocked: Bool` | `production-active` | `applyLiveUpdate` mood-override suppression; `handlePresetCompletionEvent` | DSP.3.1 + V.7.7C.4 |
+| `diagnosticPresetLocked: Bool` | `production-active` | planned-segment apply gate (`applyPlannedSegment`); `handlePresetCompletionEvent`. (Its `applyLiveUpdate` mood-override suppression went with the override at NRG.3, D-259.) | DSP.3.1 + V.7.7C.4 |
 | BUG-012 probes (`init` line 709, `deinit` line 718) | **read-only — instrumented** | BUG012Probe | BUG-012-i1 |
 | `featureEmaAlpha: Float = 0.01` (10-second EMA, ~7s effective window @ 94 Hz) | `production-active` | `accumulateMoodFeatures` | Mood classifier inputs |
 
@@ -484,7 +484,7 @@ Concrete `PlaybackActionRouter` per D-050 / U.6b. **All 7 protocol methods imple
 | `presetNudge(_:immediate:)` | `production-active` | Keyboard `→` / `←` / Shift+→ / Shift+← | D-074 diagnostic-aware; scorer-driven or alphabetical |
 | `rePlanSession()` | `production-active` | Keyboard `⌘R` | Reshuffle all + preview |
 | `undoLastAdaptation()` | `production-active` | Keyboard `Z` | Pop adaptationHistory; preserves preferences per D-058(b) |
-| `toggleMoodLock()` (`@Published isMoodLocked: Bool`) | `production-active` | Keyboard `M`; ViewModels | — |
+| `toggleMoodLock()` (`@Published isMoodLocked: Bool`) | `removed` (NRG.3) | — the M key flipped a flag nothing read; mood left scene choice at D-259 | — |
 | `static live(engine:toastBridge:onShowPlanPreview:) -> DefaultPlaybackActionRouter` | `production-active` | `PlaybackView` | Wires weak engine refs |
 
 #### PlaybackShortcutRegistry.swift (365 lines) — `production-active`

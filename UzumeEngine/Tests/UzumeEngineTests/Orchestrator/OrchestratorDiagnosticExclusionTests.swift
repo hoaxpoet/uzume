@@ -4,7 +4,7 @@
 //   1. Scorer: diagnostic preset is excluded with excludedReason == "diagnostic".
 //   2. Scorer: gate fires even when includeUncertifiedPresets == true (no toggle re-enables).
 //   3. Scorer: gate fires before family boost — boost cannot resurrect a diagnostic.
-//   4. LiveAdapter: mood-override never targets a diagnostic preset.
+//   4. (retired at NRG.3 with the LiveAdapter mood override.)
 //   5. SessionPlanner: diagnostics never appear in plan.tracks[].preset.
 //   6. ReactiveOrchestrator: diagnostics never appear in suggestedPreset.
 //   7. PresetDescriptor remains constructible with isDiagnostic == true (manual-switch path).
@@ -112,56 +112,6 @@ struct OrchestratorDiagnosticExclusionTests {
         #expect(bd.total == 0)
     }
 
-    // MARK: 4 — LiveAdapter never overrides into a diagnostic
-
-    @Test("LiveAdapter mood-override never targets a diagnostic preset")
-    func liveAdapter_neverOverridesIntoDiagnostic() throws {
-        // Catalog: a "current" cool preset, a diagnostic that would otherwise be the
-        // perfect mood match for the live state, plus a non-diagnostic alternative.
-        let current = makePreset(name: "Cool", family: .reaction,
-                                 colorTempRange: SIMD2(0.20, 0.30), visualDensity: 0.25)
-        let diag = makePreset(name: "DiagWarm", family: .waveform,
-                              isDiagnostic: true,
-                              colorTempRange: SIMD2(0.73, 0.83), visualDensity: 0.78)
-        let alt = makePreset(name: "AltCool", family: .geometric,
-                             colorTempRange: SIMD2(0.20, 0.30), visualDensity: 0.25)
-        let catalog = [current, diag, alt]
-
-        // Plan against pre-analyzed sad/calm so the planner picks `current`.
-        let tracks: [(TrackIdentity, TrackProfile)] = [
-            (makeIdentity(title: "T0", duration: 120),
-             makeProfile(valence: -0.5, arousal: -0.5)),
-            (makeIdentity(title: "T1", duration: 120), makeProfile()),
-        ]
-        let plan = try DefaultSessionPlanner().plan(
-            tracks: tracks,
-            catalog: catalog,
-            deviceTier: .tier2
-        )
-
-        let liveMood = EmotionalState(valence: 0.7, arousal: 0.7)
-        let result = DefaultLiveAdapter().adapt(
-            plan: plan,
-            currentTrackIndex: 0,
-            elapsedTrackTime: 20,
-            liveBoundary: StructuralPrediction(
-                sectionIndex: 0, sectionStartTime: 0,
-                predictedNextBoundary: 0, confidence: 0
-            ),
-            liveMood: liveMood,
-            catalog: catalog
-        )
-
-        if let override = result.presetOverride {
-            #expect(override.preset.isDiagnostic == false,
-                    "Override target must never be a diagnostic preset")
-        }
-        // Nothing in the planned plan should be a diagnostic either.
-        for plannedTrack in plan.tracks {
-            #expect(plannedTrack.preset.isDiagnostic == false)
-        }
-    }
-
     // MARK: 5 — SessionPlanner excludes diagnostic from all tracks
 
     @Test("SessionPlanner never selects a diagnostic preset for any track")
@@ -203,7 +153,6 @@ struct OrchestratorDiagnosticExclusionTests {
                               colorTempRange: SIMD2(0.40, 0.50), visualDensity: 0.50)
         let catalog = [diag, altA, altB]
 
-        let liveMood = EmotionalState(valence: 0.7, arousal: 0.7)
         let boundary = StructuralPrediction(
             sectionIndex: 0, sectionStartTime: 0,
             predictedNextBoundary: 10, confidence: 0.8
@@ -212,7 +161,6 @@ struct OrchestratorDiagnosticExclusionTests {
         // Past the listening window, currentPreset == nil → orchestrator wants to suggest
         // *something*. It must not be the diagnostic.
         let decision = DefaultReactiveOrchestrator().evaluate(
-            liveMood: liveMood,
             liveBoundary: boundary,
             elapsedSessionTime: 35,
             currentPreset: nil,

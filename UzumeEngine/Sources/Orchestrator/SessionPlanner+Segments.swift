@@ -12,6 +12,11 @@ import Shared
 
 extension DefaultSessionPlanner {
 
+    /// How far ahead a segment's energy is read (NRG.3, D-259): the stretch a scene starting here
+    /// will mostly play over — about one preset's span, so a quiet opening and the drop after it
+    /// are scored as different music.
+    static let energyWindowSeconds: TimeInterval = 30
+
     /// Section-list shape for a single track.
     ///
     /// Sections divide the track into equal-length spans with a default `nil` section type
@@ -28,7 +33,10 @@ extension DefaultSessionPlanner {
         let isRealSection: Bool
     }
 
-    /// Produces the section list for a track: equal slices from `estimatedSectionCount`.
+    /// Produces the section list for a track. With a whole-track energy curve the sections run
+    /// between the song's energy changes (NRG.4), so scene changes land on the drop rather than
+    /// on an arbitrary slice edge; otherwise (a streaming preview) equal slices from
+    /// `estimatedSectionCount`.
     static func makeSections(
         trackStart: TimeInterval,
         trackEnd: TimeInterval,
@@ -38,9 +46,24 @@ extension DefaultSessionPlanner {
         guard span > 0 else {
             return [TrackSection(start: trackStart, end: trackEnd, section: nil, isRealSection: false)]
         }
-
         let count = max(1, profile.estimatedSectionCount)
         let perSection = span / Double(count)
+        if profile.wholeTrackCurve(trackDuration: span) != nil {
+            // Each energy section keeps the song's usual pacing: as many equal slices as fit.
+            let edges = [trackStart] + profile.energyChanges(trackDuration: span).map { trackStart + $0 } + [trackEnd]
+            return zip(edges, edges.dropFirst()).flatMap { start, end -> [TrackSection] in
+                let slices = max(1, Int(((end - start) / perSection).rounded()))
+                let step = (end - start) / Double(slices)
+                return (0..<slices).map { idx in
+                    TrackSection(
+                        start: start + Double(idx) * step,
+                        end: idx == slices - 1 ? end : start + Double(idx + 1) * step,
+                        section: nil,
+                        isRealSection: false
+                    )
+                }
+            }
+        }
         var sections: [TrackSection] = []
         sections.reserveCapacity(count)
         for idx in 0..<count {
@@ -87,9 +110,12 @@ extension DefaultSessionPlanner {
             let isLastSection = sectionIdx == sections.count - 1
             var sectionClock = max(sectionEntry.start, coveredUntil)
 
-            while sectionClock < sectionEntry.end {
+            // The epsilon keeps floating-point residue at a section's end from emitting an
+            // empty segment.
+            while sectionClock < sectionEntry.end - 0.001 {
                 let result = planOneSegment(
                     sectionEntry: sectionEntry,
+                    trackStart: trackStart,
                     isLastSection: isLastSection,
                     sectionClock: sectionClock,
                     trackEnd: trackEnd,
@@ -151,6 +177,7 @@ extension DefaultSessionPlanner {
     /// Build a single segment within a section.
     private func planOneSegment(
         sectionEntry: TrackSection,
+        trackStart: TimeInterval,
         isLastSection: Bool,
         sectionClock: TimeInterval,
         trackEnd: TimeInterval,
@@ -167,13 +194,21 @@ extension DefaultSessionPlanner {
         warnings: inout [PlanningWarning]
     ) -> (segment: PlannedPresetSegment, advanced: Bool) {
         let remainingInSection = sectionEntry.end - sectionClock
+        // NRG.3 (D-259): the energy of the stretch a scene starting here will play over — never
+        // past its section's end, which is the next energy change (NRG.4).
+        let energyLevel = profile.energyLevel(
+            at: sectionClock - trackStart,
+            window: min(Self.energyWindowSeconds, remainingInSection),
+            trackDuration: trackEnd - trackStart
+        )
         let ctx = PresetScoringContext(
             deviceTier: deviceTier,
             recentHistory: history,
             currentPreset: currentPreset,
             elapsedSessionTime: sectionClock,
             currentSection: sectionEntry.section,
-            includeUncertifiedPresets: includeUncertifiedPresets
+            includeUncertifiedPresets: includeUncertifiedPresets,
+            energyLevel: energyLevel
         )
         let (chosen, breakdown) = selectPreset(
             catalog: catalog,
@@ -203,7 +238,10 @@ extension DefaultSessionPlanner {
             // governs equal-slice sections (old cached profiles / streaming previews).
             segEnd = segStart + remainingInSection
         } else {
-            let segLen = max(1.0, min(remainingInSection, maxByPreset))
+            // Split what is left of the section evenly under the preset's cap (NRG.4), so an
+            // energy section ends on a full-length scene rather than a stub before the change.
+            let pieces = max(1, (remainingInSection / maxByPreset).rounded(.up))
+            let segLen = max(1.0, remainingInSection / pieces)
             segEnd = segStart + min(segLen, remainingInSection)
         }
         let actualLen = segEnd - segStart
@@ -228,7 +266,7 @@ extension DefaultSessionPlanner {
             incomingTransition = buildTransition(
                 from: prior,
                 to: chosen,
-                profile: profile,
+                energyLevel: energyLevel,
                 at: segStart,
                 lastEntry: history.last
             )
@@ -237,7 +275,7 @@ extension DefaultSessionPlanner {
             incomingTransition = buildTransition(
                 from: prior,
                 to: chosen,
-                profile: profile,
+                energyLevel: energyLevel,
                 at: segStart,
                 lastEntry: history.last
             )

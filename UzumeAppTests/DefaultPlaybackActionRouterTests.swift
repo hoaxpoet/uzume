@@ -505,18 +505,6 @@ struct DefaultPlaybackActionRouterU6bTests {
         #expect(router.adaptationHistory.count <= 8,
                 "history must be capped at 8 (got \(router.adaptationHistory.count))")
     }
-
-    // MARK: Test 14 — toggleMoodLock persists state (U.6 regression)
-
-    @Test("toggleMoodLock persists isMoodLocked state")
-    func toggleMoodLock_persistsState() {
-        let router = Self.makeRouter()
-        #expect(!router.isMoodLocked)
-        router.toggleMoodLock()
-        #expect(router.isMoodLocked)
-        router.toggleMoodLock()
-        #expect(!router.isMoodLocked)
-    }
 }
 // swiftlint:enable type_body_length
 // swiftlint:enable file_length

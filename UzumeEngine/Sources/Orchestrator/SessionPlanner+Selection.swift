@@ -102,7 +102,7 @@ extension DefaultSessionPlanner {
             if seed != 0 {
                 let noise = seededNoise(seed: seed, trackIndex: trackRef.index, presetID: preset.id)
                 bd = PresetScoreBreakdown(
-                    mood: bd.mood,
+                    energy: bd.energy,
                     tempoMotion: bd.tempoMotion,
                     stemAffinity: bd.stemAffinity,
                     sectionSuitability: bd.sectionSuitability,

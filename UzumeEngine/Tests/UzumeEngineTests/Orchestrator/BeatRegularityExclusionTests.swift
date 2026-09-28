@@ -109,7 +109,6 @@ final class BeatRegularityExclusionTests: XCTestCase {
         let neutral = makePreset(name: "Other", requiresRegularBeat: false)
         // Past the listening window; no current preset → it must pick one.
         let decision = orchestrator.evaluate(
-            liveMood: .neutral,
             liveBoundary: .none,
             elapsedSessionTime: 60,
             currentPreset: nil,
