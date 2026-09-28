@@ -242,34 +242,6 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Meniscus", luma: try flashLuma("Meniscus", settle: 120))
     }
 
-    @Test("Fireflies is flash-safe (a locked unison on the worst-case grid, real headless render)")
-    func firefliesIsFlashSafe() throws {
-        // FF.4 — wired before certification (the Meniscus lesson). The single-pass gate cannot see
-        // Fireflies: it draws only the world fragment with a zeroed slot 6, so no firefly is ever
-        // drawn. `renderFireflies` is the production direct path (world + slot-6 camera, then the
-        // swarm's lights, pools and sprites in one encoder).
-        //
-        // The worst case for this scene is a LOCKED UNISON — hundreds of lights flashing together —
-        // and the swarm only locks on a timed grid with a clear beat. So the shared train's own grid
-        // (accentHz × 60 = 270 BPM; the swarm flashes every 4 beats, 0.89 s) is installed and
-        // beatClarity01 = 1 on every stem row. The first 20 s let it lock (the design's ~15 s) and
-        // are discarded; the next 30 s (~34 unison flashes) are measured. An untimed or unclear
-        // drive would leave the swarm free and the measurement would under-read.
-        //
-        // One continuous 50 s train, NOT the tiled 3 s one: a tile restarts `trackElapsedS` (the
-        // swarm reads that as a track change and restarts incoherent) and 3 s holds 13.5 beats at
-        // 4.5 Hz, so every seam would also jump the grid half a beat.
-        MultiPassRenderHarness.firefliesGridBPM = [Float(FlashHarnessSupport.accentHz * 60)]
-        defer { MultiPassRenderHarness.firefliesGridBPM = nil }
-        let stems = FlashHarnessSupport.worstCaseStemTrain(seconds: 50).map { s -> StemFeatures in
-            var s = s; s.beatClarity01 = 1; return s
-        }
-        let luma = try harness.render(
-            preset: "Fireflies", features: FlashHarnessSupport.worstCaseBeatTrain(seconds: 50), stems: stems
-        ) { FlashHarnessSupport.meanRelativeLuminance($0) }
-        assertFlashSafe(name: "Fireflies", luma: Array(luma.dropFirst(1200)))
-    }
-
     // MARK: - Flash-specific drive + reducer
 
     /// Render `name` through the shared harness on the synthetic worst-case beat+stem train,
@@ -300,31 +272,46 @@ struct MultiPassFlashHarnessTests {
     /// render — a static frame is never asserted "safe" (that would be a vacuous pass for a
     /// safety gate); it means the harness did not reach the preset's real response.
     private func assertFlashSafe(name: String, luma: [Double]) {
-        let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: FlashHarnessSupport.fps)
-        let lo = luma.min() ?? 0, hi = luma.max() ?? 0
-        let range = hi - lo
-        let mean = luma.reduce(0, +) / Double(max(luma.count, 1))
-        let responded = range >= FlashHarnessSupport.responsiveLumaRange
+        FlashHarnessSupport.assertFlashSafe(name: name, luma: luma)
+    }
+}
 
-        print(String(
-            format: "[flash-safety] %@: %@ | peak %.2f flashes/s (%d transitions) — %@ | luma %.3f…%.3f (Δ%.3f, mean %.3f) [limit 3.0]",
-            name, responded ? "MEASURED" : "UNMEASURED(static)",
-            report.peakFlashesPerSecond, report.transitionCount,
-            report.isSafe ? "SAFE" : "UNSAFE", lo, hi, range, mean))
+// MARK: - Fireflies (off the main actor)
 
-        #expect(
-            responded,
-            """
-            '\(name)' rendered static (Δ\(String(format: "%.4f", range))) under the worst-case beat+stem train — \
-            the harness is not reaching its real multi-pass response, so the measurement is INVALID (not safe). \
-            Fix the harness setup; do not weaken this guard.
-            """)
-        #expect(
-            report.isSafe,
-            """
-            '\(name)' peaks at \(String(format: "%.2f", report.peakFlashesPerSecond)) flashes/s (limit 3) under a \
-            \(String(format: "%.1f", FlashHarnessSupport.accentHz)) Hz worst-case beat train — exceeds Harding/WCAG 2.3.1. \
-            P1 safety finding: bring to Matt, do NOT tune away (the certified motion was hand-built safe, D-157/D-158).
-            """)
+/// FF.4. Its own NONISOLATED suite, not a test in the `@MainActor` suite above: that suite already
+/// holds the main actor for ~270 s of a full run, and a 27 s Fireflies render inside it starved 9
+/// SessionManager tests past their readiness caps (reproduced 2 of 2 full runs; 0 failures with the
+/// test skipped). `renderFirefliesOffMain` is the same production-mirroring path. The type name keeps
+/// the `MultiPassFlash` prefix so the RUNBOOK certification battery's filter still selects it.
+@Suite("Photosensitivity Multi-Pass Flash Harness — Fireflies (FF.4, off the main actor)")
+struct MultiPassFlashFirefliesTests {
+
+    @Test("Fireflies is flash-safe (a locked unison on the worst-case grid, real headless render)")
+    func firefliesIsFlashSafe() throws {
+        // The single-pass gate cannot see Fireflies: it draws only the world fragment with a zeroed
+        // slot 6, so no firefly is ever drawn. `renderFireflies` is the production direct path (world
+        // + slot-6 camera, then the swarm's lights, pools and sprites in one encoder).
+        //
+        // The worst case for this scene is a LOCKED UNISON — hundreds of lights flashing together —
+        // and the swarm only locks on a timed grid with a clear beat. So the shared train's own grid
+        // (accentHz × 60 = 270 BPM; the swarm flashes every 4 beats, 0.89 s) is installed and
+        // beatClarity01 = 1 on every stem row. The first 20 s let it lock (the design's ~15 s) and
+        // are discarded; the next 30 s (~34 unison flashes) are measured. An untimed or unclear
+        // drive would leave the swarm free and the measurement would under-read.
+        //
+        // One continuous 50 s train, NOT the tiled 3 s one: a tile restarts `trackElapsedS` (the
+        // swarm reads that as a track change and restarts incoherent) and 3 s holds 13.5 beats at
+        // 4.5 Hz, so every seam would also jump the grid half a beat.
+        //
+        // Measured (FF.4, 320×180): 0.00 flashes/s, 0 transitions, relative luminance 0.014…0.084
+        // (Δ0.071, 24× the responsiveness floor).
+        let stems = FlashHarnessSupport.worstCaseStemTrain(seconds: 50).map { s -> StemFeatures in
+            var s = s; s.beatClarity01 = 1; return s
+        }
+        let luma = try MultiPassRenderHarness(width: 320, height: 180).renderFirefliesOffMain(
+            features: FlashHarnessSupport.worstCaseBeatTrain(seconds: 50), stems: stems,
+            gridBPM: [Float(FlashHarnessSupport.accentHz * 60)]
+        ) { FlashHarnessSupport.meanRelativeLuminance($0) }
+        FlashHarnessSupport.assertFlashSafe(name: "Fireflies", luma: Array(luma.dropFirst(1200)))
     }
 }

@@ -39,7 +39,7 @@ struct MultiPassRenderHarness {
     /// harness as much as the roster.
     let readback: Bool
 
-    init(width: Int = 320, height: Int = 180, readback: Bool = true) {
+    nonisolated init(width: Int = 320, height: Int = 180, readback: Bool = true) {
         self.width = width
         self.height = height
         // The env var is an ad-hoc override for one-off sweeps; the PARAMETER is what the
@@ -101,7 +101,10 @@ struct MultiPassRenderHarness {
         case "Ricercar":     return try renderRicercar(features, stems, settle: settle, reduce)
         case "Kagura":       return try renderKagura(features, stems, settle: settle, reduce)
         case "Stave":        return try renderStave(features, stems, settle: settle, reduce)
-        case "Fireflies":    return try renderFireflies(features, stems, settle: settle, reduce)
+        case "Fireflies":
+            return try renderFireflies(features, stems, settle: settle, gridBPM: Self.firefliesGridBPM,
+                                       cameraTimeOffset: Self.firefliesCameraTimeOffset,
+                                       freezeCamera: Self.firefliesFreezeCamera, reduce)
         case "Alfvén":       return try renderAlfven(features, stems, reduce)
         case "Mitosis":      return try renderMitosis(features, stems, reduce)
         case "Cytokinesis":  return try renderCytokinesis(features, stems, reduce)
@@ -533,11 +536,27 @@ struct MultiPassRenderHarness {
     /// excluded). Timing probes only.
     nonisolated(unsafe) static var gpuTimesMs: [Double]?
 
+    /// FF.4 — the Fireflies render OFF the main actor, for a test in a nonisolated suite. The
+    /// `@MainActor` flash suite already holds the main actor for ~270 s in a full run, and adding a
+    /// 27 s Fireflies render there starved 9 SessionManager tests past their readiness caps
+    /// (reproduced 2/2; 0 failures with it skipped). Grid BPM is a parameter, never the shared
+    /// static, so a concurrent main-actor test cannot race it; the camera is production's.
+    nonisolated func renderFirefliesOffMain<T>(
+        features: [FeatureVector], stems: [StemFeatures], gridBPM: [Float]?,
+        reduce: (_ bgra: [UInt8]) -> T
+    ) throws -> [T] {
+        try renderFireflies(features, stems, settle: 0, gridBPM: gridBPM, cameraTimeOffset: 0,
+                            freezeCamera: false, reduce)
+    }
+
     /// Fireflies (FF.1). Mirrors `RenderPipeline.encodePresetVisualization` on the direct path:
     /// the world fragment through the preset's own compiled pipeline, then the swarm sprites
-    /// into the same encoder. `settle` frames advance the swarm without capture.
-    private func renderFireflies<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
-                                    settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+    /// into the same encoder. `settle` frames advance the swarm without capture. Nonisolated
+    /// (FF.4): it touches only `width`/`height`/`readback` and its own Metal objects.
+    nonisolated private func renderFireflies<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+                                                settle: Int, gridBPM bpm: [Float]?, cameraTimeOffset: Float,
+                                                freezeCamera: Bool,
+                                                _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Fireflies" }) else {
@@ -547,10 +566,9 @@ struct MultiPassRenderHarness {
         let geo = try FirefliesGeometry(device: ctx.device, library: lib.library, beatGrid: history,
                                         pixelFormat: ctx.pixelFormat)
         geo.ensureAllocated(width: width, height: height)
-        geo.cameraTimeOffset = Self.firefliesCameraTimeOffset
-        geo.freezeCamera = Self.firefliesFreezeCamera
+        geo.cameraTimeOffset = cameraTimeOffset
+        geo.freezeCamera = freezeCamera
         let aspect = Float(width) / Float(height)
-        let bpm = Self.firefliesGridBPM
         func frame(_ i: Int) -> FeatureVector {
             if let bpm, !bpm.isEmpty {
                 history.updateBeatGridData(relativeBeatTimes: [], bpm: bpm[i % bpm.count], lockState: 0, sessionMode: 0)
@@ -576,7 +594,7 @@ struct MultiPassRenderHarness {
     }
 
     /// Shared update→render→reduce loop for the geometry-driven particle presets.
-    private func particleLoop<T>(
+    nonisolated private func particleLoop<T>(
         _ ctx: MetalContext, _ drive: [FeatureVector], _ stems: [StemFeatures],
         _ reduce: (_ bgra: [UInt8]) -> T,
         render: (_ i: Int, _ enc: MTLRenderCommandEncoder) -> Void,
@@ -1221,7 +1239,7 @@ struct MultiPassRenderHarness {
         return out
     }
 
-    private func clearRPD(_ tex: MTLTexture) -> MTLRenderPassDescriptor {
+    nonisolated private func clearRPD(_ tex: MTLTexture) -> MTLRenderPassDescriptor {
         let rpd = MTLRenderPassDescriptor()
         rpd.colorAttachments[0].texture = tex
         rpd.colorAttachments[0].loadAction = .clear
@@ -1230,7 +1248,7 @@ struct MultiPassRenderHarness {
         return rpd
     }
 
-    private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture, into pixels: inout [UInt8]) throws {
+    nonisolated private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture, into pixels: inout [UInt8]) throws {
         cmd.commit()
         cmd.waitUntilCompleted()
         guard cmd.status == .completed else { throw HarnessError.renderFailed }
@@ -1240,7 +1258,7 @@ struct MultiPassRenderHarness {
                         from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
     }
 
-    private func makeOutputTexture(_ ctx: MetalContext) throws -> MTLTexture {
+    nonisolated private func makeOutputTexture(_ ctx: MetalContext) throws -> MTLTexture {
         let d = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: ctx.pixelFormat, width: width, height: height, mipmapped: false)
         d.usage = [.renderTarget, .shaderRead]
