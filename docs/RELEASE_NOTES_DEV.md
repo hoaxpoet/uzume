@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-193210] KAG.5 — Kagura's dances follow the song's measured energy (pending live M7)
+
+Kagura no longer asks the mood classifier how energetic a song is. It reads the measured energy of the part of the song playing. On local files, its three dances change at the song's energy changes: Dance Yrself Clean dances the calm three (Egyptian walk, macarena, cabbage patch) through its hush and breakdown and brings the twist in at the drop. Each stretch is judged by its loudest tenth (Matt's call). The switch waits for the next clip change, so a dance is never cut mid-move. Rests follow the same energy: ballet in calm stretches (Take Five, the openings of Warszawa and Dance Yrself Clean), the sway elsewhere (Penny Lane and the body of Warszawa now sway). The Charleston stays on any song fast enough for it, whatever the energy (Matt's call), so Take Five keeps it. On streaming the 30 s preview stands for the whole song.
+
+---
+
 ### [dev-2026-09-28-174700] KAG.4 — Kagura certified (the 26th)
 
 Kagura, the point-light dancer, is certified on Matt's M7 of the beta playlist (*"looks much better, happy with it overall"*). It now enters planned sessions like the other certified scenes, kept off beat-irregular songs by `requires_regular_beat`. Flash-safe in all three measured cases (the dance, the Charleston, the ballet rest: 0.00 flashes/s); no golden session plan changed. Known: the macarena runs a little heavy on calm songs.
