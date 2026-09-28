@@ -94,7 +94,7 @@ What this shows:
    - the rest style at each section;
    - each dance's share of bars over the playlist under the current rule and under each new rule.
 
-   Use the DECISION's default for the Charleston unless Matt has answered. **Done when** the table is in the
+   Use B for the Charleston (Matt's answer to the DECISION). **Done when** the table is in the
    session notes, the typical-level column matches the table above exactly (Swift and Python agree, as NRG.2
    showed), and you have stopped and shown Matt four things: DYC's per-section repertoires, Take Five's, the
    rests that change, and the macarena share. Continue only on his go.
@@ -123,7 +123,7 @@ What this shows:
    silence rest uses the section it interrupts. **Done when** `KaguraRestTests` takes levels instead of
    arousals, and the Warszawa row from task 1 matches what task 1 reported.
 
-5. **The Charleston, per Matt's answer** (the DECISION; default B). **Done when** the build table in
+5. **The Charleston: tempo earns it** (Matt, 2026-09-28: B — any song in its tempo band keeps it, whatever the energy). **Done when** the build table in
    `KaguraRepertoireTests` is re-derived from task 1's data, one row per section, and the Charleston rows
    match the answer.
 
@@ -204,7 +204,7 @@ Invoke `closeout`. §2 is the verbatim evidence block. Also include:
 
 The ENGINEERING_PLAN row and the RENDER_CAPABILITY_REGISTRY line say "pending live M7".
 
-## DECISION NEEDED (Matt) — the Charleston on quiet fast songs
+## DECISION (answered — Matt, 2026-09-28: **B**) — the Charleston on quiet fast songs
 
 **Measured by energy, Take Five is a quiet song (2 of 10), so the Charleston you approved on it would leave.
 Should a fast song keep the Charleston even when it plays quietly?**
@@ -220,5 +220,5 @@ Should a fast song keep the Charleston even when it plays quietly?**
 - **C — Tempo plus a floor.** Like B, but only at energy 4 or above. Take Five (2) loses it, and a quiet fast
   ballad never gets it.
 
-**Recommendation: B.** It keeps what you certified, and the in-song bar pick already keeps the kicks on the
-loud bars. **Default if no reply: B.**
+**Answered: B** (Matt, 2026-09-28). It keeps what he certified, and the in-song bar pick already keeps the kicks on the
+loud bars.
