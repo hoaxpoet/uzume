@@ -46,11 +46,11 @@ struct KaguraPulseLockReplayTests {
 
     // MARK: - Replay
 
-    static func measure(_ fixture: KaguraFixture, shiftBeats: Double) throws -> Lock {
+    static func measure(_ fixture: KaguraFixture, shiftBeats: Double, dance: KaguraDance = .twist) throws -> Lock {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let clips = try KaguraClipLibrary.shared()
-        let dancer = try KaguraDancer(device: ctx.device, library: lib.library)
+        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, dance: dance)
         dancer.ensureAllocated(width: 64, height: 36)
         let driven = try fixture.grid(shiftBeats: shiftBeats)
         dancer.setGrid(driven, streaming: false)
@@ -65,6 +65,7 @@ struct KaguraPulseLockReplayTests {
             var features = FeatureVector()
             features.time = Float(time)
             features.deltaTime = Float(1 / fps)
+            features.bassAtt = Float(fixture.bass(at: time))   // KAG.3: arm reach + the silence rest read it
             if let buffer = cmd { dancer.update(features: features, stemFeatures: StemFeatures(), commandBuffer: buffer) }
             joints.append(dancer.lastJoints)
             cuts.append(dancer.choreography.cutBeats.count)
@@ -86,13 +87,17 @@ struct KaguraPulseLockReplayTests {
                 let values = joints[index].flatMap { [$0.x, $0.y, $0.z] }.map { String(format: "%.5f", $0) }
                 csv += String(format: "%.5f,%d,", times[index], cut) + values.joined(separator: ",") + "\n"
             }
-            let url = URL(fileURLWithPath: dir).appendingPathComponent("\(fixture.name)_shift\(shiftBeats).csv")
+            let url = URL(fileURLWithPath: dir).appendingPathComponent("\(fixture.name)_\(dance)_shift\(shiftBeats).csv")
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
             try csv.write(to: url, atomically: true, encoding: .utf8)
         }
 
-        let leftHip = try #require(clips.jointNames.firstIndex(of: "lhip"))
-        let rightHip = try #require(clips.jointNames.firstIndex(of: "rhip"))
+        let joint = { (name: String) in try #require(clips.jointNames.firstIndex(of: name)) }
+        let leftHip = try joint("lhip"), rightHip = try joint("rhip")
+        let leftWrist = try joint("lwrist"), rightWrist = try joint("rwrist"), pelvis = try joint("pelvis")
+        let leftAnkle = try joint("lankle"), rightAnkle = try joint("rankle")
+        let arms = try ["lwrist", "rwrist", "lelbow", "relbow"].map(joint)
+        let pulse = try #require(clips.clips(for: dance).first?.pulseKind)
         let truth = fixture.beats
         let crossfade = driven.beatPeriod
         let cutFrames = cuts.indices.filter { $0 > 0 && cuts[$0] != cuts[$0 - 1] }
@@ -103,8 +108,19 @@ struct KaguraPulseLockReplayTests {
             let end = index + 1 < cutFrames.count ? cutFrames[index + 1] : joints.count
             let window = stride(from: start, to: end, by: 2).filter { times[$0] >= times[start] + crossfade }
             guard window.count >= 30 else { continue }
-            let events = KaguraSpikeDetector.hipYawEvents(
-                window.map { joints[$0] }, leftHip: leftHip, rightHip: rightHip, fps: 30)
+            let frames = window.map { joints[$0] }
+            let events: [Double]
+            switch pulse {
+            case "hipyaw":
+                events = KaguraSpikeDetector.hipYawEvents(frames, leftHip: leftHip, rightHip: rightHip, fps: 30)
+            case "wrists":
+                events = KaguraSpikeDetector.wristBottoms(frames, leftWrist: leftWrist, rightWrist: rightWrist, fps: 30)
+            case "footfalls":
+                events = KaguraSpikeDetector.footfallEvents(frames, leftAnkle: leftAnkle, rightAnkle: rightAnkle, fps: 30)
+            default:
+                events = KaguraSpikeDetector.gestureLandings(
+                    frames, pelvis: pelvis, arms: arms, fps: 30, beatPeriod: driven.beatPeriod)
+            }
             for event in events {
                 guard let music = fixture.truePlayback(at: times[window[0]] + event),
                       music >= truth[0], music < truth[truth.count - 1] else { continue }
@@ -150,5 +166,110 @@ struct KaguraPulseLockReplayTests {
         let scipyFrames = [6, 16, 27, 37, 48, 59, 70, 80, 91, 102, 112, 123, 134, 145]
         let events = KaguraSpikeDetector.extrema(sig, fps: fps)
         #expect(events.map { Int(($0 * fps).rounded()) } == scipyFrames, "\(events)")
+    }
+}
+
+// MARK: - Per dance (KAG.3)
+
+extension KaguraPulseLockReplayTests {
+
+    /// The spike on the same captures (`kagura.py film <capture> none /dev/null --family <dance>
+    /// --metrics-only --shift-beats k`, 2026-09-25), on-beat % / half-beat %, for k = 0 … 4. A WHOLE-beat
+    /// shift keeps the true phase and only moves where clips start, so the five cuts are the spike's own
+    /// spread on that capture (e.g. there_there chicken 51 → 31 % on the beat). The gate is against the
+    /// spike's LOWEST cut: a single cut read one sample of that spread — so_what macarena reads 85 %
+    /// on-beat + "and" at k = 0 and 75–80 % at k = 1 … 4, and the build's 73 % sits between them.
+    static let spike: [String: [KaguraDance: [(on: Double, half: Double)]]] = [
+        "love_rehab": [
+            .cabbage: [(100, 0), (100, 0), (94, 0), (94, 0), (93, 0)],
+            .chicken: [(49, 32), (42, 34), (41, 26), (41, 29), (44, 29)],
+            .macarena: [(51, 0), (50, 5), (42, 2), (45, 3), (41, 3)],
+            .egyptian: [(39, 61), (40, 60), (45, 55), (44, 56), (36, 64)],
+            .charleston: [(53, 21), (47, 17), (52, 19), (51, 16), (53, 21)],
+        ],
+        "so_what": [
+            .cabbage: [(94, 0), (100, 0), (100, 0), (100, 0), (94, 0)],
+            .chicken: [(49, 24), (49, 24), (48, 26), (45, 30), (45, 23)],
+            .macarena: [(38, 47), (41, 37), (39, 41), (39, 39), (36, 39)],
+            .egyptian: [(42, 56), (41, 59), (40, 55), (48, 52), (46, 52)],
+            .charleston: [(52, 19), (49, 18), (55, 22), (52, 18), (47, 21)],
+        ],
+        "there_there": [
+            .cabbage: [(100, 0), (100, 0), (100, 0), (94, 0), (100, 0)],
+            .chicken: [(51, 31), (51, 30), (51, 32), (47, 25), (31, 28)],
+            .macarena: [(38, 45), (41, 37), (40, 40), (33, 44), (33, 43)],
+            .egyptian: [(29, 71), (40, 57), (39, 59), (37, 61), (36, 64)],
+            .charleston: [(56, 18), (55, 16), (53, 18), (50, 17), (49, 18)],
+        ],
+    ]
+
+    /// Points below the spike's lowest cut the build may sit (KAG.3 prompt: 10).
+    static let margin = 10.0
+    /// The +½-beat decoy must move (on − half) at least this far toward the other side. The build's
+    /// smallest measured move is 8 points (there_there macarena, whose landings sit between beats).
+    static let decoySwing = 5.0
+
+    static let cases: [(String, KaguraDance)] = KaguraFixture.tracks.flatMap { track in
+        [KaguraDance.cabbage, .chicken, .macarena, .egyptian, .charleston].map { (track, $0) }
+    }
+
+    @Test("Each dance locks to the grid no worse than the spike on the same capture", arguments: cases)
+    func perDance(track: String, dance: KaguraDance) throws {
+        let fixture = try KaguraFixture.load(track)
+        let lock = try Self.measure(fixture, shiftBeats: 0, dance: dance)
+        let decoy = try Self.measure(fixture, shiftBeats: 0.5, dance: dance)
+        let cuts = try #require(Self.spike[track]?[dance])
+        let floorOn = (cuts.map(\.on).min() ?? 0) - Self.margin
+        let floorBoth = (cuts.map { $0.on + $0.half }.min() ?? 0) - Self.margin
+        print(String(format: "[kagura-pulse-dance] %@ %@ TRUE %@ | DECOY %@ | spike k=0 %.0f/%.0f, floors %.0f / %.0f",
+                     track, "\(dance)", lock.description, decoy.description, cuts[0].on, cuts[0].half, floorOn, floorBoth))
+        #expect(lock.count >= 10)
+        #expect(lock.onBeat * 100 >= floorOn, "\(track) \(dance): \(lock)")
+        #expect((lock.onBeat + lock.halfBeat) * 100 >= floorBoth, "\(track) \(dance): \(lock)")
+        let lean = (lock.onBeat - lock.halfBeat) * 100
+        let decoyLean = (decoy.onBeat - decoy.halfBeat) * 100
+        #expect((decoyLean - lean) * (lean >= 0 ? -1 : 1) >= Self.decoySwing,
+                "\(track) \(dance): the decoy did not swap the beat and the \"and\" (\(lock) → \(decoy))")
+    }
+
+    @Test("The ported wrists and gesture detectors reproduce scipy on known signals")
+    func detectorsMatchSpike() {
+        // scipy on the same signals (kagura.py's `wrists` branch and `cmd_film`'s gesture block, run
+        // 2026-09-25), in frames of 1/30 s.
+        let fps = 30.0
+        let t = (0..<150).map { Double($0) / fps }
+        let wrists = t.map { 1.6 + 0.25 * sin(2 * .pi * 0.9 * $0) + 0.05 * sin(2 * .pi * 2.7 * $0) + 0.1 * sin(2 * .pi * 0.2 * $0) }
+        let bottoms = KaguraSpikeDetector.wristBottoms(summedHeight: wrists, fps: fps)
+        #expect(bottoms.map { Int(($0 * fps).rounded()) } == [22, 62, 95, 122], "\(bottoms)")
+        let speed = t.map {
+            1.0 + 0.8 * pow(cos(2 * .pi * 1.6 * $0), 2) + 0.3 * sin(2 * .pi * 3.1 * $0) + 0.2 * sin(2 * .pi * 0.3 * $0)
+        }
+        let landings = KaguraSpikeDetector.gestureLandings(speed: speed, fps: fps, beatPeriod: 0.52)
+        #expect(landings.map { Int(($0 * fps).rounded()) } == [6, 15, 25, 34, 44, 53, 62, 71, 88, 97, 106, 116, 125, 135, 144],
+                "\(landings)")
+        #expect(KaguraSpikeDetector.gradient([0, 1, 4, 9, 7, 7.5]) == [1, 2, 4, 1.5, -0.75, 0.5])
+        // `_contacts`' morphology (scipy binary_closing then binary_opening, ones(n), border 0).
+        let raw: [Bool] = [0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1].map { $0 == 1 }
+        let cleaned = { (n: Int) in
+            KaguraSpikeDetector.dilate(KaguraSpikeDetector.erode(
+                KaguraSpikeDetector.erode(KaguraSpikeDetector.dilate(raw, n), n), n), n).map { $0 ? 1 : 0 }
+        }
+        #expect(cleaned(2) == [0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+        #expect(cleaned(3) == [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0])
+        #expect(cleaned(10) == [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0])
+        // `footfalls`: two feet lifted by a half-sine for 45 % of each 0.6 s cycle, half a cycle apart.
+        let feet = (0..<150).map { i -> [SIMD3<Float>] in
+            let time = Double(i) / 30
+            let lift = { (phase: Double) -> Float in
+                let cycle = (time / 0.6 + phase).truncatingRemainder(dividingBy: 1)
+                return Float((cycle < 0.45 ? 0.12 * sin(.pi * cycle / 0.45) : 0) + 0.002 * sin(2 * .pi * 7 * time))
+            }
+            var joints = [SIMD3<Float>](repeating: .zero, count: 15)
+            joints[11].y = lift(0)
+            joints[14].y = lift(0.5)
+            return joints
+        }
+        let falls = KaguraSpikeDetector.footfalls(feet, ankles: [11, 14], fps: 30).map { Int(($0 * 30).rounded()) }
+        #expect(falls == [1, 9, 18, 27, 36, 45, 54, 63, 72, 81, 90, 99, 108, 117, 126, 135, 144], "\(falls)")
     }
 }

@@ -25,6 +25,8 @@ struct KaguraFixture {
     let playback: [Double]
     /// The capture's stepped beat phase, one per row.
     let beatPhase: [Double]
+    /// The capture's `bass_att`, one per row (KAG.3: the dance pick, arm reach and silence rest read it).
+    let bassAtt: [Double]
     /// Beat This! reference beats and downbeats (s), and its meter estimate.
     let beats: [Double]
     let downbeats: [Double]
@@ -46,6 +48,7 @@ struct KaguraFixture {
             rowTime: try column("time"),
             playback: try column("playback_time_s"),
             beatPhase: try column("beatPhase01"),
+            bassAtt: try column("bass_att"),
             beats: ref.beatsSeconds,
             downbeats: ref.downbeatsSeconds,
             beatsPerBar: ref.beatsPerBarEstimate)
@@ -83,6 +86,9 @@ struct KaguraFixture {
     }
 
     var duration: Double { rowTime.last ?? 0 }
+
+    /// `bass_att` as the app would hold it at render instant `time` (the last published row).
+    func bass(at time: Double) -> Double { row(at: time).map { bassAtt[$0] } ?? 0 }
 
     /// The capture's playback clock interpolated to a render instant — the music's true position.
     func truePlayback(at time: Double) -> Double? {

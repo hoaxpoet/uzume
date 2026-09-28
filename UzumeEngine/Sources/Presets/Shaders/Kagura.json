@@ -2,7 +2,7 @@
   "name": "Kagura",
   "family": "dancer",
   "duration": 45,
-  "description": "A point-light dancer: fifteen warm-white points on near-black at the joints of one human body, each dragging a 0.4 s amber trail, dancing the twist in place. The dance is CMU motion capture time-warped onto the cached beat grid, so every hip-turn extreme lands on a beat, from a continuous beat position computed from the grid's beat times and the playback clock at render rate. The two twist clips alternate on bar lines (every 4 beats when the grid declines the bar) with a one-beat crossfade. With no grid, or on the streaming path until the beat tracker locks, the figure sways instead, unwarped and never frozen. Nothing brightens on the beat: the beat moves the pose. KAG.2, uncertified; dance selection, arm reach and the silence rest arrive in KAG.3. See docs/presets/KAGURA_DESIGN.md.",
+  "description": "A point-light dancer: fifteen warm-white points on near-black at the joints of one human body, each dragging a 0.4 s amber trail, dancing in place. Five dances from CMU motion capture (twist, cabbage patch, macarena, Egyptian walk, and the Charleston on fast songs) are time-warped onto the cached beat grid, so each dance's pulse lands on a beat. The song's arousal and tempo pick three of them at track start; at each bar-line clip change the bass energy of the bar just played, ranked against the song's other bars, picks the calm, middle or vigorous one. The smoothed bass also swells and settles the arms by up to 25 percent. The figure rests, unwarped and never frozen, with no grid, on the streaming path until the beat tracker locks, while the grid's beat spacing is uneven, through silence, and when playback stops: calm songs rest in slow ballet poses, others in a sway. Nothing brightens on the beat: the beat moves the pose. KAG.3, uncertified. See docs/presets/KAGURA_DESIGN.md.",
   "author": "Matt",
   "passes": [
     "feedback",
@@ -30,5 +30,11 @@
     "tier2": 0.3
   },
   "rubric_profile": "lightweight",
+  "requires_regular_beat": true,
+  "audio_routes": [
+    { "route": "arm_reach", "primitive": "bassAtt", "kind": "continuous" },
+    { "route": "dance_pick", "primitive": "bassAtt", "kind": "continuous" },
+    { "route": "silence_rest", "primitive": "bassAtt", "kind": "continuous" }
+  ],
   "certified": false
 }

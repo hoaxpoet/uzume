@@ -484,6 +484,17 @@ def cmd_tempo(a):
 FAMILIES = {   # clip list per family; the film cycles through them on bar boundaries
     "salsa": ["60_03", "61_02", "60_08"],
     "lindy": ["93_05", "103_05", "93_07"],
+    # KAG.3 (Matt, 2026-09-28: "render the Charleston films") — the chicken dance's replacement candidate:
+    # the two in-place Charleston trials (footfall pulse, 171-176 steps/min native), whole trials
+    "charleston": ["93_04", "93_05"],
+    # KAG.3 CMU survey (Matt, 2026-09-28: "download them and render films") — in-place windows found by
+    # motion signature (pelvis travel <= 0.4 m, strong limb-speed periodicity)
+    "sidetwist": ["14_20@8-13"],     # found as "jacks" by periodicity; it is the trial's side twists
+    "jacks": ["14_20@0.25-4.25", "14_06@0.5-4.5"],   # the real jumping jacks: arms overhead, feet apart
+    "jacks13": ["13_29@4.5-9.5"],
+    "indian10": ["94_10@2.5-8.5"],
+    "indian13": ["94_13@0-6"],
+    "indian09": ["94_09@8-14"],
     "modern": ["05_02", "05_11"],
     "sway": ["05_12"],
     # KAG.0b — planted-feet dances cut from the mixed trials 15_04 / 15_05 (windows found by
@@ -502,13 +513,18 @@ FAMILIES = {   # clip list per family; the film cycles through them on bar bound
 }
 # KAG.0c (Matt: "half-time twist on slow songs"): a twist never goes to two turns per beat. On a slow
 # song it plays one turn per beat below native speed (Olive Drab 86 BPM: 0.54x) instead of double time.
-PULSE_LEVELS = {"hipyaw": (1, 2, 4)}
+PULSE_LEVELS = {"hipyaw": (1, 2, 4), "footfalls": (1, 2, 4)}   # KAG.3: nor two Charleston steps per beat
 CLIP_PULSE = {   # clips whose beat is not in the feet
     "15_04@109.5-114": "hipyaw", "15_05@110-116": "hipyaw",
     "15_04@117-122.5": "wrists", "15_05@117-123": "wrists",
     "18_15@1-12.8": "gesture", "20_01@0-10.7": "gesture", "143_35@0.3-10.6": "gesture",
     "90_30@3.2-9": "wrists",
     "15_04@98-104.5": "gesture", "15_05@98-104.5": "gesture",
+    "14_20@8-13": "wrists", "14_20@0.25-4.25": "wrists", "14_06@0.5-4.5": "wrists",
+    # KAG.3 build (Matt: "add the Charleston"): the footfall pulse named, so it gets the build's levels below
+    # and cmd_film's per-segment pulse block (beat_events falls through to the footfall branch)
+    "93_04": "footfalls", "93_05": "footfalls",
+    "94_10@2.5-8.5": "gesture", "94_13@0-6": "gesture", "94_09@8-14": "gesture",
 }
 
 
@@ -565,7 +581,8 @@ def pick_repertoire(bpm, arousal, k=3):
     return sorted(best, key=lambda r: vn[r[0]]), energy, vn
 
 
-def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, bars_per_clip=4, face=True):
+def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, bars_per_clip=4, face=True,
+                 sway_clip=None):
     """-> (frames_fn, log). frames_fn(t) gives warped, energy-scaled world positions."""
     fps_r = 30
     beats = sess["beats"] + shift_beats * 60 / sess["bpm"]
@@ -591,11 +608,11 @@ def build_dancer(sess, family, shift_beats=0.0, seconds=30.0, irregular=False, b
     safety = grid_cv > GRID_CV_SWAY
     if irregular or safety or len(beats) < 8:
         why = "forced (--irregular)" if irregular else f"safety net: grid beat-spacing CV {grid_cv:.3f} > {GRID_CV_SWAY}"
-        names, P = point_lights(FAMILIES["sway"][0])
+        names, P = point_lights(sway_clip or FAMILIES["sway"][0])
         dur = len(P) / MOCAP_FPS
         # ping-pong loop (forward, then backward): a plain modulo wrap teleports the figure (a pop)
         segs = [(0.0, seconds + 1, P, lambda tq, d=dur - 0.02: d - np.abs(np.mod(tq, 2 * d) - d), 1.0, None)]
-        log.append(f"fallback: unwarped sway clip {FAMILIES['sway'][0]} ({why})")
+        log.append(f"fallback: unwarped sway clip {sway_clip or FAMILIES['sway'][0]} ({why})")
     else:
         # clip changes on bar boundaries: each clip runs up to bars_per_clip bars, or fewer
         # if its capture runs out first (the Lindy trials are 2-5 s long)
@@ -736,7 +753,7 @@ def cmd_film(a):
     if a.arousal is not None:   # song-level energy when the session is one window of a longer track
         sess["arousal"] = a.arousal
     fn, names, segs, log = build_dancer(sess, a.family, a.shift_beats, a.seconds, a.irregular,
-                                       face=not a.raw_facing)
+                                       face=not a.raw_facing, sway_clip=a.sway_clip)
     print(f"grid {sess['bpm']:.2f} BPM, {len(sess['beats'])} beats, {len(sess['bars'])} bars, "
           f"bpb {sess['bpb']}, bar_declined={sess['bar_declined']}")
     for line in log:
@@ -859,6 +876,7 @@ def main():
     p.add_argument("--raw-facing", action="store_true",
                    help="keep each capture's own facing (all films before KAG.0d)")
     p.add_argument("--metrics-only", action="store_true", help="skip rendering; print the measurements")
+    p.add_argument("--sway-clip", default=None, help="unwarped clip for the fallback (KAG.3: ballet on ambient songs)")
     p = sp.add_parser("slide"); p.add_argument("trials", nargs="+")
     p = sp.add_parser("sheet"); p.add_argument("films", nargs="+"); p.add_argument("out")
     p.add_argument("--seconds", type=float, default=30)
