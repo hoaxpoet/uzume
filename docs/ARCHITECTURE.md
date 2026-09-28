@@ -102,7 +102,8 @@ This ordering is the most important design rule in the project. Continuous-energ
 - Float 43: `drumsEnergyDevSmoothed` (D-127). Float 44: `cachedBassProportion` (CSP.3). Floats 45–47: FFO aurora hue / punch / orbit (`auroraPalettePhase`, `totalEnergySmoothed`, `auroraOrbitAzimuth`).
 - Floats 48–55: IFC.4 / D-177 instrument-family activity — `{strings,brass,woodwinds,percussion}{Activity,ActivityDev}`. `*Activity` = smoothed absolute; `*ActivityDev` = positive D-026 deviation (the trigger). Sampled from the preview-clip PANNs sweep by playback position; zero when no cached series. Renderer-transient (excluded from Codable).
 - Float 56: BC.1 `beatClarity01` — the track's D-154 beat regularity, **1 steady / 0 irregular / 0.5 unknown**. Track-scoped (installed at track change by `RenderPipeline.setBeatClarity(beatIrregular:)`, reset to unknown at session boundaries, preserved across live stem pushes); renderer-transient (excluded from Codable).
-- Floats 57–64: padding.
+- Float 57: FF.5 `energyLevel` — the track's measured section energy (1–10, `EnergyScale.library`, D-259) over the 10 s centred on the playhead; the song's typical level on a preview curve (streaming); **0 = unknown**. Installed per track by `RenderPipeline.setTrackEnergyLevels(_:)` (`TrackProfile.energyLevelsPerSecond`, cleared at session boundaries) and sampled at `trackElapsedS` into each frame's snapshot in `renderFrame`; renderer-transient (excluded from Codable). First consumer: Fireflies' swarm density.
+- Floats 58–64: padding.
 
 Rule: `base_zoom` and `base_rot` (continuous energy) should be 2–4× larger than `beat_zoom` and `beat_rot` (onset pulses).
 
@@ -1077,7 +1078,8 @@ struct StemFeatures           // 256 bytes (64 floats), @frozen. GPU buffer(3). 
                               //   Floats 48–55: IFC.4 (D-177) instrument-family capture, 2 per family
                               //     (strings/brass/woodwinds/percussion): *Activity, *ActivityDev.
                               //   Float  56   : BC.1 beatClarity01 (1 steady / 0 irregular / 0.5 unknown; track-scoped).
-                              //   Floats 57–64: padding — the ONLY free floats (PUB.7 correction:
+                              //   Float  57   : FF.5 energyLevel (1–10 section energy at the playhead; 0 unknown).
+                              //   Floats 58–64: padding — the ONLY free floats (PUB.7 correction:
                               //     44–55 were previously marked padding while live).
 struct AudioFrame             // 24 bytes, @frozen. PCM block metadata: timestamp/sampleRate/sampleCount/channelCount/bufferOffset.
 struct FFTResult              // 16 bytes, @frozen. binCount/binResolution/dominantFrequency/dominantMagnitude.

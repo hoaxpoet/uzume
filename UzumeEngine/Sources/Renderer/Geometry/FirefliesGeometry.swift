@@ -231,7 +231,10 @@ public final class FirefliesGeometry: ParticleGeometry, @unchecked Sendable {
 
     public func update(features: FeatureVector, stemFeatures: StemFeatures, commandBuffer: MTLCommandBuffer) {
         let bpm = beatGrid?.readOverlayState().bpm ?? 0
-        swarm.advance(features: features, clarity: stemFeatures.beatClarity01, gridBPM: bpm)
+        swarm.advance(features: features,
+                      clarity: stemFeatures.beatClarity01,
+                      gridBPM: bpm,
+                      energyLevel: stemFeatures.energyLevel)
         if features.aspectRatio > 0 { aspect = features.aspectRatio }
         world.advance(dt: min(max(features.deltaTime, 0), 0.1), aspect: aspect, bassAttRel: features.bassAttRel)
         writeWorld()

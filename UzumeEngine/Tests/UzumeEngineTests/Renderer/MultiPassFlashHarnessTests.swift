@@ -277,25 +277,27 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Meniscus", luma: try await flashLuma("Meniscus", settle: 120))
     }
 
-    @Test("Fireflies is flash-safe (a locked unison on the worst-case grid, real headless render)")
+    @Test("Fireflies is flash-safe (locked patches on the worst-case grid, real headless render)")
     func firefliesIsFlashSafe() async throws {
         // The single-pass gate cannot see Fireflies: it draws only the world fragment with a zeroed
         // slot 6, so no firefly is ever drawn. `renderFireflies` is the production direct path (world
         // + slot-6 camera, then the swarm's lights, pools and sprites in one encoder).
         //
-        // The worst case for this scene is a LOCKED UNISON — hundreds of lights flashing together —
-        // and the swarm only locks on a timed grid with a clear beat. So the shared train's own grid
-        // (accentHz × 60 = 270 BPM; the swarm flashes every 4 beats, 0.89 s) is installed and
-        // beatClarity01 = 1 on every stem row. The first 20 s let it lock (the design's ~15 s) and
-        // are discarded; the next 30 s (~34 unison flashes) are measured. An untimed or unclear
-        // drive would leave the swarm free and the measurement would under-read.
+        // The worst case for this scene is its fastest LOCKED rhythm, and the swarm only locks on a
+        // timed grid with a clear beat. Since FF.5 a lock is 2–4 PATCHES taking turns, one per beat;
+        // the shared train's own grid (accentHz × 60 = 270 BPM) is the fastest the scene sees: 4
+        // patches, a patch lit on every beat (4.5 Hz), each firefly's cycle 0.89 s. So that grid is
+        // installed and beatClarity01 = 1 on every stem row. The first 20 s let it lock (the design's
+        // ~15 s) and are discarded; the next 30 s (~135 patch flashes) are measured. An untimed or
+        // unclear drive would leave the swarm free and the measurement would under-read.
         //
         // One continuous 50 s train, NOT the tiled 3 s one: a tile restarts `trackElapsedS` (the
         // swarm reads that as a track change and restarts incoherent) and 3 s holds 13.5 beats at
         // 4.5 Hz, so every seam would also jump the grid half a beat.
         //
-        // Measured (FF.4, 320×180): 0.00 flashes/s, 0 transitions, relative luminance 0.014…0.084
-        // (Δ0.071, 24× the responsiveness floor).
+        // Measured (FF.5, 320×180, the smooth glow): 0.00 flashes/s, 0 transitions, relative
+        // luminance 0.015…0.037 (Δ0.022, ~7× the responsiveness floor). FF.4's whole-meadow unison:
+        // 0.014…0.084 (Δ0.071) — a patch per beat moves the frame about a third as much.
         let stems = FlashHarnessSupport.worstCaseStemTrain(seconds: 50).map { s -> StemFeatures in
             var s = s; s.beatClarity01 = 1; return s
         }

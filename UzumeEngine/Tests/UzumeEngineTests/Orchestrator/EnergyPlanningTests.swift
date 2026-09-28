@@ -78,6 +78,21 @@ struct EnergyPlanningTests {
         #expect(TrackProfile(bpm: 120).energySections(trackDuration: 180).sections.isEmpty)
     }
 
+    /// FF.5 — what the renderer installs per track (`StemFeatures.energyLevel`).
+    @Test("per-second levels step with the song; a preview gives one level; no curve gives none")
+    func energyLevelsPerSecond() {
+        let quiet = steadyCurve(level: 2, seconds: 60), loud = steadyCurve(level: 9, seconds: 60)
+        let song = TrackProfile(energyCurve: EnergyCurve(hopSeconds: 1, loudnessDB: quiet.loudnessDB + loud.loudnessDB,
+                                                         activity: quiet.activity + loud.activity))
+        let levels = song.energyLevelsPerSecond(trackDuration: 120)
+        #expect(levels.count == 120)
+        #expect(levels[30] == 2 && levels[54] == 2, "the quiet half")
+        #expect(levels[66] == 9 && levels[90] == 9, "the loud half")
+        let preview = TrackProfile(energyCurve: steadyCurve(level: 5, seconds: 30))
+        #expect(preview.energyLevelsPerSecond(trackDuration: 240) == [5], "a preview stands for the whole song")
+        #expect(TrackProfile().energyLevelsPerSecond(trackDuration: 240).isEmpty)
+    }
+
     @Test("with no curve, energy is neutral: the planner still plans, on tempo and stems")
     func noCurveIsNeutral() throws {
         let catalog = [makePreset(name: "Mid", family: .reaction, visualDensity: 0.5)]

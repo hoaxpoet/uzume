@@ -1,6 +1,6 @@
 # Fireflies — Visual References
 
-**Family:** `particles` &nbsp;·&nbsp; **Passes:** `direct` world + `particles` swarm (planned, FF.1–FF.3) &nbsp;·&nbsp; **Rubric:** full
+**Family:** `particles` &nbsp;·&nbsp; **Passes:** `direct` world + `particles` swarm (built FF.1–FF.3; **certified FF.5, 2026-09-28**) &nbsp;·&nbsp; **Rubric:** full
 **Last curated:** 2026-09-25 (FF.R2: style set, 9 local-only prints, hero `07`, blue — D-258); 2026-09-24 (FF.R: 9 photographs, now composition-only).
 **Curation role:** ⚠ **the STYLE is now set by §FF.R2 below (D-258).** The nine photographs further
 down keep a composition role only — meadow, tree line on the horizon, mist in the low ground. They no
@@ -97,35 +97,39 @@ and the traits that must be **actively disregarded**.
 
 ## Mandatory traits (per SHADER_CRAFT.md §12.1)
 
-- [ ] **Detail cascade:**
+Scored by hand at certification (FF.5), the Membrane precedent: an item counts as *adapted* only where the look
+really delivers it. The automated rubric reads 2/15 on the `full` profile, which stays (a screenprint has no
+fbm cascade and no `mat_*` calls to find).
+
+- [x] **Detail cascade (adapted, in inks):**
   - **Macro:** the horizon composition (`01`).
   - **Meso:** tree-crown and ridge layering (`06`, `07`) and the mist band (`05`).
   - **Micro:** grass strands and seed heads (`08`) and the canopy edge.
   - **Specular / emissive:** the firefly core plus its halo (`04`).
-- [ ] **Hero noise:** fbm with ≥ 4 octaves on the canopy edge and the grass. Domain-warped fbm on the mist.
-- [ ] **Materials (≥ 3):** foliage silhouette, grass, mist (participating medium, Nimbus precedent), sky gradient, firefly emissive
-- [ ] **Audio reactivity:** beat-grid nudge × `stems.beat_clarity01` (unknown → 0). Mutual relay is internal. `near_silent01` fades the swarm to stragglers.
-- [ ] **Silence fallback:** the dusk world stays lit, with a few stragglers. Never black (D-037).
-- [ ] **Performance ceiling:** 60 fps at 1080p in Release, measured at FF.3
-- [ ] **Hero reference image:** FF.R2 `07` (style, local-only); `01_macro_afterglow_meadow_treeline.jpg` (composition)
+- [ ] **Hero noise:** fbm with ≥ 4 octaves on the canopy edge and the grass. Domain-warped fbm on the mist. **Not met as written:** texture is the density of hatched lines and the paper grain (D-258: *line, not fill*), not noise octaves.
+- [x] **Materials (≥ 3, adapted):** foliage silhouette, grass, mist, sky gradient, firefly emissive — each a distinct ink treatment and light response (the pools brighten the pale grass, mist and far branches; near-black trunks stay silhouettes), not `mat_*` BRDFs.
+- [x] **Audio reactivity:** beat-grid nudge × `stems.beat_clarity01` (unknown → 0) — since FF.5, 2–4 patches taking turns on the beat; the meadow thins with `stems.energy_level` (FF.5); `near_silent01` fades the swarm to stragglers; the world breathes on `bassAttRel` (FF.2). Routes green; M7 lock verified by replay (DYC 11.1 s, B.O.B. 8.7 s).
+- [x] **Silence fallback:** the dusk world stays lit, with a few stragglers. Never black (D-037). Warszawa tail: luma min 0.0924, 0 frozen frames.
+- [x] **Performance ceiling:** 60 fps at 1080p. Release GPU median 2.32 ms (FF.3); live M7 (Debug, 1080p) 59.9 fps, GPU p95 3.69 ms.
+- [x] **Hero reference image:** FF.R2 `07` (style, local-only); `01_macro_afterglow_meadow_treeline.jpg` (composition). Stills accepted at FF.2 / FF.3, the FF.5 films (*"yes to both"*) and the M7 (*"a strong pass"*).
 
 ## Expected traits (per §12.2)
 
-- [ ] Volumetric fog / aerial perspective — **yes** (`05`, `06`): this is what separates it from the spike
+- [x] Volumetric fog / aerial perspective — the mist band and value-is-depth ink ladder (`05`, `06`)
 - [ ] Detail normals — n/a (a 2.5-D silhouette world)
 - [ ] Triplanar texturing — n/a
 - [ ] SSS / fiber BRDF — n/a
 
 ## Strongly preferred traits (per §12.3)
 
-- [ ] Volumetric light: each flash scatters into the mist (FF.3)
-- [ ] Hero emissive highlight in ≥ 60 % of frames: the fireflies
+- [x] Volumetric light (adapted): each flash's light pool brightens the mist and grass around it (FF.3), a light volume, not scattering
+- [ ] Hero emissive highlight in ≥ 60 % of frames: the fireflies — **not measured**; quiet passages now show about a tenth of the swarm by design (FF.5)
 
 ## Anti-references (failure modes specific to this preset)
 
 - **The FF.0 sketch itself:** a one-tone semicircle tree line, a three-stop CSS-style sky, a flat
   streaked meadow, identical Gaussian dots. FF.0 README §7.1 lists each.
-- **A frame that flashes:** the unison must be many tiny points, never a frame-wide lift (D-157).
+- **A frame that flashes:** a patch's flash must be many tiny points, never a frame-wide lift (D-157).
 - **Long-exposure trails**, as in `02`, `03` and `09`. Photographs integrate over seconds; the scene
   draws one instant.
 
