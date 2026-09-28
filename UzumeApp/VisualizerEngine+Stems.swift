@@ -600,6 +600,16 @@ extension VisualizerEngine {
         logger.info("\(msg, privacy: .public)")
     }
 
+    /// FF.5 — the track's measured energy per second (`StemFeatures.energyLevel`), on the
+    /// `setBeatClarity` every-call contract: no curve → [] (unknown), never the previous track's.
+    private func installTrackEnergyLevels(for identity: TrackIdentity?) {
+        let profile = identity.flatMap { stemCache?.trackProfile(for: $0) }
+        let levels = profile?.energyLevelsPerSecond(trackDuration: identity?.duration ?? 0) ?? []
+        pipeline.setTrackEnergyLevels(levels)
+        sessionRecorder?.log("ENERGY_LEVELS: \(levels.count) s, levels "
+            + "\(Int(levels.min() ?? 0))–\(Int(levels.max() ?? 0)) (0 s = unknown, 1 s = preview typical)")
+    }
+
     /// Reset the stem pipeline on track change, loading pre-analyzed data from cache
     /// when available. `caller` (BUG-006.1) identifies which code path invoked us.
     func resetStemPipeline(
@@ -625,6 +635,7 @@ extension VisualizerEngine {
         // BC.1 — the same flag, to the GPU (`StemFeatures.beatClarity01`). Written on EVERY
         // call, identity or not, so no track inherits the previous one's value.
         pipeline.setBeatClarity(beatIrregular: currentTrackBeatIrregular)
+        installTrackEnergyLevels(for: identity)
 
         // Clear the per-frame analyzer's source waveforms so stems don't
         // leak across tracks. Next separation will repopulate them.

@@ -1250,6 +1250,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         // (the both-paths rule): a new session starts unknown, not with the last track's.
         currentTrackBeatIrregular = nil
         pipeline.setBeatClarity(beatIrregular: nil)
+        pipeline.setTrackEnergyLevels([])   // FF.5 — same rule for the energy levels
     }
 
     /// BUG-012 instrumentation — record VisualizerEngine teardown. If a crash

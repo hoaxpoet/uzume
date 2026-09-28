@@ -292,6 +292,22 @@ extension RenderPipeline {
         }
     }
 
+    /// FF.5 — install the current track's per-second energy levels (see
+    /// `StemFeatures.energyLevel`). Called on every track change from the app layer's
+    /// `resetStemPipeline` — empty when the track has no prepared curve — and with `[]` at each
+    /// session boundary, the `setBeatClarity` contract, so no track reads another's. Thread-safe.
+    public func setTrackEnergyLevels(_ levels: [Float]) {
+        stemFeaturesLock.withLock { trackEnergyLevels = levels }
+    }
+
+    /// The installed level at `elapsed` seconds into the track: the last second past the end, the
+    /// single value of a whole-track level, 0 (unknown) when none is installed.
+    static func energyLevel(_ levels: [Float], at elapsed: Float) -> Float {
+        guard let last = levels.last else { return 0 }
+        let second = Int(max(elapsed, 0))
+        return second < levels.count ? levels[second] : last
+    }
+
     /// Read the latest per-stem features snapshot. Thread-safe.
     /// Returns `.zero` until the first stem separation completes.
     public func currentStemFeatures() -> StemFeatures {

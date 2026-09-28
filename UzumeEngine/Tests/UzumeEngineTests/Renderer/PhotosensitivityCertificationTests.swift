@@ -103,6 +103,14 @@ struct PhotosensitivityCertificationTests {
                            // the dance on a 120 BPM grid 0.00 flashes/s, luma 0.00423…0.00467; the
                            // Charleston at 166 BPM 0.00, 0.00424…0.00467; the ballet rest 0.00,
                            // 0.00409…0.00435. Nothing brightens on the beat (D-157).
+        ,
+        "Fireflies"        // particles-only direct path; `fireflies_world_fragment` draws the world with a
+                           // ZEROED slot 6 here, so no firefly is ever drawn and the frame reads static.
+                           // Measured for real by MultiPassFlashHarnessTests.firefliesIsFlashSafe (FF.4,
+                           // FF.5 patches + smooth glow): 50 s at the train's own 270 BPM grid, clarity 1,
+                           // first 20 s discarded — 4 patches taking turns, one per beat — 0.00 flashes/s,
+                           // 0 transitions, relative luminance 0.015…0.037 (Δ0.022). 1080p D-157 on the
+                           // four captures: max Δ frame-mean luma 0.0071 / 0.0117 / 0.0047 / 0.0043.
     ]
 
     // MARK: - Gate

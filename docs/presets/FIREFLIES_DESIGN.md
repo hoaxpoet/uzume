@@ -4,9 +4,9 @@
 FF.2 (the world) ✅ 2026-09-25 (look still accepted by Matt: *"accept … looks good overall"*) ·
 FF.3 (the light) ✅ 2026-09-26, branch `ff-3` (look still accepted by Matt: *"This light clears the bar."*) ·
 FF.4 (M7) closed 2026-09-28: **M7 not passed** (Matt: *"It's everyone at once — go with option A"*; §1a) ·
-**FF.5 (orchestration + smooth glow, then M7 + certification) next** — prompt `prompts/FF.5-prompt.md`.
-Reachable by the arrow keys (`exclude_from_cycling` removed at FF.4); `certified: false`, so no session
-plans it yet.
+**FF.5 ✅ CERTIFIED 2026-09-28, the 27th** — patches take turns, the smooth glow, the meadow thinning with the
+music (Matt's M7: *"Fireflies is a strong pass - I love it (and more importantly my wife loves it)"*; streaming
+passed with the engine's grid limit recorded, BUG-065). Sessions plan it.
 
 This document consolidates what is already decided; it adds no decision Matt has not made. (The one
 question it first left open, §4.3, Matt answered: "B".) Sources:
@@ -48,6 +48,11 @@ the whole meadow. On an irregular beat, or one whose clarity is unknown, they st
   become a soft continuous yellow-green light around the white core; **the world keeps its print
   texture**.
 
+- **The meadow thins with the music** (Matt, 2026-09-28, the FF.5 look check: *"A"*). Option A as
+  put to him: *quiet stretches show a sparse meadow, a few patches of a few lights, and it fills as
+  the song builds. DYC opens as the design first promised, with a few lights waiting, and the drop
+  fills the meadow.* Rejected: B, the full swarm whenever the beat is clear.
+
 ## 2. Temporal contract
 
 | Moment | What the listener sees |
@@ -55,8 +60,9 @@ the whole meadow. On an irregular beat, or one whose clarity is unknown, they st
 | Track start | Incoherent random blinks, by design (the swarm restarts on every track change). |
 | First seconds (clear beat) | Clusters, then sweeps relaying across the meadow; the swarm coheres in ~3 s. |
 | ~6–15 s (clear beat) | The meadow organises into 2–4 patches that take turns: each beat, one patch flashes together and the flash walks across the meadow beat by beat. Every beat lights a patch; no beat lights them all. Each firefly still blinks every 1–2 s. (Until FF.5: the whole meadow in unison once per 1, 2 or 4 beats — rejected at FF.4's M7, §1a.) |
+| Quiet but not silent (FF.5) | The meadow thins with the song's measured energy: about a tenth of the fireflies at energy ≤ 2 (a few lights in every patch), filling to all of them by energy 8. DYC's opening is sparse and its drop at 3:08 fills the meadow within a few seconds. Hidden fireflies keep their rhythm, so the patches carry on unseen. |
 | Irregular / unknown beat | Free for the whole track: neighbour relay only, scattered clusters, no patch on a beat. |
-| Near-silence (`near_silent01`) | All but ~5 % stragglers fade out over ~1.5 s; the world stays lit and its ambient motion continues (a meadow at night does not freeze; see §4.3). ⚠ **Near-silence means silence, not quiet music:** in FF.4's M7 capture (`2026-09-28T14-43-46Z`) `near_silent01` never fired over DYC's first 106 s, its quiet opening, so the full swarm flashed there. Whether quiet passages should thin the swarm is open (FF.5 prompt, DECISION). |
+| Near-silence (`near_silent01`) | All but ~5 % stragglers fade out over ~1.5 s; the world stays lit and its ambient motion continues (a meadow at night does not freeze; see §4.3). ⚠ **Near-silence means silence, not quiet music:** in FF.4's M7 capture (`2026-09-28T14-43-46Z`) `near_silent01` never fired over DYC's first 106 s, its quiet opening, so the full swarm flashed there — quiet music is the row above (FF.5). |
 | Any patch flash | Many tiny points, never a frame-wide lift: max Δ frame-mean luma < 0.05 (D-157). |
 
 The behaviour is built and gated (FF.1): `FirefliesSwarm` reproduces the spike's 20-seed coherence and
@@ -143,12 +149,35 @@ reaches, and FF.3 spends about three times FF.2's per-frame step (see ENGINEERIN
 
 | Visual layer | Primitive | Timescale | Status |
 |---|---|---|---|
-| Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. FF.5: each patch is pulled toward its own tick in the cycle, so the patches take turns (§1a). |
+| Swarm entrainment (the music nudge) | `beatPhase01` wraps (grid ticks) × K, K = clamp(2·`stems.beatClarity01` − 1, 0, 1); tempo from the installed grid's BPM (`SpectralHistoryBuffer` slot 2418) | beat | Built (FF.1). Declared route `swarm_beat_nudge`. FF.5: on a clear beat, tick n pulls strip n mod P only, so the strips take turns (§1a; the patches note below). |
 | Swarm visibility | `near_silent01` | ~1.5 s | Built (FF.1). Gated in `FirefliesSwarmTests`. |
+| Swarm density (how many fireflies show) | `stems.energyLevel`: the track's measured 1–10 section energy (NRG curve, D-259) over the 10 s centred on the playhead; the preview's typical level on streaming; 0 unknown → all shown | section (10 s windows; each firefly fades on the 1.5 s visibility fade) | Built (FF.5, Matt's "A"). 10 % shown at ≤ 2, all at ≥ 8, linear between; a fixed per-firefly rank chooses who hides. Visibility only: clocks and relay unchanged (`quietMusicThinsTheMeadow`). A different primitive from the breath and a slower timescale (FA #67). Not a declared route: `energyLevel` is not in `AudioRoutePrimitives`' recordable map (as `beatClarity01`). |
 | World breath (wind in grass and trees, mist drift) | `bassAttRel` → 4 s EMA → 0.5 + 0.5·tanh(4x) (`FirefliesWorld.advance`); sets wind speed and sway (∝ breath²) and mist speed, all integrated so nothing lurches — never beat-rate | several seconds | Built (FF.2); route `world_breath`, green in `RouteCoverageTests`. Chosen over `midAttRel`/`trebAttRel`: the only one of the three whose slow average moves on all four parity captures. Visible, measured with the camera held still (`FirefliesRenderTests.breathIsVisible`): tree-crown motion 3.4× (DYC) / 1.7× (Pyramid) in full vs quiet passages. Matt, at the FF.2 still: *"might want to consider having the trees move based on musical input"* — the trees sway on this route. |
 
 The beat belongs to the fireflies alone; the world listens only on a much slower timescale, so the two
 never fight — and a free track (irregular or unknown beat) still has a visible connection to the music.
+
+**The patches (FF.5, as built in `FirefliesSwarm`).**
+- **How they form.** While K > 0 and a grid is installed, the meadow is P upright strips across the
+  frame, left to right, their edges waving with height (±5 % of the width) so a lit strip reads as a
+  patch, not a ruled column. A firefly belongs to the strip it is drifting through. Grid tick n pulls
+  only strip n mod P toward its flash (the same K·0.30 phase pull and K·0.05 period retune as FF.1),
+  so the flash walks left to right, one strip per beat, and every beat lights a strip. The grid never
+  chooses who flashes (option B stays rejected): every firefly starts random, and each strip
+  organises itself through neighbour relay and its own tick.
+- **The boundary rule.** A flash nudges only neighbours in its own strip; relay does not cross a strip
+  edge. **Grounding (level 1):** the P strips are then P disjoint copies of the FF.0/FF.1 model, each on
+  the fireflies in its strip (density inside a strip is unchanged) and each driven on its own grid tick.
+  The one new event is a firefly drifting across an edge: it arrives out of phase and is pulled in by
+  its new neighbours and its strip's tick, the model's own cold-start mechanism at the scale of one
+  firefly. The whole-meadow attractor (§8) exists only through relay across an edge, so the rule
+  removes it rather than resisting it. Measured once without the rule (not built): the strips still
+  separated over 30 s, but the lock took 12.1–16.0 s instead of 9.4–13.3 s and the turn share fell.
+- **The cycle rule.** A firefly's cycle is P beats, with P the most strips (2–4) whose cycle stays
+  ≤ 2 s: 98 BPM (DYC) → 3 strips, 1.84 s; 118 → 3, 1.52 s; 126–136 → 4, 1.8–1.9 s; 270 → 4, 0.89 s.
+  Below 60 BPM, 2 strips run longer than 2 s (no clear-beat song in the beta set is that slow).
+- **Unclear beat (K = 0).** Nothing changes: one meadow, relay everywhere, the 1/2/4-beat cycle nearest
+  1 s, the same random draws. Unknown clarity still equals irregular, number for number.
 
 ## 6. Constraints
 - **One paradigm (D-029):** a world pass plus the `particles` swarm, as today; FF.2 does not bolt a
@@ -157,9 +186,7 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 - **Performance:** 60 fps at 1080p in Release. The Debug-built `PresetFrameBudgetTests` also times any
   CPU-side model at `-Onone` (FF.1 lesson), so CPU work must be cheap in both configurations.
 - **Silence:** never black (D-037); the world coasts (§4.3).
-- **Rotation:** reachable by the arrow keys since FF.4 Task 2 (`exclude_from_cycling` removed so Matt's
-  build can show it for the M7); `certified: false` until the M7 and the streaming pass, so the planner,
-  the reactive picker and Shift+→ skip it unless "Show uncertified scenes" is on.
+- **Rotation:** certified at FF.5; the planner, the reactive picker and the arrow keys all reach it.
 
 ## 7. Increments
 | ID | Delivers | Gate |
@@ -167,7 +194,7 @@ never fight — and a free track (irregular or unknown beat) still has a visible
 | FF.2 | The 3D world in the screenprint style; the swarm placed in depth through the shared camera; ambient motion | One still beside `07` accepted by Matt **first**; then films, motion gate, flash, frame budget, FF.1 parity still green |
 | FF.3 | The light: near-white core + coloured bloom, fireflies lighting the grass and mist around them, occlusion by grass/trees | Side-by-side against `09`/`07`; flash re-measured; 60 fps 1080p Release |
 | FF.4 | M7 on the beta playlist; certification; remove `exclude_from_cycling` | Matt's M7 — **not passed 2026-09-28** (§1a). Delivered the pre-M7 packet, the WCAG flash test and reachability; not certified |
-| FF.5 | Patches take turns on the beat (§1, §2); the smooth glow (§1a); then M7 + certification (FF.4's Tasks 3–7) | Matt's look check on a film, then his M7 and one streaming pass |
+| FF.5 | Patches take turns on the beat (§1, §2); the smooth glow (§1a); the meadow thins with the music; then M7 + certification (FF.4's Tasks 3–7) | ✅ look check *"yes to both"*; M7 *"a strong pass"*; streaming *"close, but does not lock"* on Billie Jean — the grid, BUG-065 — accepted ("a"). **Certified, the 27th** |
 
 If FF.2/FF.3 do not reach the bar by the October 11 cutoff, Fireflies ships after the beta, never as a
 sketch.

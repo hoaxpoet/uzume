@@ -121,9 +121,10 @@ Four stems (`vocals`, `drums`, `bass`, `other`), from Open-Unmix.
 | 47 | `aurora_orbit_azimuth` | **CPU-patched** — integrated azimuth (BUG-047) |
 | 48–55 | `{strings,brass,woodwinds,percussion}_activity{,_dev}` | PANNs family sweep of the preview clip, sampled by playback position (D-177). Zero when uncached |
 | 56 | `beat_clarity01` | **Track-scoped constant** (BC.1): the D-154 beat-regularity flag, 1 steady / 0 irregular / 0.5 unknown. Installed at track change, reset to unknown at session boundaries, preserved across live stem pushes — the same on both audio paths ([RenderPipeline+PresetSwitching.swift](../UzumeEngine/Sources/Renderer/RenderPipeline+PresetSwitching.swift) `setBeatClarity`) |
-| 57–64 | `_pad15…_pad22` | Padding to 256 B |
+| 57 | `energy_level` | **CPU-patched per frame** (FF.5): the track's measured 1–10 section energy (D-259) over the 10 s centred on the playhead, from the prepared curve — the whole song on the local-file path, the preview's typical level on streaming; 0 = unknown ([RenderPipeline+Draw.swift](../UzumeEngine/Sources/Renderer/RenderPipeline+Draw.swift) `renderFrame`) |
+| 58–64 | `_pad16…_pad22` | Padding to 256 B |
 
-Floats 43, 45, 46 and 47 are **derived on the CPU in the render path and written into the
+Floats 43, 45, 46, 47 and 57 are **derived on the CPU in the render path and written into the
 snapshot**, identically on both audio paths, regardless of where floats 1–42 came from.
 
 **Warmup contract:** all of floats 1–42 are zero for the first ~10 s of live separation.

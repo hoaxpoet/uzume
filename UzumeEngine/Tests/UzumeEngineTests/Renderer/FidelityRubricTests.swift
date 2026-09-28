@@ -177,12 +177,15 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // heuristic cannot see it. The Filigree / Mitosis / Cytokinesis /
                                      // Cymatic Resonance / Skein / Lumen precedent exactly. L4 is
                                      // manual and awaits Matt's M7. WL.2, certified: false.
-    "Fireflies":            false,   // full; FF.1 is BEHAVIOUR ONLY — the world is the FF.0 spike's
-                                     // placeholder and the light is its two Gaussian stamps, so M1–M4
-                                     // (detail cascade, octaves, materials, deviation primitives) fail
-                                     // by scope, not by defect: FF.2 builds the world and FF.3 the
-                                     // light. M5 silence (the dusk stays lit) and M6 performance pass.
-                                     // certified: false.
+    "Fireflies":            false,   // full; 2/15 measured (FF.2 → FF.5 unchanged). A screenprint, not
+                                     // PBR (D-258): ink ladders and hatched line density, no fbm noise
+                                     // cascade and no mat_* calls, so M1–M3 read 0 by construction —
+                                     // the Membrane / Filigree precedent, a non-PBR look certified with
+                                     // the automated gate false. M4: the audio is CPU-side (the swarm's
+                                     // grid ticks, the energy level, the breath from bassAttRel in
+                                     // FirefliesWorld), which the MSL-source heuristic cannot see.
+                                     // M5 silence (the dusk stays lit) and M6 performance pass.
+                                     // Certified at FF.5 on Matt's M7; the profile stays `full`.
     "Stave":                false,   // lightweight; L1 pass (silence renders the ruled field, its haze,
                                      // its cloud and its sparkles — all audio-independent by design),
                                      // L3 pass (0.5 ms tier2 against a 16.6 ms budget), L2 fails BY
@@ -435,7 +438,16 @@ struct FidelityRubricGateTests {
         // Accepted at certification: the macarena runs heavy on calm songs; one energyReference
         // point predates BUG-146 (Superstition), kept because re-deriving takes the Charleston off
         // Take Five, which Matt approved (KAGURA_DESIGN §15).
-        "Kagura"]
+        "Kagura",
+        // FF.5 (2026-09-28) — the 27th. Matt's M7 on the beta playlist (local files), session
+        // `2026-09-28T19-18-24Z` (chain health clean): *"Fireflies is a strong pass - I love it (and
+        // more importantly my wife loves it)"*. Streaming pass (`2026-09-28T21-39-06Z`, chain health
+        // `degraded` from the quiet Take Five / Money stretch; Billie Jean's tap healthy): *"streaming
+        // does not sync to the beat on billie jean - it's close, but does not lock to the beat as it
+        // does for local files"* — the streaming grid sits ~100–160 ms off Billie Jean's onsets while
+        // the swarm locks to that grid (replay: lock 8.5 s, turn share 0.987), the engine's known
+        // streaming limit (BUG-065). Accepted at certification (Matt: "a").
+        "Fireflies"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()

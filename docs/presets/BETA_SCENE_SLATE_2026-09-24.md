@@ -46,7 +46,7 @@ fast port, not a from-footage build), low engine work, and no dependency on the 
 
 | Lane | Order (stop the lane's current entry at a failed gate or a second failed M7, then start the next) | Why this order |
 |---|---|---|
-| **1 · musical-intelligence** (overlay / `point`) | **Fireflies → Pendulums → Harmonograph** | Fireflies has the highest conviction and a public-domain source. Pendulums is analytic maths. Harmonograph is last because of the Rosette precedent. |
+| **1 · musical-intelligence** (overlay / `point`) | **Fireflies → Pendulums → Harmonograph** | Fireflies has the highest conviction and a public-domain source. Pendulums is analytic maths. Harmonograph is last because of the Rosette precedent. **✅ Fireflies certified FF.5, 2026-09-28 — the 27th.** |
 | **2 · physical, direct fragment** | **Drumhead → Rain on Glass → Pool → Rubens' Tube** | The fastest ports (MIT, NC-SA single shader, MIT). Rubens' Tube has no code source, so it goes last. |
 | **3 · simulation / compute** | **Sumi → Physarum Species → Galaxy → Photosphere** | Sumi and Physarum have certified engines under or beside them (the Filigree engine, Alfvén's solver). |
 | backup | **Lantern** | Starts in whichever lane frees up first. |
@@ -109,6 +109,7 @@ looks in 17 days. Batch them into one daily sitting of about 3 scenes on the tes
 ## 1. Where the roster stands (measured from the sidecars, 2026-09-24)
 
 **25 certified. Production uncertified: Plasma, Waveform** (Waveform is still the launch default, per PR.9).
+**Update 2026-09-28: 27 certified** — Kagura (KAG.4, dancer) and Fireflies (FF.5, particles: the particles row is now **7**).
 
 | Family | Certified scenes | Count |
 |---|---|---|

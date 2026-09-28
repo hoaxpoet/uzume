@@ -235,6 +235,10 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// presets (Lumen's lights) read it to drive off live continuous-energy until then.
     var latestStemFeatures = StemFeatures.zero, latestStemFeaturesAreLive = false
     let stemFeaturesLock = NSLock()
+    /// FF.5 — the current track's energy level per second (`TrackProfile.energyLevelsPerSecond`;
+    /// one value = the whole track, empty = unknown). Guarded by `stemFeaturesLock`; sampled into
+    /// each frame's `StemFeatures.energyLevel` in `renderFrame`.
+    var trackEnergyLevels: [Float] = []
 
     /// 150 ms τ EMA of `StemFeatures.drumsEnergyDev`, updated by
     /// `drawWithRayMarch` and patched into the stems snapshot bound at fragment

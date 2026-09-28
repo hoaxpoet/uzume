@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-220809] FF.5 — Fireflies certified (the 27th): patches take turns, a smooth glow, a meadow that thins with the music
+
+Fireflies is certified on Matt's M7 of the beta playlist (*"Fireflies is a strong pass - I love it (and more importantly my wife loves it)"*). On a clear beat the meadow now settles into 2 to 4 patches that take turns, so a flash walks across the meadow one patch per beat instead of the whole meadow flashing at once (the FF.4 M7 note: *"everyone at once"*). Each firefly's glow is a smooth yellow-green light instead of a one-pixel stipple (*"fireflies look pixelated"*). Quiet stretches show a sparse meadow and it fills as the song builds, following the same 1–10 energy curve the planner uses (Matt's "A"): Dance Yrself Clean is sparse until the drop at 3:08. An irregular or unknown beat still leaves the swarm free. New engine surface: `StemFeatures.energyLevel` (float 57), the song's measured energy at the playhead, available to every scene. Known: on streaming the patches land only as close to the beat as the streaming beat grid does (Billie Jean: close, not locked — BUG-065), and a streaming song holds one density because only its preview is measured. Flash-safe (0.00 flashes/s); no golden session plan changed.
+
 ### [dev-2026-09-28-210158] BUG-154 — the network-recovery tests wait for the debounce, not the clock
 
 `NetworkRecoveryCoordinatorTests` failed once in a full app-suite run (`0 == 1`, `2 == 3`): the tests slept 3 s for a 2 s debounce and asserted while the debounce task was still waiting to get back onto a busy main actor. They now await the coordinator's own `debounceTask`, so they pass however slow the machine is. A probe that adds 1.5 s to the debounce failed 4 of 7 tests before the fix and passes all 7 after. Test-only change; no budget widened.
