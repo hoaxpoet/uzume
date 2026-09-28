@@ -54,8 +54,9 @@ public final class AudioInputRouter: @unchecked Sendable {
     private var filePlaybackTask: Task<Void, Never>?
     /// Owned by the router while `.localFilePlayback(URL)` is active.
     /// Created in `startFilePlayback(playback:)` and torn down in
-    /// `stopInternal()`. LF.1.
-    private var localFilePlaybackProvider: LocalFilePlaybackProvider?
+    /// `stopInternal()`. LF.1. Internal for the transport extension
+    /// (`AudioInputRouter+LocalFileTransport.swift`).
+    var localFilePlaybackProvider: LocalFilePlaybackProvider?
     let lock = NSLock()
 
     /// Monotonically increasing timestamp base.
@@ -245,24 +246,6 @@ public final class AudioInputRouter: @unchecked Sendable {
     public func stop() {
         stopInternal()
         logger.info("Router stopped")
-    }
-
-    /// Pause LF playback in place (engine + tap stay alive; player retains
-    /// position). No-op for non-LF modes. LF.5.fix D-LF5-3.
-    public func pauseLocalFilePlayback() {
-        localFilePlaybackProvider?.pause()
-    }
-
-    /// Resume LF playback from the paused position. No-op for non-LF modes
-    /// or when the player isn't paused.
-    public func resumeLocalFilePlayback() {
-        localFilePlaybackProvider?.resume()
-    }
-
-    /// `true` when LF playback is paused (engine alive, player not playing).
-    /// `false` in every other state (stopped / actively playing / non-LF mode).
-    public var isLocalFilePlaybackPaused: Bool {
-        localFilePlaybackProvider?.isPaused ?? false
     }
 
     /// The currently active input mode, or nil if stopped.

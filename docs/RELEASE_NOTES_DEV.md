@@ -13,6 +13,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 ### [dev-2026-09-28-151022] FF.4 — Fireflies' M7: not yet; patches and a smooth glow next
 
 Matt reviewed Fireflies live on the beta playlist and did not pass it. Testers found the whole meadow flashing at once overwhelming and wanted a coordinated rhythm across the swarm; Matt also saw the fireflies as pixelated. The next increment (FF.5) makes patches of the meadow take turns flashing on the beat and draws each firefly's glow smooth instead of stippled. Fireflies stays uncertified, so sessions don't plan it, but the arrow keys now reach it (`exclude_from_cycling` removed) so it can be reviewed. New tests: a WCAG flash measurement through the real draw path with the swarm locked in unison (0.00 flashes/s), and a check that the swarm follows the real beat and not a half-beat decoy.
+### [dev-2026-09-28-135038] LFSEEK.1 — jump within a local-file track
+
+Local-file sessions had no way to move within a song. The transport bar now has a track bar above its buttons, showing the current track's elapsed and total time. Click or drag to jump; the audio restarts once, where you let go. The scenes, the beat and the stems jump with it, and the new position's planned scene comes up right away. If you were paused, you stay paused. Streaming sessions don't show it, because the streaming app owns its player. Also fixed (BUG-151): in a multi-song local session the next song started about a second early, cutting each song's last second. It now starts when the last audio has played. Still to do: Matt's live check.
 
 ### [dev-2026-09-27-220250] NRG.4 — scenes change when the music does
 
