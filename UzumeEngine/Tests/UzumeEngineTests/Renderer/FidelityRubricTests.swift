@@ -211,7 +211,7 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Kagura":               false,   // KAG.2 — lightweight; the dance is CPU-side (KaguraChoreographer
                                      // warped onto the cached grid) and the MSL reads no audio at all,
                                      // so the source heuristic sees no coupling (Filigree precedent).
-                                     // certified:false until KAG.4.
+                                     // Certified at KAG.4 on Matt's M7.
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
     "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
                                      // surface, not a certification candidate. Reads no audio at all
@@ -426,7 +426,16 @@ struct FidelityRubricGateTests {
         // an energised field (ALFVEN.3h/.3i). Also open: at peak energy the frame approaches
         // the "undifferentiated filament" the reference README names as a too-high drive
         // ceiling.
-        "Alfvén"]
+        "Alfvén",
+        // KAG.4 (2026-09-28) — the 26th. Matt's M7 on the beta playlist (local files), session
+        // `2026-09-28T16-18-10Z`: *"looks much better, happy with it overall. macarena is a little
+        // heavy in this set, but it's ok"*, then *"we can move to certification!"* Chain health
+        // `degraded` (`signal_health_band_low`) — the quiet windows are Moonlight Sonata itself
+        // (peaks −23 to −27 dBFS for its whole ~50 s); every other track peaks near 0 dBFS.
+        // Accepted at certification: the macarena runs heavy on calm songs; one energyReference
+        // point predates BUG-146 (Superstition), kept because re-deriving takes the Charleston off
+        // Take Five, which Matt approved (KAGURA_DESIGN §15).
+        "Kagura"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()

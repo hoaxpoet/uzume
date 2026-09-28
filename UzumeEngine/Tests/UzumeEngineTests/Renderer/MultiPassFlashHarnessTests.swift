@@ -165,6 +165,33 @@ struct MultiPassFlashHarnessTests {
         // read "UNMEASURED(static), Δ0.000" on the first run while the figure was dancing. So
         // Kagura proves it is live the direct way — pixels change between consecutive frames —
         // and keeps the analyzer's flash assertion unchanged. The shared guard is not weakened.
+        try await assertKaguraFlashSafe("Kagura", harness)
+    }
+
+    @Test("Kagura is flash-safe dancing the Charleston on a fast song")
+    func kagura_charleston_isFlashSafe() async throws {
+        // KAG.4 — the Charleston, forced at 166 BPM (one step per beat near natural speed, where the pick
+        // admits it): the most vigorous figure and so the widest swing in trail light. Forced because the
+        // worst-case train's bass is steady — no bar ranks vigorous, so the pick alone never reaches it.
+        var fast = harness
+        fast.kaguraBPM = 166
+        fast.kaguraSongArousal = 0.609
+        fast.kaguraDance = .charleston
+        try await assertKaguraFlashSafe("Kagura (Charleston)", fast)
+    }
+
+    @Test("Kagura is flash-safe resting in ballet (a calm song with no grid)")
+    func kagura_balletRest_isFlashSafe() async throws {
+        // KAG.4 — Penny Lane's song arousal and no grid: the dancer rests in ballet the whole time,
+        // rotating its three clips with 1.5 s crossfades.
+        var calm = harness
+        calm.kaguraBPM = nil
+        calm.kaguraSongArousal = -0.426
+        try await assertKaguraFlashSafe("Kagura (ballet rest)", calm)
+    }
+
+    /// The Kagura flash measurement, shared by its three songs.
+    private func assertKaguraFlashSafe(_ label: String, _ harness: MultiPassRenderHarness) async throws {
         let train = FlashHarnessSupport.worstCaseBeatTrain()
         let stems = FlashHarnessSupport.worstCaseStemTrain()
         var previous: [UInt8]?
@@ -179,12 +206,12 @@ struct MultiPassFlashHarnessTests {
         let still = frames.filter { !$0.moved }.count
         let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: FlashHarnessSupport.fps)
         print(String(
-            format: "[flash-safety] Kagura: MEASURED by motion (%d of %d frames changed) | peak %.2f flashes/s "
-                + "(%d transitions) — %@ | luma %.4f…%.4f [limit 3.0]",
-            frames.count - still, frames.count, report.peakFlashesPerSecond, report.transitionCount,
-            report.isSafe ? "SAFE" : "UNSAFE", luma.min() ?? 0, luma.max() ?? 0))
-        #expect(still == 0, "Kagura froze on \(still) frames — the harness is not reaching the dance; INVALID")
-        #expect(report.isSafe, "Kagura peaks at \(report.peakFlashesPerSecond) flashes/s (limit 3) — P1, bring to Matt")
+            format: "[flash-safety] %@: MEASURED by motion (%d of %d frames changed) | peak %.2f flashes/s "
+                + "(%d transitions) — %@ | luma %.5f…%.5f, mean %.6f [limit 3.0]",
+            label, frames.count - still, frames.count, report.peakFlashesPerSecond, report.transitionCount,
+            report.isSafe ? "SAFE" : "UNSAFE", luma.min() ?? 0, luma.max() ?? 0, luma.reduce(0, +) / Double(max(luma.count, 1))))
+        #expect(still == 0, "\(label) froze on \(still) frames — the harness is not reaching the dance; INVALID")
+        #expect(report.isSafe, "\(label) peaks at \(report.peakFlashesPerSecond) flashes/s (limit 3) — P1, bring to Matt")
     }
 
     @Test("Stave is flash-safe (spectral dispersion of the waveform, real headless render)")
