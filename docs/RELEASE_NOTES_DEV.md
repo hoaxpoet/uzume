@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-28-151022] FF.4 — Fireflies' M7: not yet; patches and a smooth glow next
+
+Matt reviewed Fireflies live on the beta playlist and did not pass it. Testers found the whole meadow flashing at once overwhelming and wanted a coordinated rhythm across the swarm; Matt also saw the fireflies as pixelated. The next increment (FF.5) makes patches of the meadow take turns flashing on the beat and draws each firefly's glow smooth instead of stippled. Fireflies stays uncertified, so sessions don't plan it, but the arrow keys now reach it (`exclude_from_cycling` removed) so it can be reviewed. New tests: a WCAG flash measurement through the real draw path with the swarm locked in unison (0.00 flashes/s), and a check that the swarm follows the real beat and not a half-beat decoy.
+
 ### [dev-2026-09-27-220250] NRG.4 — scenes change when the music does
 
 Scene changes used to land on fixed intervals, so in Dance Yrself Clean the drop at 3:08 got its dense scene at 3:21. Preparation now finds where each song's energy steps up or down and holds (a drop, a breakdown, a re-entry), and the planner changes scene there. Dance Yrself Clean now changes at 3:08, 5:57 and 6:35, within a second of the music. A dip shorter than about 20 seconds doesn't trigger a change. Scene length is otherwise the same as before, and a stretch no longer ends on a stub of a scene just before a change. Streaming previews, whose place in the song is unknown, keep the fixed intervals. The M key ("Toggle mood lock"), which did nothing, is gone (NRG.3). Still to do: Matt's live listen.
