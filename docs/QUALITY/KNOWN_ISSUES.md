@@ -331,6 +331,21 @@ future consumers and is independently regression-tested.
 
 ## Open
 
+### BUG-151 — a local-file queue cut the last second of every song (2026-09-28)
+
+**Severity:** P2 · **Domain:** `audio.localfile` (transport) · **Failure class:** `api-semantics` (a completion callback that fires on read, not on playback) · **Status:** Fixed (LFSEEK.1); manual check outstanding · **Found by:** LFSEEK.1's seek test; Matt: *"don't flag, fix"* · **Related:** LF.5 (D-132, the EOF-driven queue advance), BUG-059 (the completion-handler hop)
+
+**Expected:** in a multi-file local session each song plays to its end before the next begins.
+**Actual:** the next song started about a second early. `LocalFilePlaybackProvider` armed its end-of-file callback with `scheduleFile`'s default completion type, `.dataConsumed`, which fires once the player has *read* the last audio into its buffers, not once it has *played* it. Since LF.5, `onFileEnded` drives `advanceLocalFileQueue`, which stops the engine, so each advance cut the buffered tail.
+
+**Measurement.** On the real engine with the `love_rehab.m4a` fixture, a seek to 3 s before the end reported end-of-file 2.0 s later: a 1.0 s lead.
+
+**Fix.** When `onFileEnded` is set (a queue advances), schedule with `.dataPlayedBack`. The single-file loop (`onFileEnded == nil`) keeps `.dataConsumed`, because re-arming while the tail still plays is what makes that loop seamless.
+
+**Verification.**
+1. ✅ Automated: `LocalFileSeekTests.seekMovesThePlayhead` requires the end ≥ 2.8 s into a 3 s remainder; the old code measured 2.0 s. `SessionLifecycleChurnTests` (the BUG-021/059/078 completion-race net) passes unchanged.
+2. Manual: in a multi-song local session, the last second of a song is heard before the next starts.
+
 ### BUG-150 — the Spotify connection tests assert before the connect finishes (2026-09-26)
 
 **Severity:** P3 · **Domain:** `test-infra` (UzumeAppTests) · **Failure class:** `concurrency` (a wall-clock wait for async work) · **Status:** Fixed (BUG150.1, `55c62b90`), merged #291 (`5327841f`) · **Numbering:** 150, because 148 and 149 were already taken on `claude/bug148-valence` (merged #290) · **Related:** BUG-143 (the same `closeout_evidence.sh` step), BUG-142 (same fix shape: await the task, don't sleep)
