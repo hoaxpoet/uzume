@@ -501,7 +501,7 @@
 "connector.type.apple_music.title"          = "Apple Music";
 "connector.type.apple_music.subtitle"       = "Read your current Apple Music playlist";
 "connector.type.spotify.title"              = "Spotify";
-"connector.type.spotify.subtitle"           = "Connect with a Spotify playlist link";
+"connector.type.spotify.subtitle"           = "Scan a playlist you have open in Spotify";
 "connector.type.local_folder.title"         = "Local files";
 "connector.type.local_folder.subtitle"      = "Play a file, folder, or playlist from disk";
 
@@ -521,4 +521,46 @@
 "content.preparing_fallback.subtitle"       = "Analyzing tracks…";
 
 // Preparation streaming subtitle — track count (PreparationProgressView)
+
+/* MARK: - Spotify scan (SCAN, D-260; UX_SPEC §4.4) */
+"connector.spotify.scan.not_running.headline"  = "Open Spotify and go to the playlist you want.";
+"connector.spotify.scan.open_button"           = "Open Spotify";
+"connector.spotify.scan.headline"              = "Scan a playlist from Spotify.";
+"connector.spotify.scan.body"                  = "Open the playlist in Spotify, then start the scan. You’ll scroll through it once.";
+"connector.spotify.scan.start_button"          = "Start scan";
+"connector.spotify.scan.drop_prompt"           = "Or drop screenshots of the playlist here.";
+"connector.spotify.scan.permission.body"       = "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere.";
+"connector.spotify.scan.permission.button"     = "Allow Access";
+"connector.spotify.scan.permission.settings_link" = "Already allowed it? Open System Settings";
+"connector.spotify.scan.scanning_status"       = "Scroll through the playlist in Spotify. Uzume is reading along.";
+"connector.spotify.scan.reading"               = "Reading your screenshots…";
+"connector.spotify.scan.paste_link"            = "Paste a link instead";
+"connector.spotify.scan.notice.spotify_closed" = "Spotify closed during the scan. Open it and start the scan again.";
+"connector.spotify.scan.notice.window_unavailable" = "Uzume couldn’t see the Spotify window. Make sure it’s open on screen, then start the scan again.";
+"connector.spotify.scan.notice.nothing_in_screenshots" = "Uzume couldn’t find a playlist in those images. Drop screenshots of the Spotify playlist, or start a scan.";
+"connector.spotify.scan.notice.nothing_read"   = "No songs were read. Open the playlist in Spotify, start the scan, and scroll through it.";
+
+"scan.panel.instruction"        = "Scroll through your playlist from top to bottom.";
+"scan.panel.count_of"           = "%1$lld of %2$lld songs";
+"scan.panel.count_of.one"       = "%lld of 1 song";
+"scan.panel.count"              = "%lld songs";
+"scan.panel.count.one"          = "1 song";
+"scan.panel.scroll_to_top"      = "Scroll to the top of the playlist first.";
+"scan.panel.missed"             = "Missed %@. Scroll back up a little.";
+"scan.panel.done"               = "Done";
+"scan.panel.cancel"             = "Cancel";
+
+"scan.review.heading"           = "Found %lld songs";
+"scan.review.heading.one"       = "Found 1 song";
+"scan.review.heading.named"     = "Found %1$lld songs from %2$@";
+"scan.review.heading.named.one" = "Found 1 song from %@";
+"scan.review.missing"           = "Missing: %@";
+"scan.review.unsure"            = "Check this one";
+"scan.review.edit"              = "Fix this song’s name";
+"scan.review.remove"            = "Remove this song";
+"scan.review.save"              = "Save";
+"scan.review.title_placeholder" = "Title";
+"scan.review.artist_placeholder" = "Artist";
+"scan.review.scan_again"        = "Scan again";
+"scan.review.continue"          = "Continue";
 

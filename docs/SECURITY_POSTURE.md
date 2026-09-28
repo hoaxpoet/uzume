@@ -15,19 +15,20 @@ Uzume is **macOS-only**, single-user, **on-device only — no cloud, no telemetr
 
 **Distribution intent (Matt, 2026-06-15):** *eventual distribution is on the roadmap* (sharing a notarized build / a possible public release). This does not change what 2.4 does — it still only documents and files — but it makes hardened-runtime + notarization (§3) a **near-term filed follow-up (CLEAN.2.5)** rather than indefinitely deferred. The actual enablement is its own increment because it touches the signing pipeline and needs a real Gatekeeper + tap test.
 
-**The exfiltration posture is the headline strength.** No telemetry, no analytics, no cloud sync; on-device ML; the only outbound network is to Spotify / Apple Music / the iTunes lookup API for *metadata the user asked us to fetch*. Audio is tapped but never uploaded. Session recordings are written to local disk only. For a privacy-sensitive surface (a system-wide audio tap) the data simply has nowhere to go.
+**The exfiltration posture is the headline strength.** No telemetry, no analytics, no cloud sync; on-device ML; the only outbound network is to Spotify / Apple Music / the iTunes lookup API for *metadata the user asked us to fetch*. Audio is tapped but never uploaded. Session recordings are written to local disk only. For a privacy-sensitive surface (a system-wide audio tap) the data simply has nowhere to go. The playlist scan (SCAN, §8) keeps this shape: it reads Spotify's window on device, in memory, and contacts no Spotify server.
 
 ## Summary (verified 2026-06-15)
 
 | # | Aspect | Current state | Verdict |
 |---|---|---|---|
-| 1 | System-audio tap | `.systemAudio` = global tap, excludes nothing (production always uses this); `.application` = single-PID path retained in engine code but not user-selectable (CLEAN.2.3.5). TCC-gated on screen-recording; audio-only, no screen pixels. | Document — core mechanism, consent-gated. |
+| 1 | System-audio tap | `.systemAudio` = global tap, excludes nothing (production always uses this); `.application` = single-PID path retained in engine code but not user-selectable (CLEAN.2.3.5). TCC-gated on screen-recording; the tap itself is audio-only (the one pixel-reading surface is row 8). | Document — core mechanism, consent-gated. |
 | 2 | App sandbox | **Off** — `app-sandbox = false` is the only entitlement. | Document — incompatible with the tap; partial sandbox not viable. |
 | 3 | Hardened runtime + notarization | **Hardened runtime ON** (CLEAN.2.5a — `ENABLE_HARDENED_RUNTIME=YES` on the app target **Release** config; Debug left unhardened so XCTest injection works; signs `-o runtime`; `automation.apple-events` entitlement added). Still dev-signed ("Apple Development"), **not yet Developer ID / notarized**. | **CLEAN.2.5a done + verified** (HR; runtime gates verified 2026-06-15 — tap green @ −6 dBFS under HR, Apple-Events entitlement accepted); **CLEAN.2.5b deferred** — Developer ID + notarization, blocked on a paid Apple Developer Program membership. |
 | 4 | Library validation | Not declared. Links Apple frameworks + SPM static libs only. | Document — not required; keep ON under hardened runtime. |
 | 5 | `uzume://` OAuth callback | scheme + host + `state` (CSRF/replay) + nil-pending rejection; double-checked at `.onOpenURL`. | Document — mitigated (CLEAN.2.2). |
 | 6 | Local-file open path | Defensive m3u parser + AVFoundation decoders; resolved entries canonicalized + filtered to an audio extension allow-list. | **BUG-051 fixed 2026-08-07** (BUG051.1) — allow-list applied at the parser boundary. |
 | 7 | Secrets at rest + no-telemetry | OAuth tokens in Keychain; only the public client ID is checked in; no telemetry. | Document — posture strength. |
+| 8 | Spotify window reading (SCAN, D-260) | During a user-started playlist scan, ScreenCaptureKit reads **Spotify's window only** (a single-window content filter, never a display), frames processed in memory and dropped, only while the scan panel is open; stops on Done / Cancel / Esc / Spotify quitting. Nothing persisted or sent; no Spotify server contacted; no Accessibility API or synthetic input. Dropped screenshots are read in memory the same way. Permission re-checked at scan start. | Document — consent-gated, user-initiated, narrowest filter. |
 
 ---
 
@@ -39,7 +40,7 @@ Uzume is **macOS-only**, single-user, **on-device only — no cloud, no telemetr
 
 The tap is **TCC-gated**: macOS requires the user to grant screen-recording permission before `AudioHardwareCreateProcessTap` will install. That grant is the consent boundary.
 
-**`NSScreenCaptureUsageDescription` honesty (verified).** The string reads *"Uzume captures system audio to generate real-time music visualizations. No video is recorded."* This is honest: the screen-recording permission is purely the OS gate for the **audio** tap — **no screen pixels are ever read**. `SessionRecorder` (`UzumeEngine/Sources/Shared/SessionRecorder+Video.swift`) does write video, but it encodes the app's **own rendered Metal texture** (`appendVideoFrame(from tex: MTLTexture …)`) — Uzume's generated visuals, not the user's screen — to local disk (`~/Documents/uzume_sessions/<stamp>/`, `SessionRecorder.swift:210-238`). "No video is recorded" is true of *screen/user content*; the only video recorded is Uzume's own output, on-device.
+**`NSScreenCaptureUsageDescription` honesty (re-verified at SCAN, 2026-09-28).** The string now reads *"Uzume listens to your Mac's audio to create visuals and, when you scan a playlist, reads the track names in your Spotify window. Nothing is recorded or sent anywhere."* The earlier claim here — that the permission was purely the OS gate for the audio tap and **no screen pixels are ever read** — stopped being true at SCAN: the playlist scan reads Spotify's window (§8). The tap itself still reads no pixels. `SessionRecorder` (`UzumeEngine/Sources/Shared/SessionRecorder+Video.swift`) does write video, but it encodes the app's **own rendered Metal texture** (`appendVideoFrame(from tex: MTLTexture …)`) — Uzume's generated visuals, not the user's screen — to local disk (`~/Documents/uzume_sessions/<stamp>/`, `SessionRecorder.swift:210-238`). "No video is recorded" is true of *screen/user content*; the only video recorded is Uzume's own output, on-device.
 
 **Threat / rationale.** A global audio tap is a real privacy surface: while active it can observe audio from any app. Mitigations: (a) the OS consent gate (user must explicitly grant screen-recording); (b) **audio-only** — no screen content; (c) **no exfiltration** — tapped audio is analyzed on-device and never uploaded (see §7); (d) the engine retains an `.application` (single-PID) tap path in code, though it is not currently user-selectable (CLEAN.2.3.5).
 
@@ -108,6 +109,16 @@ The consequence of (b) was always bounded, which is why it was P3 not higher: th
 **Decision.** Document — **posture strength, no fix**. The invariant to protect: never check a secret into `Uzume.xcconfig`; never add a telemetry/upload path for tap audio or session recordings.
 
 ---
+
+## 8. Spotify window reading (SCAN, D-260)
+
+**Current posture (verified — `UzumeApp/Services/SpotifyScanServices.swift`).** A playlist scan is started by the user (**Start scan**) and runs only while the floating scan panel is open. `SpotifyWindowFrameSource` builds its `SCStream` with `SCContentFilter(desktopIndependentWindow:)` on the largest on-screen window owned by `com.spotify.client` — **one window, never a display** — at up to 4 frames a second, cursor hidden, no audio. Each frame is converted to a `CGImage`, read by `PlaylistScreenReader` (Apple Vision, on device), and released when the handler returns; **nothing is written to disk or sent anywhere**. The stream stops on Done, Cancel, Esc, when the scan completes, or when Spotify quits. Permission is re-checked with `CGPreflightScreenCaptureAccess()` at scan start. Screenshots dropped on the Spotify view are read in memory the same way and never copied.
+
+**What it does not do.** No request to any Spotify server (the scan replaces the Web API path precisely to avoid it); no Accessibility API, no synthetic scrolling or key presses, no AppleScript UI scripting — the user scrolls. The only network traffic the scan causes is the existing iTunes Search lookup for previews (§7, `ITunesRateLimiter`).
+
+**Threat / rationale.** Reading pixels is a real privacy surface: another window, a notification, or a private playlist name can be in frame. Mitigations: the single-window filter (other apps' windows are never captured, even when overlapping), user initiation, the visible panel for the whole duration, in-memory only, and on-device recognition. What is read from the Spotify window — track titles, artists, durations, the playlist name — goes into the session exactly as a pasted link's tracks did.
+
+**Decision.** Document — consent-gated, user-initiated, narrowest filter ScreenCaptureKit offers.
 
 ## Filed follow-ups
 
