@@ -39,7 +39,7 @@ occlusion (FF.3), and the free swarm on an unclear beat (FF.1). All stay exactly
 5. Code you will change: `UzumeEngine/Sources/Renderer/Geometry/FirefliesSwarm.swift` (the model) and
    `fireflies_sprite_fragment` in `UzumeEngine/Sources/Renderer/Shaders/Fireflies.metal`.
 6. Tests you will touch: `FirefliesSwarmTests` (fixture gates, `FirefliesSpikeParityProbe`, the FF.4
-   decoy arm), `FirefliesRenderTests`, and `MultiPassFlashHarnessTests.firefliesIsFlashSafe` (FF.4).
+   decoy arm), `FirefliesRenderTests`, and `MultiPassFlashFirefliesTests.firefliesIsFlashSafe` (FF.4).
 
 ## Pre-flight invariants (each failure stops the session)
 
@@ -122,7 +122,9 @@ occlusion (FF.3), and the free swarm on an unclear beat (FF.1). All stay exactly
 5. **The pre-M7 packet (FF.4 Task 1, re-run on the new swarm).**
    - R1 (the decoy), R2 (the DYC | Warszawa sheet), R3 (coherence and patch curves), R4, and R5 (1080p
      D-157, the silence film with a motion-gate verdict).
-   - Update `firefliesIsFlashSafe` so its comment and drive describe locked patches, not a unison. It
+   - Update `firefliesIsFlashSafe` so its comment and drive describe locked patches, not a unison.
+     It stays in its own nonisolated suite (`MultiPassFlashFirefliesTests`); never move it into
+     the `@MainActor` suite, which starves the SessionManager tests in a full run (FF.4 entry). It
      must still clear the `responded` floor, with 0.00 flashes/s required.
    - **Done-when:** the R1–R5 table in the transcript, each row with its number and source. If R1 does
      not separate, or the flash test flashes, stop and report.
@@ -201,7 +203,7 @@ xcodebuild -scheme UzumeApp -destination 'platform=macOS' build
 swift test --package-path UzumeEngine
 xcodebuild -scheme UzumeApp -destination 'platform=macOS' test
 swift test --package-path UzumeEngine --filter Fireflies
-swift test --package-path UzumeEngine --filter "MultiPassFlashHarnessTests/firefliesIsFlashSafe"
+swift test --package-path UzumeEngine --filter "MultiPassFlashFirefliesTests/firefliesIsFlashSafe"
 FIREFLIES_PARITY=1 FIREFLIES_SEEDS=20 FIREFLIES_PARITY_OUT=<dir> swift test --package-path UzumeEngine --filter FirefliesSpikeParityProbe
 FIREFLIES_DECOY=1 swift test --package-path UzumeEngine --filter "FirefliesSpikeParityProbe/decoyIsDistinguishable"
 FIREFLIES_PARITY=1 FIREFLIES_PARITY_OUT=<dir> swift test --package-path UzumeEngine --filter "FirefliesRenderTests/spikeCapturesAt1080p"
