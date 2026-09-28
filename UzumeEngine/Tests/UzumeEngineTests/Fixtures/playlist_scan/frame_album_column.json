@@ -267,6 +267,34 @@
    ]
   },
   {
+   "text": "TC 11 Somewhere",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.184
+    ],
+    [
+     0.15,
+     0.017
+    ]
+   ]
+  },
+  {
+   "text": "Someone",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.206
+    ],
+    [
+     0.07,
+     0.015
+    ]
+   ]
+  },
+  {
    "text": "Is It Because You Kn...",
    "confidence": 1.0,
    "box": [
@@ -347,6 +375,34 @@
     [
      0.04,
      0.014
+    ]
+   ]
+  },
+  {
+   "text": "TC 12 Somewhere",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.241
+    ],
+    [
+     0.15,
+     0.017
+    ]
+   ]
+  },
+  {
+   "text": "Someone",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.263
+    ],
+    [
+     0.07,
+     0.015
     ]
    ]
   },
@@ -435,6 +491,34 @@
    ]
   },
   {
+   "text": "TC 13 Somewhere",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.298
+    ],
+    [
+     0.15,
+     0.017
+    ]
+   ]
+  },
+  {
+   "text": "Someone",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.32
+    ],
+    [
+     0.07,
+     0.015
+    ]
+   ]
+  },
+  {
    "text": "Glass Hours",
    "confidence": 1.0,
    "box": [
@@ -519,6 +603,34 @@
    ]
   },
   {
+   "text": "TC 14 Somewhere",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.355
+    ],
+    [
+     0.15,
+     0.017
+    ]
+   ]
+  },
+  {
+   "text": "Someone",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.377
+    ],
+    [
+     0.07,
+     0.015
+    ]
+   ]
+  },
+  {
    "text": "Blood In The Cut - Ai...",
    "confidence": 1.0,
    "box": [
@@ -599,6 +711,34 @@
     [
      0.04,
      0.014
+    ]
+   ]
+  },
+  {
+   "text": "TC 15 Somewhere",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.412
+    ],
+    [
+     0.15,
+     0.017
+    ]
+   ]
+  },
+  {
+   "text": "Someone",
+   "confidence": 1.0,
+   "box": [
+    [
+     0.058,
+     0.434
+    ],
+    [
+     0.07,
+     0.015
     ]
    ]
   },

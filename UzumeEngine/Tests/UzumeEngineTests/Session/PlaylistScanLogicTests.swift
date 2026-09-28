@@ -107,7 +107,7 @@ struct PlaylistScanRowAssemblyTests {
         #expect(!frame.rows.contains { $0.artist == "Some Album" }, "album column read as artist")
     }
 
-    @Test("wide window: the Album and Date added columns and an open context menu are not read as artist")
+    @Test("wide window: Album / Date added columns, an open context menu, and sidebar rows aligned with the list")
     func albumColumn() throws {
         let frame = try #require(try parsed("frame_album_column").first)
         #expect(frame.rows.map(\.number) == Array(1...5))

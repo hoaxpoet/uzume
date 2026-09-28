@@ -157,15 +157,28 @@ extension PlaylistFrameParser {
             let inRowBand = { (obs: ScanTextObservation, fraction: CGFloat) in
                 durations.contains { abs($0.obs.box.midY - obs.box.midY) < rowHeight * fraction }
             }
-            // Text column: the modal left edge of text inside row bands, left of the durations.
+            // Row numbers: whole numbers on a duration's line. They anchor the pane —
+            // the library sidebar's text can line up with the rows too, but never right
+            // of the "#" column.
+            let numbers = observations.filter {
+                Int($0.text) != nil && $0.box.maxX < durationMinX && inRowBand($0, 0.3)
+            }
+            let numbersMaxX = numbers.map(\.box.maxX).sorted().dropFirst(numbers.count / 2).first ?? 0
+            // Text column: the modal left edge of text inside row bands, right of the
+            // numbers, left of the durations and — with the header row in view — of the
+            // next column's label. Chrome (a context menu left open) doesn't vote.
+            let headerGuess = observations.first {
+                ["title", "# title"].contains($0.text.lowercased()) && $0.box.maxX < durationMinX
+            }
+            let titleEnd = Self.titleColumnEnd(observations, header: headerGuess, durationMinX: durationMinX)
             let lefts = observations
                 .filter { obs in
-                    obs.box.maxX < durationMinX && PlaylistFrameParser.duration(obs.text) == nil
+                    obs.box.minX > numbersMaxX && obs.box.minX < titleEnd && obs.box.maxX < durationMinX
+                        && !PlaylistFrameParser.isChrome(obs.text) && PlaylistFrameParser.duration(obs.text) == nil
                         && Int(obs.text) == nil && inRowBand(obs, 0.45)
                 }
                 .map(\.box.minX)
-            guard let textMinX = Self.mode(lefts, bin: 0.004) else { return nil }
-            let numbers = observations.filter { Int($0.text) != nil && $0.box.maxX < textMinX && inRowBand($0, 0.3) }
+            guard let textMinX = Self.mode(lefts, bin: 0.006) else { return nil }
             let paneMinX = (numbers.map(\.box.minX).min() ?? textMinX - 0.08) - 0.005
             let columnHeader = observations.first {
                 ["title", "# title"].contains($0.text.lowercased())
