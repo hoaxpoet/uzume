@@ -21,7 +21,9 @@ import Metal
 
 // MARK: - MultiPassRenderHarness
 
-@MainActor
+/// Not actor-isolated: every path that does not call a `@MainActor` engine API runs on whatever
+/// thread calls it, so the flash suite renders off the main actor (FLASHOFF.1). The per-caller
+/// knobs below are INSTANCE values, never shared statics, so a concurrent caller cannot race them.
 struct MultiPassRenderHarness {
 
     /// 16:9. 320×180 keeps aspect-driven placement faithful and is small enough for the
@@ -39,7 +41,7 @@ struct MultiPassRenderHarness {
     /// harness as much as the roster.
     let readback: Bool
 
-    nonisolated init(width: Int = 320, height: Int = 180, readback: Bool = true) {
+    init(width: Int = 320, height: Int = 180, readback: Bool = true) {
         self.width = width
         self.height = height
         // The env var is an ad-hoc override for one-off sweeps; the PARAMETER is what the
@@ -86,12 +88,65 @@ struct MultiPassRenderHarness {
     /// Render `presetName` over `features`/`stems` (row-aligned), returning `reduce(bgra)`
     /// for each measured frame. Dispatches to the preset's real render path. `settle`
     /// warm frames run first without capture (particle grow-in); default 0.
+    @MainActor
     func render<T>(
         preset presetName: String,
         features: [FeatureVector],
         stems: [StemFeatures],
         settle: Int = 0,
         reduce: (_ bgra: [UInt8]) -> T
+    ) throws -> [T] {
+        if let frames = try mainActorFrames(presetName, features, stems) {
+            return try renderLoop(features, reduce, frames)
+        }
+        return try renderOnCaller(presetName, features, stems, settle: settle, reduce)
+    }
+
+    /// FLASHOFF.1 — the same render as `render`, byte for byte, for a caller OFF the main actor.
+    /// Most paths run entirely on the caller's thread; the mv_warp paths, whose per-frame work
+    /// calls `@MainActor` `RenderPipeline` APIs, enter the main actor once per FRAME and leave
+    /// again, so a multi-second render never holds it for longer than one frame. (A `@MainActor`
+    /// suite running these renders held it ~270 s of a full run and starved SessionManager
+    /// tests past their readiness hang caps — FF.4.)
+    func renderOffMain<T>(
+        preset presetName: String,
+        features: [FeatureVector],
+        stems: [StemFeatures],
+        settle: Int = 0,
+        reduce: (_ bgra: [UInt8]) -> T
+    ) async throws -> [T] {
+        let pixelCount = width * height * 4
+        let frames = try await MainActor.run {
+            try mainActorFrames(presetName, features, stems).map { MainActorFrames($0, pixelCount: pixelCount) }
+        }
+        guard let frames else {
+            return try renderOnCaller(presetName, features, stems, settle: settle, reduce)
+        }
+        var out: [T] = []
+        out.reserveCapacity(features.count)
+        for i in features.indices { out.append(reduce(try await frames.render(i))) }
+        return out
+    }
+
+    /// The per-frame body of a preset whose frames need the main actor (the mv_warp paths), or
+    /// nil for every other preset.
+    @MainActor
+    private func mainActorFrames(_ presetName: String, _ features: [FeatureVector],
+                                 _ stems: [StemFeatures]) throws -> FrameBody? {
+        switch presetName {
+        case "Fata Morgana", "Nacre", "Floret", "Glaze":
+            return try bespokeMVWarpFrames(presetName, features, stems)
+        case "Dragon Bloom", "Skein", "Gossamer":
+            return try mvWarpFrames(presetName, features, stems)
+        default:
+            return nil
+        }
+    }
+
+    /// Every path that needs no main actor, run on the caller's thread.
+    private func renderOnCaller<T>(
+        _ presetName: String, _ features: [FeatureVector], _ stems: [StemFeatures],
+        settle: Int, _ reduce: (_ bgra: [UInt8]) -> T
     ) throws -> [T] {
         switch presetName {
         case "Filigree":     return try renderFiligree(features, stems, settle: settle, reduce)
@@ -102,20 +157,14 @@ struct MultiPassRenderHarness {
         case "Kagura":       return try renderKagura(features, stems, settle: settle, reduce)
         case "Stave":        return try renderStave(features, stems, settle: settle, reduce)
         case "Fireflies":
-            return try renderFireflies(features, stems, settle: settle, gridBPM: Self.firefliesGridBPM,
-                                       cameraTimeOffset: Self.firefliesCameraTimeOffset,
-                                       freezeCamera: Self.firefliesFreezeCamera, reduce)
+            return try renderFireflies(features, stems, settle: settle, gridBPM: firefliesGridBPM,
+                                       cameraTimeOffset: firefliesCameraTimeOffset,
+                                       freezeCamera: firefliesFreezeCamera, reduce)
         case "Alfvén":       return try renderAlfven(features, stems, reduce)
         case "Mitosis":      return try renderMitosis(features, stems, reduce)
         case "Cytokinesis":  return try renderCytokinesis(features, stems, reduce)
         case "Lumen Mosaic": return try renderLumenMosaic(features, stems, reduce)
         case "Volumetric Lithograph": return try renderVolumetricLithograph(features, stems, reduce)
-        case "Fata Morgana": return try renderBespokeMVWarp("Fata Morgana", features, stems, reduce)
-        case "Nacre":        return try renderBespokeMVWarp("Nacre", features, stems, reduce)
-        case "Floret":       return try renderBespokeMVWarp("Floret", features, stems, reduce)
-        case "Glaze":        return try renderBespokeMVWarp("Glaze", features, stems, reduce)
-        case "Dragon Bloom", "Skein", "Gossamer":
-            return try renderMVWarp(presetName, features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)
         case "Nebula", "Spectral Cartograph", "Waveform":
@@ -523,37 +572,23 @@ struct MultiPassRenderHarness {
     /// FF.1 — the installed grid's BPM per frame for the Fireflies path (production publishes it
     /// in `SpectralHistoryBuffer` slot 2418; `FeatureVector` does not carry it). Nil = no grid,
     /// which leaves the swarm free. The `realSpectrum` injection precedent.
-    nonisolated(unsafe) static var firefliesGridBPM: [Float]?
+    var firefliesGridBPM: [Float]?
 
     /// FF.2 — shifts the Fireflies camera drift's clock (`FirefliesGeometry.cameraTimeOffset`) so a
     /// still can show the same moment from a drifted camera. 0 = production.
-    nonisolated(unsafe) static var firefliesCameraTimeOffset: Float = 0
+    var firefliesCameraTimeOffset: Float = 0
     /// FF.2 — hold the Fireflies camera still (`FirefliesGeometry.freezeCamera`). Probes only.
-    nonisolated(unsafe) static var firefliesFreezeCamera = false
+    var firefliesFreezeCamera = false
 
     /// FF.2 — when non-nil, every committed frame appends its command-buffer GPU time (ms,
     /// `gpuEndTime − gpuStartTime`; the readback is a CPU copy after completion, so it is
-    /// excluded). Timing probes only.
-    nonisolated(unsafe) static var gpuTimesMs: [Double]?
-
-    /// FF.4 — the Fireflies render OFF the main actor, for a test in a nonisolated suite. The
-    /// `@MainActor` flash suite already holds the main actor for ~270 s in a full run, and adding a
-    /// 27 s Fireflies render there starved 9 SessionManager tests past their readiness caps
-    /// (reproduced 2/2; 0 failures with it skipped). Grid BPM is a parameter, never the shared
-    /// static, so a concurrent main-actor test cannot race it; the camera is production's.
-    nonisolated func renderFirefliesOffMain<T>(
-        features: [FeatureVector], stems: [StemFeatures], gridBPM: [Float]?,
-        reduce: (_ bgra: [UInt8]) -> T
-    ) throws -> [T] {
-        try renderFireflies(features, stems, settle: 0, gridBPM: gridBPM, cameraTimeOffset: 0,
-                            freezeCamera: false, reduce)
-    }
+    /// excluded). Timing probes only. A reference, so the caller reads what `render` appended.
+    var gpuTimes: GPUTimeLog?
 
     /// Fireflies (FF.1). Mirrors `RenderPipeline.encodePresetVisualization` on the direct path:
     /// the world fragment through the preset's own compiled pipeline, then the swarm sprites
-    /// into the same encoder. `settle` frames advance the swarm without capture. Nonisolated
-    /// (FF.4): it touches only `width`/`height`/`readback` and its own Metal objects.
-    nonisolated private func renderFireflies<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+    /// into the same encoder. `settle` frames advance the swarm without capture.
+    private func renderFireflies<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
                                                 settle: Int, gridBPM bpm: [Float]?, cameraTimeOffset: Float,
                                                 freezeCamera: Bool,
                                                 _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
@@ -594,7 +629,7 @@ struct MultiPassRenderHarness {
     }
 
     /// Shared update→render→reduce loop for the geometry-driven particle presets.
-    nonisolated private func particleLoop<T>(
+    private func particleLoop<T>(
         _ ctx: MetalContext, _ drive: [FeatureVector], _ stems: [StemFeatures],
         _ reduce: (_ bgra: [UInt8]) -> T,
         render: (_ i: Int, _ enc: MTLRenderCommandEncoder) -> Void,
@@ -656,7 +691,7 @@ struct MultiPassRenderHarness {
             throw HarnessError.setupFailed("audio buffers")
         }
         let outTex = try makeOutputTexture(ctx)
-        return try renderLoop(drive, ctx, outTex, reduce) { i, pixels in
+        return try renderLoop(drive, reduce) { i, pixels in
             var fv = drive[i]
             let stem = stems[i]
             engine.tick(features: fv, stems: stem)                 // advance the 4-light beat-locked dance
@@ -725,7 +760,7 @@ struct MultiPassRenderHarness {
         }
         let outTex = try makeOutputTexture(ctx)
         var audioTime: Float = 0
-        return try renderLoop(drive, ctx, outTex, reduce) { i, pixels in
+        return try renderLoop(drive, reduce) { i, pixels in
             var fv = drive[i]
             let stem = stems[i]
             // Advance the energy-gated animation clock exactly as RenderPipeline does.
@@ -749,8 +784,9 @@ struct MultiPassRenderHarness {
 
     // MARK: - Render: generic mv_warp (Dragon Bloom, Skein)
 
-    private func renderMVWarp<T>(_ presetName: String, _ drive: [FeatureVector], _ stems: [StemFeatures],
-                                 _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+    @MainActor
+    private func mvWarpFrames(_ presetName: String, _ drive: [FeatureVector],
+                              _ stems: [StemFeatures]) throws -> FrameBody {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let noise = try TextureManager(context: ctx, shaderLibrary: lib)
@@ -799,7 +835,7 @@ struct MultiPassRenderHarness {
         }
 
         let outTex = try makeOutputTexture(ctx)
-        return try renderLoop(drive, ctx, outTex, reduce) { i, pixels in
+        return { i, pixels in
             var fv = drive[i]
             let stem = stems[i]
             if let skein {
@@ -835,8 +871,8 @@ struct MultiPassRenderHarness {
     }
 
     /// Real per-frame FFT magnitudes for the `direct` path, or nil for the LCG fill.
-    /// Set by a diagnostic before calling `render`; reset it afterwards.
-    nonisolated(unsafe) static var realSpectrum: [[Float]]?
+    /// Set by a diagnostic on its own harness before calling `render`.
+    var realSpectrum: [[Float]]?
 
     /// Read the mv_warp accumulator rather than the composed drawable.
     static var dumpAccumulator: Bool {
@@ -845,8 +881,9 @@ struct MultiPassRenderHarness {
 
     // MARK: - Render: bespoke mv_warp (Fata Morgana / Nacre / Floret / Glaze)
 
-    private func renderBespokeMVWarp<T>(_ presetName: String, _ drive: [FeatureVector], _ stems: [StemFeatures],
-                                        _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+    @MainActor
+    private func bespokeMVWarpFrames(_ presetName: String, _ drive: [FeatureVector],
+                                     _ stems: [StemFeatures]) throws -> FrameBody {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let noise = try TextureManager(context: ctx, shaderLibrary: lib)
@@ -877,7 +914,7 @@ struct MultiPassRenderHarness {
         }
 
         let outTex = try makeOutputTexture(ctx)
-        return try renderLoop(drive, ctx, outTex, reduce) { i, pixels in
+        return { i, pixels in
             guard let cmd = ctx.commandQueue.makeCommandBuffer(),
                   let warpState = pipeline.mvWarpState else { throw HarnessError.renderFailed }
             switch presetName {
@@ -1020,7 +1057,7 @@ struct MultiPassRenderHarness {
                                                  stems: stems[index % stems.count])
         }
 
-        return try renderLoop(live, ctx, target, reduce) { frame, pixels in
+        return try renderLoop(live, reduce) { frame, pixels in
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                 throw HarnessError.renderFailed
             }
@@ -1171,7 +1208,7 @@ struct MultiPassRenderHarness {
         //    a session's `raw_tap.wav` through the production FFTProcessor (FA #27), one
         //    entry per frame, cycling if the render outruns the capture. Left nil, nothing
         //    changes and the budget gate is untouched.
-        let injected = Self.realSpectrum
+        let injected = realSpectrum
         if let injected, !injected.isEmpty {
             print("[direct-render] REAL spectrum injected: \(injected.count) frames "
                   + "(the LCG fill is bypassed)")
@@ -1192,7 +1229,7 @@ struct MultiPassRenderHarness {
         // The real generated textures, not placeholders — see the note above.
         let textures = try TextureManager(context: ctx, shaderLibrary: lib)
         let target = try makeOutputTexture(ctx)
-        return try renderLoop(drive, ctx, target, reduce) { frame, pixels in
+        return try renderLoop(drive, reduce) { frame, pixels in
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                 throw HarnessError.renderFailed
             }
@@ -1224,10 +1261,11 @@ struct MultiPassRenderHarness {
 
     // MARK: - Render loop / readback plumbing
 
+    /// Renders frame `frame` into `pixels` (BGRA readback of the output texture).
+    typealias FrameBody = (_ frame: Int, _ pixels: inout [UInt8]) throws -> Void
+
     private func renderLoop<T>(
-        _ drive: [FeatureVector], _ ctx: MetalContext, _ outTex: MTLTexture,
-        _ reduce: (_ bgra: [UInt8]) -> T,
-        _ body: (_ frame: Int, _ pixels: inout [UInt8]) throws -> Void
+        _ drive: [FeatureVector], _ reduce: (_ bgra: [UInt8]) -> T, _ body: FrameBody
     ) throws -> [T] {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         var out: [T] = []
@@ -1239,7 +1277,7 @@ struct MultiPassRenderHarness {
         return out
     }
 
-    nonisolated private func clearRPD(_ tex: MTLTexture) -> MTLRenderPassDescriptor {
+    private func clearRPD(_ tex: MTLTexture) -> MTLRenderPassDescriptor {
         let rpd = MTLRenderPassDescriptor()
         rpd.colorAttachments[0].texture = tex
         rpd.colorAttachments[0].loadAction = .clear
@@ -1248,17 +1286,17 @@ struct MultiPassRenderHarness {
         return rpd
     }
 
-    nonisolated private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture, into pixels: inout [UInt8]) throws {
+    private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture, into pixels: inout [UInt8]) throws {
         cmd.commit()
         cmd.waitUntilCompleted()
         guard cmd.status == .completed else { throw HarnessError.renderFailed }
-        Self.gpuTimesMs?.append((cmd.gpuEndTime - cmd.gpuStartTime) * 1000)
+        gpuTimes?.append((cmd.gpuEndTime - cmd.gpuStartTime) * 1000)
         guard readback else { return }   // see `readback` — timing runs skip this
         outTex.getBytes(&pixels, bytesPerRow: width * 4,
                         from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
     }
 
-    nonisolated private func makeOutputTexture(_ ctx: MetalContext) throws -> MTLTexture {
+    private func makeOutputTexture(_ ctx: MetalContext) throws -> MTLTexture {
         let d = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: ctx.pixelFormat, width: width, height: height, mipmapped: false)
         d.usage = [.renderTarget, .shaderRead]
@@ -1274,4 +1312,37 @@ struct MultiPassRenderHarness {
         case setupFailed(String)
         case renderFailed
     }
+}
+
+// MARK: - MainActorFrames
+
+/// One main-actor render's per-frame body plus its readback buffer, so `renderOffMain` can enter
+/// the main actor for one frame at a time.
+@MainActor
+private final class MainActorFrames {
+    private let body: MultiPassRenderHarness.FrameBody
+    private var pixels: [UInt8]
+
+    init(_ body: @escaping MultiPassRenderHarness.FrameBody, pixelCount: Int) {
+        self.body = body
+        self.pixels = [UInt8](repeating: 0, count: pixelCount)
+    }
+
+    func render(_ frame: Int) throws -> [UInt8] {
+        try body(frame, &pixels)
+        return pixels
+    }
+}
+
+// MARK: - GPUTimeLog
+
+/// Per-frame command-buffer GPU times a timing probe collects through `MultiPassRenderHarness.gpuTimes`.
+/// Locked, so the harness stays `Sendable` for `renderOffMain`.
+final class GPUTimeLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Double] = []
+
+    var ms: [Double] { lock.withLock { values } }
+
+    func append(_ value: Double) { lock.withLock { values.append(value) } }
 }
