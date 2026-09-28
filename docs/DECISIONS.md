@@ -6115,7 +6115,7 @@ energy value instead."*
    alone for now"*). About a dozen scenes read the live `valence` / `arousal` inside the scene. Changing
    them changes approved looks, so each is a separate call with Matt's eye.
 
-**Implementation (NRG.1–3, 2026-09-26/27).** NRG.1 stores a per-second loudness + activity curve. NRG.2 adds the library 1–10 scale (1,000-track pilot) and the "energy 2 → 9" readout. NRG.3 has the planner score each segment and its incoming transition against the energy of the next 30 s. This **supersedes the `LiveAdapter` mood override of D-035 and its D-080 cooldown**, both removed, and reactive mode (D-036) no longer scores mood.
+**Implementation (NRG.1–4, 2026-09-26/27).** NRG.1 stores a per-second loudness + activity curve. NRG.2 adds the library 1–10 scale (1,000-track pilot) and the "energy 2 → 9" readout. NRG.3 has the planner score each segment and its incoming transition against the energy of the next 30 s. This **supersedes the `LiveAdapter` mood override of D-035 and its D-080 cooldown**, both removed, and reactive mode (D-036) no longer scores mood. NRG.4 cuts each whole-track song into sections at its energy changes (a step of ≥ 3 levels between the 20 s before and after, holding longer than 20 s), so scene changes land on the drop, the breakdown and the re-entry.
 
 **Evidence obligation.** An energy measure is admitted only if it ranks the beta playlist the way Matt
 hears it. His ranking, or his pick among candidate orderings, is the reference; a measure that disagrees

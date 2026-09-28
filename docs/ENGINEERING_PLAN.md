@@ -1633,6 +1633,20 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment NRG.4 — scene changes land on the song's energy changes ✅ (2026-09-27; Matt's live check pending)
+
+**Delivered (D-259).**
+- `EnergyCurve.energyChanges()` finds where a song's energy steps: seconds at which the true-median section level of the 20 s after differs from the 20 s before by ≥ 3 levels (the centre of the jump plateau). A stretch of 20 s or less between two changes, a brief dip or burst, is too short for its own scene, so both of its changes are dropped. `TrackProfile.energyChanges(trackDuration:)` returns them only for a whole-track curve.
+- `makeSections` cuts the track at those changes when the curve covers the whole track. Each energy section keeps the song's usual pacing: as many equal slices as `estimatedSectionCount` gives, so scene length is unchanged from NRG.3. A streaming preview keeps the equal slices.
+- Inside a section, the preset's `maxDuration` cap now splits the remainder evenly instead of leaving a stub before the change. A scene reads energy only up to its section's end, so it no longer hears the next section coming. A 1 ms epsilon on the section walk ends the zero-length tail segment NRG.3 found.
+
+**Evidence.**
+- `EnergyPlanningTests`: a step is found at the second it happens; a 15 s dip is not a change; a 40 s breakdown is two. A quiet-then-loud song changes scene exactly at the step, and no scene straddles it.
+- On the real beta playlist, Dance Yrself Clean changes at 3:08, 5:57, 6:35 and 8:18. The raw curve puts the drop at 3:08, the breakdown at 5:56 and the re-entry at 6:34, so each change lands at or within a second of them. NRG.3's "drop at ~3:15" was a misreading. Song endings now read as their fades (Teen Spirit, Pyramid Song, Teardrop, Warszawa). Steady songs (B.O.B., Superstition, Penny Lane, Take Five, Moonlight I) have no changes.
+- Golden Session A: identical steady 180 s songs now split evenly, so every track opens on the seed-0 argmax, Filigree (trace in the test). The BUG-147 cross-process pin was re-pinned and confirmed identical across two processes.
+
+**Done-when:** ✅ tests + real-playlist plan; ⏳ Matt's live check.
+
 ### Increment NRG.3 — scene choice reads the energy curve ✅ (2026-09-27; Matt's live check pending)
 
 **Delivered (D-259).**
@@ -1648,9 +1662,9 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 **Done-when:** ✅ tests + goldens + real-playlist plan; ⏳ Matt's live check.
 
 **Found, not changed:**
-- Scene changes land on fixed segment boundaries, so the drop at ~3:15 switches at 3:21. Aligning changes to energy changes is a candidate NRG.4.
+- Scene changes land on fixed segment boundaries, so the drop switches at 3:21. Done in NRG.4 (the drop is at 3:08, not ~3:15 as read here).
 - The **M key ("Toggle mood lock")** flipped a flag nothing read; removed at Matt's call (2026-09-27).
-- The segment walk can emit a zero-length tail segment at a track's end (floating-point loop edge, pre-existing, never played).
+- The segment walk can emit a zero-length tail segment at a track's end (floating-point loop edge, pre-existing, never played). Fixed in NRG.4.
 
 ### Increment NRG.2 — the library 1–10 energy scale and the preparation readout ✅ (2026-09-26; Matt's look at the readout pending)
 
