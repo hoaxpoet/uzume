@@ -11,9 +11,13 @@ import simd
 
 // MARK: - KaguraDance
 
-/// A dance in Kagura's library (KAGURA_DESIGN §4). `sway` is the unwarped fallback.
+/// A dance in Kagura's library (KAGURA_DESIGN §4). `sway` and `ballet` are unwarped rests (KAG.3: ballet
+/// is the calm songs' rest, the sway everyone else's); `charleston` joined at KAG.3 for fast songs.
 public enum KaguraDance: String, Sendable, Codable, CaseIterable {
-    case twist, cabbage, chicken, macarena, egyptian, sway
+    case twist, cabbage, chicken, macarena, egyptian, sway, charleston, ballet
+
+    /// Whether the dance is an unwarped rest rather than a beat-warped dance.
+    public var isRest: Bool { self == .sway || self == .ballet }
 }
 
 // MARK: - KaguraClipError

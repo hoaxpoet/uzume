@@ -68,8 +68,9 @@ public struct KaguraChoreographer: Sendable {
     enum Segment: Sendable {
         /// A warped dance clip entered on bar line `entry` at level `level` grid beats per pulse.
         case dance(clip: Int, entry: Double, level: Double, offset: SIMD2<Float>)
-        /// The unwarped sway, sampled on `swayClock`.
-        case sway(offset: SIMD2<Float>)
+        /// An unwarped rest (`rests[clip]`: the sway, or a ballet clip on calm songs), ping-ponged from
+        /// `start` on `swayClock`.
+        case rest(clip: Int, start: Double, offset: SIMD2<Float>)
         /// A pose held still: what was on screen when a fade had to start inside another fade.
         case held(joints: [SIMD3<Float>])
 
@@ -77,7 +78,7 @@ public struct KaguraChoreographer: Sendable {
 
         var offset: SIMD2<Float> {
             switch self {
-            case .dance(_, _, _, let offset), .sway(let offset): return offset
+            case .dance(_, _, _, let offset), .rest(_, _, let offset): return offset
             case .held: return .zero
             }
         }
@@ -86,7 +87,7 @@ public struct KaguraChoreographer: Sendable {
             switch self {
             case let .dance(clip, entry, level, _):
                 return .dance(clip: clip, entry: entry, level: level, offset: offset)
-            case .sway: return .sway(offset: offset)
+            case let .rest(clip, start, _): return .rest(clip: clip, start: start, offset: offset)
             case .held: return self
             }
         }
@@ -115,12 +116,13 @@ public struct KaguraChoreographer: Sendable {
     private let clipIndices: [KaguraDance: [Int]]
     /// Fixed dances, cycled (tests, and the per-dance pulse-lock replay); empty picks by the song (§6).
     private let forcedDances: [KaguraDance]
-    private let sway: KaguraClip
+    /// The unwarped rests: the sway first, then the ballet clips (KAG.3).
+    let rests: [KaguraClip]
     private let pelvis: Int, leftAnkle: Int, rightAnkle: Int
     /// The joints of each arm.
     let arms: [Arm]
 
-    var current: Segment = .sway(offset: .zero)
+    var current: Segment = .rest(clip: 0, start: 0, offset: .zero)
     var previous: Segment?
     private var fade: Fade?
     private var nextCut: Cut?
@@ -134,8 +136,10 @@ public struct KaguraChoreographer: Sendable {
     private var stalled: Double = 0
     /// The last pose `pose(at:)` returned (before arm reach).
     private var lastPose: [SIMD3<Float>] = []
-    /// Seconds of sway playback. Always advances, whatever the dancer is doing.
-    private var swayClock: Double = 0
+    /// Seconds of rest playback. Always advances, whatever the dancer is doing.
+    var swayClock: Double = 0
+    /// Ballet rests entered so far, so a calm song rotates its ballet clips.
+    var balletTurns = 0
     /// Last beat position seen, and beats per second, for a dance fading out after its grid went.
     private var lastBeat: Double?
     private var beatsPerSecond: Double = 2
@@ -165,7 +169,7 @@ public struct KaguraChoreographer: Sendable {
 
     /// A choreographer dancing `sequence` in turn, one dance per clip change (empty: by the song).
     init?(library: KaguraClipLibrary, sequence: [KaguraDance]) {
-        let clips = KaguraDance.allCases.filter { $0 != .sway }.flatMap { library.clips(for: $0) }   // incl. unpicked
+        let clips = KaguraDance.allCases.filter { !$0.isRest }.flatMap { library.clips(for: $0) }   // incl. unpicked
         let names = library.jointNames
         let index = { (name: String) in names.firstIndex(of: name) }
         guard !clips.isEmpty, let sway = library.sway, sequence.allSatisfy({ !library.clips(for: $0).isEmpty }),
@@ -177,7 +181,7 @@ public struct KaguraChoreographer: Sendable {
         dances = clips
         clipIndices = Dictionary(grouping: clips.indices) { clips[$0].dance }
         forcedDances = sequence
-        self.sway = sway
+        rests = [sway] + library.clips(for: .ballet)
         self.pelvis = pelvis
         self.leftAnkle = leftAnkle
         self.rightAnkle = rightAnkle
@@ -231,12 +235,13 @@ public struct KaguraChoreographer: Sendable {
                 fade = .seconds(elapsed: (beat - start) / rate, duration: 1 / rate, outgoingBeat: beat, rate: rate)
             }
             if stalled >= Self.stallSeconds && current.isDance && fade == nil {
-                fadeToSway()   // a stopped clock never reaches a bar line
+                fadeToRest()   // a stopped clock never reaches a bar line
             }
             let permitted = dancePermitted && !resting && stalled < Self.stallSeconds
             schedule(beat: beat, grid: grid, dancePermitted: permitted)
             if let cut = nextCut, beat >= Double(cut.beat) { perform(cut, grid: grid, beat: beat) }
         }
+        if fade == nil, restNeedsChange() { fadeToRest(seconds: Self.restFadeSeconds) }
         return reached(pose(at: beat, dt: dt))
     }
 
@@ -250,28 +255,34 @@ public struct KaguraChoreographer: Sendable {
         stalled = 0
         guard current.isDance else { return }
         // A replaced or cleared grid renumbers the beats, so the dance cannot continue on it.
-        // Fade to the sway over one nominal beat; the new grid rejoins at its next bar line.
-        fadeToSway()
+        // Fade to the rest over one nominal beat; the new grid rejoins at its next bar line.
+        fadeToRest()
     }
 
-    /// Fade from the dance to the sway over one nominal beat of render time. Inside another fade the
-    /// outgoing side is the pose on screen, held still — dropping that fade's outgoing clip popped
-    /// 0.14 m when a grid was replaced within a bar-line crossfade (KAG.3, first seen).
-    private mutating func fadeToSway() {
+    /// Fade to the song's rest (`nextRest`) over `seconds`, or one nominal beat, of render time. Inside
+    /// another fade the outgoing side is the pose on screen, held still — dropping that fade's outgoing
+    /// clip popped 0.14 m when a grid was replaced within a bar-line crossfade (KAG.3, first seen).
+    private mutating func fadeToRest(seconds: Double? = nil) {
         nextCut = nil
         let leaving = previous == nil ? current : .held(joints: lastPose)
         let outgoing = displayed(leaving, beat: lastBeat)
-        let target = Segment.sway(offset: feet(rawSway()) - feet(outgoing))
         previous = leaving
-        current = target
-        fade = .seconds(elapsed: 0, duration: 1 / beatsPerSecond, outgoingBeat: lastBeat, rate: beatsPerSecond)
+        current = enterRest(from: outgoing)
+        let duration = seconds ?? 1 / beatsPerSecond
+        fade = .seconds(elapsed: 0, duration: duration, outgoingBeat: lastBeat, rate: beatsPerSecond)
+    }
+
+    /// The song's next rest, placed so its ankle midpoint matches `outgoing`'s.
+    private mutating func enterRest(from outgoing: [SIMD3<Float>]) -> Segment {
+        let clip = nextRest()
+        return .rest(clip: clip, start: swayClock, offset: feet(rawRest(clip, start: swayClock)) - feet(outgoing))
     }
 
     private mutating func schedule(beat: Double, grid: KaguraGrid, dancePermitted: Bool) {
         switch (current, nextCut) {
-        case (.sway, nil) where dancePermitted:
+        case (.rest, nil) where dancePermitted:
             nextCut = Cut(beat: grid.nextBarLine(after: beat), toDance: true)
-        case (.sway, .some) where !dancePermitted:
+        case (.rest, .some) where !dancePermitted:
             nextCut = nil
         case (.dance, let cut) where !dancePermitted && cut?.toDance != false:
             nextCut = Cut(beat: min(grid.nextBarLine(after: beat), cut?.beat ?? .max), toDance: false)
@@ -296,12 +307,6 @@ public struct KaguraChoreographer: Sendable {
             line = grid.nextBarLine(after: Double(line))
         }
         return Cut(beat: best ?? first, toDance: true)
-    }
-
-    /// Pulses into a clip at the bar line it enters on: a gesture dance as the spike (beat `p0 − 2` on
-    /// pulse 1), a single repeated move on its first pulse.
-    static func entryPulse(_ clip: KaguraClip, level: Double) -> Double {
-        clip.pulseKind == "gesture" ? 1 + 2 / level : 0
     }
 
     private mutating func perform(_ cut: Cut, grid: KaguraGrid, beat: Double) {
@@ -331,7 +336,7 @@ public struct KaguraChoreographer: Sendable {
             incoming = .dance(clip: index, entry: entry, level: level, offset: feet(raw) - feet(outgoing))
             nextCut = plannedDanceCut(clip: index, entry: entry, level: level, grid: grid)
         } else {
-            incoming = .sway(offset: feet(rawSway()) - feet(outgoing))
+            incoming = enterRest(from: outgoing)
             nextCut = nil
         }
         cutBeats.append(cut.beat)
@@ -371,20 +376,13 @@ public struct KaguraChoreographer: Sendable {
         case let .dance(clip, entry, level, _):
             let pulse = ((beat ?? entry) - entry) / level + Self.entryPulse(dances[clip], level: level)
             raw = dances[clip].pose(at: dances[clip].clipTime(atPulse: pulse))
-        case .sway:
-            raw = rawSway()
+        case let .rest(clip, start, _):
+            raw = rawRest(clip, start: start)
         case .held(let joints):
             raw = joints
         }
         let offset = segment.offset
         return raw.map { SIMD3($0.x - offset.x, $0.y, $0.z - offset.y) }
-    }
-
-    /// The sway at `swayClock`, ping-ponged (forward then backward) so it never wraps.
-    private func rawSway() -> [SIMD3<Float>] {
-        let turn = max(sway.duration - Self.swayTurnInset, 1e-3)
-        let folded = turn - abs(swayClock.truncatingRemainder(dividingBy: 2 * turn) - turn)
-        return sway.pose(at: folded)
     }
 
     /// Midpoint of the ankles on the floor plane (x, z).

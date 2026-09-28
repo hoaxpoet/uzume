@@ -24,7 +24,17 @@ public enum KaguraRepertoire {
 
     /// The dances the repertoire picks from. The chicken dance is out (Matt, 2026-09-28, after three M7
     /// sessions: "a poor fit", "should be used sparingly, if at all"); its clips stay in the KAG.1 resource.
-    public static let dances: [KaguraDance] = [.twist, .cabbage, .macarena, .egyptian]
+    public static let dances: [KaguraDance] = [.twist, .cabbage, .macarena, .egyptian, .charleston]
+    /// Fast-song dances (Matt, 2026-09-28: the Charleston "for fast energetic songs"): eligible only at one
+    /// pulse per beat within `fastSongRate` of natural speed, and their vigor is capped at the top of the
+    /// other dances' scale. The Charleston's kicks (1.25 m/s against the twist's 0.71) would otherwise
+    /// stretch the scale and push every other dance toward calm; uncapped and ungated, the spike's rule gave
+    /// Dance Yrself Clean a 0.56× slow-motion Charleston in place of the twist and kept it off Take Five.
+    public static let fastSongDances: Set<KaguraDance> = [.charleston]
+    /// Playback rates a fast-song dance may play at: ±25 % around natural speed, the warp's own foot-slide
+    /// tolerance for in-place material (spike README §4: under the line up to ×1.25). About 137–214 BPM
+    /// for the Charleston's 171–176 steps a minute.
+    public static let fastSongRate: ClosedRange<Double> = 0.8...1.25
     /// The spike's `DANCES` (README §9, §10 are reproduced against these).
     public static let spikeDances: [KaguraDance] = [.twist, .cabbage, .chicken, .macarena, .egyptian]
 
@@ -86,14 +96,15 @@ public enum KaguraRepertoire {
         bpm: Double, energy: Double, library: KaguraClipLibrary, count: Int = 3, from dances: [KaguraDance] = dances
     ) -> [KaguraDance] {
         let profiles = dances.compactMap { dance in profile(dance, library: library).map { (dance, $0) } }
-        let vigors = profiles.map(\.1.vigor)
+        let vigors = profiles.filter { !fastSongDances.contains($0.0) }.map(\.1.vigor)
         guard let low = vigors.min(), let high = vigors.max(), high > low, bpm > 0 else { return [] }
-        let normalised = { (vigor: Double) in (vigor - low) / (high - low) }
+        let normalised = { (vigor: Double) in min((vigor - low) / (high - low), 1) }
         let gridPeriod = 60 / bpm
-        let scored = profiles.enumerated().map { index, entry -> Scored in
+        let scored = profiles.enumerated().compactMap { index, entry -> Scored? in
             let level = KaguraChoreographer.chooseLevel(
                 pulsePeriod: entry.1.period, beatPeriod: gridPeriod, levels: entry.1.levels)
             let rate = entry.1.period / (level * gridPeriod)
+            if fastSongDances.contains(entry.0), level != 1 || !fastSongRate.contains(rate) { return nil }
             let vigor = normalised(entry.1.vigor)
             return Scored(index: index, dance: entry.0, score: abs(log2(rate)) + abs(vigor - energy), vigor: vigor)
         }
