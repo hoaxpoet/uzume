@@ -12,6 +12,8 @@ import CoreGraphics
 import DSP
 import Foundation
 import ML
+import Metal
+import Presets
 import Session
 import Shared
 import SwiftUI
@@ -185,5 +187,26 @@ extension VisualizerEngine {
                 currentPresetName = nil
             }
         }
+    }
+
+    // MARK: - GPU Capability Gate (BR.1 / K1, decision 3)
+
+    /// The scenes this GPU may plan or walk to. On pre-Apple8 GPUs (the M1 family) the
+    /// mesh-shader path falls back to a full-screen triangle whose brightness follows the
+    /// music — the whole-frame flash D-157 removed, never flash-measured — so mesh-shader
+    /// scenes (Fractal Tree) are excluded there for the beta.
+    static func capableCatalog(
+        _ catalog: [PresetDescriptor], supportsNativeMeshShaders: Bool
+    ) -> [PresetDescriptor] {
+        supportsNativeMeshShaders ? catalog : catalog.filter { !$0.passes.contains(.meshShader) }
+    }
+
+    /// `capableCatalog` over every loaded scene, for this engine's GPU. Same `.apple8`
+    /// test as `PresetLoader+Mesh` / `MeshGenerator`.
+    var plannableCatalog: [PresetDescriptor] {
+        Self.capableCatalog(
+            presetLoader.presets.map(\.descriptor),
+            supportsNativeMeshShaders: context.device.supportsFamily(.apple8)
+        )
     }
 }

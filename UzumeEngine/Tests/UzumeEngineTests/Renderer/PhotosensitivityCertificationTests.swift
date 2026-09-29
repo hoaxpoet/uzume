@@ -18,7 +18,9 @@
 // COVERAGE. This lightweight harness drives only the FeatureVector through a single
 // fragment pass, so it VALIDLY measures only presets that read their music response
 // directly from the FeatureVector in that pass:
-//   - Ferrofluid Ocean, Murmuration — measured here, both SAFE.
+//   - Murmuration — measured here, SAFE. (Ferrofluid Ocean was listed here until BR.1: this
+//     harness drew its G-buffer state, i.e. surface height. It is measured lit by
+//     `MultiPassFlashHarnessTests` now, and a G-buffer guard refuses the old draw — K4.)
 //   - Nimbus — `.direct` + a CPU follower buffer (slot 6); `renderLuminanceSequence`
 //     ticks the real NimbusState, so it is measured here too (CLEAN.7.6b).
 // The other four certified presets read their response through multi-pass / feedback
@@ -61,7 +63,16 @@ struct PhotosensitivityCertificationTests {
     /// honest about the division of labour and FAILS LOUD if a NEW certified preset
     /// renders static here without joining the multi-pass harness.
     static let multiPassMeasured: Set<String> = [
+        "Ferrofluid Ocean", // ray_march + post_process; its pipelineState IS the G-buffer state
+                            // (no preview fragment), so this harness measured gbuf0 = (depth,
+                            // matID) — surface height, not the aurora, specular spikes or bloom.
+                            // Measured lit by MultiPassFlashHarnessTests (BR.1 / K4); the G-buffer
+                            // guard below now refuses the old measurement.
         "Lumen Mosaic",   // ray_march + post_process + the 4-light follower (slot 8)
+        "Volumetric Lithograph", // ray_march; like Ferrofluid its pipelineState IS the G-buffer state,
+                                 // so this harness's "0.00 flashes/s" was surface height. Found by the
+                                 // BR.1 G-buffer guard on its first run; measured lit all along by
+                                 // MultiPassFlashHarnessTests.volumetricLithographIsFlashSafe.
         "Dragon Bloom",   // mv_warp feedback (strands-on-top + per-beat display pulse)
         "Fata Morgana",   // mv_warp feedback (bespoke renderFataMorgana mirage path)
         "Skein",          // mv_warp feedback (cream canvas-hold + per-stem paint + sheen)
@@ -119,7 +130,8 @@ struct PhotosensitivityCertificationTests {
           arguments: _acceptanceFixture.presets)
     func certifiedPresetIsFlashSafe(_ preset: PresetLoader.LoadedPreset) throws {
         // Gate covers the certified, shipping set. Mesh-shader presets cannot
-        // drawPrimitives in this harness and are skipped (same as the other gates).
+        // drawPrimitives in this harness and are skipped here; Fractal Tree (the only one)
+        // is measured on its mesh path by MultiPassFlashHarnessTests (BR.1 / K4).
         guard preset.descriptor.certified else { return }
         guard !preset.descriptor.passes.contains(.meshShader) else { return }
         let name = preset.descriptor.name
@@ -127,6 +139,15 @@ struct PhotosensitivityCertificationTests {
         // `MultiPassFlashHarnessTests`; this single-pass harness cannot reach their
         // response, so it does not (and must not) assert anything about them.
         guard !Self.multiPassMeasured.contains(name) else { return }
+
+        // BR.1 / K4: drawing a ray-march preset's G-buffer state measures depth + material
+        // IDs, not light. Such a preset must be measured lit in the multi-pass harness.
+        #expect(
+            !FlashHarnessSupport.isGBufferState(preset.pipelineState, of: preset),
+            Comment(rawValue: "'\(name)' — the pipeline this single-pass gate draws is its ray-march "
+                + "G-buffer state, so the measurement is surface height, not light. Measure its lit "
+                + "output in `MultiPassFlashHarnessTests` and add it to `multiPassMeasured`.")
+        )
 
         let ctx = try MetalContext()
         let drive = FlashHarnessSupport.worstCaseBeatTrain()

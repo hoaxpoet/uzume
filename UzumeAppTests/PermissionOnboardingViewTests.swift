@@ -9,6 +9,7 @@
 // Button identifier strings are declared inline in the view bodies; we test them
 // via Mirror to avoid duplicating magic strings.
 
+import Session
 import SwiftUI
 import Testing
 @testable import UzumeApp
@@ -61,5 +62,60 @@ struct PermissionOnboardingViewTests {
         ]
         #expect(expected.contains("uzume.photosensitivity.openAccessibility"))
         #expect(expected.contains("uzume.photosensitivity.acknowledge"))
+    }
+}
+
+// MARK: - Photosensitivity gate (BR.1 / F7, F6)
+
+@Suite("Photosensitivity notice gates every path to visuals")
+@MainActor
+struct PhotosensitivityGateTests {
+
+    /// F7: before the acknowledgement nothing but Idle renders, so Ready (streaming
+    /// first-audio advance), the local-file countdown and Playback — the only routes
+    /// to `.playing` — cannot run. The local-file path enters at `.preparing`.
+    @Test func unacknowledged_onlyIdleRenders() {
+        for state in [SessionState.idle, .connecting, .preparing, .ready, .playing, .ended] {
+            #expect(ContentView.showsSessionContent(acknowledged: false, state: state) == (state == .idle))
+            #expect(ContentView.showsSessionContent(acknowledged: true, state: state))
+        }
+    }
+
+    /// Source shape: the gate wraps the session-state switch (not just Idle), and the
+    /// session views that advance to `.playing` live only inside `sessionStateBody`.
+    @Test func gateWrapsTheWholeStateSwitch() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("UzumeApp/ContentView.swift")
+        let src = try String(contentsOf: url, encoding: .utf8)
+        #expect(src.contains("                photosensitivityGatedBody\n"))
+        #expect(src.components(separatedBy: "                sessionStateBody\n").count == 2,
+                "sessionStateBody is reachable only through the gate")
+        #expect(src.contains("handleLocalFileReady()"))
+    }
+
+    /// F6: "Enable Reduce motion" sets the in-app setting to Always on and acknowledges.
+    @Test func enableReducedMotion_setsAlwaysOnAndAcknowledges() throws {
+        let suite = "test.br1.photosensitivity.enable"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(defaults: defaults)
+        #expect(settings.reducedMotion == .matchSystem)
+
+        ContentView.acknowledgeNotice(enableReducedMotion: true, settings: settings, defaults: defaults)
+        #expect(settings.reducedMotion == .alwaysOn)
+        #expect(PhotosensitivityAcknowledgementStore(defaults: defaults).isAcknowledged)
+    }
+
+    @Test func iUnderstand_acknowledgesWithoutChangingTheSetting() throws {
+        let suite = "test.br1.photosensitivity.ack"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = SettingsStore(defaults: defaults)
+
+        ContentView.acknowledgeNotice(enableReducedMotion: false, settings: settings, defaults: defaults)
+        #expect(settings.reducedMotion == .matchSystem)
+        #expect(PhotosensitivityAcknowledgementStore(defaults: defaults).isAcknowledged)
     }
 }

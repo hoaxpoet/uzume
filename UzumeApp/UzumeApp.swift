@@ -15,8 +15,8 @@ private let lfLogger = Logger(subsystem: "io.uzume.mac", category: "LF1")
 /// `AccessibilityState` (U.9) is a `@StateObject` here so it can observe
 /// `NSWorkspace.accessibilityDisplayOptionsDidChangeNotification` independently
 /// of the settings store. `UzumeApp.body` wires the two together via `.task`
-/// (subscribes to `settingsStore.$reducedMotion`) and `.onChange` (pushes engine
-/// flags on state change).
+/// (subscribes to `settingsStore.$reducedMotion`) and `.onReceive(engineFlags)`
+/// (pushes engine flags at launch and on every change, BR.1).
 ///
 /// `spotifyOAuth` (U.11) is a long-lived actor that owns the Spotify OAuth
 /// Authorization Code + PKCE token lifecycle. It is created once here and passed
@@ -100,19 +100,18 @@ struct UzumeApp: App {
                     accessibilityState.applyPreference(pref)
                 }
             }
-            // Push accessibility flags into the engine whenever state changes.
-            .onChange(of: accessibilityState.reduceMotion) { _, reduce in
-                engine.applyAccessibility(
-                    reduceMotion: reduce,
-                    beatAmplitudeScale: accessibilityState.beatAmplitudeScale
-                )
+            // Push accessibility flags into the engine at launch AND on every change
+            // (BR.1 / F1: `.onChange` never fired when Reduce Motion was already on).
+            .onReceive(accessibilityState.engineFlags) { reduce, scale in
+                engine.applyAccessibility(reduceMotion: reduce, beatAmplitudeScale: scale)
             }
             // Push uncertified-presets preference into the engine so reactive mode
             // honours the setting without requiring a SettingsStore dependency in the engine.
+            // BR.1 (F15): a value stored by a developer build never reaches a public one.
             .task {
-                engine.applyShowUncertifiedPresets(settingsStore.showUncertifiedPresets)
+                let allowed = BuildFlavor.current.exposesUncheckedScenes
                 for await value in settingsStore.$showUncertifiedPresets.values {
-                    engine.applyShowUncertifiedPresets(value)
+                    engine.applyShowUncertifiedPresets(allowed && value)
                 }
             }
             // Route uzume://spotify-callback back to the OAuth actor (U.11)

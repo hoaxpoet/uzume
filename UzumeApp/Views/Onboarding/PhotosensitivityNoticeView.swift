@@ -1,14 +1,10 @@
-// PhotosensitivityNoticeView — One-time sheet shown on first IdleView appearance.
+// PhotosensitivityNoticeView — One-time sheet, presented by ContentView until acknowledged.
 //
-// Two CTAs: "Enable Reduce motion" (opens Accessibility pane, then dismisses) and
-// "I understand" (dismisses). Both call onAcknowledge — the notice does not reappear
-// after either action because IdleView persists the flag via
-// PhotosensitivityAcknowledgementStore.
-//
-// macOS does not expose a programmatic toggle for accessibilityDisplayShouldReduceMotion.
-// "Enable Reduce motion" opens the Accessibility → Display pane; the user flips it there.
+// Two CTAs (UX_SPEC §3.3): "Enable Reduce motion" sets the in-app Reduced motion to
+// Always on and acknowledges (BR.1 / F6 — it used to open System Settings, a system-wide
+// change the app then ignored at launch, F1); "I understand" acknowledges. ContentView
+// persists the acknowledgement, so the notice does not reappear after either.
 
-import AppKit
 import SwiftUI
 
 // MARK: - PhotosensitivityNoticeView
@@ -17,6 +13,8 @@ import SwiftUI
 struct PhotosensitivityNoticeView: View {
     static let accessibilityID = "uzume.view.photosensitivityNotice"
 
+    /// "Enable Reduce motion": the caller sets the in-app setting, then acknowledges.
+    let onEnableReducedMotion: () -> Void
     let onAcknowledge: () -> Void
 
     // MARK: - Body
@@ -33,8 +31,7 @@ struct PhotosensitivityNoticeView: View {
 
             HStack(spacing: 12) {
                 Button(String(localized: "onboarding.photosensitivity.enable_reduce")) {
-                    openAccessibilityPane()
-                    onAcknowledge()
+                    onEnableReducedMotion()
                 }
                 .accessibilityIdentifier("uzume.photosensitivity.openAccessibility")
 
@@ -50,14 +47,5 @@ struct PhotosensitivityNoticeView: View {
         .padding(32)
         .frame(width: 480)
         .accessibilityIdentifier(Self.accessibilityID)
-    }
-
-    // MARK: - Private
-
-    private func openAccessibilityPane() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.universalaccess?Seeing_Display"
-        ) else { return }
-        NSWorkspace.shared.open(url)
     }
 }

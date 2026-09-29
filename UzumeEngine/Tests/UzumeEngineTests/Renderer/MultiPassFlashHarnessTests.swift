@@ -309,6 +309,70 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Fireflies", luma: Array(luma.dropFirst(1200)))
     }
 
+    // MARK: - BR.1 / K4 — the holes in "every certified scene is flash-measured"
+
+    @Test("Fractal Tree is flash-safe (native mesh-shader path, real headless render)")
+    func fractalTreeIsFlashSafe() async throws {
+        // Skipped by the single-pass gate (a mesh-shader preset cannot drawPrimitives there) and
+        // never flash-measured before BR.1 — FTR.25's single-frame lift check was the only guard.
+        // This is the NATIVE (Apple8+) path; the Apple7 full-screen fallback is excluded from
+        // planning and the walk instead (K1, decision 3) and cannot be driven on an Apple8 host.
+        //
+        // Measured over the TREE'S OWN BOX, not the whole frame. The canopy is thin lines on
+        // black: at 320×180 it spans x ≈ 85…222, y ≈ 84…170 with ~1.4 % of pixels lit, so the
+        // whole-frame mean sits at 0.004–0.005 and cannot move past the responsiveness floor
+        // (Δ0.001 measured) — the Witchlight geometry. The crop (x 80..<240, y 80..<180, ~28 % of
+        // the frame) contains every lit pixel we measured and is conservative: the same swing over
+        // a smaller area reads LARGER. `meshKeepsDriveDeviations` keeps the train's bassDev /
+        // flux / surge pulsing (openTheGates would pin them); 600 settle frames grow the canopy in.
+        var flashDrive = harness
+        flashDrive.meshKeepsDriveDeviations = true
+        let luma = try await flashDrive.renderOffMain(
+            preset: "Fractal Tree", features: FlashHarnessSupport.worstCaseBeatTrain(),
+            stems: FlashHarnessSupport.worstCaseStemTrain(), settle: 600
+        ) { bgra in
+            var crop: [UInt8] = []
+            crop.reserveCapacity(160 * 100 * 4)
+            for row in 80..<180 {
+                let start = (row * 320 + 80) * 4
+                crop.append(contentsOf: bgra[start..<(start + 160 * 4)])
+            }
+            return FlashHarnessSupport.meanRelativeLuminance(crop)
+        }
+        assertFlashSafe(name: "Fractal Tree", luma: luma)
+    }
+
+    @Test("Ferrofluid Ocean is flash-safe (lit output: aurora, specular spikes, bloom)")
+    func ferrofluidOceanIsFlashSafe() async throws {
+        // The single-pass gate drew Ferrofluid's G-buffer state (gbuf0 = depth, matID). This is
+        // the lit frame production shows — the scene behind BUG-041's track-start flashing.
+        assertFlashSafe(name: "Ferrofluid Ocean", luma: try await flashLuma("Ferrofluid Ocean"))
+    }
+
+    @Test("Waveform is flash-safe (launch default; spectrum pulsing with the beat train)")
+    func waveformIsFlashSafe() async throws {
+        // Waveform is the launch default and the fallback, uncertified, and draws raw FFT bars —
+        // so its worst case is a SPECTRUM that pulses with the beat, which the harness's fixed
+        // broadband fill never provides (it would read static). Inject one: the fill's shape,
+        // scaled per frame by the train's own beat envelope (0.1 floor → full scale).
+        let drive = FlashHarnessSupport.worstCaseBeatTrain()
+        var seed: UInt64 = 0x9E3779B97F4A7C15
+        let shape: [Float] = (0..<512).map { bin in
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let noise = abs(Float(Int32(truncatingIfNeeded: seed >> 33)) / Float(Int32.max))
+            return noise * (1.0 - Float(bin) / 640.0)
+        }
+        var pulsing = harness
+        pulsing.realSpectrum = drive.map { fv in
+            let envelope = 0.1 + 0.9 * max(0, min(1, fv.beatComposite))
+            return shape.map { $0 * envelope }
+        }
+        let luma = try await pulsing.renderOffMain(
+            preset: "Waveform", features: drive, stems: FlashHarnessSupport.worstCaseStemTrain()
+        ) { FlashHarnessSupport.meanRelativeLuminance($0) }
+        assertFlashSafe(name: "Waveform", luma: luma)
+    }
+
     // MARK: - Flash-specific drive + reducer
 
     /// Render `name` through the shared harness on the synthetic worst-case beat+stem train,
