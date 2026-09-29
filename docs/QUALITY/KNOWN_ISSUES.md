@@ -74,6 +74,7 @@ reads" are not reads — see the entry.)*
 | BUG-152 | P2 · **OPEN** (found 2026-09-28, SCAN.0) — not fixed: changing the streaming path needs its own before/after | session / preview resolution | **The streaming preview lookup takes the catalog's first hit, and for 8 % of four real playlists that is a different song.** Paste-a-link Spotify and Apple Music tracks resolve through `PreviewResolver`'s limit-1 iTunes search on "artist title". On Matt's four fixture playlists **11 of 136** rows with a preview land on another song ("Not Techno — i_o" → Lady Gaga's "Just Dance"; "It´s Up There" → a Kumbia Queers track; songs the catalog lacks → a piano cover or another track by the artist), so those sessions plan visuals for music that isn't playing. The SCAN verified lookup (`ScreenReadMatchPolicy`: 25 candidates, title/artist/duration must agree, else no match) is the likely fix. Detail below |
 | BUG-158 | P2 · **OPEN** (2026-09-29, CLEAN.2.5b) — a new user is asked for Documents-folder access at first launch | app / diagnostics | **The notarized build asks "access files in your Documents folder" before anything else.** The session recorder's folder (`~/Documents/uzume_sessions`) is touched at launch; Matt's Mac had the grant already. Detail below |
 | BUG-159 | P3 · **OPEN** (2026-09-29, found in CLEAN.2.5b) — the Settings "record sessions" switch does nothing | app / settings | **`SessionRecorder()` is built with its default `enabled: true` and never reads `sessionRecorderEnabled`**, so turning the switch off still records. Detail below |
+| BUG-160 | P0 · **OPEN — UNDER DIAGNOSIS** (2026-09-29, CLEAN.2.5b Task 8) — the notarized build heard nothing after a fresh onboarding | audio.capture | **After screen access was reset and re-granted through onboarding, the tap installed with both permissions granted and delivered silence**; Ready never advanced, "Haven't heard anything for a while" appeared. Same account, same build, worked 30 min earlier. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
 | BUG-147 | P3 · **FIXED 2026-09-25 (BUG147.1)** — FNV-1a noise; merged #286 (`c6369035`) | orchestrator / algorithm | **A nonzero planner seed produced a different plan in every process: the D-047 noise hashed `presetID.hashValue`, which Swift seeds randomly per launch.** Not user-visible (the app draws a fresh random seed for every plan and every Regenerate), but a logged seed could not be replayed and offline seeded measurements (BUG-144's) were not reproducible. Detail below |
@@ -475,6 +476,30 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 **Expected.** Settings → Diagnostics → record sessions off → the next session writes nothing to `~/Documents/uzume_sessions`.
 **Actual.** `VisualizerEngine` builds `SessionRecorder()` with its default `enabled: true`; `SettingsStore.sessionRecorderEnabled` is written by the switch and read by nothing else (`git grep sessionRecorderEnabled`). The switch describes behaviour the app doesn't have (UX_SPEC: controls describe what they do now).
 **Found** while tracing BUG-158; not fixed there (the public build hides the switch; developer builds keep it). Fix: pass the setting into the recorder at session start, or remove the switch.
+
+### BUG-160 — the notarized build heard nothing after a fresh onboarding (2026-09-29)
+
+**Severity:** P0 until explained (silent audio on the tester path) · **Domain:** audio.capture · **Status:** Open — under diagnosis
+
+**Expected.** A new user who grants access in onboarding, prepares a Spotify playlist and presses play sees Ready advance to visuals within a few seconds.
+
+**Actual.** CLEAN.2.5b Task 8 onboarding check, "Uzume Test" standard account, notarized build 0.9.0 (4), Mac mini, macOS 26.5.1, output = built-in speaker. Ready never advanced after Matt pressed play in Spotify; the "Haven't heard anything for a while. Is the music playing?" card appeared. The same account and build heard Apple Music / Spotify fine at 11:24 the same day.
+
+**Timeline (unified log).**
+- 11:49:50 `tccutil reset ScreenCapture io.uzume.mac` (machine-wide), so the onboarding screen would show.
+- 11:51:50 Uzume pid 66744 launches → onboarding → **Allow Access** → `ScreenCapture` modified 11:52:02 (and again 11:52:24) → macOS "may not be able to record … until it is quit" → **Quit & Reopen**.
+- 11:52:42 Uzume pid 66897 relaunches; ScreenCaptureKit streams (the Spotify scan) at 11:52:56 and 11:53:14; preparation decodes previews from 11:53:31.
+- 11:54:33 `coreaudiod` registers `io.uzume.aggregate.…`; TCC `kTCCServiceAudioCapture` → **authValue=2 (allowed)**.
+- 11:54:37 `coreaudiod` "Starting tap after waiting for writers"; TCC `kTCCServiceScreenCapture` preflight → **authValue=2 (allowed)**; IO starts on the built-in speaker.
+- 11:56:40 Uzume quits. No further TCC prompt.
+
+**What this rules out.** Missing permission (both granted at tap start), a tap that never installed (it started), an unrelaunched grant (the process was relaunched). `coreaudiod` uptime 3 d 20 h — the same daemon delivered green signal at 09:46 (Matt's account) and 11:24 (this account).
+
+**What is missing.** The public build writes no `session.log` (BUG-158, by design) and Uzume's `Logger.info` lines are not persisted, so the tap's RMS probe for this run is lost. Unknown: whether Spotify was audibly playing in that session, and the debug overlay's SIGNAL line.
+
+**Suspects, in order.** (1) The BUG-057 family — a tap fed zeros by `coreaudiod` after a permission change (the RUNBOOK's re-grant trap); (2) Spotify not actually playing / playing in the other logged-in session; (3) the tap installed at Ready, before audio, then a silent-cold-install that the reinstall ladder doesn't recover.
+
+**Verification criteria (before any fix).** Reproduce with the overlay's SIGNAL line (peak dBFS, health) recorded, on Spotify and on Music; if it reproduces, capture a developer-flavor `session.log` of the same flow. A fix closes only on a passing fresh-onboarding run.
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
