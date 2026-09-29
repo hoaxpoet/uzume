@@ -54,6 +54,9 @@ extension VisualizerEngine {
         }
         sessionRecorder?.log("WIRING: startListeningForFirstAudio → SYSTEM-AUDIO TAP at .ready")
         startAudioCapture()
+        // BUG-160: the detector starts at `.active` and reports only changes; without this, music
+        // that starts within 1.5 s never produces a transition and the `.silent` above sticks.
+        (router as? AudioInputRouter)?.markAwaitingFirstAudio()
     }
 
     /// Start audio capture and metadata observation.

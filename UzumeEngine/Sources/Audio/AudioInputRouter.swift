@@ -174,6 +174,14 @@ public final class AudioInputRouter: @unchecked Sendable {
         silenceDetector.state
     }
 
+    /// Treat the running tap as having heard nothing yet, so the first real audio is reported
+    /// as `.recovering → .active` rather than never reported at all (BUG-160: Ready never
+    /// advanced when music began within 1.5 s of the tap coming up). The `.silent` it emits
+    /// also arms the BUG-057 reinstall ladder for a cold tap that never delivers.
+    public func markAwaitingFirstAudio() {
+        silenceDetector.resetToSilent()
+    }
+
     // MARK: - Public API
 
     /// Start audio input with the given mode.

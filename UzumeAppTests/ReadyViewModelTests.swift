@@ -167,3 +167,28 @@ struct ReadyViewModelTests {
         #expect(vm.reduceMotion)
     }
 }
+
+// MARK: - BUG-160: the tap's detector starts Ready at silent
+
+/// The engine forces the surface to `.silent` at Ready; the tap's silence detector must be put
+/// there too, or music that starts within 1.5 s never produces a transition and Ready waits
+/// forever (session 2026-09-29T17-30-29Z). Needs Metal, a session and a live tap to exercise,
+/// so the wiring is asserted against the source shape (as `StemSeriesWiringTests` does).
+@Suite("Ready first-audio wiring (BUG-160)")
+struct ReadyFirstAudioWiringTests {
+    @Test func startListeningForFirstAudio_marksTheDetectorSilentAfterStartingTheTap() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("UzumeApp/VisualizerEngine+PublicAPI.swift")
+        let src = try String(contentsOf: url, encoding: .utf8)
+        let body = try #require(src.range(of: "func startListeningForFirstAudio()"))
+        let tail = src[body.upperBound...]
+        let start = try #require(tail.range(of: "startAudioCapture()"))
+        let mark = try #require(tail.range(of: "markAwaitingFirstAudio()"),
+                                "startListeningForFirstAudio must call markAwaitingFirstAudio (BUG-160)")
+        #expect(start.lowerBound < mark.lowerBound,
+                "markAwaitingFirstAudio must run after the tap starts — start(mode:) resets the detector")
+        let nextFunc = tail.range(of: "\n    func ")?.lowerBound ?? tail.endIndex
+        #expect(mark.lowerBound < nextFunc, "the call must be inside startListeningForFirstAudio")
+    }
+}

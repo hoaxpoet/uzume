@@ -205,3 +205,52 @@ private func makeDetector(
     detector.update(rms: 0.5)
     #expect(detector.state == .active)
 }
+
+// MARK: - Awaiting First Audio (BUG-160)
+
+/// Ready's shape: the tap comes up, ~1 s of silence, then music. From the default `.active` that
+/// input produces no transition at all — the control below — so a listener that assumed silence
+/// never heard the music (session 2026-09-29T17-30-29Z: loud audio, zero `audio signal →` lines).
+@Test func test_resetToSilent_musicWithinSuspectWindow_isReported() {
+    var t = 0.0
+    let detector = makeDetector(silenceDuration: 3.0, recoveryDuration: 0.5, clock: { t })
+    var transitions: [AudioSignalState] = []
+    detector.onStateChanged = { transitions.append($0) }
+
+    detector.resetToSilent()
+    detector.update(rms: 0)          // t=0 — tap up, nothing playing
+    t = 1.0
+    detector.update(rms: 0.2)        // music starts inside the 1.5 s suspect window
+    t = 1.6
+    detector.update(rms: 0.2)
+
+    #expect(transitions == [.silent, .recovering, .active])
+}
+
+@Test func test_withoutReset_musicWithinSuspectWindow_isNeverReported() {
+    var t = 0.0
+    let detector = makeDetector(silenceDuration: 3.0, recoveryDuration: 0.5, clock: { t })
+    var transitions: [AudioSignalState] = []
+    detector.onStateChanged = { transitions.append($0) }
+
+    detector.update(rms: 0)
+    t = 1.0
+    detector.update(rms: 0.2)
+    t = 1.6
+    detector.update(rms: 0.2)
+
+    #expect(transitions.isEmpty)
+}
+
+@Test func test_resetToSilent_whenAlreadySilent_doesNotReEmit() {
+    var t = 0.0
+    let detector = makeDetector(clock: { t })
+    var transitions: [AudioSignalState] = []
+    detector.onStateChanged = { transitions.append($0) }
+
+    detector.resetToSilent()
+    detector.resetToSilent()
+
+    #expect(transitions == [.silent])
+    #expect(detector.state == .silent)
+}

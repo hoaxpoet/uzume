@@ -217,6 +217,24 @@ final class SilenceDetector: @unchecked Sendable {
 
     // MARK: - Reset
 
+    /// Reset state machine to `.silent` — "nothing heard yet". Use when a listener needs the
+    /// first real audio to register as a transition (`.recovering → .active`), e.g. Ready's
+    /// first-audio detector (BUG-160). From the default `.active`, music that starts before
+    /// `suspectDuration` of silence produces no transition at all, so a listener that assumed
+    /// silence would wait forever. Emits `.silent` when the state changes.
+    func resetToSilent() {
+        var changed = false
+        lock.withLock {
+            changed = _state != .silent
+            _state = .silent
+            silenceStartTime = nil
+            signalReturnTime = nil
+        }
+        if changed {
+            onStateChanged?(.silent)
+        }
+    }
+
     /// Reset state machine to `.active`. Useful when the audio source changes.
     func reset() {
         var changed = false
