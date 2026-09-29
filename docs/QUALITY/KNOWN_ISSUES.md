@@ -75,8 +75,9 @@ reads" are not reads — see the entry.)*
 | BUG-158 | P2 · **FIXED 2026-09-29 (CLEAN.2.5b, `2340d771`) — live-verified on a fresh account (build 5)** — a new user is asked for Documents-folder access at first launch | app / diagnostics | **The notarized build asks "access files in your Documents folder" before anything else.** The session recorder's folder (`~/Documents/uzume_sessions`) is touched at launch; Matt's Mac had the grant already. Detail below |
 | BUG-159 | P3 · **OPEN** (2026-09-29, found in CLEAN.2.5b) — the Settings "record sessions" switch does nothing | app / settings | **`SessionRecorder()` is built with its default `enabled: true` and never reads `sessionRecorderEnabled`**, so turning the switch off still records. Detail below |
 | BUG-160 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `35cc3be7`) — live-verified: Ready advanced after a long wait, build 5** (2026-09-29, CLEAN.2.5b Task 8) — Ready never advanced when music started within 1.5 s of the tap coming up | audio.capture / session | **The tap heard the music (peak −1 dBFS) but Ready's detector was never told.** `SilenceDetector` starts at `.active` and reports only changes; Ready forced the surface to `.silent` without resetting the detector. Fix: `markAwaitingFirstAudio()` at Ready. Pre-existing since DS.5. Detail below |
-| BUG-162 | P1 · **FIXED 2026-09-29 (BR.1, `cf9cc978`) — pending live check (listening session 1)** — Reduce Motion ignored at launch; macOS "Dim flashing lights" never read | app / accessibility | **The engine got the reduced-motion flags only on a CHANGE**, so a launch with Reduce Motion already on ran full feedback trails and full beat strength (audit F1/F1b). Fix: `AccessibilityState.engineFlags` delivers the current state on subscribe; Dim Flashing Lights ORs into the system flag. Detail below |
-| BUG-163 | P1 · **FIXED 2026-09-29 (BR.1, `c5f33aa1`) — exclusion; the fallback itself is unchanged and unmeasured** — Fractal Tree on M1-family Macs is a full-screen field that flashes with the music | renderer / orchestrator | **Mesh shading needs `.apple8`; M1 is Apple7**, so the fallback full-screen triangle drew a whole-frame onset flash (audit K1/D1). Fix (decision 3): mesh-shader scenes are excluded from planning, reactive mode and Shift+→ on pre-Apple8 GPUs. Detail below |
+| BUG-162 | P1 · **FIXED 2026-09-29 (BR.2, `9e4403c2`) — pending live check (M4 MacBook Pro on battery, streaming listening session)** — the display slept and the Mac locked mid-session | app / session | **No power assertion existed anywhere** (audit B1), so an untouched session hit the idle display timeout. Fix: `DisplaySleepGuard` holds `.idleDisplaySleepDisabled` from `.ready` through `.playing`, released on end, idle and window close. Detail below |
+| BUG-163 | P1 · **FIXED 2026-09-29 (BR.1, `cf9cc978`) — pending live check (listening session 1)** — Reduce Motion ignored at launch; macOS "Dim flashing lights" never read | app / accessibility | **The engine got the reduced-motion flags only on a CHANGE**, so a launch with Reduce Motion already on ran full feedback trails and full beat strength (audit F1/F1b). Fix: `AccessibilityState.engineFlags` delivers the current state on subscribe; Dim Flashing Lights ORs into the system flag. Detail below |
+| BUG-164 | P1 · **FIXED 2026-09-29 (BR.1, `c5f33aa1`) — exclusion; the fallback itself is unchanged and unmeasured** — Fractal Tree on M1-family Macs is a full-screen field that flashes with the music | renderer / orchestrator | **Mesh shading needs `.apple8`; M1 is Apple7**, so the fallback full-screen triangle drew a whole-frame onset flash (audit K1/D1). Fix (decision 3): mesh-shader scenes are excluded from planning, reactive mode and Shift+→ on pre-Apple8 GPUs. Detail below |
 | BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
@@ -512,11 +513,28 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 **Closes on** a passing fresh-account run through Continue.
 
-### BUG-162 — Reduce Motion ignored at launch; "Dim flashing lights" never read (2026-09-29)
+### BUG-162 — the display slept and the Mac locked mid-session (2026-09-29)
+
+**Severity:** P1 (breaks the core use: leaving the visuals running) · **Domain:** app / session · **Failure class:** `pipeline-wiring` (a missing OS integration) · **Status:** Fixed 2026-09-29 (BR.2, `9e4403c2`) — **pending live check** by Matt: `pmset -g assertions` names Uzume mid-session on the M4 MacBook Pro on battery (streaming listening session, audit §Manual verification debt #2)
+
+**Expected.** From Ready through Playing the display stays on and the Mac does not lock, with no keyboard or mouse input. At End, Idle or window close, normal idle sleep resumes.
+
+**Actual.** Audit B1 (lane B, re-verified ✔︎): nothing in `UzumeApp/` or `UzumeEngine/Sources/` called `ProcessInfo.beginActivity`, `IOPMAssertionCreateWithName` or `.idleDisplaySleepDisabled`. Audio playback and Metal rendering do not hold off display sleep, so an untouched session dimmed, blacked out and (with "require password") locked after the idle timeout — a few minutes on a laptop on battery.
+
+**Reproduction.** Start any session, touch nothing, wait past System Settings › Lock Screen's "Turn display off" interval. `pmset -g assertions` shows no Uzume assertion.
+
+**Fix.** `DisplaySleepGuard` (`UzumeApp/Services/DisplaySleepGuard.swift`) behind a `DisplaySleepAsserting` seam: holds `ProcessInfo.beginActivity([.userInitiated, .idleDisplaySleepDisabled])` iff the session state is `.ready`/`.playing` **and** the window is open. Fed from the engine's session-state observer and from the root view's `onAppear`/`onDisappear` (a closed window releases it even though the session outlives the window — F14, BR.14).
+
+**Gate.** `DisplaySleepGuardTests`: the full state × window mapping; one assertion spans ready → playing and ends at `.ended`; release at `.idle`; release on window close and re-acquire on reopen mid-session.
+
+**Smoke (Debug build, Mac mini M2 Pro on AC, macOS 26.5.1, 2026-09-29).** Launched on `so_what.m4a` via `UZUME_LOCAL_FILE_PLAYBACK`: `pmset -g assertions` showed no Uzume line before launch, then `PreventUserIdleDisplaySleep` + `PreventUserIdleSystemSleep` named "Uzume visual session" once the session reached Ready/Playing, and none after exit. This proves the wiring, not the laptop-on-battery behaviour.
+
+**Closes on** Matt's `pmset -g assertions` check mid-session on the M4 MacBook Pro on battery, and the display staying on past the idle timeout.
+### BUG-163 — Reduce Motion ignored at launch; "Dim flashing lights" never read (2026-09-29)
 
 **Severity:** P1 (a photosensitivity mitigation that silently doesn't hold) · **Domain:** app / accessibility · **Failure class:** `pipeline-wiring` · **Status:** Fixed 2026-09-29 (BR.1, `cf9cc978`) — **pending live check** (listening session 1: launch with macOS Reduce Motion on, then with Dim Flashing Lights on; the visuals run without feedback trails and at half beat strength from the first frame)
 
-*(Numbering: filed from `origin/main`'s next free number. BR.2's open PR #316 also claims BUG-162; whichever merges second renumbers, per the Phase BR kickoff.)*
+*(Numbering: filed as BUG-162 on `br-1`; renumbered to BUG-163 (and K1 to BUG-164) when BR.2's #316 merged first with its own BUG-162.)*
 
 **Expected.** With macOS Reduce Motion (or Dim Flashing Lights) on at launch, the engine renders reduced from its first frame: mv_warp feedback skipped, beat amplitude × 0.5 (D-054).
 
@@ -526,7 +544,7 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 **Gates.** `AccessibilityStateTests`: `engineFlags_deliverTheLaunchStateOnSubscription` (Reduce Motion on / Dim Flashing Lights on, each delivered synchronously on subscribe), `dimFlashingLights_actsLikeReduceMotion`, `engineFlags_followPreferenceChanges`; `AccessibilityLaunchWiringTests` (source shape: `.onReceive(accessibilityState.engineFlags)`, no `.onChange` on `reduceMotion`). The existing tests now pin Dim Flashing Lights off so they no longer read the host Mac.
 
-### BUG-163 — Fractal Tree on M1-family Macs is a full-screen field that flashes with the music (2026-09-29)
+### BUG-164 — Fractal Tree on M1-family Macs is a full-screen field that flashes with the music (2026-09-29)
 
 **Severity:** P1 (photosensitivity) · **Domain:** renderer / orchestrator · **Failure class:** `api-contract` (GPU family capability) · **Status:** Fixed by exclusion 2026-09-29 (BR.1, `c5f33aa1`, Matt's decision 3). The Apple7 fallback is unchanged and still unmeasured — it cannot be driven on an Apple8 host; gating the native path on Apple7 waits for an M1.
 
@@ -2861,7 +2879,8 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
-- **BR.1 (2026-09-29).** F1/F1b → **BUG-162**; K1/D1 → **BUG-163**. P2 findings fixed in the same increment, tracked here:
+- **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **BR.1 (2026-09-29).** F1/F1b → **BUG-163**; K1/D1 → **BUG-164**. P2 findings fixed in the same increment, tracked here:
   - **F7** — the photosensitivity notice gates every path to visuals (ContentView; ⌘O / Open With / drop included). Fixed (`8d294d8f`); live-verified on the local-file path (ack forced NO stops at `.ready`, YES logs `playback started`).
   - **F6** — the notice's "Enable Reduce motion" sets the in-app Reduced motion to Always on (UX_SPEC §3.3). Fixed (`8d294d8f`).
   - **K3 / E13 / F15 / A13** — the public build walks only certified, non-diagnostic scenes on Shift+→, hides "Show uncertified scenes" (a stored true never reaches the engine) and loads no user-preset folder (`BuildFlavor.exposesUncheckedScenes`). Fixed (`1e47cca9`); verified by test only — no public-flavor build was run.

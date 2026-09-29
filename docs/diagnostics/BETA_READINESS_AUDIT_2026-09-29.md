@@ -398,13 +398,14 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Ready to Start after clearing its cache: BUG-134.
    - A bar-locked scene on a meterless song: BUG-117.
    - Ferrofluid Ocean on the 96 kHz file: BUG-141.
-   - Launch with macOS Reduce Motion on, then again with Dim Flashing Lights on: no feedback trails and half beat strength from the first frame (BUG-162, BR.1).
+   - Launch with macOS Reduce Motion on, then again with Dim Flashing Lights on: no feedback trails and half beat strength from the first frame (BUG-163, BR.1).
    - Reset the notice (Settings › Diagnostics › Reset onboarding, then relaunch), then open a file with ⌘O: the notice appears before any visuals; "Enable Reduce motion" turns on Uzume's Reduced motion (BR.1, F7/F6).
 2. **Streaming session** (an external 4K display if possible).
    - Start and stop twice, and swap output devices: BUG-139 (never live-validated), BUG-070 (pending since 07-12), BUG-058.
    - Pause Spotify for 30 s or more, then end and restart: the tap race, and E2.
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - Judge stem timing at 4K: BUG-106.
+   - On the M4 MacBook Pro on battery, leave a session untouched past the display-off interval and run `pmset -g assertions` mid-session: BUG-162 (BR.2).
 3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM.
 
 ---

@@ -239,8 +239,8 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | ID | Tier | Status | What (findings) |
 |---|---|---|---|
 | **BR.0** | 0 | 🔨 CLEAN.2.5b done; `clean-2-5b` pushed, PR open (awaiting CI + merge) | Merge the notarized-DMG branch ✗ (Matt's push); renumber its IDs ✅ (now BUG-158…161); fresh-account rehearsal ✅ (*"Passes all steps."*, build 5); `release.sh` SHA + dSYM ✅ + untracked-file check ✅ (H5, H6); GitHub "Latest" pointing at the weights tarball (H14) — open, a publishing call |
-| **BR.1** | 1 | ✅ fixed, PR open — pending live checks (BUG-162, BUG-163; session 1) | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
-| **BR.2** | 1 | ready | Keep the display awake during a session (B1) |
+| **BR.1** | 1 | ✅ fixed, PR open — pending live checks (BUG-163, BUG-164; session 1) | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
+| **BR.2** | 1 | ✅ merged (#316) — pending Matt's live `pmset` check (BUG-162) | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ready | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
 | **BR.4** | 1 | ready | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
 | **BR.5** | 1 | ready | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
@@ -1699,11 +1699,16 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ### Increment BR.1 — photosensitivity safety ✅ (2026-09-29, pending live checks)
 
-**Delivered.** Audit F1/F1b → BUG-162 (Reduce Motion + Dim Flashing Lights reach the engine at launch), K1/D1 → BUG-163 (mesh-shader scenes excluded on pre-Apple8 GPUs), and P2 lines under AUDIT-2026-09-29 for F7 (notice gates every path), F6 (notice sets in-app Reduced motion), K3/E13/F15/A13 (public build reaches only checked scenes) and K4 (flash measurements + G-buffer guard).
+**Delivered.** Audit F1/F1b → BUG-163 (Reduce Motion + Dim Flashing Lights reach the engine at launch), K1/D1 → BUG-164 (mesh-shader scenes excluded on pre-Apple8 GPUs), and P2 lines under AUDIT-2026-09-29 for F7 (notice gates every path), F6 (notice sets in-app Reduced motion), K3/E13/F15/A13 (public build reaches only checked scenes) and K4 (flash measurements + G-buffer guard).
 **Done-when:** ✅ Reduce Motion on at launch reaches the engine on subscribe (test); ✅ Dim Flashing Lights acts like Reduce Motion (test); ✅ no route to `.playing` without the acknowledgement, local-file path included (test + live Debug run); ✅ the notice button sets "Always on" (test); ✅ Fractal Tree excluded without `.apple8` (stubbed test); ✅ flash harness measures Fractal Tree, Ferrofluid Ocean lit and Waveform — 0.00 flashes/s each — and fails on a G-buffer pipeline (negative control: Ferrofluid back in the single-pass set → red); ✅ public flavor: Shift+→ certified + non-diagnostic only, uncertified toggle and user-preset folder off (tests).
 **Flash table (320×180, 3 s worst-case train at 4.5 Hz):** Fractal Tree 0.00 flashes/s, Δ0.005 (tree box) · Ferrofluid Ocean 0.00, Δ0.073 · Waveform 0.00, Δ0.081 · Volumetric Lithograph (unchanged, lit) 0.00, Δ0.058.
 **Found on the way:** Volumetric Lithograph's single-pass flash line was also a G-buffer draw.
 **Not done:** Murmuration birds, Gossamer/Membrane feedback (K4's remaining holes); the Apple7 fallback's own flash rate (no Apple7 host); a public-flavor build was not run.
+### Increment BR.2 — the display stays awake during a session ✅ (2026-09-29, pending live check)
+
+**Delivered.** Audit B1 → BUG-162. `DisplaySleepGuard` holds a `.idleDisplaySleepDisabled` activity from `.ready` through `.playing` while the window is open, and releases it on `.ended`, `.idle` and window close. The state→assertion mapping sits behind a `DisplaySleepAsserting` seam and is unit-tested (`DisplaySleepGuardTests`).
+**Done-when:** ✅ held Ready → Playing, released on end / idle / window close; ✅ unit test through the seam; ⏳ `pmset -g assertions` names Uzume mid-session on the M4 MacBook Pro on battery — Matt's check, queued into listening session 2 (streaming).
+**Not done:** the audit's "pause-timeout" release — no pause timeout exists; a paused streaming session keeps the display on while Uzume is on screen, which matches a visualizer left running.
 
 ### Increment AUDIT.2 — beta readiness review and improvement plan ✅ (2026-09-29)
 
