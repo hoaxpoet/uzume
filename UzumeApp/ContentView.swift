@@ -134,7 +134,7 @@ struct ContentView: View {
             // LocalFileMenuCommands to re-open the right source.
             EndedView(
                 trackCount: engine.sessionManager.currentPlan?.tracks.count ?? 0,
-                sessionDuration: nil,
+                sessionDuration: engine.lastSessionPlaybackSeconds,
                 onStartNewSession: { engine.sessionManager.cancel() },
                 onOpenSessionsFolder: { EndedView.openSessionsFolder() },
                 lastLocalFileOrigin: engine.lastEndedLocalFileOrigin,

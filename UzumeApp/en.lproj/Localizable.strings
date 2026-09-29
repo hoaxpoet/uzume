@@ -267,6 +267,7 @@
 "ended.subtext"             = "Start a new session to continue";
 /* %lld = track count (Int) */
 "ended.summary.tracks"      = "%lld tracks";
+"ended.summary.track_one"   = "1 track";
 /* %@ = formatted duration string e.g. "12 min" or "—" */
 "ended.summary.duration"    = "%@";
 "ended.cta.newSession"      = "Start another session";
