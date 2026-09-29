@@ -222,41 +222,50 @@ extension VisualizerEngine {
             // sessions where livePlan is nil.
             let identity = self.canonicalTrackIdentity(matching: partialIdentity) ?? partialIdentity
 
-            Task { @MainActor in
-                // R3.1 (PUB.9): ONE paired publish — title + plan index
-                // (QR.4 / D-091) together, with artwork cleared in the same
-                // tick so a prior LF session's bytes never dress the new
-                // streaming title (LF.6.fix.1 / BUG-024); the LF.6.streaming
-                // async fetch then lands the real bytes on a later tick.
-                // The stale pre-fetched profile drops with it — the new
-                // track's kickoffPreFetch repopulates.
-                self.nowPlaying.publishTrack(
-                    event.current, index: resolvedPlanIndex, artwork: .some(nil))
-                self.streamingArtworkPublisher?.update(for: identity)
-                self.nowPlaying.setProfile(nil)
-                let displayTitle = event.current.title ?? "?"
-                let displayArtist = event.current.artist ?? "?"
-                captureLogger.info("Track: \(displayTitle) — \(displayArtist)")
-                self.sessionRecorder?.log("track → \(displayTitle) — \(displayArtist)")
-            }
-            mir.reset()
-            self.pipeline.resetAccumulatedAudioTime()
-            // BUG-016 fix (2026-05-26): persist the resolved identity so
-            // `applyPreset` can refresh per-track preset state (Lumen Mosaic
-            // palette) when the user activates a preset mid-track. Before this
-            // line existed, the identity escaped the closure scope and was only
-            // available to `resetStemPipeline` below — so any preset whose
-            // per-track GPU payload is wired through `resetStemPipeline` would
-            // render against zero-filled defaults until the next track change.
-            // Must precede `resetPerTrackPresetState()` (the Skein reseed
-            // derives from it).
-            self.lastResolvedTrackIdentity = identity
-            // BUG-044: Nimbus settle (NB.4) + Skein §1.5 canvas wipe + reseed, shared with the
-            // local-file advance path. See `resetPerTrackPresetState` in VisualizerEngine+Presets.
-            self.resetPerTrackPresetState()
-            self.logTrackChangeObserved(event: event, identity: identity)
-            self.resetStemPipeline(for: identity, caller: .trackChange)
-            self.kickoffPreFetch(for: event.current, fetcher: fetcher)
+            // BR.3 (audit G1): this callback runs on the Now Playing poller's pool thread.
+            // Every reset below goes to the owner of its state — MIR to the analysis queue;
+            // preset, geometry, identity and renderer clocks to main, in the order they ran
+            // inline before (the publish, then the resets). Inline, they raced the render
+            // loop (Witchlight's bead path, Meniscus's waves) and the analysis queue.
+            TrackChangeResetRouter.route(
+                analysisQueue: self.analysisQueue,
+                analysis: { mir.reset() },
+                main: { [weak self] in
+                    guard let self else { return }
+                    // R3.1 (PUB.9): ONE paired publish — title + plan index
+                    // (QR.4 / D-091) together, with artwork cleared in the same
+                    // tick so a prior LF session's bytes never dress the new
+                    // streaming title (LF.6.fix.1 / BUG-024); the LF.6.streaming
+                    // async fetch then lands the real bytes on a later tick.
+                    // The stale pre-fetched profile drops with it — the new
+                    // track's kickoffPreFetch repopulates.
+                    self.nowPlaying.publishTrack(
+                        event.current, index: resolvedPlanIndex, artwork: .some(nil))
+                    self.streamingArtworkPublisher?.update(for: identity)
+                    self.nowPlaying.setProfile(nil)
+                    let displayTitle = event.current.title ?? "?"
+                    let displayArtist = event.current.artist ?? "?"
+                    captureLogger.info("Track: \(displayTitle) — \(displayArtist)")
+                    self.sessionRecorder?.log("track → \(displayTitle) — \(displayArtist)")
+                    self.pipeline.resetAccumulatedAudioTime()
+                    // BUG-016 fix (2026-05-26): persist the resolved identity so
+                    // `applyPreset` can refresh per-track preset state (Lumen Mosaic
+                    // palette) when the user activates a preset mid-track. Before this
+                    // line existed, the identity escaped the closure scope and was only
+                    // available to `resetStemPipeline` below — so any preset whose
+                    // per-track GPU payload is wired through `resetStemPipeline` would
+                    // render against zero-filled defaults until the next track change.
+                    // Must precede `resetPerTrackPresetState()` (the Skein reseed
+                    // derives from it).
+                    self.lastResolvedTrackIdentity = identity
+                    // BUG-044: Nimbus settle (NB.4) + Skein §1.5 canvas wipe + reseed, shared with the
+                    // local-file advance path. See `resetPerTrackPresetState` in VisualizerEngine+Presets.
+                    self.resetPerTrackPresetState()
+                    self.logTrackChangeObserved(event: event, identity: identity)
+                    self.resetStemPipeline(for: identity, caller: .trackChange)
+                    self.kickoffPreFetch(for: event.current, fetcher: fetcher)
+                }
+            )
         }
     }
 

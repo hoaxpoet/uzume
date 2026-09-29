@@ -626,7 +626,9 @@ extension VisualizerEngine {
         // once per SESSION, so every track after the first inherited its predecessor's
         // window. Same class as the stale-@Published trap in CLAUDE.md §What NOT To Do —
         // populated on one path, never cleared on the complementary one.
-        moodAccumulator.reset()
+        // BR.3 (audit G1): the accumulator is analysis-queue state (`update` runs there);
+        // callers of this reset are on main.
+        analysisQueue.async { [weak self] in self?.moodAccumulator.reset() }
 
         // FBS / D-154: resolve the new track's beat regularity once, while the
         // cache is reachable (MainActor). Consumed by the reactive evaluate off
