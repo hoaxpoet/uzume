@@ -178,7 +178,8 @@ struct ReadyViewModelTests {
 struct ReadyFirstAudioWiringTests {
     @Test func startListeningForFirstAudio_marksTheDetectorSilentAfterStartingTheTap() throws {
         let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
             .appendingPathComponent("UzumeApp/VisualizerEngine+PublicAPI.swift")
         let src = try String(contentsOf: url, encoding: .utf8)
         let body = try #require(src.range(of: "func startListeningForFirstAudio()"))
