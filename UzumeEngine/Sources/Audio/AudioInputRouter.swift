@@ -43,7 +43,6 @@ public enum InputMode: Sendable, Equatable {
 /// Set `onAudioSamples` before calling `start()`. Audio data is delivered
 /// as interleaved float32 PCM on a real-time audio thread (for system/app
 /// capture) or a background thread (for file playback).
-@available(macOS 14.2, *)
 public final class AudioInputRouter: @unchecked Sendable {
 
     // MARK: - State

@@ -40,7 +40,6 @@ private final class TestClock {
 /// Build an AudioInputRouter wired to a MockAudioCapture and a SilenceDetector
 /// driven by a TestClock. Returns the tuple so individual tests can drive
 /// whatever subset they need.
-@available(macOS 14.2, *)
 private func makeTestRouter(
     clock: TestClock = TestClock()
 ) -> (router: AudioInputRouter, mock: MockAudioCapture, detector: SilenceDetector, clock: TestClock) {
@@ -71,7 +70,6 @@ private final class DiagnosticSink: @unchecked Sendable {
 /// Simulates "the workItem fired and ran" for counter-sequence tests
 /// without actually waiting for the 3/10/30 s asyncAfter delay.
 /// Distinct from `cancelPendingReinstall()` which also zeroes attempts.
-@available(macOS 14.2, *)
 private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
     router.lock.withLock {
         router.reinstallWorkItem?.cancel()
@@ -85,7 +83,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// After 3 sequential calls (each simulating a prior workItem firing) the
 /// counter advances 1 → 2 → 3. The 4th call hits the backoff-exhausted
 /// guard and leaves the counter at 3 with no new workItem scheduled.
-@available(macOS 14.2, *)
 @Test func test_scheduleNextReinstall_attemptCountSequence() {
     let (router, _, _, _) = makeTestRouter()
     // LF.1: scheduler is mode-gated. Set a tap mode so the scheduler
@@ -121,7 +118,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// at AudioInputRouter+SignalState.swift line 51. A regression of this guard
 /// would double-bump the attempt counter on overlapping silence transitions
 /// and burn through the 3-attempt cap on the first scrub.
-@available(macOS 14.2, *)
 @Test func test_scheduleNextReinstall_doesNotDoubleScheduleWhilePending() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -142,7 +138,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 
 /// A session that NEVER delivered audio (a broken cold install) DOES schedule a
 /// reinstall — preserves BUG-055 / wedged-daemon cold-install recovery.
-@available(macOS 14.2, *)
 @Test func test_scheduleNextReinstall_firesWhenSessionNeverHadAudio() {
     let (router, _, detector, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }
@@ -157,7 +152,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// A session that HAS delivered audio then goes silent (= a user pause) does NOT
 /// schedule a reinstall — the working tap is left alone to resume on play. This
 /// is the BUG-057 pause-churn fix (instrumented session 17-45-44Z).
-@available(macOS 14.2, *)
 @Test func test_scheduleNextReinstall_skipsWhenSessionHadAudio() {
     let (router, _, detector, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }
@@ -173,7 +167,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 
 /// `resetSignalHistory()` clears the latch so a fresh session re-evaluates a cold
 /// install on its own merits (`router.start()` calls it).
-@available(macOS 14.2, *)
 @Test func test_resetSignalHistory_clearsDeliveredLatch() {
     let detector = SilenceDetector(
         silenceRMSThreshold: 1e-6, silenceDuration: 3.0, recoveryDuration: 0.5)
@@ -190,7 +183,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// the cold-install recovery timeline lands in session.log where os_log can't.
 /// Locks the routing so a refactor can't silently drop the artifact the
 /// diagnosis depends on.
-@available(macOS 14.2, *)
 @Test func test_silentReinstall_emitsCaptureDiagnostic() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -209,7 +201,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// `scheduleNextReinstall` returns before logging, so the sink stays empty —
 /// the engine-side guarantee behind the LF.1 "no reinstall lines in session.log"
 /// grep, now that those lines also route to the recorder.
-@available(macOS 14.2, *)
 @Test func test_silentReinstall_emitsNothingInLocalFileMode() {
     let (router, _, _, _) = makeTestRouter()
     let url = URL(fileURLWithPath: "/dev/null")
@@ -229,7 +220,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// Audit recommendation #2: cancelPendingReinstall_resetsAttempts.
 /// Cancel-on-active path zeroes both the workItem handle and the attempt
 /// counter so a subsequent silence run starts fresh.
-@available(macOS 14.2, *)
 @Test func test_cancelPendingReinstall_resetsAttempts() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -248,7 +238,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// The SilenceDetector's onStateChanged callback drives handleSignalStateChange.
 /// The `.silent` branch must schedule a reinstall; verified here for the
 /// short path (bypasses driving the detector through hysteresis).
-@available(macOS 14.2, *)
 @Test func test_handleSignalStateChange_silentSchedulesReinstall() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -262,7 +251,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// The `.active` branch must cancel any pending reinstall and reset attempts.
 /// Verifies the recovery short-circuit: if audio returns naturally on the
 /// existing tap before the backoff window expires, no reinstall happens.
-@available(macOS 14.2, *)
 @Test func test_handleSignalStateChange_activeCancelsPending() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -282,7 +270,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// short-circuits (does NOT call stopCapture/startCapture) AND calls
 /// cancelPendingReinstall. Verified by: a fresh detector defaults to .active,
 /// so calling attemptTapReinstall directly hits the state-guard skip path.
-@available(macOS 14.2, *)
 @Test func test_attemptTapReinstall_skipsIfStateNotSilent() {
     let (router, mock, _, _) = makeTestRouter()
     // Set currentMode so we'd progress to performTapReinstall if the state
@@ -313,7 +300,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// After consuming all reinstallDelays entries, scheduleNextReinstall is a
 /// no-op (the documented "treats prolonged silence as a real pause" log).
 /// Verifies the cap holds and no new workItem is scheduled.
-@available(macOS 14.2, *)
 @Test func test_backoffExhausted_noNewScheduling() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -345,7 +331,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// silence run must start at attempts=1 (fresh counter), not at 2 (continued
 /// from prior). Regression-locks the "cancel resets" behaviour at the
 /// integration level via the handleSignalStateChange entry point.
-@available(macOS 14.2, *)
 @Test func test_nextActiveToSilent_resetsAttempts() {
     let (router, _, _, _) = makeTestRouter()
     router.lock.withLock { router.currentMode = .systemAudio }  // LF.1 mode-gate
@@ -383,7 +368,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// `scheduleNextReinstall(...)`. A regression would cause "Tap reinstall
 /// scheduled" log lines to appear in `session.log` during local-file
 /// playback sessions, breaking the LF.1 manual-verification grep.
-@available(macOS 14.2, *)
 @Test func test_scheduleNextReinstall_isNoOpInLocalFilePlaybackMode() {
     let (router, _, _, _) = makeTestRouter()
     let url = URL(fileURLWithPath: "/dev/null")
@@ -403,7 +387,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// LF.1 regression lock: the existing `.localFile` (diagnostic injection)
 /// mode is also gated. Mirrors the playback gate so the offline
 /// `SoakTestHarness` path never schedules a reinstall either.
-@available(macOS 14.2, *)
 @Test func test_scheduleNextReinstall_isNoOpInLocalFileMode() {
     let (router, _, _, _) = makeTestRouter()
     let url = URL(fileURLWithPath: "/dev/null")
@@ -425,7 +408,6 @@ private func clearPendingWithoutResettingAttempts(_ router: AudioInputRouter) {
 /// behaviour without a discussion. If a real tuning increment ships, this
 /// test should be updated as part of that increment with the rationale in
 /// the commit message.
-@available(macOS 14.2, *)
 @Test func test_reinstallDelays_matchDesignSpec() {
     let (router, _, _, _) = makeTestRouter()
     #expect(router.reinstallDelays == [3.0, 10.0, 30.0])

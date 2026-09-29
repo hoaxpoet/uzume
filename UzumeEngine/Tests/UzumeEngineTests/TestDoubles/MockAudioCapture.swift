@@ -4,7 +4,6 @@
 import Foundation
 @testable import Audio
 
-@available(macOS 14.2, *)
 final class MockAudioCapture: AudioCapturing, @unchecked Sendable {
 
     // MARK: - Canned Data

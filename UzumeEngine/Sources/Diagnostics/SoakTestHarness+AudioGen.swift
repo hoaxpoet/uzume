@@ -9,7 +9,6 @@ import os.log
 
 // MARK: - Synthetic Audio Generation
 
-@available(macOS 14.2, *)
 extension SoakTestHarness {
 
     /// Generate a 10-second procedural audio fixture: sine sweep (100→4000 Hz) + light

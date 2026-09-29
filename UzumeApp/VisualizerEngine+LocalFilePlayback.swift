@@ -200,10 +200,6 @@ extension VisualizerEngine: LocalFilePreparing {
         // (LF.1 behavior preserved); multi-file queues advance + .ended on
         // exhaustion.
         let isMultiFile = source.allLocalFileURLs.count > 1
-        guard #available(macOS 14.2, *) else {
-            sessionRecorder?.log("WIRING: handleLocalFileReady BAILED — macOS < 14.2, no LF router")
-            return
-        }
         // BUG-091: this cast gates the ENTIRE start below it. If it ever fails the function
         // returns having installed a BeatGrid and a plan but no audio at all — which is
         // exactly the observed signature — so it is now a logged guard rather than a silent
@@ -237,7 +233,6 @@ extension VisualizerEngine: LocalFilePreparing {
 
     /// FTR/BUG-091 — wire the LF callbacks and start the provider. `false` ⇒ start failed and
     /// the session has been ended; the caller must not continue.
-    @available(macOS 14.2, *)
     @MainActor
     private func startLocalFileRouter(_ audioRouter: AudioInputRouter,
                                       url: URL,
@@ -379,7 +374,7 @@ extension VisualizerEngine: LocalFilePreparing {
             "file='\(nextURL.lastPathComponent)' direction=\(direction)"
         )
 
-        if #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter {
+        if let audioRouter = router as? AudioInputRouter {
             sessionRecorder?.log("WIRING: advanceLocalFileQueue audioRouter.stop BEGIN")
             audioRouter.stop()
             sessionRecorder?.log("WIRING: advanceLocalFileQueue audioRouter.stop COMPLETE")
@@ -456,7 +451,7 @@ extension VisualizerEngine: LocalFilePreparing {
     @MainActor
     func togglePauseLocalFile() {
         guard sessionManager.currentSource?.isLocalFile == true else { return }
-        if #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter {
+        if let audioRouter = router as? AudioInputRouter {
             if isLocalFilePaused {
                 audioRouter.resumeLocalFilePlayback()
                 isLocalFilePaused = false
@@ -508,7 +503,7 @@ extension VisualizerEngine: LocalFilePreparing {
     @MainActor
     func seekLocalFile(to seconds: TimeInterval) {
         guard sessionManager.currentSource?.isLocalFile == true,
-              #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter else { return }
+              let audioRouter = router as? AudioInputRouter else { return }
         do {
             try audioRouter.seekLocalFilePlayback(to: seconds)
         } catch {

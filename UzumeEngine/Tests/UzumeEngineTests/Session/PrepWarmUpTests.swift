@@ -24,7 +24,6 @@ private final class SpyBeatGridAnalyzer: BeatGridAnalyzing, @unchecked Sendable 
     }
 }
 
-@available(macOS 14.2, *)
 final class PrepWarmUpTests: XCTestCase {
 
     func testWarmUpCallsBothModelsOnce() throws {

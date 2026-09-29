@@ -223,7 +223,6 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
 
 // MARK: - Wiring
 
-@available(macOS 14.2, *)
 extension PlayheadAnalysisClock {
 
     /// Build the playhead-driven analysis clock, or nil when BUG087.4's flag is off, the caller

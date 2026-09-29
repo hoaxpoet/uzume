@@ -29,7 +29,6 @@ private final class FixedTempoAnalyzer: BeatGridAnalyzing, @unchecked Sendable {
 @Suite("BUG-145 stored tempo is the beat tracker's")
 struct ProfileTempoTests {
 
-    @available(macOS 14.2, *)
     private func storedBPM(fullMix: Double, drums: Double) throws -> Float? {
         let device = try #require(MTLCreateSystemDefaultDevice())
         var seed: UInt32 = 1   // broadband noise: fires the sub-bass onset detector freely
@@ -50,14 +49,12 @@ struct ProfileTempoTests {
 
     @Test("a steady 90 BPM grid is stored as 90, not the onset detector's ~135")
     func steadyGridTempoIsStored() throws {
-        guard #available(macOS 14.2, *) else { return }   // FakeStemSeparator's floor
         let bpm = try #require(try storedBPM(fullMix: 90, drums: 90), "a steady grid must store a BPM")
         #expect(abs(bpm - 90) < 0.5, "stored \(bpm), expected the grid's 90 (BUG-145)")
     }
 
     @Test("a beat the D-154 gate calls irregular stores no BPM")
     func irregularBeatStoresNoBPM() throws {
-        guard #available(macOS 14.2, *) else { return }
         // 90 vs 117: a 30 % non-octave disagreement between the full-mix and drums grids.
         #expect(try storedBPM(fullMix: 90, drums: 117) == nil)
     }

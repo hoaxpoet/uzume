@@ -65,7 +65,6 @@ struct LocalFilePrepCostHarness {
             print("LocalFilePrepCostHarness: UZUME_PREP_COST not set, skipping")
             return
         }
-        guard #available(macOS 14.2, *) else { return }
         guard let device = MTLCreateSystemDefaultDevice() else {
             print("LocalFilePrepCostHarness: no Metal device, skipping")
             return

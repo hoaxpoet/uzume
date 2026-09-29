@@ -7,7 +7,6 @@ import Metal
 @testable import Audio
 @testable import Shared
 
-@available(macOS 14.2, *)
 final class FakeStemSeparator: StemSeparating, @unchecked Sendable {
 
     // MARK: - Tracking

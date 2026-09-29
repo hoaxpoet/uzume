@@ -18,7 +18,6 @@ private let logger = Logger(subsystem: "io.uzume.mac", category: "VisualizerEngi
 extension VisualizerEngine {
 
     /// Set up audio routing, MIR analysis, mood classification, and pre-fetching.
-    @available(macOS 14.2, *)
     func setupAudioRouting(
         audioBuffer buf: AudioBuffer,
         fftProcessor fft: FFTProcessor

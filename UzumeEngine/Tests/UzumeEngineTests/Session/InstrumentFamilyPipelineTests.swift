@@ -34,8 +34,6 @@ import Testing
     }
 
     @Test func test_analyzePreview_populatesFamilySeriesFromAnalyzer() throws {
-        // FakeStemSeparator requires macOS 14.2; the deployment floor is 14.0.
-        guard #available(macOS 14.2, *) else { return }
         guard let device = MTLCreateSystemDefaultDevice() else {
             // No Metal device (headless CI) — the family wiring is identical with
             // or without a device; the stub-vs-CachedTrackData seam is covered by
@@ -70,7 +68,6 @@ import Testing
     }
 
     @Test func test_analyzePreview_nilAnalyzerYieldsEmptySeries() throws {
-        guard #available(macOS 14.2, *) else { return }
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         let sampleRate = 44_100
         let pcm = [Float](repeating: 0, count: sampleRate * 2)

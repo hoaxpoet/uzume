@@ -28,7 +28,7 @@ extension VisualizerEngine {
     /// down a live tap and reset the silence detector at the very moment Ready handed off.
     @MainActor
     private var isSystemAudioCaptureRunning: Bool {
-        if #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter,
+        if let audioRouter = router as? AudioInputRouter,
            audioRouter.activeMode == .systemAudio {
             return true
         }
@@ -82,7 +82,7 @@ extension VisualizerEngine {
             "WIRING: startAudio → SYSTEM-AUDIO TAP path; currentSource="
             + "\(sessionManager.currentSource.map { "\($0)" } ?? "nil") "
             + "sessionState=\(sessionManager.state)")
-        if #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter {
+        if let audioRouter = router as? AudioInputRouter {
             audioRouter.startMetadataOnly()
         }
         var permitted = CGPreflightScreenCaptureAccess()
@@ -124,7 +124,7 @@ extension VisualizerEngine {
 
     /// Start Core Audio tap capture (requires screen capture permission).
     private func startAudioCapture() {
-        if #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter {
+        if let audioRouter = router as? AudioInputRouter {
             do {
                 try audioRouter.start(mode: .systemAudio)
                 apiLogger.info("Audio capture started")

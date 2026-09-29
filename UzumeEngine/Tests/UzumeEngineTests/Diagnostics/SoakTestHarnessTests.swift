@@ -29,7 +29,6 @@ struct SoakTestHarnessTests {
 
     @Test("Configuration defaults are sensible")
     func configurationDefaults() {
-        guard #available(macOS 14.2, *) else { return }
         let config = SoakTestHarness.Configuration()
         #expect(config.duration == 7200,
                 "Default duration should be 7200 s (2 hours)")
@@ -45,7 +44,6 @@ struct SoakTestHarnessTests {
 
     @Test("Report round-trips through JSON Codable")
     func reportCodableRoundTrip() throws {
-        guard #available(macOS 14.2, *) else { return }
         let original = SoakTestHarness.Report(
             configuration: .init(
                 duration: 300,
@@ -103,7 +101,6 @@ struct SoakTestHarnessTests {
 
     @Test("Assessment has correct raw values")
     func assessmentRawValues() {
-        guard #available(macOS 14.2, *) else { return }
         #expect(SoakTestHarness.Report.Assessment.pass.rawValue == "pass")
         #expect(SoakTestHarness.Report.Assessment.passWithSoftAlerts.rawValue == "passWithSoftAlerts")
         #expect(SoakTestHarness.Report.Assessment.hardFailure.rawValue == "hardFailure")
@@ -117,7 +114,6 @@ extension SoakTestHarnessTests {
     @Test("cancel() causes run() to return before duration expires")
     @MainActor
     func cancelCausesEarlyReturn() async throws {
-        guard #available(macOS 14.2, *) else { return }
 
         let config = SoakTestHarness.Configuration(
             duration: 3600,
@@ -161,7 +157,6 @@ struct SoakTestHarnessSoakTests {
     @MainActor
     func smokeSoakRun() async throws {
         guard ProcessInfo.processInfo.environment["SOAK_TESTS"] == "1" else { return }
-        guard #available(macOS 14.2, *) else { return }
 
         let reportDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("uzume_soak_smoke_\(Int(Date().timeIntervalSince1970))")
@@ -199,7 +194,6 @@ struct SoakTestHarnessSoakTests {
     @MainActor
     func fiveMinuteMemoryCheck() async throws {
         guard ProcessInfo.processInfo.environment["SOAK_TESTS"] == "1" else { return }
-        guard #available(macOS 14.2, *) else { return }
 
         let reportDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("uzume_soak_5min_\(Int(Date().timeIntervalSince1970))")
@@ -224,7 +218,6 @@ struct SoakTestHarnessSoakTests {
 
     // MARK: Helpers
 
-    @available(macOS 14.2, *)
     private nonisolated func printSmokeSummary(_ report: SoakTestHarness.Report, label: String) {
         let dur = String(format: "%.1f", report.actualDuration)
         let snap = report.snapshots.last

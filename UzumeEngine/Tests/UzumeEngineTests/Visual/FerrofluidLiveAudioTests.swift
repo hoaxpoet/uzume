@@ -27,7 +27,6 @@ import XCTest
 @testable import Renderer
 @testable import Shared
 
-@available(macOS 14.2, *)
 final class FerrofluidLiveAudioTests: XCTestCase {
 
     private var device: MTLDevice!

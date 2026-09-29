@@ -25,7 +25,7 @@ struct LocalFileSeekTests {
 
     @Test("a seek plays from the new point: the playhead reads it, and the end comes that much sooner")
     func seekMovesThePlayhead() throws {
-        guard #available(macOS 14.2, *), let url = Self.fixture() else { return }
+        guard let url = Self.fixture() else { return }
         let duration = try { let f = try AVAudioFile(forReading: url); return Double(f.length) / f.processingFormat.sampleRate }()
         let ended = DispatchSemaphore(value: 0)
         let provider = LocalFilePlaybackProvider(url: url)
@@ -51,7 +51,7 @@ struct LocalFileSeekTests {
 
     @Test("seeking while paused stays paused")
     func pausedStaysPaused() throws {
-        guard #available(macOS 14.2, *), let url = Self.fixture() else { return }
+        guard let url = Self.fixture() else { return }
         let provider = LocalFilePlaybackProvider(url: url)
         try provider.start()
         defer { provider.stop() }

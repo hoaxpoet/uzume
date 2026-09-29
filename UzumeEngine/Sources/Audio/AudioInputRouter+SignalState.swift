@@ -4,7 +4,6 @@ import os.log
 
 private let signalStateLogger = Logger(subsystem: "io.uzume.audio", category: "AudioInputRouter")
 
-@available(macOS 14.2, *)
 extension AudioInputRouter {
 
     // MARK: - BUG-057 Instrumentation

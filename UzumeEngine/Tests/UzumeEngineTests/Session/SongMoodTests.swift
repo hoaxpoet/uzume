@@ -40,7 +40,6 @@ struct SongMoodTests {
 
     @Test("a 2 s ending that disagrees with the song does not become the song's mood")
     func storedMoodIsTheSongNotItsEnding() throws {
-        guard #available(macOS 14.2, *) else { return }   // FakeStemSeparator's floor
         let device = try #require(MTLCreateSystemDefaultDevice())
         let sampleRate = 44_100
         let samples = (0..<(sampleRate * 10)).map { Float(sin(Double($0) * 0.05)) * 0.3 }

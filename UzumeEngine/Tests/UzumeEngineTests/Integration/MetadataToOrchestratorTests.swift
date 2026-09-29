@@ -10,7 +10,6 @@ import Foundation
 struct MetadataToOrchestratorTests {
 
     @Test func trackChange_triggersPreFetch_resultsAvailableWithin2Seconds() async throws {
-        guard #available(macOS 14.2, *) else { return }
 
         let mockCapture = MockAudioCapture()
         let mockMetadata = MockMetadataProvider()
@@ -36,7 +35,6 @@ struct MetadataToOrchestratorTests {
     }
 
     @Test func trackChange_metadataFlowsToOrchestratorState() async throws {
-        guard #available(macOS 14.2, *) else { return }
 
         let mockCapture = MockAudioCapture()
         let mockMetadata = MockMetadataProvider()

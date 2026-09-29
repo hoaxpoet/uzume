@@ -75,7 +75,6 @@ private enum StartRaceFixture {
 struct LocalFilePlaybackStartRaceTests {
 
     @Test func concurrentStart_neverOrphansARunningInstance() throws {
-        guard #available(macOS 14.2, *) else { return }
         guard let url = StartRaceFixture.url() else { return }
 
         let tally = BreadcrumbTally()
@@ -141,7 +140,6 @@ struct LocalFilePlaybackStartRaceTests {
     /// `swift test --filter concurrentDoubleStart`: **10 crashes in 14 runs before,
     /// 0 in 30 after.** Re-run that, not this, when judging a change to this path.
     @Test func rescheduleRacingTeardown_neverArmsACommandOnAReleasedNode() throws {
-        guard #available(macOS 14.2, *) else { return }
         guard let url = StartRaceFixture.url() else { return }
 
         let provider = LocalFilePlaybackProvider(url: url)

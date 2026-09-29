@@ -35,7 +35,6 @@ let logger = Logger(subsystem: "io.uzume.diagnostics", category: "SoakTestHarnes
 /// renderPipeline.onFrameTimingObserved = harness.frameTimingRecorder
 /// let report = try await harness.run()
 /// ```
-@available(macOS 14.2, *)
 @MainActor
 public final class SoakTestHarness {
 

@@ -39,7 +39,6 @@ private let logger = Logger(subsystem: "io.uzume.audio", category: "LocalFilePla
 ///
 /// `AVAudioEngineConfigurationChange` notifications are observed and
 /// trigger a stop → start cycle (best-effort restart from beginning).
-@available(macOS 14.2, *)
 public final class LocalFilePlaybackProvider: @unchecked Sendable {
 
     // MARK: - State
