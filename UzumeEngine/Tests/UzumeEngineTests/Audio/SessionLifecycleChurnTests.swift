@@ -209,12 +209,14 @@ struct SessionLifecycleChurnTests {
             guard swapped else { return }
             provider = next
 
-            // The 0.25 s excerpt must reach EOF and fire the callback well
-            // within the watchdog window — a missing callback is its own
-            // hang class (the queue would stall on this track forever).
-            if ended.wait(timeout: .now() + 5.0) == .timedOut {
-                let message = "advance \(advance): onFileEnded never fired within 5 s — "
-                    + "queue-advance stall class"
+            // The 0.25 s excerpt must reach EOF and fire the callback. A missing
+            // callback is its own hang class: the queue would stall on this
+            // track forever. BUG-156: the wait is ordered against the
+            // default-QoS pool the `.dataPlayedBack` completion is delivered
+            // from, so a saturated parallel suite can delay it but not fail it.
+            if !awaitPlayedBackEnd(ended) {
+                let message = "advance \(advance): onFileEnded never fired within 5 s of the "
+                    + "delivery pool going live — queue-advance stall class"
                 Issue.record(Comment(rawValue: message))
                 return
             }

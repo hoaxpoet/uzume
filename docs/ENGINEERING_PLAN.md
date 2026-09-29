@@ -1654,6 +1654,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG156.1 — the end-of-track tests wait on an ordering, not the clock ✅ (2026-09-29)
+
+**Delivered.** BUG-156 (P3) was filed from one `onFileEnded_queueAdvanceChurn_neverHangs` failure on `ff-5` and fixed in one increment, as P3 allows. Root cause, measured: since LFSEEK.1 the queue-advance completion is `.dataPlayedBack`, which AVFAudio delivers from a timer in the process's default-QoS dispatch pool, and the parallel suite keeps that pool saturated. The churn test and `LocalFileSeekTests.seekMovesThePlayhead` now wait with `awaitPlayedBackEnd`: after the 5 s budget, a canary on the same pool decides between late and lost. Test-only; `LocalFilePlaybackProvider` is unchanged. Open product risk (unobserved) recorded in KNOWN_ISSUES.
+**Done-when:** ✅ reproduced 2/2 in full runs with a probe (callback 14.9–20.0 s late, never lost); ✅ mechanism isolated in-process (default/userInitiated saturation delays `.dataPlayedBack` 8.5 s; `.dataConsumed` and lower-QoS load don't); ✅ `PlayedBackWaitTests` + negative control; ✅ 3 full engine runs: 2 green (2117/2117); run 1 red only on the same-class sibling `StemSeparatorConcurrencyTests`, churn test passed via the late path in 13.1 s; ✅ KNOWN_ISSUES + release notes. No timeout widened.
+
 ### Increment KAG.5 — Kagura: the dances follow the song's measured energy ✅ (2026-09-28, branch `kag-5`; **M7 PASSED**)
 
 **Delivered (D-259 §4 amendment).**
