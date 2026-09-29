@@ -15,13 +15,15 @@ set -uo pipefail
 OUT="${TMPDIR:-/tmp}/uzume_hang_$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$OUT"
 
-PID=$(pgrep -x UzumeApp | head -1)
+# The executable has been `Uzume` since RN.1 (BR.5 / audit H7, D3: this said UzumeApp and
+# reported "not running" during a real freeze).
+PID=$(pgrep -x Uzume | head -1)
 if [ -z "$PID" ]; then
-    echo "capture_hang: UzumeApp is not running — nothing to sample." >&2
+    echo "capture_hang: Uzume is not running — nothing to sample." >&2
     exit 1
 fi
 
-echo "capture_hang: UzumeApp pid $PID → $OUT"
+echo "capture_hang: Uzume pid $PID → $OUT"
 
 # 1. The stack. This is the artifact that matters most: it says WHERE it is stuck.
 #    5 s at 1 ms gives ~4250 samples, enough to prove a hard block vs a slow frame.
@@ -45,7 +47,13 @@ fi
 # 4. Did the display sleep or reconfigure? Rules the power path in or out.
 pmset -g log 2>/dev/null | grep -iE "display|sleep|wake" | tail -40 > "$OUT/power.txt" && echo "  ✓ power.txt"
 
-# 5. The session that was running — log tail plus frame count, which dates the freeze.
+# 5. The unified log (BR.5 / D3): the watchdogs write MAIN_THREAD STALL and DRAWABLE_LIFECYCLE
+#    STALL there as faults, and the public build keeps no session.log.
+/usr/bin/log show --last 15m --info --predicate 'process == "Uzume"' > "$OUT/unified_log.txt" 2>&1 \
+    && echo "  ✓ unified_log.txt"
+df -h > "$OUT/df.txt" 2>&1 && echo "  ✓ df.txt"
+
+# 6. The session that was running — log tail plus frame count, which dates the freeze.
 SESSION=$(ls -dt "$HOME"/Documents/uzume_sessions/2*/ 2>/dev/null | head -1)
 if [ -n "$SESSION" ]; then
     { echo "session: $SESSION"

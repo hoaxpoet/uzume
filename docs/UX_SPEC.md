@@ -768,6 +768,10 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 
 ---
 
+### 9.6 Reporting a problem (BR.5, decision 5)
+
+**Help › Report a Problem…** (every build) asks first — *"Create a problem report?"* — naming what goes in: recent log messages, any Uzume crash or freeze reports, the Mac's model, macOS version and graphics chip; no audio; nothing sent. On **Create Report** the zip is written to `~/Library/Logs/Uzume`, shown in Finder, and a pre-filled GitHub issue opens for the tester to attach it to. After a run that didn't quit cleanly (crash, force-quit, kill), the **public** build offers the same dialog at the next launch, headed *"Uzume didn't quit normally last time."*
+
 ## 10. Settings Surface
 
 `SettingsView` is a sheet presented from any top-level view. Organized into four groups.
