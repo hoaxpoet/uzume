@@ -10,6 +10,18 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-182455] CLEAN.2.5b — Uzume installs on a stranger's Mac: signed by Plait & Pattern, notarized, one-command DMG
+
+- **A DMG anyone can open.** `Scripts/release.sh` builds a Developer ID–signed, notarized, stapled `Uzume-<version>-<build>.dmg` and checks it 15 ways before calling it done. Opening it shows only macOS's normal "downloaded from the internet" confirmation. Nothing is published; that is a separate call.
+- **Who it runs on.** macOS 15 Sequoia and later, Apple Silicon only. Version 0.9.0; the About box reads "Copyright © 2026 Plait & Pattern."
+- **Hearing the music on a new Mac.** A new user is now asked "record your system audio" with Uzume's own explanation. Without it, a tester's Uzume would have heard silence. The question comes on the Ready screen, next to "press play" (Matt's call).
+- **Ready no longer waits forever (BUG-160).** Pressing play soon after Ready used to leave Ready waiting even with the music loud; it now moves to visuals within about a second, however long you wait first.
+- **No crash on Continue (BUG-161).** Continuing from the Spotify scan's review could crash Uzume; it now closes the list before preparing.
+- **The public build keeps no session records (BUG-158)**, so it never asks for your Documents folder. Developer builds record as before.
+- Verified on a fresh account on the Mac mini: Matt, *"Passes all steps."*
+
+---
+
 ### [dev-2026-09-29-135111] BUG-156 — the local-file end-of-track tests wait for the music, not the clock
 
 `SessionLifecycleChurnTests.onFileEnded_queueAdvanceChurn_neverHangs` failed once in a full engine run. The end-of-track callback it waits for is delivered by AVFAudio through a thread pool the rest of the test suite keeps busy, so under full load it arrived 15–20 s late instead of in 0.3 s. It was late, never lost. The test and its sibling in `LocalFileSeekTests` now tell late from lost by what the pool has done, not by elapsed time. No timeout was widened, and a callback that never comes still fails. Test-only; playback is unchanged. KNOWN_ISSUES BUG-156 records an open, unobserved product risk from the same mechanism: a busy app could advance local-file tracks late.
