@@ -30,13 +30,20 @@ struct MainThreadWatchdogTests {
         )
         watchdog.start()
         defer { watchdog.stop() }
-        try await Task.sleep(for: .milliseconds(300))              // main free: pings answered
-        #expect(events.all.isEmpty, "no stall while main answers")
+        // Start from a healthy main thread. Under full-suite load other main-actor work can
+        // hold main past the stall threshold first — the watchdog then (correctly) reports a
+        // REAL stall — so order on the watchdog's own state, not on a fixed warm-up: wait
+        // (capped) until it has either said nothing or last said RECOVERED.
+        try await Task.sleep(for: .milliseconds(100))
+        for _ in 0..<100 where !(events.all.last.map { $0.0 == "MAIN_THREAD RECOVERED" } ?? true) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
 
+        let hangStart = Date()
         hangTheMainThread(for: 1.4)                                 // THE HANG: main blocked
         let released = Date()
 
-        let during = events.all.filter { $0.1 < released }.map(\.0)
+        let during = events.all.filter { $0.1 >= hangStart && $0.1 < released }.map(\.0)
         #expect(during.contains { $0.hasPrefix("MAIN_THREAD STALL") }, "STALL logged while main was blocked")
         #expect(during.contains("SAMPLE"), "sampled once past the sample threshold")
         #expect(during.filter { $0 == "SAMPLE" }.count == 1)
