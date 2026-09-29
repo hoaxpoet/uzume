@@ -155,6 +155,10 @@
 		H10006 /* PlaybackShortcutRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20006; };
 		H10007 /* PlaybackKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20007; };
 		H10008 /* FullscreenObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20008; };
+		BR510003 /* ProblemReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR520003; };
+		BR510004 /* ProblemReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR520004; };
+		BR510001 /* MainThreadWatchdog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR520001; };
+		BR510002 /* MainThreadWatchdogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR520002; };
 		BR210001 /* DisplaySleepGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR220001; };
 		BR210002 /* DisplaySleepGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR220002; };
 		H10009 /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20009; };
@@ -391,6 +395,10 @@
 		H20006 /* PlaybackShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackShortcutRegistry.swift; sourceTree = "<group>"; };
 		H20007 /* PlaybackKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackKeyMonitor.swift; sourceTree = "<group>"; };
 		H20008 /* FullscreenObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenObserver.swift; sourceTree = "<group>"; };
+		BR520003 /* ProblemReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProblemReport.swift; sourceTree = "<group>"; };
+		BR520004 /* ProblemReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProblemReportTests.swift; sourceTree = "<group>"; };
+		BR520001 /* MainThreadWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadWatchdog.swift; sourceTree = "<group>"; };
+		BR520002 /* MainThreadWatchdogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadWatchdogTests.swift; sourceTree = "<group>"; };
 		BR220001 /* DisplaySleepGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySleepGuard.swift; sourceTree = "<group>"; };
 		BR220002 /* DisplaySleepGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySleepGuardTests.swift; sourceTree = "<group>"; };
 		H20009 /* DisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManager.swift; sourceTree = "<group>"; };
@@ -676,6 +684,8 @@
 				H20006 /* PlaybackShortcutRegistry.swift */,
 				H20007 /* PlaybackKeyMonitor.swift */,
 				H20008 /* FullscreenObserver.swift */,
+				BR520003 /* ProblemReport.swift */,
+				BR520001 /* MainThreadWatchdog.swift */,
 				BR220001 /* DisplaySleepGuard.swift */,
 				H20009 /* DisplayManager.swift */,
 				H20010 /* LiveAdaptationToastBridge.swift */,
@@ -832,6 +842,8 @@
 				H20034 /* ToastManagerTests.swift */,
 				H20035 /* LiveAdaptationToastBridgeTests.swift */,
 				H20036 /* FullscreenObserverTests.swift */,
+				BR520004 /* ProblemReportTests.swift */,
+				BR520002 /* MainThreadWatchdogTests.swift */,
 				BR220002 /* DisplaySleepGuardTests.swift */,
 				BR120001 /* MeshCapabilityCatalogTests.swift */,
 				H20037 /* DisplayManagerTests.swift */,
@@ -1079,6 +1091,8 @@
 				H10006 /* PlaybackShortcutRegistry.swift in Sources */,
 				H10007 /* PlaybackKeyMonitor.swift in Sources */,
 				H10008 /* FullscreenObserver.swift in Sources */,
+				BR510003 /* ProblemReport.swift in Sources */,
+				BR510001 /* MainThreadWatchdog.swift in Sources */,
 				BR210001 /* DisplaySleepGuard.swift in Sources */,
 				H10009 /* DisplayManager.swift in Sources */,
 				H10010 /* LiveAdaptationToastBridge.swift in Sources */,
@@ -1165,6 +1179,8 @@
 				H10034 /* ToastManagerTests.swift in Sources */,
 				H10035 /* LiveAdaptationToastBridgeTests.swift in Sources */,
 				H10036 /* FullscreenObserverTests.swift in Sources */,
+				BR510004 /* ProblemReportTests.swift in Sources */,
+				BR510002 /* MainThreadWatchdogTests.swift in Sources */,
 				BR210002 /* DisplaySleepGuardTests.swift in Sources */,
 				BR110001 /* MeshCapabilityCatalogTests.swift in Sources */,
 				H10037 /* DisplayManagerTests.swift in Sources */,

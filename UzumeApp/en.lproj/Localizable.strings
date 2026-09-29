@@ -564,3 +564,15 @@
 "scan.review.scan_again"        = "Scan again";
 "scan.review.continue"          = "Continue";
 
+
+/* BR.5 — Help › Report a Problem (consent first; nothing is sent by the app) */
+"menu.help.report_problem"            = "Report a Problem…";
+"report.consent.title"                = "Create a problem report?";
+"report.consent.title.abnormal_exit"  = "Uzume didn’t quit normally last time. Create a problem report?";
+"report.consent.body"                 = "Uzume will save a zip of its recent log messages, any Uzume crash or freeze reports, and your Mac’s model, macOS version and graphics chip. No audio is included, and nothing is sent: the zip opens in Finder so you can look at it, then a new GitHub issue opens for you to attach it to.";
+"report.consent.create"               = "Create Report";
+"report.consent.cancel"               = "Not Now";
+"report.failed.title"                 = "The report couldn’t be created";
+"report.failed.body"                  = "Please describe what happened in a new GitHub issue instead.";
+"report.issue.title"                  = "Problem report: ";
+"report.issue.body"                   = "**What happened?**\n\n\n**What did you expect?**\n\n\nPlease drag %1$@ (shown in Finder) into this issue.\n\n`%2$@`";

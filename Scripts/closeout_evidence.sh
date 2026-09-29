@@ -204,10 +204,10 @@ render_test_step "Step 2: App tests (UzumeApp xcodebuild)" "$APP_CMD_STR" "$APP_
 # UzumeApp instance is running — exit 65, zero tests, "Could not launch". Name
 # it so a stray app is never mistaken for a test regression.
 if [ "$APP_EXIT" != "0" ] && grep -q 'Could not launch .UzumeAppTests' "$APP_LOG" 2> /dev/null; then
-  if pgrep -x UzumeApp > /dev/null 2>&1; then
-    emit "> **BUG-072 — not a test regression.** UzumeApp is running; quit it and re-run."
+  if pgrep -x Uzume > /dev/null 2>&1; then   # the executable since RN.1 (BR.5 / H7)
+    emit "> **BUG-072 — not a test regression.** Uzume is running; quit it and re-run."
   else
-    emit "> **Runner launch failed with no UzumeApp running** — unlike BUG-072. Investigate."
+    emit "> **Runner launch failed with no Uzume running** — unlike BUG-072. Investigate."
   fi
   emit ""
 fi
