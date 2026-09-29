@@ -65,6 +65,16 @@ struct StemSeriesWiringTests {
                 sample with — the point is reading the second playback is on.
                 """)
 
+        // BUG-158 follow-on: the public build has no session recorder, and setupCaptureHook
+        // returns early without one — the stem publish must be wired before that guard.
+        if let publish = initHelpers.range(of: "pipe.setPerFrameStemPublish"),
+           let guardRecorder = initHelpers.range(of: "guard let recorder = self.sessionRecorder else { return }") {
+            #expect(publish.lowerBound < guardRecorder.lowerBound, """
+                    setPerFrameStemPublish sits behind the session-recorder guard, so the public \
+                    build (no recorder, BUG-158) never publishes the pre-analysed stem series.
+                    """)
+        }
+
         // Ordering: the publish must precede the frame's stem snapshot, or it lands a frame late.
         if let publish = draw.range(of: "perFrameStemPublish }?()"),
            let snapshot = draw.range(of: "let stemFeatures   = stemFeaturesLock.withLock") {
