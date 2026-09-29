@@ -196,3 +196,18 @@ struct PreparationEscapeWiringTests {
         #expect(src.contains(localReachability))
     }
 }
+
+// MARK: - BR.7 (C10): missing ML weights say so
+
+@Suite("Missing ML weights are announced (BR.7)")
+struct MissingAnalysisNoticeWiringTests {
+    @Test func launchShowsTheNotice_whenTheSeparatorDidNotLoad() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let app = try String(contentsOf: root.appendingPathComponent("UzumeApp/UzumeApp.swift"), encoding: .utf8)
+        #expect(app.contains("if engine.analysisUnavailable { MissingAnalysisNotice.show() }"))
+        let stems = try String(
+            contentsOf: root.appendingPathComponent("UzumeApp/VisualizerEngine+Stems.swift"), encoding: .utf8)
+        #expect(stems.contains("var analysisUnavailable: Bool { stemSeparator == nil }"))
+        #expect(Bundle.main.localizedString(forKey: "analysis_unavailable.title", value: "∅", table: nil) != "∅")
+    }
+}
