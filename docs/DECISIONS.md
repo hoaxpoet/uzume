@@ -6199,12 +6199,21 @@ the block.
    anything. 15 covers most active Macs; only 26 is tested so far (KNOWN_ISSUES).
 4. **Apple Silicon only** (`ARCHS = arm64`). Intel Macs can't reach the 60 fps target, and the
    engine's `Float16` math doesn't exist on x86_64 anyway.
-5. **Permission questions before the first visuals: one screen, as before** (DECISION-NEEDED 1,
-   default A). Onboarding asks for Screen & System Audio Recording, which covers hearing the music
-   and the Spotify scan. `NSAudioCaptureUsageDescription` is now declared, as Apple documents for
-   Core Audio process taps.
+5. **Permission questions: one onboarding screen; the system-audio question stays on Ready**
+   (DECISION-NEEDED 1 → A, refined by Task 8). Onboarding asks for Screen & System Audio
+   Recording. On macOS 26 a new account is *also* asked "record your system audio"
+   (`NSAudioCaptureUsageDescription`, now declared — without it a tester's tap would be silent);
+   it arrives the first time the tap starts, on Ready, before any visuals. Matt (2026-09-29):
+   leave it there, next to "press play", rather than move it into onboarding. The full observed
+   sequence is UX_SPEC §3.3a.
 6. **About box: "Copyright © 2026 Plait & Pattern."** (DECISION-NEEDED 3, default A), matching the
    signing certificate's name. `LICENSE` (MIT, Matt Deming) is unchanged; aligning the two is Matt's
    separate call.
 7. **Version 0.9.0.** The build number lives in `UzumeApp/Version.xcconfig`; the release script
    increments and commits it on every run, so no number is reused.
+8. **Developer vs public build** (Matt, 2026-09-29: *"We need to start distinguishing between the
+   developer version of the app and the public release, which would have few features."*).
+   `BuildFlavor` (`UzumeBuildFlavor` in Info.plist; only `Scripts/release.sh` sets `public`, and
+   verifies it on the artifact). First use: the public build keeps no session records, so it
+   never asks for Documents access (BUG-158). Every other build — Debug and Release — is the
+   developer build. Further developer-only surfaces move behind it in their own increments.

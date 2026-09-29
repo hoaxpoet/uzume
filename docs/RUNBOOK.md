@@ -367,10 +367,21 @@ It prompts for the Apple ID, team and an app-specific password, and stores them 
 | `spctl -t open --context context:primary-signature` on the DMG → `accepted` | Gatekeeper would open the downloaded disk image. |
 | `stapler validate` on app and DMG | The notarization ticket travels inside the file, so first launch works offline. |
 | `lipo -archs` → `arm64` | Apple Silicon only (D-261). |
+| `UzumeBuildFlavor: public` | The public build (D-261 §8): no session records, no Documents question (BUG-158). |
 
 **A notarization rejection.** The script prints the submission's `notarytool log` and stops. The log is JSON; read its `issues` array: each entry names the file (`path`) and the reason (`message`), e.g. "The executable does not have the hardened runtime enabled" or "The signature does not include a secure timestamp". Fix the cause and run the script again (it takes the next build number). A past submission's log: `xcrun notarytool log <submission-id> --keychain-profile uzume-notary`; the list: `xcrun notarytool history --keychain-profile uzume-notary`.
 
 **After changing signing teams, expect permission re-grants.** macOS keys its permissions to the app's signature. The first build after a team change asks again for Screen & System Audio Recording (and system-audio capture), and the Keychain asks whether Uzume may use its saved Spotify item — click **Always Allow**. While that Keychain dialog is up, the app is blocked before launch, so `xcodebuild test` fails with "The test runner hung before establishing connection" (seen at CLEAN.2.5b). It is the new signature, not a regression.
+
+**Diagnosing a failure on a tester build.** The public build writes no `session.log`, and macOS does not keep Uzume's `Logger.info` lines, so the unified log shows only TCC, `coreaudiod` and crash traffic (`log show --predicate 'subsystem == "com.apple.TCC" AND eventMessage CONTAINS "io.uzume.mac"'` gives every permission request and its `authValue`; `2` = allowed). For Uzume's own trail, build a **developer-flavor copy with the same signature** — permissions carry over, and it records `~/Documents/uzume_sessions/<stamp>/` (it asks for Documents access once):
+
+```bash
+xcodebuild -scheme UzumeApp -configuration Release -destination 'generic/platform=macOS' -archivePath /tmp/diag/Uzume.xcarchive -allowProvisioningUpdates ARCHS=arm64 UZUME_BUILD_FLAVOR=developer CURRENT_PROJECT_VERSION=9000 archive
+```
+
+then `xcodebuild -exportArchive … -exportOptionsPlist Scripts/ExportOptions.plist`, and run the exported app from `/Users/Shared` (not quarantined, so no notarization needed; never distribute it). CLEAN.2.5b diagnosed BUG-160 this way. A crash report lands in the tester account's `~/Library/Logs/DiagnosticReports/Uzume-<date>.ips` (Finder → ⇧⌘G), which another account cannot read.
+
+**Screen access is machine-wide; audio capture and Apple Events are per account.** A second account on a Mac where Screen & System Audio Recording is already granted skips the onboarding card entirely; to test the card, `tccutil reset ScreenCapture io.uzume.mac` (affects every account).
 
 **CI is unaffected.** CI builds with `CODE_SIGNING_ALLOWED=NO`; only this script signs for distribution.
 

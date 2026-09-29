@@ -137,6 +137,20 @@ After permission is granted, before first session, show a one-time notice:
 
 Two CTAs: "I understand" (dismisses, stored in `UserDefaults`), "Enable Reduce motion" (flips the setting, dismisses).
 
+### 3.3a What a new user is actually asked (CLEAN.2.5b, notarized build, macOS 26.5.1)
+
+Observed on a fresh standard account ("Uzume Test", Mac mini) plus a machine-wide screen-access reset, 2026-09-29 — screenshots from Matt, order from the unified log (TCC / replayd). Each question appears once; **relaunching asks nothing again** (Task 8 step 7).
+
+1. **Gatekeeper, first open from the DMG:** the standard *"Uzume is an app downloaded from the internet. Are you sure you want to open it?"* — no "unidentified developer" / "could not verify" wording (notarized + stapled).
+2. **§3.2 card → Allow Access → Screen & System Audio Recording** (macOS dialog / System Settings), then macOS's *"'Uzume' may not be able to record the contents of your screen until it is quit"* → **Quit & Reopen**. This grant is **machine-wide**: a second account on the same Mac skips the card.
+3. **§3.3 photosensitivity notice** ("Heads up") — in-app, not a permission.
+4. **"'Uzume' wants access to control 'Spotify'"** (Apple Events, `NSAppleEventsUsageDescription`) — the first time the now-playing bridge or a scan reaches Spotify. Per account.
+5. **"'Uzume' is requesting to bypass the system private window picker and directly access your screen and audio"** (ScreenCaptureKit, macOS 15+) — when a Spotify scan starts its window capture (§4.4). macOS wording; it can reappear periodically by OS policy.
+6. **"'Uzume' would like access to record your system audio"** (`NSAudioCaptureUsageDescription`: *"Uzume listens to the music playing on your Mac to create its visuals. Nothing is recorded or sent anywhere."*) — the first time the tap starts, which is **Ready** (§6.3), before any visuals. Per account. Matt's call (2026-09-29): it stays on Ready, next to "press play", rather than moving into onboarding.
+7. **Apple Music access** (`NSAppleMusicUsageDescription`) — when connecting an Apple Music playlist (expected; not separately captured).
+
+No Documents-folder question in the public build (BUG-158: it keeps no session records).
+
 ### 3.4 What onboarding is *not*
 
 No tour. No "pro tips." No email capture. No account. No dark-pattern skip-to-settings chicanery. If the permission is granted and the photosensitivity notice is acknowledged, the user reaches `.idle` in two taps.
