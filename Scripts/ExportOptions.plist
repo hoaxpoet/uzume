@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- CLEAN.2.5b: Developer ID export for Scripts/release.sh (direct download,
+	     not the Mac App Store — no sandbox, SECURITY_POSTURE §2). -->
+	<key>method</key>
+	<string>developer-id</string>
+	<key>teamID</key>
+	<string>TYK3BXQ5D4</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>
