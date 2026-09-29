@@ -85,7 +85,8 @@ struct PhotosensitivityGateTests {
     /// session views that advance to `.playing` live only inside `sessionStateBody`.
     @Test func gateWrapsTheWholeStateSwitch() throws {
         let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
             .appendingPathComponent("UzumeApp/ContentView.swift")
         let src = try String(contentsOf: url, encoding: .utf8)
         #expect(src.contains("                photosensitivityGatedBody\n"))
