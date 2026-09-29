@@ -6,4 +6,4 @@
 // own lines in this exact form — the script parses them.
 
 MARKETING_VERSION = 0.9.0
-CURRENT_PROJECT_VERSION = 2
+CURRENT_PROJECT_VERSION = 3
