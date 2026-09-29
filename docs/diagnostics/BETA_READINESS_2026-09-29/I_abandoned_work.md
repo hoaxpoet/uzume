@@ -24,7 +24,7 @@ Beta-relevance calls below are my honest read, not decisions.
   - **The merge itself.**
 - **Two things to know.**
   - **ID collision.** `clean-2-5b` files **BUG-157** (Documents prompt) and **BUG-158**. Open PR #311 (`claude/bug-157-stemsep-threads`) *also* files **BUG-157**, for an unrelated StemSeparator test fix. Whichever merges second has to renumber.
-  - **Tester floor.** D-261, on this branch, raises the floor to **macOS 15.0, arm64 only**. The beta brief assumes testers on macOS 14.x. Recruiting needs to know this now. DIST-LIM also records that only macOS 26 has been run.
+  - **Tester floor.** The CLEAN.2.5b decision, on this branch, raises the floor to **macOS 15.0, arm64 only**. The beta brief assumes testers on macOS 14.x. Recruiting needs to know this now. DIST-LIM also records that only macOS 26 has been run.
 - **Effort.** M: flavor gating, rehearsal, merge.
 
 ---

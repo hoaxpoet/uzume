@@ -6,6 +6,8 @@
 >
 > **Evidence.** Eleven review lanes, one per area. Their full reports (file:line quotes, failure scenarios, "reviewed and healthy" and "could not verify" lists) are in [`BETA_READINESS_2026-09-29/`](BETA_READINESS_2026-09-29/) — cite those for detail. Finding IDs below (A1, C2, K1 …) are the lane IDs used in those reports.
 >
+> **Citing the release branch.** Its distribution decision is cited as "the CLEAN.2.5b decision", not by D-number: that number exists only on the unmerged `clean-2-5b` branch, so citing it from `main` would not resolve.
+>
 > **Proposed work is numbered BR.0–BR.20 (Phase BR, "beta readiness").** No new BUG-numbers were filed: `origin/main` and `clean-2-5b` already collide on BUG-157, and filing here would add a third claimant. Take the next free ID from the tree when an item is picked up.
 
 ---
@@ -277,7 +279,7 @@ Recommended default for the beta: **hide all of these**, and wire them after.
   - Beat This!, Open-Unmix, CMU mocap (Kagura) and the authors of the Milkdrop presets that inspired scenes get no in-app credit.
   - CREDITS.md's Milkdrop table lists 7 of 8 scenes (Stave is missing).
 
-  **Fix:** add Settings › About › Acknowledgements and correct the licence line. The copyright also reads "© 2024 Matt" in one place, "© 2026 Uzume contributors" in another, and "Plait & Pattern" on the release branch (F16, D-261 §6).
+  **Fix:** add Settings › About › Acknowledgements and correct the licence line. The copyright also reads "© 2024 Matt" in one place, "© 2026 Uzume contributors" in another, and "Plait & Pattern" on the release branch (F16, the CLEAN.2.5b decision §6).
 
 ### BR.17 · Output devices as testers have them (P2 · M)
 
@@ -513,7 +515,7 @@ Each has a recommendation and a default that a session can proceed on if no answ
 8. **Non-US testers** (BR.19). If any, use the Mac's region for the iTunes storefront. Default: yes.
 9. **Privacy copy** (BR.16). Adopt "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz." or supply wording. Default: that sentence.
 10. **Scene changes** (E9). Planned crossfades are never performed, and changes are hard cuts on a 2–3 Hz tick. Keep that for the beta (**recommended** unless Matt dislikes it), or crossfade or align to bar lines.
-11. **Recruiting copy.** D-261's floor excludes Sonoma and Intel testers; the invite and download page should say so.
+11. **Recruiting copy.** The CLEAN.2.5b decision's floor excludes Sonoma and Intel testers; the invite and download page should say so.
 12. **D-113** (the Milkdrop authors notification). It is a courtesy decision, triggered by the repo going public on about 08-31, and still open.
 13. **Branch, stash and worktree cleanup** (I19). A list for Matt's review. Nothing is deleted without his yes.
 
