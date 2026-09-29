@@ -17,6 +17,15 @@
 // Red/green: GREEN with the lock + return-by-value in place; A/B-demonstrated
 // RED by temporarily removing the `lock.withLock` wrapper in
 // `StemSeparator.separate()` (the BUG-034 temporary-revert precedent).
+//
+// BUG-157 (2026-09-29): the callers run on dedicated threads, not a dispatch queue. A private
+// default-QoS queue draws its workers from the process's default-QoS pool, which the parallel
+// suite keeps saturated with CPU-bound tests. There the eight jobs sat unstarted for the whole
+// saturation (measured: 9.8 s behind 10 s of spinners), and the 180 s wait timed out on work
+// that was queued, not stuck. Threads start immediately (0.1 ms under the same saturation), and
+// `separate()` itself doesn't wait on that pool (eight calls: 0.90 s idle, 0.97 s under 60 s
+// of saturation). So the 180 s budget is back to being a hang detector. All eight callers now
+// overlap from the start, which is at least as much contention as the pool ever gave.
 
 import Testing
 import Foundation
@@ -75,16 +84,15 @@ struct StemSeparatorConcurrencyTests {
         )
 
         // Fire many overlapping separations (alternating silence / loud sine) at
-        // the ONE shared instance.
+        // the ONE shared instance, each on its own thread (BUG-157: not a pooled queue).
         let group = DispatchGroup()
-        let queue = DispatchQueue(label: "stemsep.concurrency", attributes: .concurrent)
         let collector = EnergyCollector()
 
         let perKind = 4
         for i in 0..<(perKind * 2) {
             let isSilence = (i % 2 == 0)
             group.enter()
-            queue.async {
+            Thread.detachNewThread {
                 do {
                     let result = try separator.separate(
                         audio: isSilence ? silence : sine, channelCount: 2, sampleRate: 44_100
