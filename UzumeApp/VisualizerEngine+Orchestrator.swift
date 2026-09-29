@@ -94,7 +94,7 @@ extension VisualizerEngine {
             return
         }
 
-        let catalog = presetLoader.presets.map { $0.descriptor }
+        let catalog = plannableCatalog
         let tier = Self.detectDeviceTier(device: context.device)
 
         do {
@@ -417,7 +417,7 @@ extension VisualizerEngine {
         guard let sessionStart = reactiveSessionStart else { return }
         let elapsed = Date().timeIntervalSince(sessionStart)
 
-        let catalog = presetLoader.presets.map { $0.descriptor }
+        let catalog = plannableCatalog
         let currentDesc = presetLoader.currentPreset?.descriptor
         let tier = Self.detectDeviceTier(device: context.device)
 
@@ -486,7 +486,7 @@ extension VisualizerEngine {
             profile.beatIrregular = sessionManager.cache.beatIrregular(for: identity)  // FBS / D-154
             return (identity, profile)
         }
-        let catalog = presetLoader.presets.map { $0.descriptor }
+        let catalog = plannableCatalog
         let tier = Self.detectDeviceTier(device: context.device)
         let seed = UInt64.random(in: 1...UInt64.max)
         currentSessionPlanSeed = seed   // so extendPlan() uses the new seed too

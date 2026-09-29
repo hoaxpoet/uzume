@@ -491,7 +491,7 @@ extension DefaultPlaybackActionRouter {
             getCurrentPresetID: { [weak engine] in engine?.currentPresetDescriptor?.id },
             getCurrentPresetFamily: { [weak engine] in engine?.currentPresetDescriptor?.family },
             getLivePlan: { [weak engine] in engine?.orchestratorLock.withLock { engine?.livePlan } },
-            getCatalog: { [weak engine] in engine?.presetLoader.presets.map(\.descriptor) ?? [] },
+            getCatalog: { [weak engine] in engine?.plannableCatalog ?? [] },  // BR.1 / K1
             getTrackProfile: { [weak engine] in engine?.currentTrackProfile() },
             getCurrentTrackIndex: { [weak engine] in engine?.currentTrackIndexInPlan() ?? 0 },
             getScoringContext: { [weak engine] fields in

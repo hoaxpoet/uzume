@@ -176,6 +176,7 @@
 		H10034 /* ToastManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20034; };
 		H10035 /* LiveAdaptationToastBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20035; };
 		H10036 /* FullscreenObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20036; };
+		BR110001 /* MeshCapabilityCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR120001; };
 		H10037 /* DisplayManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20037; };
 		H10038 /* MultiDisplayToastBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20038; };
 		H10039 /* EscBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20039; };
@@ -409,6 +410,7 @@
 		H20034 /* ToastManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastManagerTests.swift; sourceTree = "<group>"; };
 		H20035 /* LiveAdaptationToastBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAdaptationToastBridgeTests.swift; sourceTree = "<group>"; };
 		H20036 /* FullscreenObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenObserverTests.swift; sourceTree = "<group>"; };
+		BR120001 /* MeshCapabilityCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshCapabilityCatalogTests.swift; sourceTree = "<group>"; };
 		H20037 /* DisplayManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManagerTests.swift; sourceTree = "<group>"; };
 		H20038 /* MultiDisplayToastBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiDisplayToastBridgeTests.swift; sourceTree = "<group>"; };
 		H20039 /* EscBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscBehaviorTests.swift; sourceTree = "<group>"; };
@@ -825,6 +827,7 @@
 				H20034 /* ToastManagerTests.swift */,
 				H20035 /* LiveAdaptationToastBridgeTests.swift */,
 				H20036 /* FullscreenObserverTests.swift */,
+				BR120001 /* MeshCapabilityCatalogTests.swift */,
 				H20037 /* DisplayManagerTests.swift */,
 				H20038 /* MultiDisplayToastBridgeTests.swift */,
 				H20039 /* EscBehaviorTests.swift */,
@@ -1155,6 +1158,7 @@
 				H10034 /* ToastManagerTests.swift in Sources */,
 				H10035 /* LiveAdaptationToastBridgeTests.swift in Sources */,
 				H10036 /* FullscreenObserverTests.swift in Sources */,
+				BR110001 /* MeshCapabilityCatalogTests.swift in Sources */,
 				H10037 /* DisplayManagerTests.swift in Sources */,
 				H10038 /* MultiDisplayToastBridgeTests.swift in Sources */,
 				H10039 /* EscBehaviorTests.swift in Sources */,
