@@ -83,8 +83,10 @@ mkdir -p "$OUT"
 
 # --- 4. Archive ----------------------------------------------------------------
 step "4/9 archiving (Release) — log: $OUT/archive.log"
+# ARCHS on the command line, not only in the pbxproj: SPM package targets don't
+# inherit the project's ARCHS, and the engine's Float16 doesn't exist on x86_64.
 xcodebuild -scheme "$SCHEME" -configuration Release -destination 'generic/platform=macOS' \
-  -archivePath "$ARCHIVE" -allowProvisioningUpdates archive > "$OUT/archive.log" 2>&1 \
+  -archivePath "$ARCHIVE" -allowProvisioningUpdates ARCHS=arm64 archive > "$OUT/archive.log" 2>&1 \
   || { tail -40 "$OUT/archive.log" >&2; die "xcodebuild archive"; }
 echo "archived: $ARCHIVE"
 
