@@ -334,6 +334,46 @@ Only the first is needed for a green `swift test`. `pyramid_song.m4a` has exactl
 
 The `BeatThisFixturePresenceGate` suite is intentionally designed to fail loudly when the fixture tree is empty — silent skips have masked the DSP.2 S8 four-bug regression surface in the past (see CLAUDE.md *§What NOT To Do* on silent fixture skips).
 
+## Release build (CLEAN.2.5b, D-261)
+
+A tester build is a **Developer ID–signed, notarized, stapled DMG**, made by one command on `main` with a clean tree:
+
+```bash
+Scripts/release.sh
+```
+
+`--allow-branch` lets it run from another branch (dry runs). It writes `build/release/Uzume-<version>-<build>.dmg` plus a `.sha256`, and keeps the archive, the exported app, the build logs and the notarization results under `build/release/Uzume-<version>-<build>/`. It **publishes nothing**; uploading the DMG is a separate decision.
+
+**What it does, in order:** refuses a dirty tree or a non-`main` branch → checks the Developer ID identity and the notary profile → `Scripts/fetch_weights.sh` → bumps `CURRENT_PROJECT_VERSION` in `UzumeApp/Version.xcconfig` and **commits** it (so a build number is never reused, even when a later step fails; a failed run leaves a `[release] Build: build number N` commit) → `xcodebuild archive` (Release, `ARCHS=arm64`) → `xcodebuild -exportArchive` with `Scripts/ExportOptions.plist` (`developer-id`, team `TYK3BXQ5D4`, automatic) → notarize + staple the app → DMG (`hdiutil`, app + `Applications` link) → sign, notarize and staple the DMG → verify. `MARKETING_VERSION` is edited by hand in the same xcconfig.
+
+**One-time setup, per Mac.** The Keychain needs the `Developer ID Application: Plait & Pattern, LLC (TYK3BXQ5D4)` identity (`security find-identity -v -p codesigning`) and a notarytool credential profile named **`uzume-notary`**:
+
+```bash
+xcrun notarytool store-credentials uzume-notary
+```
+
+It prompts for the Apple ID, team and an app-specific password, and stores them in the login Keychain. The repo, the script and the logs only ever name the profile; never put the password, a `.p8`/`.p12` or a Keychain export anywhere in the repo.
+
+**What each verification line means** (the script's step 9; every line must say PASS):
+
+| Check | Proves |
+|---|---|
+| `codesign --verify --deep --strict --verbose=2` | Every nested binary and resource is signed and unmodified since signing. |
+| `Authority=Developer ID Application: … (TYK3BXQ5D4)` | Signed with the distribution identity, not "Apple Development". |
+| `TeamIdentifier=TYK3BXQ5D4` | The Plait & Pattern team — the name Gatekeeper shows a tester. |
+| `flags=0x10000(runtime)` | Hardened runtime is on; notarization rejects an app without it. |
+| entitlements = `app-sandbox=false` + `automation.apple-events` only | No `get-task-allow` (a debuggable build — notarization rejects it) and nothing unreviewed (SECURITY_POSTURE §2–§4). |
+| `spctl -t exec` → `accepted, source=Notarized Developer ID` | Gatekeeper would open the app on any Mac. |
+| `spctl -t open --context context:primary-signature` on the DMG → `accepted` | Gatekeeper would open the downloaded disk image. |
+| `stapler validate` on app and DMG | The notarization ticket travels inside the file, so first launch works offline. |
+| `lipo -archs` → `arm64` | Apple Silicon only (D-261). |
+
+**A notarization rejection.** The script prints the submission's `notarytool log` and stops. The log is JSON; read its `issues` array: each entry names the file (`path`) and the reason (`message`), e.g. "The executable does not have the hardened runtime enabled" or "The signature does not include a secure timestamp". Fix the cause and run the script again (it takes the next build number). A past submission's log: `xcrun notarytool log <submission-id> --keychain-profile uzume-notary`; the list: `xcrun notarytool history --keychain-profile uzume-notary`.
+
+**After changing signing teams, expect permission re-grants.** macOS keys its permissions to the app's signature. The first build after a team change asks again for Screen & System Audio Recording (and system-audio capture), and the Keychain asks whether Uzume may use its saved Spotify item — click **Always Allow**. While that Keychain dialog is up, the app is blocked before launch, so `xcodebuild test` fails with "The test runner hung before establishing connection" (seen at CLEAN.2.5b). It is the new signature, not a regression.
+
+**CI is unaffected.** CI builds with `CODE_SIGNING_ALLOWED=NO`; only this script signs for distribution.
+
 ## Local-file stem cache management (LF.3 / LF.4 / LF.5, D-130 / D-131 / D-132)
 
 Local-file playback (LF.4 + LF.5) persists the offline pre-analysis result
