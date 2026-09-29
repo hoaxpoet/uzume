@@ -97,6 +97,8 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
                                 constant float* fftMagnitudes [[buffer(1)]],
                                 constant float* waveformData [[buffer(2)]],
                                 constant float* nebulaBands [[buffer(6)]]) {
+    int half = 1; // BR.6a CI NEGATIVE CONTROL — reverted in the next commit
+
     float2 uv = in.uv;
     float t = features.time;
     float3 color = float3(0.0);
