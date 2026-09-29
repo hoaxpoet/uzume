@@ -44,7 +44,8 @@ struct LocalFileSeekTests {
         try provider.seek(to: duration - 3)
         let sought = Date()
         #expect(ended.wait(timeout: .now() + 0.3) == .timedOut, "the seek itself fired the queue advance")
-        #expect(ended.wait(timeout: .now() + 5) == .success, "no end-of-file within 5 s of a seek to 3 s before it")
+        // BUG-156: ordered against the completion's delivery pool, not a bare deadline.
+        #expect(awaitPlayedBackEnd(ended), "no end-of-file within 5 s of a seek to 3 s before it")
         let heard = Date().timeIntervalSince(sought)
         #expect(heard >= 2.8, "the queue advanced \(heard) s into a 3 s remainder — the tail was cut")
     }
