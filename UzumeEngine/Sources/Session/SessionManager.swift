@@ -217,12 +217,21 @@ public final class SessionManager: ObservableObject {
         cancellationRequested = false
         state = .connecting
         logger.info("SessionManager: connecting")
+        streamingSessionGen &+= 1      // a newer connect (cancel → start again) supersedes this one
+        let connectGen = streamingSessionGen
 
         let tracks: [TrackIdentity]
         do {
             tracks = try await connector.connect(source: source)
+            // BR.7 (F11): Cancel during Connecting sticks — a read that finishes after it
+            // (the Apple Music AppleScript loop takes seconds) must not start preparing.
+            guard streamingSessionGen == connectGen, !cancellationRequested else {
+                logger.info("SessionManager: connect finished after cancel — ignored")
+                return
+            }
             logger.info("SessionManager: connected — \(tracks.count) track(s)")
         } catch {
+            guard streamingSessionGen == connectGen, !cancellationRequested else { return }
             // BR.7 (F10): not `.ready` — nothing was prepared. `.preparing` with no tracks shows the
             // §9.3 recovery screen (pick another playlist / start reactive mode).
             logger.info("SessionManager: connection failed (\(error)) — showing the recovery screen")
