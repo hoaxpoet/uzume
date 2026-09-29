@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-174949] TESTFLAKE.3 — the chrome and Ready tests wait for the timer, not the clock
+
+Seven app tests failed once each during CLEAN.2.5b's full-suite runs and passed on rerun: the playback chrome's auto-hide and first-show timer tests, and the Ready screen's first-audio tests. Each slept a fixed 50 ms to 1.5 s and then checked that a timer had fired, which a busy main actor can make late. They now wait for the event itself: the chrome going hidden, the Ready screen hearing audio, or the chrome's timer being armed. The check that the first track does not restart the chrome's timer now waits until the track has been handled. A test whose event never arrives fails at one minute instead of hanging. The two suites run in about 0.01 s, down from several seconds. Test-only change; no product behaviour changed and no wait widened.
+
+---
+
 ### [dev-2026-09-29-135111] BUG-156 — the local-file end-of-track tests wait for the music, not the clock
 
 `SessionLifecycleChurnTests.onFileEnded_queueAdvanceChurn_neverHangs` failed once in a full engine run. The end-of-track callback it waits for is delivered by AVFAudio through a thread pool the rest of the test suite keeps busy, so under full load it arrived 15–20 s late instead of in 0.3 s. It was late, never lost. The test and its sibling in `LocalFileSeekTests` now tell late from lost by what the pool has done, not by elapsed time. No timeout was widened, and a callback that never comes still fails. Test-only; playback is unchanged. KNOWN_ISSUES BUG-156 records an open, unobserved product risk from the same mechanism: a busy app could advance local-file tracks late.
