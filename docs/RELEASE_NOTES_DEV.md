@@ -13,6 +13,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 ### [dev-2026-09-29-135111] BUG-156 — the local-file end-of-track tests wait for the music, not the clock
 
 `SessionLifecycleChurnTests.onFileEnded_queueAdvanceChurn_neverHangs` failed once in a full engine run. The end-of-track callback it waits for is delivered by AVFAudio through a thread pool the rest of the test suite keeps busy, so under full load it arrived 15–20 s late instead of in 0.3 s. It was late, never lost. The test and its sibling in `LocalFileSeekTests` now tell late from lost by what the pool has done, not by elapsed time. No timeout was widened, and a callback that never comes still fails. Test-only; playback is unchanged. KNOWN_ISSUES BUG-156 records an open, unobserved product risk from the same mechanism: a busy app could advance local-file tracks late.
+### [dev-2026-09-29-140357] BUG-157 — the StemSeparator concurrency test no longer waits behind the rest of the suite
+
+`StemSeparatorConcurrencyTests.concurrentSeparations_returnPerCallerOwnStems` timed out once in a full engine run. Its eight separations sat in a thread pool that the rest of the suite keeps busy, the same mechanism as BUG-156, and never started within the 180 s wait. They now run on their own threads and start at once, even with that pool saturated. No timeout was widened, and the test still catches the BUG-031 contamination it guards. Test-only; `StemSeparator` is unchanged.
 
 ---
 
