@@ -17,7 +17,7 @@ struct IdleView: View {
     @EnvironmentObject private var engine: VisualizerEngine
     @EnvironmentObject private var errorStore: LocalFileErrorStore
 
-    @State private var showConnectorPicker        = false
+    @State private var showConnectorPicker = false
     /// A connect chosen in the picker, held until its sheet has finished closing (BUG-161).
     @State private var pendingConnection: PendingConnection?
 
