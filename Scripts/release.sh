@@ -155,7 +155,7 @@ expect() { # expect <description> <haystack> <regex>
 
 check "deep strict signature" codesign --verify --deep --strict --verbose=2 "$APP"
 
-SIG="$(codesign -dv "$APP" 2>&1)"; echo "--- \$ codesign -dv $APP"; echo "$SIG"
+SIG="$(codesign -dvv "$APP" 2>&1)"; echo "--- \$ codesign -dvv $APP"; echo "$SIG"  # -dv omits Authority= lines
 expect "Developer ID authority" "$SIG" "^Authority=Developer ID Application: .*\($TEAM_ID\)$"
 expect "team identifier" "$SIG" "^TeamIdentifier=$TEAM_ID$"
 expect "hardened runtime flag" "$SIG" "flags=0x[0-9a-f]+\(.*runtime.*\)"
