@@ -15,6 +15,11 @@
 #   - SessionLifecycleGenerationTests  (BUG-032 — end-then-restart guard, source order)
 #   - SessionRecoverySingleFlightTests (BUG-032 — recovery single-flight)
 #   - ConcurrencyAuditProbeTests       (probe thread-safety)
+#   - TrackChangeResetStressTests      (BR.3 / audit G1 — a streaming song change with
+#                                        Witchlight active: render loop on main + MIR on the
+#                                        analysis queue while a pool-thread poller fires song
+#                                        changes through TrackChangeResetRouter; UZUME_STRESS=1)
+#   - TrackChangeResetRouterTests      (BR.3 — the router's thread contract)
 #
 # Pass condition: exit 0 AND no "ThreadSanitizer: data race" / "WARNING:
 # ThreadSanitizer" line in the output. TSan is ~5-15× slower than a normal run
@@ -44,6 +49,8 @@ UZUME_STRESS=1 swift test --package-path UzumeEngine --sanitize=thread \
   --filter rejectedStartSession_leavesPublishedSourceUntouched \
   --filter test_recoveryDuringActivePrep_isSingleFlight \
   --filter ConcurrencyAuditProbeTests \
+  --filter streamingTrackChange_witchlightActive_raceFree \
+  --filter TrackChangeResetRouterTests \
   > "$LOG" 2>&1
 TEST_EXIT=$?
 
