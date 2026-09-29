@@ -10,6 +10,15 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-231449] BR.4 — the tester build shows only tester things
+
+- **The "Uzume isn't hearing any audio" card no longer tells testers to use Terminal**, and no longer appears while they're still opening Spotify. A frozen audio connection still shows it.
+- **No developer keys in the tester build.** The help overlay lists no bug IDs, and the keys that could pull the visuals off the beat are gone. `+` ("more of this style") now works on US and UK keyboards.
+- **Settings shows words, not string keys,** and a test now catches any missing string.
+- **The Ended screen says how long the session played,** and "1 track" rather than "1 tracks".
+- **No log file in the tester's home folder.**
+- **A one-page note for testers:** [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md).
+
 ### [dev-2026-09-29-215718] BR.5 — testers can send Matt evidence (BUG-166)
 
 - **Help › Report a Problem.** Uzume asks first, then saves a zip of its recent log messages, any Uzume crash or freeze reports, and the Mac's model, macOS and graphics chip, with the build number and commit. No audio, nothing sent. The zip opens in Finder and a pre-filled GitHub issue opens for the tester to attach it.

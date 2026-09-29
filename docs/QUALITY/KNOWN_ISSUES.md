@@ -2913,6 +2913,14 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **BR.4 (2026-09-29), the public build's tester surface** (`BuildFlavor.showsDeveloperDiagnostics`; verified by tests; no public-flavor build was run):
+  - **I2 / F3 / A9** — the no-audio card has no Terminal step, and a live-but-silent tap never raises it (a frozen tap still does). Fixed (`b4a33412`).
+  - **F8** — no developer keys or bug IDs (the `.developer` shortcuts are dropped); `+` fires on US/UK layouts (Shift ignored for symbol keys only); `.` has one binding. Fixed (`cfb4b5c4`). The developer build still binds `.` twice (latency +5 unreachable); that's a developer-only leftover.
+  - **F18** — the three raw keys in Settings got strings; `LocalizationKeyCoverageTests` checks every referenced key resolves. Fixed (`384c7963`).
+  - **I10** — the Ended screen shows the real playing time and "1 track" / "N tracks". Fixed (`b87e191e`).
+  - **H11 / A12** — no `~/uzume_diag.log` in the public build. Fixed (`a450ccad`).
+  - **A13 / G9** — the user-preset (hot-reload) folder is off in the public build: done at BR.1 (`1e47cca9`).
+  - **I2 tester notes** — [`docs/TESTER_RELEASE_NOTES.md`](../TESTER_RELEASE_NOTES.md).
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
 - **BR.1 (2026-09-29).** F1/F1b → **BUG-163**; K1/D1 → **BUG-164**. P2 findings fixed in the same increment, tracked here:
