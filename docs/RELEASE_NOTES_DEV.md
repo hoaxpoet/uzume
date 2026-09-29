@@ -19,6 +19,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 - **No crash on Continue (BUG-161).** Continuing from the Spotify scan's review could crash Uzume; it now closes the list before preparing.
 - **The public build keeps no session records (BUG-158)**, so it never asks for your Documents folder. Developer builds record as before.
 - Verified on a fresh account on the Mac mini: Matt, *"Passes all steps."*
+### [dev-2026-09-29-174949] TESTFLAKE.3 — the chrome and Ready tests wait for the timer, not the clock
+
+Seven app tests failed once each during CLEAN.2.5b's full-suite runs and passed on rerun: the playback chrome's auto-hide and first-show timer tests, and the Ready screen's first-audio tests. Each slept a fixed 50 ms to 1.5 s and then checked that a timer had fired, which a busy main actor can make late. They now wait for the event itself: the chrome going hidden, the Ready screen hearing audio, or the chrome's timer being armed. The check that the first track does not restart the chrome's timer now waits until the track has been handled. A test whose event never arrives fails at one minute instead of hanging. The two suites run in about 0.01 s, down from several seconds. Test-only change; no product behaviour changed and no wait widened.
 
 ---
 

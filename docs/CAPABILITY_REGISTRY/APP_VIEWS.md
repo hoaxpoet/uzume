@@ -63,9 +63,9 @@ Three small file-internal docstring-vs-code drift findings and the same systemic
    | `ToastManagerTests.swift` | `autoDismiss_afterDuration` — 50 ms toast | 400 ms | 1000 ms | ≥ 4× duration | **production-active** (20× the 50 ms duration) |
    | `AppleMusicConnectionViewModelTests.swift` | `noCurrentPlaylist` 2s auto-retry | 500 ms | 1500 ms | ≥ 700 ms (debounce class) | **production-active** |
    | `AppleMusicConnectionViewModelTests.swift` | 4 sibling waits | 50 ms | 300 ms | ≥ 250 ms (connect/login class) | **production-active** |
-   | `ReadyViewTimeoutIntegrationTests.swift` | `retry_resetsDetectorAndClearsTimeout` 250 ms FirstAudioDetector timer | 600 ms | 1500 ms | ≥ 4× timer | **production-active** (6× the 250 ms timer) |
-   | `ReadyViewModelTests.swift` | 3 sites (siblings discovered in `[dev-2026-05-21-d]`) | 600 ms | 1500 ms | ≥ 4× timer | **production-active** |
-   | `PlaybackChromeViewModelTests.swift` | `overlayAutoHides_afterDelay` — InstantDelay-driven 3s timer | 300 ms | 1000 ms | ≥ 700 ms | **production-active** |
+   | `ReadyViewTimeoutIntegrationTests.swift` | `retry_resetsDetectorAndClearsTimeout` 250 ms FirstAudioDetector timer | 600 ms | 1500 ms | ≥ 4× timer | **retired TESTFLAKE.3 (2026-09-29)**: awaits `$hasDetectedAudio`, no fixed wait |
+   | `ReadyViewModelTests.swift` | 3 sites (siblings discovered in `[dev-2026-05-21-d]`) | 600 ms | 1500 ms | ≥ 4× timer | **retired TESTFLAKE.3 (2026-09-29)**: awaits `$hasDetectedAudio`, no fixed wait |
+   | `PlaybackChromeViewModelTests.swift` | `overlayAutoHides_afterDelay` — InstantDelay-driven 3s timer | 300 ms | 1000 ms | ≥ 700 ms | **retired TESTFLAKE.3 (2026-09-29)**: awaits `$overlayVisible`, no fixed wait |
    | `SpotifyConnectionViewModelTests.swift` | 16 sites: 300 ms paste-debounce | 700 ms | 1500 ms | ≥ 700 ms | **production-active** (5× the 300 ms debounce; baseline says 700 ms = 2.3× — code uses 5× for additional headroom) |
    | `SpotifyConnectionViewModelTests.swift` | 5 sites: post-connect actor-hop | 250 ms | 700 ms | ≥ 250 ms | **production-active** (700 ms is upper edge of baseline — within bracket) |
    | `SpotifyConnectionViewModelTests.swift` | 4 sites: rate-limit retry | 400 ms | 400 ms | ≥ 250 ms | **production-active** |

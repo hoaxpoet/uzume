@@ -42,15 +42,28 @@ private struct NeverDelay: DelayProviding {
     func sleep(seconds: Double) async throws { try await Task.sleep(for: .seconds(3600)) }
 }
 
-/// Records every requested sleep, then yields like `InstantDelay`.
+/// Records every requested sleep, then yields like `InstantDelay`. `requests` streams each
+/// one as it happens, so a test awaits the timer being armed instead of sleeping on the clock.
 private final class RecordingDelay: DelayProviding, @unchecked Sendable {
     private let lock = NSLock()
     private var log: [Double] = []
+    let requests: AsyncStream<Double>
+    private let continuation: AsyncStream<Double>.Continuation
     var requested: [Double] { lock.withLock { log } }
+    init() { (requests, continuation) = AsyncStream.makeStream(of: Double.self) }
     func sleep(seconds: Double) async throws {
         lock.withLock { log.append(seconds) }
+        continuation.yield(seconds)
         await Task.yield()
     }
+}
+
+/// Returns once every block already queued on the main queue has run: the VM's
+/// `receive(on: .main)` deliveries, and the MainActor tasks those deliveries spawn (both
+/// are FIFO on the main queue, ahead of this resume). An ordering, not a wall-clock wait.
+@MainActor
+private func drainMainQueue() async {
+    await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
 }
 
 // swiftlint:disable large_tuple
@@ -78,7 +91,8 @@ private func makeVM(
 
 // MARK: - Suite
 
-@Suite("PlaybackChromeViewModel")
+// The time limit turns a timer that never fires into a failure, not a hung suite.
+@Suite("PlaybackChromeViewModel", .timeLimit(.minutes(1)))
 @MainActor
 struct PlaybackChromeViewModelTests {
 
@@ -106,7 +120,7 @@ struct PlaybackChromeViewModelTests {
     @Test func onActivity_resetsHideTimer_andKeepsOverlayVisible() async throws {
         let (vm, _, _, _, _) = makeVM(delay: InstantDelay())
         // After instant hide fires
-        try await Task.sleep(for: .milliseconds(20))
+        for await visible in vm.$overlayVisible.values where !visible { break }
         // Activity should reset and show overlay
         vm.onActivity()
         #expect(vm.overlayVisible)
@@ -114,12 +128,9 @@ struct PlaybackChromeViewModelTests {
 
     @Test func overlayAutoHides_afterDelay() async throws {
         let (vm, _, _, _, _) = makeVM(delay: InstantDelay())
-        // InstantDelay makes the 3s timer effectively instant (Task.yield).
-        // 1000ms (was 300ms) absorbs @MainActor scheduling under parallel test
-        // load — observed overlayVisible == true at the 300ms mark on a 328-test
-        // parallel app run. The U.11 precedent (CLAUDE.md) carries 2-3× headroom
-        // over the worst-observed delay.
-        try await Task.sleep(for: .milliseconds(1000))
+        // InstantDelay makes the 3s timer effectively instant (Task.yield). Await the hide
+        // itself: any fixed sleep (300 ms, then 1000 ms) flaked under full-suite load.
+        for await visible in vm.$overlayVisible.values where !visible { break }
         #expect(!vm.overlayVisible)
     }
 
@@ -135,7 +146,7 @@ struct PlaybackChromeViewModelTests {
 
     @Test func onActivity_fromHidden_restoresTheChrome() async throws {
         let (vm, _, _, _, _) = makeVM(delay: InstantDelay())
-        try await Task.sleep(for: .milliseconds(1000))
+        for await visible in vm.$overlayVisible.values where !visible { break }
         #expect(!vm.overlayVisible)
         vm.onActivity()   // mouse movement, a tap, or a key — all route here
         #expect(vm.overlayVisible)
@@ -144,19 +155,21 @@ struct PlaybackChromeViewModelTests {
     @Test func trackChange_restoresTheChrome() async throws {
         let (vm, _, trackPub, _, _) = makeVM(delay: NeverDelay())
         trackPub.send(TrackMetadata(title: "First", artist: "A"))
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         vm.toggleOverlay()
         #expect(!vm.overlayVisible)
         trackPub.send(TrackMetadata(title: "Second", artist: "A"))
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(vm.overlayVisible, "a track change is activity (UX_SPEC §7.2)")
     }
 
     @Test func firstTrack_doesNotResetTheArrivalTimer() async throws {
         let recorder = RecordingDelay()
         let (vm, _, trackPub, _, _) = makeVM(firstShowDelay: 3.82, delay: recorder)
+        var sleeps = recorder.requests.makeAsyncIterator()
+        _ = await sleeps.next()   // the arrival timer is armed
         trackPub.send(TrackMetadata(title: "First", artist: "A"))
-        try await Task.sleep(for: .milliseconds(50))
+        await drainMainQueue()    // the track delivery, and any timer it would re-arm, have run
         _ = vm
         #expect(recorder.requested.count == 1, "the first track must not re-arm the timer")
     }
@@ -167,14 +180,13 @@ struct PlaybackChromeViewModelTests {
         // wall-clock window (the first full-suite run saw 1.4 s pass before onActivity).
         let arrival = 60.0
         let (vm, _, _, _, _) = makeVM(firstShowDelay: arrival, delay: recorder)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(recorder.requested.first == arrival + PlaybackChromeViewModel.inactivityDelay)
+        var sleeps = recorder.requests.makeAsyncIterator()
+        #expect(await sleeps.next() == arrival + PlaybackChromeViewModel.inactivityDelay)
         // Activity while the arrival is still running (the pointer resting over the window
         // fires the hover the moment PlaybackView appears) must not cut the first show short:
         // the re-armed timer is longer than a bare 3 s and no longer than arrival + 3 s.
         vm.onActivity()
-        try await Task.sleep(for: .milliseconds(50))
-        let rearmed = try #require(recorder.requested.last)
+        let rearmed = try #require(await sleeps.next())
         #expect(rearmed > PlaybackChromeViewModel.inactivityDelay)
         #expect(rearmed <= arrival + PlaybackChromeViewModel.inactivityDelay)
     }
@@ -182,40 +194,40 @@ struct PlaybackChromeViewModelTests {
     @Test func activityAfterTheArrival_rearmsThreeSeconds() async throws {
         let recorder = RecordingDelay()
         let (vm, _, _, _, _) = makeVM(firstShowDelay: 0, delay: recorder)
-        try await Task.sleep(for: .milliseconds(50))
+        var sleeps = recorder.requests.makeAsyncIterator()
+        _ = await sleeps.next()   // the arrival timer is armed
         vm.onActivity()
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(recorder.requested.last == PlaybackChromeViewModel.inactivityDelay)
+        #expect(await sleeps.next() == PlaybackChromeViewModel.inactivityDelay)
     }
 
     @Test func sustainedSilence_showsListeningBadge() async throws {
         let (vm, sig, _, _, _) = makeVM()
         sig.send(.silent)
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(vm.showListeningBadge)
     }
 
     @Test func transientSilence_suspect_doesNotShowBadge() async throws {
         let (vm, sig, _, _, _) = makeVM()
         sig.send(.suspect)
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(!vm.showListeningBadge)
     }
 
     @Test func signalRecovery_hidesListeningBadge() async throws {
         let (vm, sig, _, _, _) = makeVM()
         sig.send(.silent)
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(vm.showListeningBadge)
         sig.send(.active)
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(!vm.showListeningBadge)
     }
 
     @Test func reactiveMode_sessionProgress_collapses() async throws {
         let (vm, _, _, _, planPub) = makeVM()
         planPub.send(nil)
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(vm.sessionProgress.isReactiveMode)
     }
 
@@ -223,7 +235,7 @@ struct PlaybackChromeViewModelTests {
         let (vm, _, _, _, planPub) = makeVM()
         let plan = try makePlan()
         planPub.send(plan)
-        try await Task.sleep(for: .milliseconds(20))
+        await drainMainQueue()
         #expect(!vm.sessionProgress.isReactiveMode)
         #expect(vm.sessionProgress.totalTracks == 1)
     }

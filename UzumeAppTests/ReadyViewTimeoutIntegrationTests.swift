@@ -38,7 +38,8 @@ private func makeReadyViewModel(
         sessionManager: mgr,
         audioSignalStatePublisher: sigPub.publisher,
         planPublisher: planSubject.eraseToAnyPublisher(),
-        reduceMotion: false
+        reduceMotion: false,
+        delayProvider: InstantDelay()   // the 250 ms confirmation is FirstAudioDetectorTests' job
     )
     return (vm, sigPub, mgr)
 }
@@ -46,7 +47,8 @@ private func makeReadyViewModel(
 
 // MARK: - Suite
 
-@Suite("ReadyView timeout actions")
+// The time limit turns a detection that never lands into a failure, not a hung suite.
+@Suite("ReadyView timeout actions", .timeLimit(.minutes(1)))
 @MainActor
 struct ReadyViewTimeoutIntegrationTests {
 
@@ -54,13 +56,10 @@ struct ReadyViewTimeoutIntegrationTests {
     func retry_resetsDetectorAndClearsTimeout() async throws {
         let (vm, sigPub, _) = makeReadyViewModel()
 
-        // Simulate audio arriving so hasDetectedAudio becomes true.
-        // 1500ms gives 1250ms margin over the 250ms confirmation timer.
-        // Previously 600ms; widened to absorb @MainActor contention during the
-        // 328-test parallel app run (CLAUDE.md U.11 precedent — 2-3× headroom
-        // over the worst-observed delay).
+        // Simulate audio arriving so hasDetectedAudio becomes true. Await the detection
+        // itself: fixed sleeps (600 ms, then 1500 ms) flaked under full-suite load.
         sigPub.send(.active)
-        try await Task.sleep(for: .milliseconds(1500))
+        for await detected in vm.$hasDetectedAudio.values where detected { break }
         #expect(vm.hasDetectedAudio, "pre-condition: audio must have been detected")
         #expect(!vm.isTimedOut, "no timeout has occurred yet")
 
