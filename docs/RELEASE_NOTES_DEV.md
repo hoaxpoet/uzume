@@ -10,6 +10,11 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-200841] BR.2 — the screen stays on while Uzume plays (BUG-162)
+
+- **The display no longer sleeps mid-song.** From Ready through the visuals, Uzume keeps the display awake and the Mac from locking; ending the session, returning to Idle or closing the window lets normal sleep resume.
+- Pending Matt's live check on the M4 MacBook Pro on battery (`pmset -g assertions` mid-session).
+
 ### [dev-2026-09-29-182455] CLEAN.2.5b — Uzume installs on a stranger's Mac: signed by Plait & Pattern, notarized, one-command DMG
 
 - **A DMG anyone can open.** `Scripts/release.sh` builds a Developer ID–signed, notarized, stapled `Uzume-<version>-<build>.dmg` and checks it 15 ways before calling it done. Opening it shows only macOS's normal "downloaded from the internet" confirmation. Nothing is published; that is a separate call.

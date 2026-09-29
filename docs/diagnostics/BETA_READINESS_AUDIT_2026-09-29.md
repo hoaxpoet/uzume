@@ -403,6 +403,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Pause Spotify for 30 s or more, then end and restart: the tap race, and E2.
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - Judge stem timing at 4K: BUG-106.
+   - On the M4 MacBook Pro on battery, leave a session untouched past the display-off interval and run `pmset -g assertions` mid-session: BUG-162 (BR.2).
 3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM.
 
 ---
