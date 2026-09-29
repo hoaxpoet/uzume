@@ -1,6 +1,6 @@
 // IdleView — Shown when SessionManager.state == .idle.
 // U.1 stub: displays state name on black background.
-// U.2: photosensitivity sheet on first appearance (persisted via UserDefaults).
+// U.2: photosensitivity sheet — moved to ContentView at BR.1 so it gates every path (F7).
 // U.3: connector picker CTA + ad-hoc "Start listening now" CTA.
 
 import Session
@@ -17,9 +17,7 @@ struct IdleView: View {
     @EnvironmentObject private var engine: VisualizerEngine
     @EnvironmentObject private var errorStore: LocalFileErrorStore
 
-    @State private var showPhotosensitivityNotice = false
-    @State private var showConnectorPicker        = false
-    private let acknowledgementStore              = PhotosensitivityAcknowledgementStore()
+    @State private var showConnectorPicker = false
     /// A connect chosen in the picker, held until its sheet has finished closing (BUG-161).
     @State private var pendingConnection: PendingConnection?
 
@@ -66,17 +64,6 @@ struct IdleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(UzumeAppColor.canvas)
         .accessibilityIdentifier(Self.accessibilityID)
-        .onAppear {
-            if !acknowledgementStore.isAcknowledged {
-                showPhotosensitivityNotice = true
-            }
-        }
-        .sheet(isPresented: $showPhotosensitivityNotice) {
-            PhotosensitivityNoticeView {
-                acknowledgementStore.markAcknowledged()
-                showPhotosensitivityNotice = false
-            }
-        }
         .sheet(isPresented: $showConnectorPicker, onDismiss: startPendingConnection) {
             ConnectorPickerView { tracks, source in
                 // BUG-161: close the sheet FIRST and start the session from `onDismiss`.

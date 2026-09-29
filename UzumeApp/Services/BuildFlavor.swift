@@ -28,4 +28,10 @@ enum BuildFlavor: Sendable {
     /// `~/Documents/uzume_sessions`. Off in the public build: touching Documents
     /// makes macOS ask a new user for Documents access at launch (BUG-158).
     var recordsSessions: Bool { self == .developer }
+
+    /// Whether scenes that never passed the flash gate are reachable: Shift+→ walking every
+    /// loaded scene (sandboxes, diagnostics, uncertified), Settings' "Show uncertified
+    /// scenes", and the watched user-preset folder (hot reload, trusts a sidecar's own
+    /// `certified`). Off in the public build (BR.1: K3 / E13 / F15 / A13).
+    var exposesUncheckedScenes: Bool { self == .developer }
 }

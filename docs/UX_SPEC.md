@@ -137,6 +137,8 @@ After permission is granted, before first session, show a one-time notice:
 
 Two CTAs: "I understand" (dismisses, stored in `UserDefaults`), "Enable Reduce motion" (flips the setting, dismisses).
 
+**Every path (BR.1).** The notice gates all visuals, not only Idle: until it is acknowledged, a session started by ⌘O, Finder "Open With" or a drop waits behind it (ContentView renders only Idle). "Enable Reduce motion" sets Uzume's **Settings › Visuals › Reduced motion: Always on** — not the system-wide flag.
+
 ### 3.3a What a new user is actually asked (CLEAN.2.5b, notarized build, macOS 26.5.1)
 
 Observed on a fresh standard account ("Uzume Test", Mac mini) plus a machine-wide screen-access reset, 2026-09-29 — screenshots from Matt, order from the unified log (TCC / replayd). Each question appears once; **relaunching asks nothing again** (Task 8 step 7). Items 4–6 follow what the user does first, so their order varies: on the build-5 re-run the system-audio question (Ready, 13:13:09) came before Spotify control (13:13:51). The whole sequence passed there (Matt: *"Passes all steps."*).

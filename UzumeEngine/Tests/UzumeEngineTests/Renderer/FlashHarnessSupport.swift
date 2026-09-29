@@ -15,7 +15,9 @@
 // spiking to the measured real p99 (~0.85) — not to an unphysical 1.0.
 
 import Foundation
+import Metal
 import Testing
+@testable import Presets
 @testable import Renderer
 @testable import Shared
 
@@ -199,6 +201,14 @@ enum FlashHarnessSupport {
     /// render — a static frame is never asserted "safe" (that would be a vacuous pass for a
     /// safety gate); it means the harness did not reach the preset's real response. Shared by
     /// the `@MainActor` multi-pass suite and the nonisolated Fireflies suite (FF.4).
+    /// BR.1 / K4: whether `state` is `preset`'s ray-march G-buffer pipeline. A ray-march
+    /// preset with no preview fragment reuses that state as its `pipelineState`
+    /// (`PresetLoader`), so a single fragment draw of it writes `gbuf0 = (depth, matID)` —
+    /// surface height, not light. Any flash measurement of such a draw is invalid.
+    static func isGBufferState(_ state: MTLRenderPipelineState, of preset: PresetLoader.LoadedPreset) -> Bool {
+        preset.rayMarchPipelineState.map { $0 === state } ?? false
+    }
+
     static func assertFlashSafe(name: String, luma: [Double]) {
         let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: fps)
         let lo = luma.min() ?? 0, hi = luma.max() ?? 0

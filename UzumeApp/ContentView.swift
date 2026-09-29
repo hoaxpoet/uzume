@@ -30,6 +30,12 @@ struct ContentView: View {
     @EnvironmentObject private var engine: VisualizerEngine
     @EnvironmentObject private var accessibilityState: AccessibilityState
     @EnvironmentObject private var recentsStore: LocalFileRecentsStore
+    @EnvironmentObject private var settingsStore: SettingsStore
+
+    /// BR.1 / F7: the photosensitivity notice gates EVERY path to visuals, not just Idle.
+    /// Read once at launch (not `@AppStorage`): Settings › Diagnostics › "Reset onboarding"
+    /// promises to take effect on the NEXT launch, not to blank a playing session.
+    @State private var photosensitivityAcknowledged = PhotosensitivityAcknowledgementStore().isAcknowledged
 
     init(viewModel: SessionStateViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -46,10 +52,55 @@ struct ContentView: View {
             // boolean flag (was `engine.localFilePlaybackActive` pre-LF.4).
             if permissionMonitor.isScreenCaptureGranted
                 || engine.sessionManager.currentSource?.isLocalFile == true {
-                sessionStateBody
+                photosensitivityGatedBody
             } else {
                 PermissionOnboardingView()
             }
+        }
+    }
+
+    // MARK: - Photosensitivity gate (BR.1 / F7)
+
+    /// Whether the session-state view may render. Until the notice is acknowledged only
+    /// Idle does: Ready (the streaming first-audio advance), the local-file countdown and
+    /// Playback are the only routes to `.playing`, so none of them exists before the
+    /// acknowledgement — ⌘O, Finder "Open With" and a drop included.
+    static func showsSessionContent(acknowledged: Bool, state: SessionState) -> Bool {
+        acknowledged || state == .idle
+    }
+
+    /// Acknowledge the notice; `enableReducedMotion` also sets the in-app Reduced motion
+    /// to Always on (F6: the button used to open System Settings instead).
+    static func acknowledgeNotice(
+        enableReducedMotion: Bool, settings: SettingsStore, defaults: UserDefaults = .standard
+    ) {
+        if enableReducedMotion { settings.reducedMotion = .alwaysOn }
+        defaults.set(true, forKey: PhotosensitivityAcknowledgementStore.defaultsKey)
+    }
+
+    /// The sheet hangs off this container, which outlives every state change — so a
+    /// local-file open under the notice doesn't tear the sheet down from a departing
+    /// host (the BUG-161 crash class).
+    private var photosensitivityGatedBody: some View {
+        Group {
+            if Self.showsSessionContent(acknowledged: photosensitivityAcknowledged, state: viewModel.state) {
+                sessionStateBody
+            } else {
+                UzumeAppColor.canvas.ignoresSafeArea()
+            }
+        }
+        .sheet(isPresented: .constant(!photosensitivityAcknowledged)) {
+            PhotosensitivityNoticeView(
+                onEnableReducedMotion: {
+                    Self.acknowledgeNotice(enableReducedMotion: true, settings: settingsStore)
+                    photosensitivityAcknowledged = true
+                },
+                onAcknowledge: {
+                    Self.acknowledgeNotice(enableReducedMotion: false, settings: settingsStore)
+                    photosensitivityAcknowledged = true
+                }
+            )
+            .interactiveDismissDisabled()
         }
     }
 

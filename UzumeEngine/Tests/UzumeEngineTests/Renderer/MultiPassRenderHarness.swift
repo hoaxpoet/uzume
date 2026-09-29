@@ -52,9 +52,11 @@ struct MultiPassRenderHarness {
     }
 
     /// The certified presets this harness renders through their real multi-pass path.
-    /// (The three single-pass presets — Ferrofluid Ocean, Murmuration, Nimbus — read their
-    /// response through one fragment + optional follower and are rendered by the single-pass
-    /// harness; see PhotosensitivityCertificationTests / CouplingReportTests.)
+    /// (Murmuration and Nimbus read their response through one fragment + optional follower and
+    /// are rendered by the single-pass harness; see PhotosensitivityCertificationTests /
+    /// CouplingReportTests. Ferrofluid Ocean's LIT output is renderable here for the flash gate
+    /// (BR.1 / K4) but is deliberately not listed: this list also drives the frame-budget and
+    /// coupling suites.)
     static let multiPassPresets = [
         "Lumen Mosaic", "Dragon Bloom", "Fata Morgana", "Skein", "Nacre",
         "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Cymatic Resonance",
@@ -164,6 +166,7 @@ struct MultiPassRenderHarness {
         case "Mitosis":      return try renderMitosis(features, stems, reduce)
         case "Cytokinesis":  return try renderCytokinesis(features, stems, reduce)
         case "Lumen Mosaic": return try renderLumenMosaic(features, stems, reduce)
+        case "Ferrofluid Ocean": return try renderFerrofluidOcean(features, stems, reduce)
         case "Volumetric Lithograph": return try renderVolumetricLithograph(features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)
@@ -726,6 +729,104 @@ struct MultiPassRenderHarness {
         }
     }
 
+    // MARK: - Render: ray-march lit output (Ferrofluid Ocean)
+
+    /// BR.1 / K4: Ferrofluid Ocean's LIT output — G-buffer → lighting (aurora sky, specular
+    /// spikes) → bloom, with the baked spike height field at texture slot 10 and the CPU-side
+    /// per-frame modulation production applies (`applyAudioModulation` + the aurora / hue /
+    /// punch / orbit drivers in `RenderPipeline+AudioDrivers`). The single-pass gate measured
+    /// its G-buffer (`gbuf0 = depth, matID`), i.e. surface height, not light.
+    ///
+    /// The modulation is ported from `FerrofluidFlashForensicsTests` (which replays a recorded
+    /// session) with the drive's deterministic `deltaTime` in place of the wall clock
+    /// `applyAudioModulation` reads, and with the aurora warm-up already complete — the
+    /// full-strength aurora is the worst case.
+    private func renderFerrofluidOcean<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+                                          _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Ferrofluid Ocean" }) else {
+            throw HarnessError.presetNotFound("Ferrofluid Ocean")
+        }
+        guard let gbufferState = preset.rayMarchPipelineState else {
+            throw HarnessError.setupFailed("Ferrofluid Ocean rayMarchPipelineState missing")
+        }
+        let pipeline = try RayMarchPipeline(context: ctx, shaderLibrary: lib)
+        pipeline.allocateTextures(width: width, height: height)
+        pipeline.cameraDollySpeed = preset.descriptor.sceneDollySpeed
+        guard let particles = FerrofluidParticles(device: ctx.device, library: lib.library) else {
+            throw HarnessError.setupFailed("FerrofluidParticles allocation")
+        }
+        particles.bakeHeightField(commandQueue: ctx.commandQueue)
+        var base = preset.descriptor.makeSceneUniforms()
+        base.sceneParamsA.y = Float(width) / Float(height)
+        let baseLight = base.lightPositionAndIntensity.w
+        let baseLightColor = SIMD3(base.lightColor.x, base.lightColor.y, base.lightColor.z)
+        let baseFogFar = base.sceneParamsB.y
+        let ibl = try IBLManager(context: ctx, shaderLibrary: lib)
+        let post = try PostProcessChain(context: ctx, shaderLibrary: lib)
+        post.allocateTextures(width: width, height: height)
+        let floatStride = MemoryLayout<Float>.stride
+        guard let fft = ctx.makeSharedBuffer(length: 512 * floatStride),
+              let wav = ctx.makeSharedBuffer(length: 2048 * floatStride) else {
+            throw HarnessError.setupFailed("audio buffers")
+        }
+        let outTex = try makeOutputTexture(ctx)
+
+        var light: Float = 1, dolly: Float = 0
+        var aurora: Float = 0, auroraWarmup: Float = 1, hue: Float = 0, punch: Float = 0
+        var azimuth: Float = 0
+        var lastAAT: Float?
+        return try renderLoop(drive, reduce) { i, pixels in
+            var fv = drive[i]
+            var stem = stems[i]
+            let dt = max(0.001, min(0.1, fv.deltaTime))
+            var u = base
+            dolly += dt * pipeline.cameraDollySpeed * (0.5 + max(0, min(1.1, fv.bass * 1.1)))
+            u.cameraOriginAndFov.z += dolly
+            let accent = max(0, min(1, max(fv.beatBass, max(fv.beatMid, fv.beatComposite))))
+            light = RayMarchPipeline.smoothLightIntensity(
+                previous: light, target: 1 + max(0, min(1, fv.bass)) * 0.4 + accent * 0.15, dt: dt)
+            u.lightPositionAndIntensity.w = baseLight * light
+            let warm = max(0, min(1, fv.valence)), cool = max(0, min(1, -fv.valence))
+            u.lightColor = SIMD4(baseLightColor * SIMD3<Float>(1 + warm * 0.40 - cool * 0.25,
+                                                                1 + warm * 0.15 - cool * 0.10,
+                                                                1 + cool * 0.40 - warm * 0.30), 0)
+            let arousal = max(-1, min(1, fv.arousal))
+            u.sceneParamsB.y = baseFogFar * (arousal >= 0 ? 1 - arousal * 0.7 : 1 - arousal)
+            u.sceneParamsA.x = fv.accumulatedAudioTime
+            let step = RenderPipeline.auroraDriverStep(
+                smoothed: aurora, warmup01: auroraWarmup, drumsDev: stem.drumsEnergyDev, dt: dt)
+            aurora = step.smoothed
+            auroraWarmup = step.warmup01
+            stem.drumsEnergyDevSmoothed = step.output
+            hue = RenderPipeline.auroraHueStep(smoothedPhase: hue, pitchHz: stem.vocalsPitchHz,
+                                               pitchConfidence: stem.vocalsPitchConfidence,
+                                               valence: fv.valence, dt: dt)
+            stem.auroraPalettePhase = hue
+            punch = RenderPipeline.punchEnergyStep(
+                smoothed: punch,
+                totalStemEnergy: stem.drumsEnergy + stem.bassEnergy + stem.vocalsEnergy + stem.otherEnergy,
+                dt: dt)
+            stem.totalEnergySmoothed = punch
+            let aat = fv.accumulatedAudioTime
+            azimuth = RenderPipeline.auroraOrbitStep(
+                azimuth: azimuth, aatDelta: lastAAT.map { aat - $0 } ?? 0, arousal: fv.arousal)
+            lastAAT = aat
+            stem.auroraOrbitAzimuth = azimuth
+            pipeline.sceneUniforms = u
+
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { throw HarnessError.renderFailed }
+            pipeline.render(
+                gbufferPipelineState: gbufferState, features: &fv,
+                fftBuffer: fft, waveformBuffer: wav, stemFeatures: stem,
+                outputTexture: outTex, commandBuffer: cmd, noiseTextures: nil,
+                iblManager: ibl, postProcessChain: post,
+                presetFragmentBuffer3: nil, presetHeightTexture: particles.heightTexture)
+            try commit(cmd, outTex, into: &pixels)
+        }
+    }
+
     // MARK: - Render: ray-march, no follower (Volumetric Lithograph)
 
     // VL is the Lumen ray_march path minus the 4-light follower, plus the two
@@ -888,6 +989,12 @@ struct MultiPassRenderHarness {
     /// Real per-frame FFT magnitudes for the `direct` path, or nil for the LCG fill.
     /// Set by a diagnostic on its own harness before calling `render`.
     var realSpectrum: [[Float]]?
+
+    /// BR.1 / K4 — the Fractal Tree flash drive. `openTheGates` also pins `bassDev`,
+    /// `spectralFlux` and `spectralSurge` to constants (right for the frame budget, which wants a
+    /// steady full canopy), which would flatten exactly the pulses a flash measurement exists to
+    /// apply. When true, the silence gates still open but those three follow the drive.
+    var meshKeepsDriveDeviations = false
 
     /// Read the mv_warp accumulator rather than the composed drawable.
     static var dumpAccumulator: Bool {
@@ -1061,7 +1168,16 @@ struct MultiPassRenderHarness {
         // timed is circular; the capture's own delta is what FTR.14 established here.
         generator.renderDeltaOverride = 1.0 / 60.0
 
-        let live = drive.map { Self.openTheGates($0) }
+        let keep = meshKeepsDriveDeviations
+        let live = drive.map { vector -> FeatureVector in
+            var open = Self.openTheGates(vector)
+            if keep {
+                open.bassDev = vector.bassDev
+                open.spectralFlux = vector.spectralFlux
+                open.spectralSurge = vector.spectralSurge
+            }
+            return open
+        }
         let target = try makeOutputTexture(ctx)
 
         // Settle unTIMED and unCAPTURED, but through the real holds — the growth stepper and all
@@ -1191,6 +1307,11 @@ struct MultiPassRenderHarness {
                                  loadBuiltIn: true)
         guard let preset = loader.presets.first(where: { $0.descriptor.name == presetName }) else {
             throw HarnessError.presetNotFound("\(presetName) did not load through PresetLoader")
+        }
+        // BR.1 / K4: a direct render of a ray-march preset draws its G-buffer (depth, matID),
+        // not light — a measurement of the wrong thing. Refuse it.
+        if FlashHarnessSupport.isGBufferState(preset.pipelineState, of: preset) {
+            throw HarnessError.setupFailed("\(presetName): pipelineState is the G-buffer state")
         }
         let floatStride = MemoryLayout<Float>.stride
         guard let fft = ctx.makeSharedBuffer(length: 512 * floatStride),
