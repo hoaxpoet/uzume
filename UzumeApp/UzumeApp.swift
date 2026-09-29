@@ -37,6 +37,9 @@ struct UzumeApp: App {
     /// `ObservableObject`; stored as a plain `let` since `UzumeApp` is `@MainActor`.
     private let spotifyOAuth = SpotifyOAuthTokenProvider.makeLive()
 
+    /// BR.5 (audit D3): notices a blocked main thread from its own thread, in every build.
+    private let mainThreadWatchdog = MainThreadWatchdog()
+
     init() {
         // RN.1: adopt state stranded by the bundle-ID change (settings domain,
         // stem cache). Runs before SettingsMigrator so the key migration below
@@ -57,6 +60,7 @@ struct UzumeApp: App {
         // silently to system fonts if the TTF/OTF files aren't bundled
         // (DASH.7.1, D-088). Idempotent — safe to call repeatedly.
         _ = DashboardFontLoader.resolveFonts(in: nil)
+        mainThreadWatchdog.start()
     }
 
     var body: some Scene {
