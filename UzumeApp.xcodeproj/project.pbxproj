@@ -155,6 +155,8 @@
 		H10006 /* PlaybackShortcutRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20006; };
 		H10007 /* PlaybackKeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20007; };
 		H10008 /* FullscreenObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20008; };
+		BR210001 /* DisplaySleepGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR220001; };
+		BR210002 /* DisplaySleepGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR220002; };
 		H10009 /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20009; };
 		H10010 /* LiveAdaptationToastBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20010; };
 		H10011 /* MultiDisplayToastBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20011; };
@@ -388,6 +390,8 @@
 		H20006 /* PlaybackShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackShortcutRegistry.swift; sourceTree = "<group>"; };
 		H20007 /* PlaybackKeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackKeyMonitor.swift; sourceTree = "<group>"; };
 		H20008 /* FullscreenObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenObserver.swift; sourceTree = "<group>"; };
+		BR220001 /* DisplaySleepGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySleepGuard.swift; sourceTree = "<group>"; };
+		BR220002 /* DisplaySleepGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySleepGuardTests.swift; sourceTree = "<group>"; };
 		H20009 /* DisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManager.swift; sourceTree = "<group>"; };
 		H20010 /* LiveAdaptationToastBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAdaptationToastBridge.swift; sourceTree = "<group>"; };
 		H20011 /* MultiDisplayToastBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiDisplayToastBridge.swift; sourceTree = "<group>"; };
@@ -670,6 +674,7 @@
 				H20006 /* PlaybackShortcutRegistry.swift */,
 				H20007 /* PlaybackKeyMonitor.swift */,
 				H20008 /* FullscreenObserver.swift */,
+				BR220001 /* DisplaySleepGuard.swift */,
 				H20009 /* DisplayManager.swift */,
 				H20010 /* LiveAdaptationToastBridge.swift */,
 				H20011 /* MultiDisplayToastBridge.swift */,
@@ -825,6 +830,7 @@
 				H20034 /* ToastManagerTests.swift */,
 				H20035 /* LiveAdaptationToastBridgeTests.swift */,
 				H20036 /* FullscreenObserverTests.swift */,
+				BR220002 /* DisplaySleepGuardTests.swift */,
 				H20037 /* DisplayManagerTests.swift */,
 				H20038 /* MultiDisplayToastBridgeTests.swift */,
 				H20039 /* EscBehaviorTests.swift */,
@@ -1070,6 +1076,7 @@
 				H10006 /* PlaybackShortcutRegistry.swift in Sources */,
 				H10007 /* PlaybackKeyMonitor.swift in Sources */,
 				H10008 /* FullscreenObserver.swift in Sources */,
+				BR210001 /* DisplaySleepGuard.swift in Sources */,
 				H10009 /* DisplayManager.swift in Sources */,
 				H10010 /* LiveAdaptationToastBridge.swift in Sources */,
 				H10011 /* MultiDisplayToastBridge.swift in Sources */,
@@ -1155,6 +1162,7 @@
 				H10034 /* ToastManagerTests.swift in Sources */,
 				H10035 /* LiveAdaptationToastBridgeTests.swift in Sources */,
 				H10036 /* FullscreenObserverTests.swift in Sources */,
+				BR210002 /* DisplaySleepGuardTests.swift in Sources */,
 				H10037 /* DisplayManagerTests.swift in Sources */,
 				H10038 /* MultiDisplayToastBridgeTests.swift in Sources */,
 				H10039 /* EscBehaviorTests.swift in Sources */,
