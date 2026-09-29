@@ -5,6 +5,68 @@ Completed-increment narratives moved out of `ENGINEERING_PLAN.md` at RB.3 (2026-
 
 ## Recently Completed
 
+### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ **LIVE-MEASURED 2026-09-14** — 10 → 16 distinct presets on an identical window (Matt's felt verdict outstanding)
+
+BUG133.1 (per-preset fatigue) was necessary and failed its live check — Matt saw the same presets.
+Measured with the production scorer on his own cached profiles, the eligible catalog spans
+0.612 → 0.459 with the **top twelve inside 0.05**, so `max(by:)` was deciding segments on gaps of
+0.003 and fourteen certified presets were unreachable at any cooldown setting. `selectPreset` now
+samples uniformly within 0.05 of the best. First pick over 12 seeds: **4 distinct → 10**.
+
+Deterministic on `(seed, trackIndex, elapsedSessionTime)` so PREP.2's plan extension stays
+byte-identical; `seed == 0` remains argmax so the unseeded goldens still pin the scorer; and it is a
+band, not a lottery — 0.15 below the best still never plays.
+
+**Live result** (`2026-09-14T15-52-43Z`, same folder, same first 59 selections as the pre-fix
+baseline): distinct **10 → 16**, Cytokinesis **14 → 7**, top-3 share **51 % → 33 %**; Alfvén appeared
+for the first time since certification. Eleven presets still never appear — they score 0.459–0.532
+against a band floor of 0.562, so that is the band as specified, and the next question is the
+scorer's discrimination rather than the sampling.
+
+★ The first regression test passed with the fix removed (fixture inside the ±0.02 noise); rebuilt
+around a preset measured ~0.04 below the best. Twice this session a pre-existing source of variety
+made a new gate look green — remove the fix and re-run, every time.
+`SessionPlanner+Selection.swift` split out for the 400-line budget. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
+
+### BUG133.1 — preset fatigue cools the preset, not the family ✅ (2026-09-14, Matt: *"cool down the preset, not the family"*, live check owed)
+
+Both of `PresetScorer`'s anti-repetition levers keyed on the family, so a family was one rotation
+slot held permanently by its argmax. Measured over 59 selections: `particles` (6 members) produced
+one preset (Cytokinesis ×14), `hypnotic` (9) produced three, and singleton families produced their
+member 7–8 times each — frequency set by family size, not fit. `fatigueMultiplier` now matches on
+`presetID`; `familyRepeatMultiplier` is untouched, so back-to-back similarity is still handled while
+the rest of a family becomes reachable one segment later.
+
+★ The A/B reproduces the complaint as a unit test — four consecutive picks from a six-member family
+return ONE distinct preset on the shipped code and four on the fix. ⚠ **Correction:** the first
+write-up said no existing test could distinguish the two scopings; that was a `--filter` run that
+never reached `GoldenSessionFixtures`, which fails on exactly this. Its Session A golden — pinned at
+`[VL, Membrane ×4]` — carried a 2026-05-13 comment describing this defect precisely and calling it
+*"correct given the inputs"*. Regenerated to 3 distinct with a trace; B/C/D unchanged. Cooldown
+windows unchanged and flagged for re-check rather than silently re-tuned. No
+renderer, preset or `FeatureVector` change; the render capability registry is unchanged.
+
+### BUG132.1 — a plan rebuild no longer pre-fires over the playing track ✅ (2026-09-14, live re-check owed)
+
+`_buildPlan` pre-fired the plan's FIRST track into the live pipeline on every rebuild. Five of nine
+rebuilds in PREP.2's validation session installed track 1's 164.4 BPM grid over a different playing
+track; `grid_bpm` stayed wrong until the next track change (13,190 frames inside a 175.0 BPM track,
+13,928 inside a 108.0 BPM track in 3/4). Now gated on `shouldPreFirePlan(sessionState:) != .playing`
+— every non-playing state still primes, since the DSP.3.2 priming is a pre-playback concern.
+
+Latent for as long as the plan has existed, because the plan was built once. **PREP.2 made it
+routine** by rebuilding once per prepared track.
+
+★ **The gate passed against the reverted guard on its first attempt** — it matched the `static func`
+declaration rather than a call site, i.e. a green gate over dead code (BUG-015's shape). Found only
+by reverting and re-running; it now matches the call over comment-stripped source, red on the
+pre-fix code and green on the fix. Criterion 1 was met in substance, not where written — the named
+`LocalFileEarlyStartTests` is in the engine and `_buildPlan` is in the app; criterion 2's replay
+harness does not exist and is recorded as not-built rather than dropped. No renderer, preset or
+`FeatureVector` change; the render capability registry is unchanged.
+
+
 ### BUG129.1 — the chain-health peak had no ceiling, and the 0 dBFS it reported was correct ✅ (2026-09-13)
 
 `chain_health.json` read `peakDBFS: 0` with a `clean` verdict on three consecutive sessions. Read
