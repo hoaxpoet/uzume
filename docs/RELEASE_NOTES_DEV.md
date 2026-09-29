@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-215718] BR.5 — testers can send Matt evidence (BUG-166)
+
+- **Help › Report a Problem.** Uzume asks first, then saves a zip of its recent log messages, any Uzume crash or freeze reports, and the Mac's model, macOS and graphics chip, with the build number and commit. No audio, nothing sent. The zip opens in Finder and a pre-filled GitHub issue opens for the tester to attach it.
+- **After a crash or force-quit,** the tester build offers the same report the next time it opens.
+- **Freezes leave evidence.** A new watchdog notices when the app stops responding, even in the tester build, and records where it is stuck.
+- The hang-capture script works again (it was looking for the app's old name).
+
 ### [dev-2026-09-29-213501] BR.3 — a Spotify / Apple Music song change no longer risks corrupting memory (BUG-165)
 
 - **Song changes are handled on the right threads.** When the streaming app moved to the next song, Uzume reset its scene and analysis state from a background thread while the visuals were still drawing, a crash or memory-corruption risk on every song change. Each reset now runs where that state lives.
