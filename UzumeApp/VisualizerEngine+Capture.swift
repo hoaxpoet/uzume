@@ -94,7 +94,7 @@ extension VisualizerEngine {
             // detection only applies to process-tap modes — local-file silence
             // is real musical silence, not a broken tap.
             var tapMode = false
-            if #available(macOS 14.2, *), let router = self.router as? AudioInputRouter {
+            if let router = self.router as? AudioInputRouter {
                 switch router.activeMode {
                 case .systemAudio, .application: tapMode = true
                 default: tapMode = false

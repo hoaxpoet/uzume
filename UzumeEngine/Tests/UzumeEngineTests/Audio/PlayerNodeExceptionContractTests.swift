@@ -44,7 +44,6 @@ struct PlayerNodeExceptionContractTests {
 
     @Test("a raised NSException becomes a Swift error instead of abort()")
     func raisingPlayIsConvertedToASwiftError() throws {
-        guard #available(macOS 14.2, *) else { return }
         let player = detachedPlayer()
 
         var caught: Error?
@@ -65,7 +64,6 @@ struct PlayerNodeExceptionContractTests {
 
     @Test("a play() that does not raise is passed through untouched")
     func nonRaisingPlayDoesNotThrow() throws {
-        guard #available(macOS 14.2, *) else { return }
         let engine = AVAudioEngine()
         let player = AVAudioPlayerNode()
         engine.attach(player)
@@ -85,7 +83,6 @@ struct PlayerNodeExceptionContractTests {
 
     @Test("the catcher reports success and failure distinctly under repetition")
     func catcherIsReusable() throws {
-        guard #available(macOS 14.2, *) else { return }
         // The shim is called on every start; a one-shot @try would be a subtle
         // regression that only shows up on the second track of a session.
         for _ in 0..<3 {

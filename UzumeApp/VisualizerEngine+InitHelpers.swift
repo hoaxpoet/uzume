@@ -21,6 +21,10 @@ extension VisualizerEngine {
     /// Wire the per-frame capture hook: blit the drawable into a capture texture
     /// inside the command buffer, then hand it to the recorder for video+CSV.
     func setupCaptureHook(pipe: RenderPipeline, ctx: MetalContext) {
+        // LFSTEM.1e — sample the pre-analysed stem series once per RENDER frame (engine state, a
+        // no-op without a series). Before the recorder guard: the public build has none (BUG-158).
+        pipe.setPerFrameStemPublish { [weak self] in self?.publishStemSeriesFrame() }
+
         guard let recorder = self.sessionRecorder else { return }
         let device = ctx.device
         pipe.onFrameRendered = { [weak recorder, weak self] drawableTex, features, stems, commandBuffer in
@@ -67,11 +71,6 @@ extension VisualizerEngine {
                 postProcessMs: postMs
             )
         }
-        // LFSTEM.1e — sample the pre-analysed stem series once per RENDER frame. Wired here,
-        // once, rather than per preset: it is engine state, not preset state, and it is a no-op
-        // on every track without a series (streaming, cache miss, pre-schema-v10 entries).
-        pipe.setPerFrameStemPublish { [weak self] in self?.publishStemSeriesFrame() }
-
         setupDrawableLifecycleWatchdog(pipe: pipe, recorder: recorder)
     }
 

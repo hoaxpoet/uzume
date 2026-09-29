@@ -48,11 +48,6 @@ struct SoakRunnerCommand: AsyncParsableCommand {
 
     @MainActor
     func run() async throws {
-        guard #available(macOS 14.2, *) else {
-            print("SoakRunner requires macOS 14.2 or later.")
-            throw ExitCode(1)
-        }
-
         print("SoakRunner: duration=\(Int(duration))s sampleInterval=\(Int(sampleInterval))s")
 
         let baseDir: URL = reportDir.map { URL(fileURLWithPath: $0) }
@@ -89,7 +84,6 @@ struct SoakRunnerCommand: AsyncParsableCommand {
         }
     }
 
-    @available(macOS 14.2, *)
     @MainActor
     private func printSummary(_ report: SoakTestHarness.Report) {
         let dur = String(format: "%.1f", report.actualDuration)

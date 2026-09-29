@@ -92,3 +92,27 @@ struct ConnectorPickerViewTests {
         }
     }
 }
+
+// MARK: - BUG-161: the session starts after the picker sheet has closed
+
+/// Starting the session inside the picker's callback removed IdleView while its sheet was still
+/// up; SwiftUI tore the sheet down mid-close and AppKit crashed (EXC_BAD_ACCESS in UpdateCycle,
+/// macOS 26, report Uzume-2026-09-29-120709). Needs a real window to reproduce, so the ordering
+/// is asserted against the source shape.
+@Suite("Connector sheet closes before the session starts (BUG-161)")
+struct ConnectorSheetDismissOrderTests {
+    @Test func sessionStartsFromOnDismiss_notFromThePickerCallback() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("UzumeApp/Views/Idle/IdleView.swift")
+        let src = try String(contentsOf: url, encoding: .utf8)
+        #expect(src.contains(".sheet(isPresented: $showConnectorPicker, onDismiss: startPendingConnection)"),
+                "the connector sheet must start the session from onDismiss")
+        let picker = try #require(src.range(of: "ConnectorPickerView { tracks, source in"))
+        let dismissFunc = try #require(src.range(of: "private func startPendingConnection()"))
+        let callback = src[picker.upperBound..<dismissFunc.lowerBound]
+        #expect(!callback.contains("startSession("),
+                "the picker callback must not start the session while its sheet is up")
+    }
+}

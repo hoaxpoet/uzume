@@ -72,6 +72,11 @@ reads" are not reads — see the entry.)*
 | BUG-154 | P3 · **FIXED 2026-09-28 (BUG154.1, `83fb016a`)** — the tests await the coordinator's `debounceTask`; no budget widened | test-infra / concurrency | **`NetworkRecoveryCoordinatorTests` failed in `closeout_evidence.sh` on branch `scan` (`6ec6b7e1`): `recoveryAttemptCount → 0 == 1` and `→ 2 == 3`.** The tests slept `recoveryDebounceSecs + 1 s` and asserted; under full-suite main-actor load the debounce task resumed after the assert. Same shape as BUG-150. Detail below |
 | BUG-153 | P2 · **FIXED + LIVE-VERIFIED 2026-09-28 (`832e8102`)** — Matt's re-scan of TC 27 diffs 38/38 against the CSV (row 9 "Prizefighter — Youth Lagoon", 8 readings) | session / playlist scan | **A live scan kept a wrong artist for one row: the first, edge-of-frame reading of a row beats every later complete reading.** Matt, Release scan of TC 27 (38 songs, 15:09): *"it just misread one track (Prizefighter - has the wrong artist, which should be Youth Lagoon)."* The frame log shows #9 first read as the bottom row of a frame; the accumulator replaces a reading only with a strictly more confident one, and Vision reports clipped text at full confidence. Detail below |
 | BUG-152 | P2 · **OPEN** (found 2026-09-28, SCAN.0) — not fixed: changing the streaming path needs its own before/after | session / preview resolution | **The streaming preview lookup takes the catalog's first hit, and for 8 % of four real playlists that is a different song.** Paste-a-link Spotify and Apple Music tracks resolve through `PreviewResolver`'s limit-1 iTunes search on "artist title". On Matt's four fixture playlists **11 of 136** rows with a preview land on another song ("Not Techno — i_o" → Lady Gaga's "Just Dance"; "It´s Up There" → a Kumbia Queers track; songs the catalog lacks → a piano cover or another track by the artist), so those sessions plan visuals for music that isn't playing. The SCAN verified lookup (`ScreenReadMatchPolicy`: 25 candidates, title/artist/duration must agree, else no match) is the likely fix. Detail below |
+| BUG-158 | P2 · **FIXED 2026-09-29 (CLEAN.2.5b, `2340d771`) — live-verified on a fresh account (build 5)** — a new user is asked for Documents-folder access at first launch | app / diagnostics | **The notarized build asks "access files in your Documents folder" before anything else.** The session recorder's folder (`~/Documents/uzume_sessions`) is touched at launch; Matt's Mac had the grant already. Detail below |
+| BUG-159 | P3 · **OPEN** (2026-09-29, found in CLEAN.2.5b) — the Settings "record sessions" switch does nothing | app / settings | **`SessionRecorder()` is built with its default `enabled: true` and never reads `sessionRecorderEnabled`**, so turning the switch off still records. Detail below |
+| BUG-160 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `35cc3be7`) — live-verified: Ready advanced after a long wait, build 5** (2026-09-29, CLEAN.2.5b Task 8) — Ready never advanced when music started within 1.5 s of the tap coming up | audio.capture / session | **The tap heard the music (peak −1 dBFS) but Ready's detector was never told.** `SilenceDetector` starts at `.active` and reports only changes; Ready forced the surface to `.silent` without resetting the detector. Fix: `markAwaitingFirstAudio()` at Ready. Pre-existing since DS.5. Detail below |
+| BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
+| DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
 | BUG-147 | P3 · **FIXED 2026-09-25 (BUG147.1)** — FNV-1a noise; merged #286 (`c6369035`) | orchestrator / algorithm | **A nonzero planner seed produced a different plan in every process: the D-047 noise hashed `presetID.hashValue`, which Swift seeds randomly per launch.** Not user-visible (the app draws a fresh random seed for every plan and every Regenerate), but a logged seed could not be replayed and offline seeded measurements (BUG-144's) were not reproducible. Detail below |
 | BUG-140 | P2 · **RESOLVED 2026-09-25 (BUG140.2, Matt's option A)** — gate compares octave-folded median tempos; drums grid at 44.1 kHz; cache v15. Matt's live check passed: *"Membrane is locked on Superstition"* | dsp.beat / orchestrator | **The D-154 beat-irregularity gate flags steady songs (Superstition, Penny Lane): the drums-grid BPM it compares averages two octaves, and on local files is also scaled by the wrong sample rate.** Corpus-estimated flag rate 28 %; 42 % of flagged duplicate recordings are unflagged in their other copy. |
@@ -448,6 +453,70 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 **Actual:** `PreviewResolver` asks iTunes Search for one result for "artist title" and takes it. On the four SCAN fixture playlists, 11 of the 136 rows that have a preview resolve to a different song (`docs/diagnostics/SCAN_FEASIBILITY_2026-09-28.md` §Failures, "truth resolves elsewhere"): an underscore or acute accent in a name breaks the search, and when the catalog lacks the song the first hit is whatever else ranks first. Stems, beat grid and energy are then measured on the wrong music.
 
 **Likely fix.** Apply the verified lookup SCAN built for screen-read rows (title, primary artist and duration must agree; else no match) to every track. The prompt that built it forbade changing the streaming path without a before/after on a known playlist; that measurement is the fix increment's first step (ScanBench's ground-truth column already gives the "before").
+
+### BUG-158 — a new user is asked for Documents-folder access at first launch (2026-09-29)
+
+**Severity:** P2 · **Domain:** app / diagnostics · **Failure class:** `api-contract` (macOS privacy / TCC) · **Status:** Resolved 2026-09-29 (`2340d771`) — public build keeps no session records; no Documents question on Matt's rehearsal (build 4) or the fresh-account re-run (build 5)
+
+**Expected.** A new user of the public (notarized) build answers only the permission questions onboarding explains: Screen & System Audio Recording, and Apple Music when they connect a playlist.
+
+**Actual.** The first question macOS asks, at launch, is "Uzume would like to access files in your Documents folder", with generic wording that gives no reason. Seen on the CLEAN.2.5b Task 7 rehearsal (notarized build 2, launched from `/Applications` after `tccutil reset` of ScreenCapture + AudioCapture on Matt's account). TCC log: `09:29:52.829 AUTHREQ_PROMPTING service=kTCCServiceSystemPolicyDocumentsFolder subject=io.uzume.mac`, then `09:30:36 Modify service=kTCCServiceScreenCapture` (the expected grant). Every tester would see it; Matt never did, because his Mac already held the grant.
+
+**Reproduction.** On an account that has never granted Uzume Documents access, launch the notarized app.
+
+**Cause.** The diagnostic session recorder lives in `~/Documents/uzume_sessions`. `UzumeApp.init` prunes that folder at every launch (`SessionRecorderRetentionPolicy.apply`), and every session creates its folder there (`SessionRecorder`, `VisualizerEngine`). Settings → Diagnostics and the Ended screen open it.
+
+**Decision (Matt, 2026-09-29).** *"For the public release, why do we need a diagnostic record of every session? We need to start distinguishing between the developer version of the app and the public release, which would have few features."* The public build records no sessions and never touches Documents; developer builds (Debug and Release) keep recording.
+
+**Verification criteria (written before the fix).** (1) Automated: `BuildFlavorTests` — the developer flavor records sessions, the public flavor does not — and `Scripts/release.sh` fails unless the exported app's Info.plist says `UzumeBuildFlavor = public`. (2) Manual: Task 8 on a fresh account shows no Documents question, and the rehearsal on Matt's account after resetting the Documents grant shows none either.
+
+### BUG-159 — the Settings "record sessions" switch does nothing (2026-09-29)
+
+**Severity:** P3 · **Domain:** app / settings · **Failure class:** `pipeline-wiring` · **Status:** Open
+
+**Expected.** Settings → Diagnostics → record sessions off → the next session writes nothing to `~/Documents/uzume_sessions`.
+**Actual.** `VisualizerEngine` builds `SessionRecorder()` with its default `enabled: true`; `SettingsStore.sessionRecorderEnabled` is written by the switch and read by nothing else (`git grep sessionRecorderEnabled`). The switch describes behaviour the app doesn't have (UX_SPEC: controls describe what they do now).
+**Found** while tracing BUG-158; not fixed there (the public build hides the switch; developer builds keep it). Fix: pass the setting into the recorder at session start, or remove the switch.
+
+### BUG-160 — Ready never advanced when music started within 1.5 s of the tap coming up (2026-09-29)
+
+**Severity:** P1 (the streaming hand-off hangs until the user clicks Start session) · **Domain:** audio.capture / session · **Failure class:** `pipeline-wiring` · **Status:** Resolved 2026-09-29 (`35cc3be7`, collapsed diagnose+fix with Matt's approval) — live-verified on the Task 8 re-run (build 5, fresh account): Matt waited at Ready, pressed play, Ready advanced by itself (*"Passes all steps."*)
+
+**Expected.** Ready → press play in Spotify → visuals within about a second (UX_SPEC §6.3, FirstAudioDetector ≥ 250 ms).
+
+**Actual.** Seen twice on the "Uzume Test" account (notarized build 4, 11:54; developer-flavor diagnostic build, 17:32 UTC). Ready never advanced; "Haven't heard anything for a while" appeared; after **Start session** the overlay showed SIGNAL green, peak −2 dBFS, health healthy. First filed as a silent tap — the log disproved that.
+
+**Evidence** (`/Volumes/Extreme SSD/uzume_screens_testing/2026-09-29T17-30-29Z/session.log`): `startListeningForFirstAudio → SYSTEM-AUDIO TAP at .ready` at 17:32:14; `tap RMS … t=+2.6s rms=0.000000`, then audio from +3.6 s rising to peak 0.43; `signal quality → green`; **zero `audio signal →` lines for the whole session** (every `AudioSignalState` change is logged). `sessionState=playing` at 17:32:21 is the Start-session click. Both TCC services were granted at tap start (log `authValue=2` for AudioCapture and ScreenCapture) — not a permission failure.
+
+**Root cause.** `SilenceDetector` starts at `.active` and emits only transitions. At `.ready` the engine forces `CaptureStateSurface` to `.silent` (BUG-112 / DS.5) but left the detector at `.active`. Music that begins before `suspectDuration` (1.5 s) of silence never produces a transition, so the surface stays `.silent` and FirstAudioDetector never fires. Waiting ≥ 3 s before pressing play (silent → recovering → active) hid it — why it rarely showed on Matt's own runs.
+
+**Fix.** `SilenceDetector.resetToSilent()` + `AudioInputRouter.markAwaitingFirstAudio()`, called in `startListeningForFirstAudio` after the tap starts: the first audio now always arrives as `.recovering → .active`. The emitted `.silent` also arms the BUG-057 reinstall ladder for a cold tap that never delivers (slightly earlier than before: at Ready rather than after 3 s of silence).
+
+**Gates.** `SilenceDetectorTests`: `test_resetToSilent_musicWithinSuspectWindow_isReported` (the log's shape → `[.silent, .recovering, .active]`), the control `test_withoutReset_…_isNeverReported` (pins the old behaviour), `test_resetToSilent_whenAlreadySilent_doesNotReEmit`; `ReadyFirstAudioWiringTests` (source shape: the call sits in `startListeningForFirstAudio`, after the tap starts).
+
+**Closes on** a passing fresh-account run: press play within a second of Ready and Ready advances.
+
+### BUG-161 — crash on the scan review's Continue (2026-09-29)
+
+**Severity:** P1 (crash on the main tester path) · **Domain:** app / UI · **Failure class:** `render-state` (SwiftUI/AppKit presentation lifetime) · **Status:** Resolved 2026-09-29 (`b49a9722`, collapsed with Matt's approval) — live-verified on the Task 8 re-run (build 5): scan → review → Continue, no crash, no crash report
+
+**Actual.** "Uzume Test" account, notarized build 4, 12:06:45: Spotify scan → review → **Continue** → crash. Report `Uzume-2026-09-29-120709.ips` (copy on `/Volumes/Extreme SSD/uzume_screens_testing/`): `EXC_BAD_ACCESS (SIGSEGV) KERN_INVALID_ADDRESS at 0x0`, pc 0, main thread; `UC::DriverCore::continueProcessing()` (UpdateCycle) ← CFRunLoop observer ← `-[NSMoveHelper _doAnimation]` ← `-[NSSheetMoveHelper closeSheet]` ← `NSWindowEndWindowModalSession` ← SwiftUI `SheetBridge.updateSheetPresentations` teardown ← `NSHostingView.layout`. No Uzume frame.
+
+**Cause.** `IdleView`'s connector sheet started the session inside `ConnectorPickerView`'s callback ("no explicit dismiss needed"). The state flip to `.connecting` made ContentView replace IdleView while its sheet was still presented, so SwiftUI tore the sheet down from a departing host and AppKit's close animation ran a nested run loop into a null UpdateCycle callback. Intermittent (animation timing): the 11:24 Apple Music connect on the same build survived.
+
+**Fix.** The callback stores the choice and closes the sheet; `.sheet(…, onDismiss: startPendingConnection)` starts the session once AppKit has finished closing it. Covers Apple Music connects as well.
+
+**Gate.** `ConnectorSheetDismissOrderTests` (source shape: the session starts from `onDismiss`, never inside the picker callback).
+
+**Closes on** a passing fresh-account run through Continue.
+
+### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
+
+**Severity:** P3 · **Domain:** build / distribution · **Status:** Open (recorded limits, D-261)
+
+- **macOS 15 Sequoia.** In range (`LSMinimumSystemVersion` 15.0) but never run. The Core Audio tap, the audio-capture permission prompt, ScreenCaptureKit's window filter (the Spotify scan) and MusicKit lookups are the parts most likely to differ; the first tester on 15 is the first test.
+- **Intel Macs.** Not supported: the app is arm64-only, and macOS refuses to open it on Intel. The engine's `Float16` math does not exist on x86_64, and Intel Macs can't reach the 60 fps target.
+- **Tested so far:** macOS 26.5.1 on Apple Silicon (Mac mini M2 Pro) — Matt's account and a fresh standard account with every Uzume permission reset (CLEAN.2.5b Task 8, build 0.9.0 (5), *"Passes all steps."*).
 
 ### SCAN-LIM — what the playlist scan has not been shown to handle (2026-09-28)
 

@@ -15,10 +15,21 @@
 	<string>Uzume</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Uzume listens to your Mac’s audio to create visuals and, when you scan a playlist, reads the track names in your Spotify window. Nothing is recorded or sent anywhere.</string>
+	<!-- CLEAN.2.5b: the Core Audio process tap (SystemAudioCapture) is gated by
+	     the system-audio-capture permission; without this key a fresh user's tap
+	     installs but delivers silence. Must live in this file, not INFOPLIST_KEY_*. -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Uzume listens to the music playing on your Mac to create its visuals. Nothing is recorded or sent anywhere.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Uzume reads track info from music apps (Apple Music, Spotify) to display what's currently playing.</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Uzume searches the Apple Music catalog to look up track details like BPM and genre for the currently playing song.</string>
+	<!-- Developer vs public build (BuildFlavor.swift); release.sh sets public. -->
+	<key>UzumeBuildFlavor</key>
+	<string>$(UZUME_BUILD_FLAVOR)</string>
+	<!-- The commit the build came from; release.sh sets it, other builds say "dev". -->
+	<key>UzumeGitSHA</key>
+	<string>$(UZUME_GIT_SHA)</string>
 	<key>SpotifyClientID</key>
 	<string>$(SPOTIFY_CLIENT_ID)</string>
 	<key>LSMultipleInstancesProhibited</key>

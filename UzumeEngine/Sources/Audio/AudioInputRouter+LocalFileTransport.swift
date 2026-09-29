@@ -5,7 +5,6 @@ import Foundation
 
 // MARK: - Local-file transport
 
-@available(macOS 14.2, *)
 extension AudioInputRouter {
 
     /// Pause LF playback in place (engine + tap stay alive; player retains

@@ -43,7 +43,6 @@ import Metal
 
 // MARK: - Separation → Analysis
 
-@available(macOS 14.2, *)
 @Test func stemFeatures_afterSeparation_hasNonZeroDrumsEnergy() throws {
     guard let device = MTLCreateSystemDefaultDevice() else {
         throw StemTestError.noMetalDevice

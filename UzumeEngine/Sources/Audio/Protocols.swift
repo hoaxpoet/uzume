@@ -28,7 +28,6 @@ public enum AudioSignalState: Sendable, Equatable {
 /// Abstraction over system audio capture (Core Audio taps or test doubles).
 ///
 /// Concrete implementation: `SystemAudioCapture`.
-@available(macOS 14.2, *)
 public protocol AudioCapturing: AnyObject, Sendable {
     /// Called on each audio IO callback with interleaved float32 PCM samples.
     /// Parameters: (pointer to samples, sample count, sample rate, channel count).

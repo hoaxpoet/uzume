@@ -28,7 +28,7 @@ swift build -c release --package-path UzumeEngine
 
 Warnings-as-errors is enforced per-target via `UzumeApp/Uzume.xcconfig` — do NOT pass the flag on the command line (conflicts with SPM dependency `-suppress-warnings`).
 
-Deployment target: macOS 14.0+ (Sonoma). Swift 6.0. Metal 3.1+.
+Deployment target: macOS 15.0+ (Sequoia), Apple Silicon (arm64) only (D-261). Swift 6.0. Metal 3.1+.
 
 All tests must pass before any new code is merged (regression gate).
 

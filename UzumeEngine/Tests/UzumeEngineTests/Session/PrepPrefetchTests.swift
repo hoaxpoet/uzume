@@ -70,7 +70,6 @@ private func makeTrack(_ title: String) -> TrackIdentity {
     TrackIdentity(title: title, artist: "Artist")
 }
 
-@available(macOS 14.2, *)
 @MainActor
 final class PrepPrefetchTests: XCTestCase {
 

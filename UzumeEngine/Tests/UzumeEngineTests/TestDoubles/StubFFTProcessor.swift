@@ -6,7 +6,6 @@ import Metal
 @testable import Audio
 @testable import Shared
 
-@available(macOS 14.2, *)
 final class StubFFTProcessor: FFTProcessing, @unchecked Sendable {
 
     // MARK: - Configurable Output

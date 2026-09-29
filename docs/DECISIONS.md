@@ -142,6 +142,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-258 | Accepted | **Fireflies' look is a stylized screenprint rendered from a real 3D scene** — Daniel Danger's night prints, blue palette, hero `07`; supersedes FF.0's photographic / matte-painting bar; addendum: the world breathes with slow energy, never the beat (FF.R2 / FF.2 prompt, Matt 2026-09-25) |
 | D-259 | Accepted | **Scenes are chosen by measured energy, not by the mood classifier** — a 1–10 energy level plus the song's range; valence leaves scene choice; certified scenes' live mood routes untouched for now (BUG-148, Matt 2026-09-26) |
 | D-260 | Accepted | **Spotify track lists come from on-device screen reading, not the Web API** — the user scrolls the playlist once while Uzume reads Spotify's window (or drops screenshots); no Spotify request, no login; screen-read rows resolve through a verified catalog lookup (SCAN, 2026-09-28) |
+| D-261 | Accepted | **Testers get a Developer ID–notarized DMG; macOS 15+, Apple Silicon only** — direct download, not the Mac App Store (no sandbox); team Plait & Pattern; one-command `Scripts/release.sh`; one permission screen (CLEAN.2.5b, 2026-09-29) |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6174,3 +6175,45 @@ uses lands on a different song for 8 % of these playlists' own ground truth (BUG
 compact view synthetic-only; no 100+ song capture; the Spotify web player is not read; a very small
 window truncates harder.
 
+
+## D-261: Testers get a Developer ID–notarized DMG; macOS 15+, Apple Silicon only (CLEAN.2.5b)
+
+**Date:** 2026-09-29 · **Increment:** CLEAN.2.5b · **Status:** Accepted ·
+**Completes:** the CLEAN.2.5 split (SECURITY_POSTURE §3) — 2.5a turned on the hardened runtime; this signs and notarizes.
+
+**Why.** Nothing reaches a beta tester until a build opens cleanly on a Mac that has never seen
+Uzume. The dev-signed app ran only on Matt's Mac, through earlier permission grants a tester won't
+have. The paid Apple Developer Program membership (Plait & Pattern, LLC, team `TYK3BXQ5D4`) removed
+the block.
+
+**The decision.**
+1. **Distribution channel: a direct-download DMG signed with Developer ID and notarized by Apple,
+   not the Mac App Store.** The App Store requires the App Sandbox, which the global Core Audio
+   tap cannot run under (SECURITY_POSTURE §2). `Scripts/release.sh` produces it in one command
+   (RUNBOOK §Release build). Publishing it (GitHub Releases, the uzume.io download page) is a
+   separate call.
+2. **Signing team: Plait & Pattern (`TYK3BXQ5D4`)**, automatic signing and "Apple Development" for
+   everyday builds; Developer ID applies only at export (`Scripts/ExportOptions.plist`).
+3. **Oldest macOS: 15.0 Sequoia** (DECISION-NEEDED 2, default A). The floor was 14.0, but the
+   audio tap needs 14.2, so a 14.0/14.1 user would have launched into an app that can never hear
+   anything. 15 covers most active Macs; only 26 is tested so far (KNOWN_ISSUES).
+4. **Apple Silicon only** (`ARCHS = arm64`). Intel Macs can't reach the 60 fps target, and the
+   engine's `Float16` math doesn't exist on x86_64 anyway.
+5. **Permission questions: one onboarding screen; the system-audio question stays on Ready**
+   (DECISION-NEEDED 1 → A, refined by Task 8). Onboarding asks for Screen & System Audio
+   Recording. On macOS 26 a new account is *also* asked "record your system audio"
+   (`NSAudioCaptureUsageDescription`, now declared — without it a tester's tap would be silent);
+   it arrives the first time the tap starts, on Ready, before any visuals. Matt (2026-09-29):
+   leave it there, next to "press play", rather than move it into onboarding. The full observed
+   sequence is UX_SPEC §3.3a.
+6. **About box: "Copyright © 2026 Plait & Pattern."** (DECISION-NEEDED 3, default A), matching the
+   signing certificate's name. `LICENSE` (MIT, Matt Deming) is unchanged; aligning the two is Matt's
+   separate call.
+7. **Version 0.9.0.** The build number lives in `UzumeApp/Version.xcconfig`; the release script
+   increments and commits it on every run, so no number is reused.
+8. **Developer vs public build** (Matt, 2026-09-29: *"We need to start distinguishing between the
+   developer version of the app and the public release, which would have few features."*).
+   `BuildFlavor` (`UzumeBuildFlavor` in Info.plist; only `Scripts/release.sh` sets `public`, and
+   verifies it on the artifact). First use: the public build keeps no session records, so it
+   never asks for Documents access (BUG-158). Every other build — Debug and Release — is the
+   developer build. Further developer-only surfaces move behind it in their own increments.

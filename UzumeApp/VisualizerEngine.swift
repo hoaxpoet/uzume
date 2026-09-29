@@ -345,14 +345,15 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Shader library for creating post-process chains on preset switch.
     let shaderLibrary: Renderer.ShaderLibrary
 
-    /// AudioInputRouter requires macOS 14.2+; stored as Any to avoid propagating availability.
+    /// The `AudioInputRouter`. Typed `Any` from when it was macOS 14.2-only; the 15.0 floor
+    /// (CLEAN.2.5b) retired that reason; retyping it is a filed follow-up.
     var router: Any?
 
     /// True once the live tap has delivered any non-silent audio this session
     /// (BUG-057). Drives the silent-tap card's pause-suppression: a session that
     /// has had audio and goes silent is a user pause (suppress), not a broken tap.
     var hasEverDetectedAudio: Bool {
-        if #available(macOS 14.2, *), let audioRouter = router as? AudioInputRouter {
+        if let audioRouter = router as? AudioInputRouter {
             return audioRouter.hasEverDetectedSignal
         }
         return false
@@ -993,7 +994,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         self.moodClassifier = classifier
         self.stemAnalyzer = analyzer
         self.stemSeparator = sep
-        self.sessionRecorder = SessionRecorder()
+        self.sessionRecorder = BuildFlavor.current.recordsSessions ? SessionRecorder() : nil  // BUG-158
         self.prepTimingSink = PrepStageSink.ifEnabled(
             inSessionDirectory: self.sessionRecorder?.sessionDir)
         // Round 26 (2026-05-15): construct the metadata fetcher early so it
@@ -1074,9 +1075,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             self?.userFacingErrorSubject.send(.presetCompileFailed(presetName: presetName))
         }
 
-        if #available(macOS 14.2, *) {
-            self.router = setupAudioRouting(audioBuffer: buf, fftProcessor: fft)
-        }
+        self.router = setupAudioRouting(audioBuffer: buf, fftProcessor: fft)
 
         // LF.4: SessionManager delegates the heavy ML pipeline back to the
         // engine via the `LocalFilePreparing` protocol. Wired here, post-init,
@@ -1162,7 +1161,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // process tap (correct behaviour at session end — the
                     // streaming app keeps playing, Uzume stops analysing).
                     // Either way, idempotent + safe.
-                    if #available(macOS 14.2, *), let audioRouter = self.router as? AudioInputRouter {
+                    if let audioRouter = self.router as? AudioInputRouter {
                         audioRouter.stop()
                     }
                     // LF.5.fix D-LF5-3: reset transport state so a new session

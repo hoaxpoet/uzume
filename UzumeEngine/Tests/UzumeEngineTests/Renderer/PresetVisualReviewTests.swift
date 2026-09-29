@@ -1266,9 +1266,7 @@ struct PresetVisualReviewTests {
     }
 
     private func writeCGImage(_ image: CGImage, to url: URL) throws {
-        let type: CFString
-        if #available(macOS 11.0, *) { type = UTType.png.identifier as CFString }
-        else { type = "public.png" as CFString }
+        let type = UTType.png.identifier as CFString
         guard let dest = CGImageDestinationCreateWithURL(url as CFURL, type, 1, nil) else {
             throw VisualReviewError.pngWriteFailed
         }

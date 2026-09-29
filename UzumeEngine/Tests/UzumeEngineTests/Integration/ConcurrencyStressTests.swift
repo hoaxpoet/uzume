@@ -64,8 +64,7 @@ private final class StressAnalyzer: StemAnalyzing, @unchecked Sendable {
     func analyze(stemWaveforms: [[Float]], fps: Float) -> StemFeatures { .zero }
     func reset() {}
 }
-/// Local separator double for the churn test — avoids FakeStemSeparator's
-/// `@available(macOS 14.2)` gate; returns stems by value (CLEAN.1.2 contract).
+/// Local separator double for the churn test; returns stems by value (CLEAN.1.2 contract).
 private final class StressSeparator: StemSeparating, @unchecked Sendable {
     let stemLabels = ["vocals", "drums", "bass", "other"]
     let stemBuffers: [UMABuffer<Float>]

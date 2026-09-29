@@ -135,9 +135,6 @@ struct SessionLifecycleChurnTests {
     /// different playback phases (engine spin-up, mid-play, completion
     /// callback in flight).
     @Test func routerChurn_startStopLocalFilePlayback_neverHangs() throws {
-        // LocalFilePlaybackProvider is @available(macOS 14.2, *); deployment
-        // floor is 14.0. Never expected to skip on dev/CI hardware.
-        guard #available(macOS 14.2, *) else { return }
         guard let url = try ChurnFixture.shortExcerptURL() else { return }
         let router = AudioInputRouter()
         // Varied dwell times (ms): hit spin-up, steady-state, and the
@@ -168,9 +165,6 @@ struct SessionLifecycleChurnTests {
     /// deadlocked on: the completion callback takes the provider lock to
     /// check `playerNode === player` while `stop()` is mid-teardown.
     @Test func completionCallbackVsStop_abbaShape_neverDeadlocks() throws {
-        // LocalFilePlaybackProvider is @available(macOS 14.2, *); deployment
-        // floor is 14.0. Never expected to skip on dev/CI hardware.
-        guard #available(macOS 14.2, *) else { return }
         guard let url = try ChurnFixture.shortExcerptURL() else { return }
         let provider = LocalFilePlaybackProvider(url: url)
         for cycle in 0..<10 {
@@ -197,9 +191,6 @@ struct SessionLifecycleChurnTests {
     /// next track. Simulates 8 consecutive track advances, each stop + new
     /// provider + start triggered by a real end-of-file callback.
     @Test func onFileEnded_queueAdvanceChurn_neverHangs() throws {
-        // LocalFilePlaybackProvider is @available(macOS 14.2, *); deployment
-        // floor is 14.0. Never expected to skip on dev/CI hardware.
-        guard #available(macOS 14.2, *) else { return }
         guard let url = try ChurnFixture.shortExcerptURL() else { return }
         var provider: LocalFilePlaybackProvider?
 
@@ -242,9 +233,6 @@ struct SessionLifecycleChurnTests {
     /// watchdog catches any lock-ordering regression between the transport
     /// surface and teardown.
     @Test func transportChurn_concurrentWithStopStart_neverDeadlocks() throws {
-        // LocalFilePlaybackProvider is @available(macOS 14.2, *); deployment
-        // floor is 14.0. Never expected to skip on dev/CI hardware.
-        guard #available(macOS 14.2, *) else { return }
         guard let url = try ChurnFixture.shortExcerptURL() else { return }
         let provider = LocalFilePlaybackProvider(url: url)
         try provider.start()
@@ -286,9 +274,6 @@ struct SessionLifecycleChurnTests {
     /// AVFoundation teardown. Five create→start→release cycles under the
     /// watchdog.
     @Test func deinitWhilePlaying_quitShape_neverHangs() throws {
-        // LocalFilePlaybackProvider is @available(macOS 14.2, *); deployment
-        // floor is 14.0. Never expected to skip on dev/CI hardware.
-        guard #available(macOS 14.2, *) else { return }
         guard let url = try ChurnFixture.shortExcerptURL() else { return }
         for cycle in 0..<5 {
             let dwellMicros: UInt32 = cycle % 2 == 0 ? 120_000 : 280_000
@@ -313,9 +298,6 @@ struct SessionLifecycleChurnTests {
     /// must serialize them without deadlocking, and the final `stop()` must
     /// complete.
     @Test func concurrentDoubleStart_serializesWithoutDeadlock() throws {
-        // LocalFilePlaybackProvider is @available(macOS 14.2, *); deployment
-        // floor is 14.0. Never expected to skip on dev/CI hardware.
-        guard #available(macOS 14.2, *) else { return }
         guard let url = try ChurnFixture.shortExcerptURL() else { return }
         let provider = LocalFilePlaybackProvider(url: url)
         for round in 0..<8 {

@@ -238,7 +238,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 
 | ID | Tier | Status | What (findings) |
 |---|---|---|---|
-| **BR.0** | 0 | 🔨 in flight on `clean-2-5b` (CLEAN.2.5b session) | Merge the notarized-DMG branch; renumber its BUG-157/158 (taken on `main` by #311); fresh-account rehearsal; `release.sh` SHA + dSYM + untracked-file check (H2, H5, H6, H14) |
+| **BR.0** | 0 | 🔨 CLEAN.2.5b done; `clean-2-5b` pushed, PR open (awaiting CI + merge) | Merge the notarized-DMG branch ✗ (Matt's push); renumber its IDs ✅ (now BUG-158…161); fresh-account rehearsal ✅ (*"Passes all steps."*, build 5); `release.sh` SHA + dSYM ✅ + untracked-file check ✅ (H5, H6); GitHub "Latest" pointing at the weights tarball (H14) — open, a publishing call |
 | **BR.1** | 1 | ready | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
 | **BR.2** | 1 | ready | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ready | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
@@ -1683,6 +1683,14 @@ and think the ball has a personality."* That is the preset working; it is not to
 only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
+
+### Increment CLEAN.2.5b — a signed, notarized Uzume a stranger can install ✅ (2026-09-29, branch `clean-2-5b`, pushed; PR open)
+
+**Delivered.** Uzume is signed by Plait & Pattern, LLC (`TYK3BXQ5D4`). `Scripts/release.sh` is one command: clean-tree + untracked-input check → weights → build number bump (committed, never reused) → Release archive (arm64) → Developer ID export (`Scripts/ExportOptions.plist`) → notarize + staple app → DMG → sign, notarize, staple DMG → 15 self-checks (signature, authority, team, hardened runtime, exact entitlements, Gatekeeper app + DMG, staples, arm64, public flavor, embedded git SHA, dSYM UUID). Floor macOS 15.0, Apple Silicon only, 0.9.0, "Copyright © 2026 Plait & Pattern." `NSAudioCaptureUsageDescription` declared — on macOS 26 a new account is asked for system audio separately, so without it a tester's tap would be silent. New **developer vs public build** (`BuildFlavor`, D-261 §8): the public build keeps no session records (no Documents question, BUG-158). The fresh-account run found and fixed two pre-existing P1s (collapsed with Matt's approval): **BUG-160** Ready never advanced when music began within 1.5 s of the tap (the silence detector was never told Ready assumed silence) and **BUG-161** a crash on the scan review's Continue (session started inside a closing sheet). Also: the per-frame stem-series publish moved out from behind the recorder guard (the public build would have lost local-file stems).
+**Matt's verdict (Task 8, fresh standard account, build 0.9.0 (5)):** *"Passes all steps."*
+**Done-when:** ✅ team TYK3BXQ5D4, automatic signing, Debug + Release green; ✅ audio-capture key in the built plist; ✅ `LSMinimumSystemVersion` 15.0, `lipo` arm64; ✅ 0.9.0 + build number + copyright in the plist; ✅ `release.sh --allow-branch` produces a stapled DMG (runs 3–6 end-to-end; run 1 failed at archive on x86_64 package slices, run 2 on a wrong `codesign -dv` check — both fixed); ✅ every self-check passes; ✅ Task 7 rehearsal on Matt's account; ✅ Task 8 fresh account, all seven steps; ✅ docs (SECURITY_POSTURE §1/§3, RUNBOOK §Release build, UX_SPEC §3.3a, D-261, KNOWN_ISSUES, release notes).
+**Decisions built (defaults, D-261):** 1 → A, one onboarding screen; Matt kept the system-audio question on Ready. 2 → A, macOS 15.0. 3 → A, Plait & Pattern.
+**Follow-ups:** Sparkle auto-update; a tester feedback/crash path (BR.5 Report a Problem); publishing to GitHub Releases (and H14's "Latest" pointer); the uzume.io download page; retype `VisualizerEngine.router` from `Any`; BUG-159 (record-sessions switch unwired, developer builds).
 
 ### Increment TESTFLAKE.3 — the chrome and Ready tests await the timer, not the clock ✅ (2026-09-29)
 

@@ -30,7 +30,6 @@ struct SystemAudioCaptureTeardownTests {
 
     @Test("claiming returns the handles and clears them in one locked step")
     func claimReturnsAndClears() {
-        guard #available(macOS 14.2, *) else { return }
         let capture = SystemAudioCapture()
         capture.seedTapResourcesForTesting(aggregate: 4_242, tap: 77)
 
@@ -42,7 +41,6 @@ struct SystemAudioCaptureTeardownTests {
 
     @Test("a second claim gets nothing — teardown cannot double-destroy")
     func claimIsIdempotent() {
-        guard #available(macOS 14.2, *) else { return }
         let capture = SystemAudioCapture()
         capture.seedTapResourcesForTesting(aggregate: 9, tap: 9)
 
@@ -56,7 +54,6 @@ struct SystemAudioCaptureTeardownTests {
 
     @Test("the lock is free the moment claiming returns")
     func lockIsNotHeldAfterClaim() throws {
-        guard #available(macOS 14.2, *) else { return }
         let capture = SystemAudioCapture()
         capture.seedTapResourcesForTesting(aggregate: 1, tap: 1)
 
@@ -75,7 +72,6 @@ struct SystemAudioCaptureTeardownTests {
 
     @Test("teardown and lock-taking callers interleave without wedging")
     func concurrentTeardownAndLockTakersComplete() throws {
-        guard #available(macOS 14.2, *) else { return }
         let capture = SystemAudioCapture()
         let finished = DispatchSemaphore(value: 0)
 

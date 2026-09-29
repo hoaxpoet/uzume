@@ -62,7 +62,6 @@ public enum CaptureMode: Sendable, Equatable {
 /// // ...
 /// capture.stopCapture()
 /// ```
-@available(macOS 14.2, *)
 public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
 
     // MARK: - Init

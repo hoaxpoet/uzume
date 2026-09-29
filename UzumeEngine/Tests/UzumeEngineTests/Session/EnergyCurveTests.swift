@@ -13,7 +13,6 @@ struct EnergyCurveTests {
 
     @Test("a quiet half then a loud half reads as a ~29.5 dB step with rising activity, one point a second")
     func quietThenLoudIsAStep() throws {
-        guard #available(macOS 14.2, *) else { return }   // FakeStemSeparator's floor
         let device = try #require(MTLCreateSystemDefaultDevice())
         let rate = 44_100
         var seed: UInt32 = 7

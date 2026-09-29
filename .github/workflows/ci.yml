@@ -28,7 +28,7 @@ jobs:
     # Sendable types, and those `: Sendable` SDK conformances only exist from the
     # Xcode-26 SDK. macos-14 (Xcode 16.2 / Swift 6.0.3) red-built all 18 with
     # "non-sendable type 'any MTL…'". The BUILD SDK must be Xcode 26; the
-    # DEPLOYMENT TARGET stays macOS 14.0 (set in pbxproj / Package.swift), which
+    # DEPLOYMENT TARGET is macOS 15.0 (CLEAN.2.5b; pbxproj / Package.swift), which
     # that SDK still targets — build SDK != run target.
     runs-on: macos-26
     steps:

@@ -3,7 +3,6 @@
 import Foundation
 import os.log
 
-@available(macOS 14.2, *)
 extension SoakTestHarness {
 
     // MARK: - Report Building

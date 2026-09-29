@@ -86,13 +86,15 @@ struct EndedView: View {
                     .accessibilityIdentifier(Self.replayLocalFileButtonID)
                 }
 
-                Button(String(localized: "ended.cta.openFolder")) {
-                    onOpenSessionsFolder()
+                if BuildFlavor.current.recordsSessions {  // BUG-158: no session records in the public build
+                    Button(String(localized: "ended.cta.openFolder")) {
+                        onOpenSessionsFolder()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(UzumeAppColor.textTertiary)
+                    .font(.subheadline)
+                    .accessibilityIdentifier(Self.openFolderButtonID)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(UzumeAppColor.textTertiary)
-                .font(.subheadline)
-                .accessibilityIdentifier(Self.openFolderButtonID)
             }
 
             Spacer()

@@ -79,7 +79,6 @@ struct AnalysisRateGateTests {
 
     // MARK: - The mechanism gate: delivery spacing, under the flag
 
-    @available(macOS 14.2, *)
     @Test("Deliveries land in distinct render windows", .timeLimit(.minutes(1)))
     func deliveryRateGate() throws {
         let url = try PlayheadAnalysisClockTests.writeRamp(frames: 44_100 * 2)

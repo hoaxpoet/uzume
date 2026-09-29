@@ -24,7 +24,6 @@ struct MIRSampleRateTests {
         }
     }
 
-    @available(macOS 14.2, *)
     private static func profile(rate: Int) throws -> TrackProfile {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let samples = music(rate: rate)
@@ -39,7 +38,6 @@ struct MIRSampleRateTests {
 
     @Test("the same music prepared from a 96 kHz file reads as it does at 44.1 kHz")
     func ninetySixKilohertzMatchesFortyFour() throws {
-        guard #available(macOS 14.2, *) else { return }   // FakeStemSeparator's floor
         let reference = try Self.profile(rate: Int(StemSeparator.modelSampleRate))
         let high = try Self.profile(rate: 96_000)
         #expect(abs(high.spectralCentroidAvg / reference.spectralCentroidAvg - 1) < 0.05,
