@@ -2,7 +2,7 @@
 
 Internal release notes for the `main` branch. Audience: Matt and Claude Code. Each entry covers one session or a logical batch of increments. These notes complement `docs/ENGINEERING_PLAN.md` (authoritative for what's planned) and `docs/QUALITY/KNOWN_ISSUES.md` (authoritative for open defects).
 
-User-visible release notes are not yet in scope (no public build).
+User-visible release notes for the beta build: [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md) (BR.4).
 
 Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
