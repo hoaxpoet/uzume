@@ -40,6 +40,9 @@ struct UzumeApp: App {
     /// BR.5 (audit D3): notices a blocked main thread from its own thread, in every build.
     private let mainThreadWatchdog = MainThreadWatchdog()
 
+    /// BR.5: whether the previous run ended without a clean quit (read once at launch).
+    private let previousRunEndedAbnormally: Bool
+
     init() {
         // RN.1: adopt state stranded by the bundle-ID change (settings domain,
         // stem cache). Runs before SettingsMigrator so the key migration below
@@ -61,6 +64,17 @@ struct UzumeApp: App {
         // (DASH.7.1, D-088). Idempotent — safe to call repeatedly.
         _ = DashboardFontLoader.resolveFonts(in: nil)
         mainThreadWatchdog.start()
+        // BR.5: set at launch, cleared on a clean quit. Not under XCTest — every test run
+        // kills its host app, which would otherwise read as a crash on the next real launch.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            let marker = AbnormalExitMarker(defaults: .standard)
+            previousRunEndedAbnormally = marker.markLaunch()
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+            ) { _ in AbnormalExitMarker(defaults: .standard).markCleanQuit() }
+        } else {
+            previousRunEndedAbnormally = false
+        }
     }
 
     var body: some Scene {
@@ -165,6 +179,13 @@ struct UzumeApp: App {
             // (recursive walk), `.m3u` playlists (parsed via M3UParser), and
             // any combination thereof. Mixed drops are flattened in drop
             // order.
+            // BR.5: offer the report after a run that didn't quit cleanly. Public build only:
+            // developer builds are stopped from Xcode and killed by scripts all day.
+            .task {
+                if previousRunEndedAbnormally, BuildFlavor.current == .public {
+                    ProblemReporter.offer(.abnormalExit)
+                }
+            }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 LocalFileMenuCommands.handleDrop(
                     providers: providers,
@@ -184,6 +205,12 @@ struct UzumeApp: App {
         // surfaces the current disk footprint in the menu label. The size
         // auto-refreshes via the `localFileCacheBytes` publisher.
         .commands {
+            // BR.5: Help › Report a Problem (replaces the empty "Uzume Help" item).
+            CommandGroup(replacing: .help) {
+                Button(String(localized: "menu.help.report_problem")) {
+                    ProblemReporter.offer(.userRequested)
+                }
+            }
             CommandGroup(replacing: .newItem) {
                 Button(String(localized: "menu.file.open_local_file")) {
                     LocalFileMenuCommands.openLocalFilePanel(
