@@ -77,6 +77,8 @@ sed -i '' -E "s/^CURRENT_PROJECT_VERSION = [0-9]+$/CURRENT_PROJECT_VERSION = $BU
 git commit -q -m "[release] Build: build number $BUILD" -- "$VERSION_FILE" || die "could not commit the build-number bump"
 echo "version $VERSION, build $BUILD"
 
+SHA="$(git rev-parse --short=12 HEAD)"   # after the bump commit: the exact tree archived
+echo "commit $SHA"
 NAME="$APP_NAME-$VERSION-$BUILD"
 OUT="build/release/$NAME"
 ARCHIVE="$OUT/$APP_NAME.xcarchive"
@@ -93,7 +95,7 @@ step "4/9 archiving (Release) — log: $OUT/archive.log"
 # developer-only features, e.g. no session records in ~/Documents (BUG-158).
 xcodebuild -scheme "$SCHEME" -configuration Release -destination 'generic/platform=macOS' \
   -archivePath "$ARCHIVE" -allowProvisioningUpdates ARCHS=arm64 \
-  UZUME_BUILD_FLAVOR=public archive > "$OUT/archive.log" 2>&1 \
+  UZUME_BUILD_FLAVOR=public UZUME_GIT_SHA="$SHA" archive > "$OUT/archive.log" 2>&1 \
   || { tail -40 "$OUT/archive.log" >&2; die "xcodebuild archive"; }
 echo "archived: $ARCHIVE"
 
@@ -147,6 +149,9 @@ codesign --sign "$IDENTITY_HASH" --timestamp "$DMG" || die "signing the DMG"
 notarize "$DMG" dmg
 xcrun stapler staple "$DMG" || die "stapling the DMG"
 (cd build/release && shasum -a 256 "$NAME.dmg" > "$NAME.dmg.sha256")
+# Keep the debug symbols next to the DMG so a tester's crash report can be symbolicated.
+ditto -c -k --keepParent "$ARCHIVE/dSYMs/$APP_NAME.app.dSYM" "build/release/$NAME.dSYM.zip" \
+  || die "zipping the dSYM"
 
 # --- 9. Verify -----------------------------------------------------------------
 step "9/9 verifying the artifact"
@@ -187,6 +192,14 @@ expect "Gatekeeper accepts the DMG" "$GKD" "accepted"
 
 check "stapled ticket on the app" xcrun stapler validate "$APP"
 check "stapled ticket on the DMG" xcrun stapler validate "$DMG"
+
+EMBEDDED_SHA="$(plutil -extract UzumeGitSHA raw -o - "$APP/Contents/Info.plist" 2>/dev/null || true)"
+echo "--- UzumeGitSHA: $EMBEDDED_SHA"
+expect "commit embedded in the app" "$EMBEDDED_SHA" "^$SHA$"
+APP_UUID="$(dwarfdump --uuid "$APP/Contents/MacOS/$APP_NAME" | awk '{print $2}')"
+DSYM_UUID="$(dwarfdump --uuid "$ARCHIVE/dSYMs/$APP_NAME.app.dSYM" | awk '{print $2}')"
+echo "--- binary UUID $APP_UUID, dSYM UUID $DSYM_UUID"
+expect "dSYM matches the shipped binary" "$DSYM_UUID" "^$APP_UUID$"
 
 FLAVOR="$(plutil -extract UzumeBuildFlavor raw -o - "$APP/Contents/Info.plist" 2>/dev/null || true)"
 echo "--- UzumeBuildFlavor: $FLAVOR"

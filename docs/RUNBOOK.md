@@ -342,7 +342,7 @@ A tester build is a **Developer ID–signed, notarized, stapled DMG**, made by o
 Scripts/release.sh
 ```
 
-`--allow-branch` lets it run from another branch (dry runs). It writes `build/release/Uzume-<version>-<build>.dmg` plus a `.sha256`, and keeps the archive, the exported app, the build logs and the notarization results under `build/release/Uzume-<version>-<build>/`. It **publishes nothing**; uploading the DMG is a separate decision.
+`--allow-branch` lets it run from another branch (dry runs). It writes `build/release/Uzume-<version>-<build>.dmg` plus a `.sha256` and the debug symbols `Uzume-<version>-<build>.dSYM.zip` (keep it with the release: a tester's `.ips` crash report symbolicates against it), and keeps the archive, the exported app, the build logs and the notarization results under `build/release/Uzume-<version>-<build>/`. It **publishes nothing**; uploading the DMG is a separate decision.
 
 **What it does, in order:** refuses a dirty tree or a non-`main` branch → checks the Developer ID identity and the notary profile → `Scripts/fetch_weights.sh` → bumps `CURRENT_PROJECT_VERSION` in `UzumeApp/Version.xcconfig` and **commits** it (so a build number is never reused, even when a later step fails; a failed run leaves a `[release] Build: build number N` commit) → `xcodebuild archive` (Release, `ARCHS=arm64`) → `xcodebuild -exportArchive` with `Scripts/ExportOptions.plist` (`developer-id`, team `TYK3BXQ5D4`, automatic) → notarize + staple the app → DMG (`hdiutil`, app + `Applications` link) → sign, notarize and staple the DMG → verify. `MARKETING_VERSION` is edited by hand in the same xcconfig.
 
@@ -367,6 +367,8 @@ It prompts for the Apple ID, team and an app-specific password, and stores them 
 | `spctl -t open --context context:primary-signature` on the DMG → `accepted` | Gatekeeper would open the downloaded disk image. |
 | `stapler validate` on app and DMG | The notarization ticket travels inside the file, so first launch works offline. |
 | `lipo -archs` → `arm64` | Apple Silicon only (D-261). |
+| `UzumeGitSHA` = the archived commit | Which commit a tester has (audit H5); other builds say `dev`. |
+| dSYM UUID = binary UUID | The kept debug symbols belong to the shipped binary. |
 | `UzumeBuildFlavor: public` | The public build (D-261 §8): no session records, no Documents question (BUG-158). |
 
 **A notarization rejection.** The script prints the submission's `notarytool log` and stops. The log is JSON; read its `issues` array: each entry names the file (`path`) and the reason (`message`), e.g. "The executable does not have the hardened runtime enabled" or "The signature does not include a secure timestamp". Fix the cause and run the script again (it takes the next build number). A past submission's log: `xcrun notarytool log <submission-id> --keychain-profile uzume-notary`; the list: `xcrun notarytool history --keychain-profile uzume-notary`.

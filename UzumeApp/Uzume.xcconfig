@@ -20,6 +20,10 @@ SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 // overrides this to `public`; it reaches the app as Info.plist `UzumeBuildFlavor`.
 UZUME_BUILD_FLAVOR = developer
 
+// The commit a build came from (Info.plist UzumeGitSHA). Scripts/release.sh sets it; any
+// other build says "dev" (BR.0 / audit H5: identify a tester's build from its crash report).
+UZUME_GIT_SHA = dev
+
 // Spotify Web API client ID for the OAuth Authorization Code + PKCE flow.
 // PKCE uses only the public client ID — NO client secret (a native app must
 // not embed one). Do NOT put a real value here — this file is checked in.

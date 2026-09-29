@@ -27,6 +27,9 @@
 	<!-- Developer vs public build (BuildFlavor.swift); release.sh sets public. -->
 	<key>UzumeBuildFlavor</key>
 	<string>$(UZUME_BUILD_FLAVOR)</string>
+	<!-- The commit the build came from; release.sh sets it, other builds say "dev". -->
+	<key>UzumeGitSHA</key>
+	<string>$(UZUME_GIT_SHA)</string>
 	<key>SpotifyClientID</key>
 	<string>$(SPOTIFY_CLIENT_ID)</string>
 	<key>LSMultipleInstancesProhibited</key>
