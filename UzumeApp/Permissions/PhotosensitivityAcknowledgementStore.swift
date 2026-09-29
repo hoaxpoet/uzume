@@ -15,8 +15,11 @@ final class PhotosensitivityAcknowledgementStore {
     // MARK: - Private
 
     private enum Keys {
-        static let acknowledged = "uzume.onboarding.photosensitivityAcknowledged"
+        static let acknowledged = PhotosensitivityAcknowledgementStore.defaultsKey
     }
+
+    /// The UserDefaults key (also read by `ContentView`'s `@AppStorage` gate, BR.1).
+    static let defaultsKey = "uzume.onboarding.photosensitivityAcknowledged"
 
     private let defaults: UserDefaults
 
