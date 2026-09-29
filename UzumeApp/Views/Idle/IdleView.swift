@@ -20,6 +20,8 @@ struct IdleView: View {
     @State private var showPhotosensitivityNotice = false
     @State private var showConnectorPicker        = false
     private let acknowledgementStore              = PhotosensitivityAcknowledgementStore()
+    /// A connect chosen in the picker, held until its sheet has finished closing (BUG-161).
+    @State private var pendingConnection: PendingConnection?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -75,23 +77,45 @@ struct IdleView: View {
                 showPhotosensitivityNotice = false
             }
         }
-        .sheet(isPresented: $showConnectorPicker) {
+        .sheet(isPresented: $showConnectorPicker, onDismiss: startPendingConnection) {
             ConnectorPickerView { tracks, source in
-                // No explicit dismiss needed — startSession transitions state to
-                // .connecting, which causes ContentView to replace IdleView (and
-                // this sheet) with ConnectingView automatically.
-                //
-                // Route by SOURCE, not tracks.isEmpty:
-                // - Spotify: always use preFetchedTracks (even if empty) to avoid
-                //   SessionManager re-fetching via client-credentials (→ 401). A
-                //   scanned playlist (SCAN) has no fetch at all — its rows ARE the tracks.
-                // - Apple Music / other: no pre-fetched tracks; SM fetches itself.
-                switch source {
-                case .spotifyPlaylistURL, .spotifyCurrentQueue, .spotifyScan:
-                    await engine.sessionManager.startSession(preFetchedTracks: tracks, source: source)
-                default:
-                    await engine.sessionManager.startSession(source: source)
+                // BUG-161: close the sheet FIRST and start the session from `onDismiss`.
+                // Starting it here flipped the state to .connecting, so ContentView removed
+                // IdleView while its sheet was still up; SwiftUI then tore the sheet down
+                // mid-close and AppKit's sheet animation crashed (EXC_BAD_ACCESS in
+                // UpdateCycle, macOS 26, on the scan review's Continue).
+                await MainActor.run {
+                    pendingConnection = PendingConnection(tracks: tracks, source: source)
+                    showConnectorPicker = false
                 }
+            }
+        }
+    }
+
+    // MARK: - Private
+
+    private struct PendingConnection {
+        let tracks: [TrackIdentity]
+        let source: PlaylistSource
+    }
+
+    /// Start the session the picker chose, once its sheet is gone.
+    ///
+    /// Route by SOURCE, not tracks.isEmpty:
+    /// - Spotify: always use preFetchedTracks (even if empty) to avoid SessionManager
+    ///   re-fetching via client-credentials (→ 401). A scanned playlist (SCAN) has no
+    ///   fetch at all — its rows ARE the tracks.
+    /// - Apple Music / other: no pre-fetched tracks; SM fetches itself.
+    private func startPendingConnection() {
+        guard let pending = pendingConnection else { return }
+        pendingConnection = nil
+        let sessionManager = engine.sessionManager
+        Task {
+            switch pending.source {
+            case .spotifyPlaylistURL, .spotifyCurrentQueue, .spotifyScan:
+                await sessionManager.startSession(preFetchedTracks: pending.tracks, source: pending.source)
+            default:
+                await sessionManager.startSession(source: pending.source)
             }
         }
     }
