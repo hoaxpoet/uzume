@@ -20,6 +20,7 @@
 import AppKit
 import Combine
 import Foundation
+import MediaAccessibility
 
 // MARK: - AccessibilityState
 
@@ -37,8 +38,9 @@ final class AccessibilityState: ObservableObject {
 
     // MARK: - Published
 
-    /// Raw system reduce-motion flag from NSWorkspace. Updated on
-    /// `accessibilityDisplayOptionsDidChangeNotification`.
+    /// The system asks for reduced motion: macOS Reduce Motion (NSWorkspace) OR
+    /// "Dim flashing lights" (MediaAccessibility, BR.1 / F1b). Updated on either
+    /// setting's change notification.
     @Published private(set) var systemReduceMotion: Bool
 
     /// Effective reduce-motion state: combination of system flag + user preference.
@@ -58,18 +60,28 @@ final class AccessibilityState: ObservableObject {
     /// Create the accessibility state, seeding from the current system flag.
     ///
     /// - Parameter workspace: NSWorkspace to read the system flag from. Overrideable for testing.
-    init(workspace: NSWorkspace = .shared) {
-        let system = workspace.accessibilityDisplayShouldReduceMotion
+    /// - Parameter dimFlashingLights: reads macOS "Dim flashing lights". Overrideable for testing.
+    init(
+        workspace: NSWorkspace = .shared,
+        dimFlashingLights: @escaping () -> Bool = { MADimFlashingLightsEnabled() }
+    ) {
+        let readSystem = { workspace.accessibilityDisplayShouldReduceMotion || dimFlashingLights() }
+        let system = readSystem()
         self.systemReduceMotion = system
         self.reduceMotion = system          // matchSystem default
         self.beatAmplitudeScale = system ? 0.5 : 1.0
 
+        // `kMADimFlashingLightsChangedNotification` is posted to the local CF center,
+        // which `NotificationCenter.default` is.
         NotificationCenter.default
             .publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)
+            .merge(with: NotificationCenter.default.publisher(
+                for: Notification.Name(kMADimFlashingLightsChangedNotification as String)
+            ))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.systemReduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                self.systemReduceMotion = readSystem()
                 self.recompute()
             }
             .store(in: &cancellables)
@@ -83,6 +95,16 @@ final class AccessibilityState: ObservableObject {
         guard pref != reducedMotionPreference else { return }
         reducedMotionPreference = pref
         recompute()
+    }
+
+    // MARK: - Engine Flags
+
+    /// `(reduceMotion, beatAmplitudeScale)` for `VisualizerEngine.applyAccessibility`.
+    /// Emits the CURRENT value synchronously on subscription, then every change —
+    /// so a launch with Reduce Motion already on reaches the engine before the
+    /// first frame (BR.1 / F1: an `.onChange` alone never fired for it).
+    var engineFlags: AnyPublisher<(Bool, Float), Never> {
+        $reduceMotion.map { ($0, $0 ? 0.5 : 1.0) }.eraseToAnyPublisher()
     }
 
     // MARK: - Queries
