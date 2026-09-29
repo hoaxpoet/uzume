@@ -12,6 +12,10 @@
 
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 
+// Version + build number (MARKETING_VERSION, CURRENT_PROJECT_VERSION) — bumped by
+// Scripts/release.sh (CLEAN.2.5b).
+#include "Version.xcconfig"
+
 // Spotify Web API client ID for the OAuth Authorization Code + PKCE flow.
 // PKCE uses only the public client ID — NO client secret (a native app must
 // not embed one). Do NOT put a real value here — this file is checked in.

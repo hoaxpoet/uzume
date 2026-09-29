@@ -1,0 +1,9 @@
+// Version.xcconfig — Uzume's version and build number (CLEAN.2.5b).
+//
+// MARKETING_VERSION is edited by hand. CURRENT_PROJECT_VERSION is owned by
+// Scripts/release.sh: it increments and commits it on every release run, so a
+// build number is never reused. Do not edit it by hand, and keep both on their
+// own lines in this exact form — the script parses them.
+
+MARKETING_VERSION = 0.9.0
+CURRENT_PROJECT_VERSION = 0
