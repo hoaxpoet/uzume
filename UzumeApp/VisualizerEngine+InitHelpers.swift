@@ -205,10 +205,8 @@ extension VisualizerEngine {
                     initLogger.info("\(message, privacy: .public)")
 
                     // BUG-100: GPU working set + ML force-dispatch count, on the same low-rate
-                    // bucket so the three diagnostic lines share one timeline. See
-                    // `gpuPressureDescription()` for what each number decides.
-                    // BR.5 / audit D3: fire-and-forget. Awaiting the main actor here parked the
-                    // whole loop behind a blocked main thread, so the STALL check below never ran.
+                    // bucket so the three diagnostic lines share one timeline (`gpuPressureDescription`).
+                    // BR.5 / D3: fire-and-forget — an await here parked the loop behind a hung main.
                     Task { @MainActor [weak self] in
                         guard let pressure = self?.gpuPressureDescription() else { return }
                         let line = "GPU_PRESSURE \(pressure)"

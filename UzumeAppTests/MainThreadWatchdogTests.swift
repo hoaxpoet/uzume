@@ -12,7 +12,7 @@ struct MainThreadWatchdogTests {
     private final class Events: @unchecked Sendable {
         private let lock = NSLock()
         private var items: [(String, Date)] = []
-        func add(_ s: String) { lock.withLock { items.append((s, Date())) } }
+        func add(_ line: String) { lock.withLock { items.append((line, Date())) } }
         var all: [(String, Date)] { lock.withLock { items } }
     }
 
@@ -22,8 +22,12 @@ struct MainThreadWatchdogTests {
     @Test func logsStallAndSamplesWhileMainIsBlocked_thenRecovers() async throws {
         let events = Events()
         let watchdog = MainThreadWatchdog(
-            stallThreshold: 0.3, sampleThreshold: 0.8, tick: 0.05,
-            log: { events.add($0) }, sample: { events.add("SAMPLE") })
+            stallThreshold: 0.3,
+            sampleThreshold: 0.8,
+            tick: 0.05,
+            log: { events.add($0) },
+            sample: { events.add("SAMPLE") }
+        )
         watchdog.start()
         defer { watchdog.stop() }
         try await Task.sleep(for: .milliseconds(300))              // main free: pings answered
