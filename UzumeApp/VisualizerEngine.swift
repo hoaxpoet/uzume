@@ -799,6 +799,9 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
 
     var stateCancellable: AnyCancellable?
 
+    /// BR.2 (BUG-162): keeps the display awake from `.ready` through `.playing`.
+    @MainActor let displaySleepGuard = DisplaySleepGuard()
+
     /// Retains the subscription that calls `extendPlan()` as readiness level advances.
     var readinessCancellable: AnyCancellable?
 
@@ -1112,6 +1115,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         stateCancellable = mgr.$state
             .sink { [weak self] newState in
                 guard let self else { return }
+                self.displaySleepGuard.update(state: newState)
                 if newState == .connecting {
                     self.currentSessionPlanSeed = nil
                     // LF.6.fix.1 (BUG-024): wipe stale LF artwork at session
