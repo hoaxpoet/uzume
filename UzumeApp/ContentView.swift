@@ -33,8 +33,9 @@ struct ContentView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
 
     /// BR.1 / F7: the photosensitivity notice gates EVERY path to visuals, not just Idle.
-    @AppStorage(PhotosensitivityAcknowledgementStore.defaultsKey)
-    private var photosensitivityAcknowledged = false
+    /// Read once at launch (not `@AppStorage`): Settings › Diagnostics › "Reset onboarding"
+    /// promises to take effect on the NEXT launch, not to blank a playing session.
+    @State private var photosensitivityAcknowledged = PhotosensitivityAcknowledgementStore().isAcknowledged
 
     init(viewModel: SessionStateViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -92,9 +93,11 @@ struct ContentView: View {
             PhotosensitivityNoticeView(
                 onEnableReducedMotion: {
                     Self.acknowledgeNotice(enableReducedMotion: true, settings: settingsStore)
+                    photosensitivityAcknowledged = true
                 },
                 onAcknowledge: {
                     Self.acknowledgeNotice(enableReducedMotion: false, settings: settingsStore)
+                    photosensitivityAcknowledged = true
                 }
             )
             .interactiveDismissDisabled()

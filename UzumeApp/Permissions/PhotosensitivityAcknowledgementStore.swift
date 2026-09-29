@@ -18,7 +18,7 @@ final class PhotosensitivityAcknowledgementStore {
         static let acknowledged = PhotosensitivityAcknowledgementStore.defaultsKey
     }
 
-    /// The UserDefaults key (also read by `ContentView`'s `@AppStorage` gate, BR.1).
+    /// The UserDefaults key (`ContentView.acknowledgeNotice` writes it, BR.1).
     static let defaultsKey = "uzume.onboarding.photosensitivityAcknowledged"
 
     private let defaults: UserDefaults
