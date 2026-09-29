@@ -22,7 +22,7 @@ Uzume is **macOS-only**, single-user, **on-device only — no cloud, no telemetr
 | # | Aspect | Current state | Verdict |
 |---|---|---|---|
 | 1 | System-audio tap | `.systemAudio` = global tap, excludes nothing (production always uses this); `.application` = single-PID path retained in engine code but not user-selectable (CLEAN.2.3.5). TCC-gated on screen-recording; the tap itself is audio-only (the one pixel-reading surface is row 8). | Document — core mechanism, consent-gated. |
-| 2 | App sandbox | **Off** — `app-sandbox = false` is the only entitlement. | Document — incompatible with the tap; partial sandbox not viable. |
+| 2 | App sandbox | **Off** — `app-sandbox = false`; the only other entitlement is `automation.apple-events` (§3). | Unsandboxed for the Developer ID beta. **Corrected 2026-09-29:** the sandbox is *not* shown incompatible with the tap. Phosphor ships a system-audio process tap on the Mac App Store, where the sandbox is mandatory. A sandboxed Uzume is plausible but untested (follow-up **MAS.0**). |
 | 3 | Hardened runtime + notarization | **Hardened runtime ON** (CLEAN.2.5a — `ENABLE_HARDENED_RUNTIME=YES` on the app target **Release** config; Debug left unhardened so XCTest injection works; signs `-o runtime`; `automation.apple-events` entitlement added). Still dev-signed ("Apple Development"), **not yet Developer ID / notarized**. | **CLEAN.2.5a done + verified** (HR; runtime gates verified 2026-06-15 — tap green @ −6 dBFS under HR, Apple-Events entitlement accepted); **CLEAN.2.5b deferred** — Developer ID + notarization, blocked on a paid Apple Developer Program membership. |
 | 4 | Library validation | Not declared. Links Apple frameworks + SPM static libs only. | Document — not required; keep ON under hardened runtime. |
 | 5 | `uzume://` OAuth callback | scheme + host + `state` (CSRF/replay) + nil-pending rejection; double-checked at `.onOpenURL`. | Document — mitigated (CLEAN.2.2). |
@@ -48,16 +48,17 @@ The tap is **TCC-gated**: macOS requires the user to grant screen-recording perm
 
 ## 2. App sandbox = off
 
-**Current posture (verified — `UzumeApp/UzumeApp.entitlements`).** `com.apple.security.app-sandbox = false` is the **only** entitlement declared.
+**Current posture (verified — `UzumeApp/UzumeApp.entitlements`).** `com.apple.security.app-sandbox = false`. The only other entitlement is `com.apple.security.automation.apple-events` (§3).
 
-**Threat / rationale.** An un-sandboxed app has the user's full file/IPC reach; a compromise (e.g. via a decoder bug, §6) is not contained by the sandbox. But the App Sandbox is **fundamentally incompatible** with Uzume's three core mechanisms:
-- the **global Core Audio process tap** needs to see all processes' audio — the sandbox cannot grant that;
-- **Apple Events** to arbitrary music apps (Apple Music / Spotify, for now-playing metadata) need per-target temporary-exception entitlements the sandbox discourages;
-- **arbitrary local-file open** (LF.4–LF.6: any `.m4a/.mp3/.flac/.m3u` the user picks) works today via direct paths; under the sandbox it would require user-selected-file scope + security-scoped bookmarks throughout.
+**Correction (2026-09-29).** This section used to say the App Sandbox is *fundamentally incompatible* with Uzume, starting with the claim that "the global Core Audio process tap needs to see all processes' audio — the sandbox cannot grant that." **That was never tested here, and there is contrary evidence.** Phosphor (Little Knife Labs), a macOS music visualizer sold on the Mac App Store, where the App Sandbox is mandatory, states that it captures system audio through a Core Audio process tap ([getphosphor.com](https://getphosphor.com/); [launch post, 2026-04-29](https://littleknife.dev/blog/2026/04/29/introducing-phosphor/)). Its store listing also advertises Apple Music and Spotify media controls. **Uzume has not built or run a sandboxed variant**, so everything below is an assessed cost, not a verified result.
 
-**Partial sandboxing?** Not viable as a quick win: the global tap alone defeats it, and the file/Apple-Events paths would each need a non-trivial rework for marginal benefit on a single-user local app. Revisit only if a future model drops the global tap.
+**Threat / rationale.** An un-sandboxed app has the user's full file/IPC reach; a compromise (e.g. via a decoder bug, §6) is not contained by the sandbox. What a sandboxed Uzume would need, surface by surface:
+- **Global Core Audio process tap (§1).** Shown shippable in a sandboxed App Store app by Phosphor. Unverified for Uzume's exact configuration: the empty-exclude global tap (`stereoGlobalTapButExcludeProcesses: []`) plus the private aggregate device.
+- **Apple Events to Apple Music / Spotify** (now-playing metadata). This needs `com.apple.security.scripting-targets` where the target app publishes scripting access groups, or a temporary-exception entitlement, and App Review has to accept either. Phosphor's advertised media controls suggest this is approvable; how it does it is unknown.
+- **Local-file open** (LF.4–LF.6: any `.m4a/.mp3/.flac/.m3u` the user picks). This needs user-selected-file scope plus security-scoped bookmarks throughout, including recents and `.m3u` entries that point outside the picked file's folder (§6).
+- **Spotify window reading (§8).** ScreenCaptureKit is available to sandboxed apps; untested here.
 
-**Decision.** Document the rationale. **No follow-up filed** (partial sandboxing does not look viable). If distribution hardening (§3) later wants defense-in-depth, the tradeoff can be re-opened then.
+**Decision.** Stay unsandboxed for the direct-download (Developer ID) beta. CLEAN.2.5b does not depend on the sandbox. A sandboxed build is filed as **MAS.0**: a feasibility spike (tap, Apple Events, file access, scan) run only if the Mac App Store becomes a distribution goal. It is not scheduled.
 
 ## 3. Hardened runtime + notarization
 
@@ -127,8 +128,9 @@ The consequence of (b) was always bounded, which is why it was P3 not higher: th
 | **CLEAN.2.5a** | — | **Done (2026-06-15)** — hardened runtime enabled (app-target-scoped) + `automation.apple-events` entitlement; build + sign verified (`-o runtime`). Runtime gates (tap + Apple Events under HR) pending Matt's Mac-mini run. | The deliberate flip 2.4 deferred — applied here with a build behind it (§3). |
 | **CLEAN.2.5b** | — | Developer ID signing + notarization + Gatekeeper test; keep library validation on. | **Deferred — blocked on a paid Apple Developer Program membership.** Mechanical once the cert + notarization key exist (§3). |
 | **BUG-051** | P3 | **Done (2026-08-07, BUG051.1)** — extension allow-list + path canonicalization on resolved playlist entries, applied at the parser boundary. | Filed here as defense-in-depth; fixed in its own small increment (§6). |
+| **MAS.0** | — | Feasibility spike for a sandboxed (Mac App Store) build: process tap, Apple Events to Music/Spotify, security-scoped local files, Spotify window reading. | **Unscheduled.** Filed at the §2 correction (2026-09-29); runs only if the Mac App Store becomes a distribution goal. |
 
-No fix was filed for §2 (partial sandbox — not viable), §4 (library validation — not required), §5 (OAuth — mitigated), §1/§7 (core mechanism / posture strength).
+No fix was filed for §4 (library validation — not required), §5 (OAuth — mitigated), §1/§7 (core mechanism / posture strength).
 
 ## How each claim was verified (2026-06-15)
 
