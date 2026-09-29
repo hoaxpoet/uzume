@@ -103,10 +103,11 @@ struct UzumeApp: App {
             }
             // Push uncertified-presets preference into the engine so reactive mode
             // honours the setting without requiring a SettingsStore dependency in the engine.
+            // BR.1 (F15): a value stored by a developer build never reaches a public one.
             .task {
-                engine.applyShowUncertifiedPresets(settingsStore.showUncertifiedPresets)
+                let allowed = BuildFlavor.current.exposesUncheckedScenes
                 for await value in settingsStore.$showUncertifiedPresets.values {
-                    engine.applyShowUncertifiedPresets(value)
+                    engine.applyShowUncertifiedPresets(allowed && value)
                 }
             }
             // Route uzume://spotify-callback back to the OAuth actor (U.11)

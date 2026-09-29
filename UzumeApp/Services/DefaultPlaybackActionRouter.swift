@@ -94,6 +94,7 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
     private let onRePlanSession: () -> Void
     private let onApplyPresetOverride: (String, Bool) -> Void
     private let onRestorePlan: (PlannedSession) -> Void
+    private let flavor: BuildFlavor
 
     // Ceiling timers for boundary-or-8s transitions.
     private var ceilingTimerTask: Task<Void, Never>?
@@ -121,8 +122,10 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         onReshuffle: @escaping (Set<TrackIdentity>, [TrackIdentity: PresetDescriptor]) -> Void = { _, _ in },
         onRePlanSession: @escaping () -> Void = {},
         onApplyPresetOverride: @escaping (String, Bool) -> Void = { _, _ in },
-        onRestorePlan: @escaping (PlannedSession) -> Void = { _ in }
+        onRestorePlan: @escaping (PlannedSession) -> Void = { _ in },
+        flavor: BuildFlavor = .current
     ) {
+        self.flavor = flavor
         self.sessionManager = sessionManager
         self.toastBridge = toastBridge
         self.getSessionTime = getSessionTime
@@ -409,7 +412,10 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         // (PR.8.2). Matt's call reverses the ORDER; the reachability half of the PR.8.2 fix stays:
         // no eligibility filter here. This is a manual override, so it must reach anything loaded —
         // diagnostics and over-budget presets included, which PR.8's `filter { $0.1 > 0 }` dropped.
-        let eligible = catalog.sorted { $0.name < $1.name }
+        //
+        // BR.1 (K3 / E13): that reach is a developer tool. The public build walks only
+        // certified, non-diagnostic scenes — never a sandbox or a scene no flash test measured.
+        let eligible = Self.walkCatalog(catalog, flavor: flavor)
         guard !eligible.isEmpty else {
             logger.warning("U.6b: presetNudge — empty catalog")
             return false
@@ -433,6 +439,15 @@ final class DefaultPlaybackActionRouter: PlaybackActionRouter, @unchecked Sendab
         }
         logger.info("U.6b: presetNudge(.\(String(describing: direction))) reactive-walk → \(nextDesc.id)")
         return true
+    }
+
+    /// The Shift+→ walk's scenes, alphabetical: every loaded scene in the developer build;
+    /// certified, non-diagnostic scenes in the public build.
+    static func walkCatalog(_ catalog: [PresetDescriptor], flavor: BuildFlavor) -> [PresetDescriptor] {
+        let reachable = flavor.exposesUncheckedScenes
+            ? catalog
+            : catalog.filter { $0.certified && !$0.isDiagnostic }
+        return reachable.sorted { $0.name < $1.name }
     }
 
     func rePlanSession() {

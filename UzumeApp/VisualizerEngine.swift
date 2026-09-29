@@ -917,9 +917,13 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         // `.json` sidecar) there and every save recompiles + swaps it in
         // without relaunching; a broken save keeps the last-good compile and
         // toasts (wired below, post-init). Directory created on first launch.
-        let userPresetsDir = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Uzume/Presets", isDirectory: true)
+        // BR.1 (A13): the public build loads no user presets — a dropped sidecar
+        // saying `certified: true` would enter rotation with no flash gate.
+        let userPresetsDir = BuildFlavor.current.exposesUncheckedScenes
+            ? FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("Uzume/Presets", isDirectory: true)
+            : nil
         if let userPresetsDir {
             try? FileManager.default.createDirectory(
                 at: userPresetsDir, withIntermediateDirectories: true)

@@ -116,20 +116,23 @@ struct VisualsSettingsSection: View {
                 )
             }
 
-            Section(NSLocalizedString("settings.visuals.certification.title", comment: "")) {
-                Toggle(
-                    NSLocalizedString("settings.visuals.show_uncertified_presets.label", comment: ""),
-                    isOn: Binding(
-                        get: { viewModel.showUncertifiedPresets },
-                        set: { viewModel.showUncertifiedPresets = $0 }
+            // BR.1 (F15): uncertified scenes never passed the flash gate — developer build only.
+            if BuildFlavor.current.exposesUncheckedScenes {
+                Section(NSLocalizedString("settings.visuals.certification.title", comment: "")) {
+                    Toggle(
+                        NSLocalizedString("settings.visuals.show_uncertified_presets.label", comment: ""),
+                        isOn: Binding(
+                            get: { viewModel.showUncertifiedPresets },
+                            set: { viewModel.showUncertifiedPresets = $0 }
+                        )
                     )
-                )
-                .accessibilityLabel(
-                    NSLocalizedString("settings.visuals.show_uncertified_presets.accessibility", comment: "")
-                )
-                Text(NSLocalizedString("settings.visuals.show_uncertified_presets.hint", comment: ""))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .accessibilityLabel(
+                        NSLocalizedString("settings.visuals.show_uncertified_presets.accessibility", comment: "")
+                    )
+                    Text(NSLocalizedString("settings.visuals.show_uncertified_presets.hint", comment: ""))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
