@@ -1,4 +1,4 @@
-// BuildFlavorTests — the public build records no sessions (CLEAN.2.5b, BUG-157).
+// BuildFlavorTests — the public build records no sessions (CLEAN.2.5b, BUG-158).
 
 import Testing
 @testable import UzumeApp

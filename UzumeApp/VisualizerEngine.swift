@@ -994,7 +994,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         self.moodClassifier = classifier
         self.stemAnalyzer = analyzer
         self.stemSeparator = sep
-        self.sessionRecorder = BuildFlavor.current.recordsSessions ? SessionRecorder() : nil  // BUG-157
+        self.sessionRecorder = BuildFlavor.current.recordsSessions ? SessionRecorder() : nil  // BUG-158
         self.prepTimingSink = PrepStageSink.ifEnabled(
             inSessionDirectory: self.sessionRecorder?.sessionDir)
         // Round 26 (2026-05-15): construct the metadata fetcher early so it

@@ -10,7 +10,7 @@ struct DiagnosticsSettingsSection: View {
 
     var body: some View {
         Form {
-            // BUG-157: the public build keeps no session records, so nothing here applies.
+            // BUG-158: the public build keeps no session records, so nothing here applies.
             if BuildFlavor.current.recordsSessions {
                 Section(NSLocalizedString("settings.diagnostics.recorder.title", comment: "")) {
                     Toggle(

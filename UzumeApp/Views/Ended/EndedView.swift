@@ -86,7 +86,7 @@ struct EndedView: View {
                     .accessibilityIdentifier(Self.replayLocalFileButtonID)
                 }
 
-                if BuildFlavor.current.recordsSessions {  // BUG-157: no session records in the public build
+                if BuildFlavor.current.recordsSessions {  // BUG-158: no session records in the public build
                     Button(String(localized: "ended.cta.openFolder")) {
                         onOpenSessionsFolder()
                     }

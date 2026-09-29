@@ -16,7 +16,7 @@ SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 // Scripts/release.sh (CLEAN.2.5b).
 #include "Version.xcconfig"
 
-// Developer vs public build (BuildFlavor.swift, BUG-157). Only Scripts/release.sh
+// Developer vs public build (BuildFlavor.swift, BUG-158). Only Scripts/release.sh
 // overrides this to `public`; it reaches the app as Info.plist `UzumeBuildFlavor`.
 UZUME_BUILD_FLAVOR = developer
 

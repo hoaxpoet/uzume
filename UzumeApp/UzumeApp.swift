@@ -48,7 +48,7 @@ struct UzumeApp: App {
         // Read the key directly to avoid a second SettingsStore allocation before @StateObject init.
         let rawPolicy = UserDefaults.standard.string(forKey: "uzume.settings.diagnostics.sessionRetention")
         let policy = SessionRetentionPolicy(rawValue: rawPolicy ?? "") ?? .lastN10
-        // The public build keeps no session records and never touches ~/Documents (BUG-157).
+        // The public build keeps no session records and never touches ~/Documents (BUG-158).
         if BuildFlavor.current.recordsSessions {
             SessionRecorderRetentionPolicy.apply(policy: policy)
         }

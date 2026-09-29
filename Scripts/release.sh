@@ -42,8 +42,12 @@ done
 
 # --- 1. Tree + branch ----------------------------------------------------------
 step "1/9 checking tree and branch"
-# ponytail: untracked files are ignored — only tracked, pbxproj-registered sources build.
 [ -z "$(git status --porcelain --untracked-files=no)" ] || die "working tree has uncommitted changes — commit or discard them first"
+# Untracked files elsewhere (e.g. prompts/) are fine, but SPM compiles every file in a
+# target's folder, so a stray untracked source under the build inputs would ship.
+STRAY="$(git status --porcelain --untracked-files=all -- UzumeApp UzumeEngine/Sources UzumeEngine/Package.swift)"
+[ -z "$STRAY" ] || die "untracked files in the build inputs would ship — commit or remove them:
+$STRAY"
 BRANCH="$(git symbolic-ref --short -q HEAD || echo DETACHED)"
 if [ "$BRANCH" != "main" ] && [ "$ALLOW_BRANCH" -ne 1 ]; then
   die "on '$BRANCH', not main — release from main, or pass --allow-branch for a dry run"
@@ -86,7 +90,7 @@ step "4/9 archiving (Release) — log: $OUT/archive.log"
 # ARCHS on the command line, not only in the pbxproj: SPM package targets don't
 # inherit the project's ARCHS, and the engine's Float16 doesn't exist on x86_64.
 # UZUME_BUILD_FLAVOR=public makes this the public build (BuildFlavor.swift): no
-# developer-only features, e.g. no session records in ~/Documents (BUG-157).
+# developer-only features, e.g. no session records in ~/Documents (BUG-158).
 xcodebuild -scheme "$SCHEME" -configuration Release -destination 'generic/platform=macOS' \
   -archivePath "$ARCHIVE" -allowProvisioningUpdates ARCHS=arm64 \
   UZUME_BUILD_FLAVOR=public archive > "$OUT/archive.log" 2>&1 \

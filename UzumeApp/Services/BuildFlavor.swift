@@ -1,4 +1,4 @@
-// BuildFlavor — the developer build vs the public build (CLEAN.2.5b, BUG-157).
+// BuildFlavor — the developer build vs the public build (CLEAN.2.5b, BUG-158).
 //
 // The public build is the notarized DMG `Scripts/release.sh` produces; only that
 // script sets `UZUME_BUILD_FLAVOR = public`, which lands in Info.plist as
@@ -26,6 +26,6 @@ enum BuildFlavor: Sendable {
 
     /// Whether the app keeps a diagnostic record of each session in
     /// `~/Documents/uzume_sessions`. Off in the public build: touching Documents
-    /// makes macOS ask a new user for Documents access at launch (BUG-157).
+    /// makes macOS ask a new user for Documents access at launch (BUG-158).
     var recordsSessions: Bool { self == .developer }
 }
