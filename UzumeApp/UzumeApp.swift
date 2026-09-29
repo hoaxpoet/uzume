@@ -74,6 +74,10 @@ struct UzumeApp: App {
             // an unconditionally near-black canvas.
             .preferredColorScheme(.dark)
             .environmentObject(engine)
+            // BR.2 (BUG-162): a closed window releases the display-sleep
+            // assertion even though the session outlives it (F14).
+            .onAppear { engine.displaySleepGuard.setWindowOpen(true) }
+            .onDisappear { engine.displaySleepGuard.setWindowOpen(false) }
             .environmentObject(permissionMonitor)
             .environmentObject(settingsStore)
             .environmentObject(accessibilityState)

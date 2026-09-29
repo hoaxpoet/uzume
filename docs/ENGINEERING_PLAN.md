@@ -240,7 +240,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 |---|---|---|---|
 | **BR.0** | 0 | 🔨 CLEAN.2.5b done; `clean-2-5b` pushed, PR open (awaiting CI + merge) | Merge the notarized-DMG branch ✗ (Matt's push); renumber its IDs ✅ (now BUG-158…161); fresh-account rehearsal ✅ (*"Passes all steps."*, build 5); `release.sh` SHA + dSYM ✅ + untracked-file check ✅ (H5, H6); GitHub "Latest" pointing at the weights tarball (H14) — open, a publishing call |
 | **BR.1** | 1 | ready | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
-| **BR.2** | 1 | ready | Keep the display awake during a session (B1) |
+| **BR.2** | 1 | ✅ fixed, PR open — pending Matt's live `pmset` check (BUG-162) | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ready | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
 | **BR.4** | 1 | ready | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
 | **BR.5** | 1 | ready | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.2 — the display stays awake during a session ✅ (2026-09-29, pending live check)
+
+**Delivered.** Audit B1 → BUG-162. `DisplaySleepGuard` holds a `.idleDisplaySleepDisabled` activity from `.ready` through `.playing` while the window is open, and releases it on `.ended`, `.idle` and window close. The state→assertion mapping sits behind a `DisplaySleepAsserting` seam and is unit-tested (`DisplaySleepGuardTests`).
+**Done-when:** ✅ held Ready → Playing, released on end / idle / window close; ✅ unit test through the seam; ⏳ `pmset -g assertions` names Uzume mid-session on the M4 MacBook Pro on battery — Matt's check, queued into listening session 2 (streaming).
+**Not done:** the audit's "pause-timeout" release — no pause timeout exists; a paused streaming session keeps the display on while Uzume is on screen, which matches a visualizer left running.
 
 ### Increment AUDIT.2 — beta readiness review and improvement plan ✅ (2026-09-29)
 
