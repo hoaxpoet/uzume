@@ -579,3 +579,8 @@
 "report.failed.body"                  = "Please describe what happened in a new GitHub issue instead.";
 "report.issue.title"                  = "Problem report: ";
 "report.issue.body"                   = "**What happened?**\n\n\n**What did you expect?**\n\n\nPlease drag %1$@ (shown in Finder) into this issue.\n\n`%2$@`";
+
+/* BR.4 (F18) — keys the Settings views referenced that did not exist (they showed as raw keys) */
+"settings.about.app.title"               = "Uzume";
+"settings.about.copy_debug_info.caption" = "Copies the version, macOS and graphics chip, for a bug report. No audio or personal data.";
+"settings.visuals.blocklist.caption"     = "Scene families to leave out. Not applied yet in this build.";
