@@ -128,3 +128,12 @@ struct EndedSummaryTests {
         #expect(!src.contains("sessionDuration: nil"))
     }
 }
+
+// MARK: - BR.4 (H11): no ~/uzume_diag.log in the public build
+
+@Suite("No home-folder diagnostic log in the public build (BR.4)")
+struct PublicDiagnosticLogTests {
+    @Test func public_opensNoDiagnosticLog() {
+        #expect(VisualizerEngine.openDiagnosticLog(flavor: .public) == nil)
+    }
+}
