@@ -139,7 +139,7 @@ Two CTAs: "I understand" (dismisses, stored in `UserDefaults`), "Enable Reduce m
 
 ### 3.3a What a new user is actually asked (CLEAN.2.5b, notarized build, macOS 26.5.1)
 
-Observed on a fresh standard account ("Uzume Test", Mac mini) plus a machine-wide screen-access reset, 2026-09-29 — screenshots from Matt, order from the unified log (TCC / replayd). Each question appears once; **relaunching asks nothing again** (Task 8 step 7).
+Observed on a fresh standard account ("Uzume Test", Mac mini) plus a machine-wide screen-access reset, 2026-09-29 — screenshots from Matt, order from the unified log (TCC / replayd). Each question appears once; **relaunching asks nothing again** (Task 8 step 7). Items 4–6 follow what the user does first, so their order varies: on the build-5 re-run the system-audio question (Ready, 13:13:09) came before Spotify control (13:13:51). The whole sequence passed there (Matt: *"Passes all steps."*).
 
 1. **Gatekeeper, first open from the DMG:** the standard *"Uzume is an app downloaded from the internet. Are you sure you want to open it?"* — no "unidentified developer" / "could not verify" wording (notarized + stapled).
 2. **§3.2 card → Allow Access → Screen & System Audio Recording** (macOS dialog / System Settings), then macOS's *"'Uzume' may not be able to record the contents of your screen until it is quit"* → **Quit & Reopen**. This grant is **machine-wide**: a second account on the same Mac skips the card.
