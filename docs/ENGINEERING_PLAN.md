@@ -230,36 +230,35 @@ what he took (plus Release); **concurrency across tracks was not taken** — it 
 that no longer blocks the listener, and PREP.1 found four workers being OOM-killed at 23–45 GB, so
 it needs the memory question answered before it is worth anything.
 
-## Phase BR — Beta readiness remediation ⏳ (proposed 2026-09-29, AUDIT.2; awaiting Matt's go)
+## Phase BR — Beta readiness remediation 🔨 (2026-09-29, AUDIT.2; Matt accepted every default the same day)
 
 The 2026-09-29 beta-readiness review ([`BETA_READINESS_AUDIT_2026-09-29.md`](diagnostics/BETA_READINESS_AUDIT_2026-09-29.md),
 evidence in [`diagnostics/BETA_READINESS_2026-09-29/`](diagnostics/BETA_READINESS_2026-09-29/)) turned eleven review lanes,
-the known-issues ledger and an abandoned-work sweep into the increments below. **All rows are proposed, not started.**
-The review's §Decisions lists thirteen product calls with defaults; the tiers and done-whens live in the review, not here.
+the known-issues ledger and an abandoned-work sweep into the increments below. **Matt accepted all thirteen defaults (2026-09-29)** — roster called at 27 (26 selectable, VL excluded), Fractal Tree excluded on Apple7, dead controls hidden, local files without Screen Recording, region storefront, the privacy sentence, hard cuts kept, zip + issue-link reports, D-113 still open, nothing deleted without a per-item yes. **Hardware:** no M1 Air — the conservative tier-1 render cap + Alfvén tier-1 exclusion apply; the Retina/4K half of BR.6 is measured on Matt's M4 MacBook Pro and 4K display. Rows are ready to start; none is started. A D-number for this decision set is filed after `clean-2-5b` merges (it holds the next one). Tiers and done-whens live in the review, not here.
 
 | ID | Tier | Status | What (findings) |
 |---|---|---|---|
 | **BR.0** | 0 | 🔨 in flight on `clean-2-5b` (CLEAN.2.5b session) | Merge the notarized-DMG branch; renumber its BUG-157/158 (taken on `main` by #311); fresh-account rehearsal; `release.sh` SHA + dSYM + untracked-file check (H2, H5, H6, H14) |
-| **BR.1** | 1 | proposed | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
-| **BR.2** | 1 | proposed | Keep the display awake during a session (B1) |
-| **BR.3** | 1 | proposed | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
-| **BR.4** | 1 | proposed | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
-| **BR.5** | 1 | proposed | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
-| **BR.6** | 1 | proposed | Reality check: CI compiles Metal + builds Release; macOS 15 launch; base-M1 and Retina/5K sessions; cold-launch time; then the pixel-cap decision (H1, H8, K2, D4–D6) |
-| **BR.7** | 2 | proposed | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
-| **BR.8** | 2 | proposed | Long playlists keep their preparation (C1) |
-| **BR.9** | 2 | proposed | Background preparation gets its own analyzers (C3/G3) |
-| **BR.10** | 2 | proposed | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
-| **BR.11** | 2 | proposed | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
-| **BR.12** | 2 | proposed | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
-| **BR.13** | 2 | proposed | Local-file transport (B3/BUG-056, B4, B10) |
-| **BR.14** | 2 | proposed | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
-| **BR.15** | 2 | proposed | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
-| **BR.16** | 2 | proposed | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
-| **BR.17** | 2 | proposed | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
-| **BR.18** | 2 | proposed | Streaming fidelity for the newest scenes (K6) |
-| **BR.19** | 2 | proposed | The right song, reliably (BUG-152, C7, C8/A10) |
-| **BR.20** | 2 | proposed | Flash check v2: regional + red (I8) |
+| **BR.1** | 1 | ready | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
+| **BR.2** | 1 | ready | Keep the display awake during a session (B1) |
+| **BR.3** | 1 | ready | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
+| **BR.4** | 1 | ready | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
+| **BR.5** | 1 | ready | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
+| **BR.6** | 1 | ready | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
+| **BR.7** | 2 | ready | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
+| **BR.8** | 2 | ready | Long playlists keep their preparation (C1) |
+| **BR.9** | 2 | ready | Background preparation gets its own analyzers (C3/G3) |
+| **BR.10** | 2 | ready | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
+| **BR.11** | 2 | ready | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
+| **BR.12** | 2 | ready | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
+| **BR.13** | 2 | ready | Local-file transport (B3/BUG-056, B4, B10) |
+| **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
+| **BR.15** | 2 | ready | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
+| **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
+| **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
+| **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
+| **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
+| **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
 
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
 

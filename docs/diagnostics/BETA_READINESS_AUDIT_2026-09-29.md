@@ -8,6 +8,8 @@
 >
 > **Citing the release branch.** Its distribution decision is cited as "the CLEAN.2.5b decision", not by D-number: that number exists only on the unmerged `clean-2-5b` branch, so citing it from `main` would not resolve.
 >
+> **Status (2026-09-29): Matt accepted every default in §Decisions.** He has an M4 MacBook Pro and a 4K display, not an M1 Air, so BR.6 measures the high-resolution half and the conservative cap covers the low end.
+>
 > **Proposed work is numbered BR.0–BR.20 (Phase BR, "beta readiness").** No new BUG-numbers were filed: `origin/main` and `clean-2-5b` already collide on BUG-157, and filing here would add a third claimant. Take the next free ID from the tree when an item is picked up.
 
 ---
@@ -80,7 +82,7 @@ Also in flight: PR #309 (POSTURE.1). It corrects SECURITY_POSTURE §2 (the sandb
 
 ## Tier 1 — Before the first tester build
 
-### BR.1 · Photosensitivity safety (P1 · M · Needs Matt for one call)
+### BR.1 · Photosensitivity safety (P1 · M)
 
 The first-run notice is the only protection a photosensitive tester gets. Today it can be skipped, and the mitigations it points to don't hold.
 
@@ -90,7 +92,7 @@ The first-run notice is the only protection a photosensitive tester gets. Today 
 | **F1b** macOS "Dim flashing lights" never read | The one setting made for this audience does nothing. | Read MediaAccessibility's `MADimFlashingLightsEnabled()` (public since macOS 13) and treat it like Reduce Motion. |
 | **F7** Notice skipped on the local-file path | ⌘O, Finder "Open With", or a drop goes straight to preparing → 3-2-1 → flashing visuals, with no warning. The notice lives only on the Idle screen. | Require the acknowledgement before any playback, on every path. |
 | **F6** The notice's "Enable Reduce motion" button opens System Settings | The tester changes a system-wide setting that F1 then ignores. | Set the in-app "Reduced motion: Always on". |
-| **K1 / D1** ✔︎ Fractal Tree on M1, M1 Pro, Max, Ultra | Mesh shading is gated on `.apple8` (`PresetLoader+Mesh.swift:50`, `MeshGenerator.swift:249`), and M1 is Apple7. The fallback is a full-screen triangle (`FractalTree.metal:1297`) whose brightness follows `bass_dev` and jumps with every onset: the whole-frame flash D-157 removed from the real tree. The planner has no capability gate. | **Needs Matt:** exclude Fractal Tree on pre-Apple8 GPUs for the beta (recommended), or gate the native path on Apple7. Metal 3 mesh shaders are documented for Apple7, but that needs one run on an M1. |
+| **K1 / D1** ✔︎ Fractal Tree on M1, M1 Pro, Max, Ultra | Mesh shading is gated on `.apple8` (`PresetLoader+Mesh.swift:50`, `MeshGenerator.swift:249`), and M1 is Apple7. The fallback is a full-screen triangle (`FractalTree.metal:1297`) whose brightness follows `bass_dev` and jumps with every onset: the whole-frame flash D-157 removed from the real tree. The planner has no capability gate. | **Decided (decision 3):** exclude Fractal Tree on pre-Apple8 GPUs for the beta. Gating the native path on Apple7 waits for an M1 run; Metal 3 mesh shaders are documented for Apple7. |
 | **K4** The "27/27 flash-measured" claim has holes | Fractal Tree is skipped. Ferrofluid Ocean's gate measures its G-buffer (depth and material IDs), not light, so the aurora and specular highlights are unmeasured; it is the scene behind BUG-041. Murmuration's birds, Gossamer's and Membrane's feedback, and Waveform (the launch default) are also unmeasured. | Add Fractal Tree (both paths), Ferrofluid Ocean's lit output and Waveform to the multi-pass flash harness. Fail when a scene's measured pipeline is its G-buffer state. |
 | **K3 / E13 / F15 / A13** Unchecked scenes reachable | Shift+→ ("cut to next scene", listed in the help screen) walks all 32 loaded scenes, including the three sandboxes and Spectral Cartograph. "Show uncertified scenes" is a Release setting. A scene dropped into the watched user-preset folder is trusted if its sidecar says `certified: true`. | In the public build: filter the walk to certified, non-diagnostic scenes; hide the toggle; turn off the user-preset folder. |
 
@@ -134,7 +136,7 @@ A reset landing mid-mutation is an "Index out of range", an `EXC_BAD_ACCESS`, or
 - **User-preset hot-reload folder (A13 / G9).** It is live in Release. A `.metal` file there whose name contains `"` or `\` and has no sidecar hits a `fatalError` in `init`, crashing every launch until the file is removed.
 - **Tester-facing release notes (I2).** `RELEASE_NOTES_DEV.md:5` says they are out of scope "until a public build". Write one page of known limits: DIST-LIM, SCAN-LIM, streaming vs local-file sync, Bluetooth latency until BR.17.
 
-### BR.5 · Get evidence back from testers (P1 · M · Needs Matt: where reports go)
+### BR.5 · Get evidence back from testers (P1 · M · decided: zip plus a GitHub issue link)
 
 BUG-085 is still an open P1 hang, and today nothing a tester experiences can reach Matt.
 
@@ -156,7 +158,7 @@ BUG-085 is still an open P1 hang, and today nothing a tester experiences can rea
 - **An independent watchdog.** When the main thread stalls for more than 3 s it runs `/usr/bin/sample` on its own process into the report folder. The app is unsandboxed, so it can.
 - **Two small fixes:** the script's process name and the watchdog's main-actor hop.
 
-### BR.6 · Reality check on tester hardware and macOS 15 (P1 · S to measure, M to act · Needs Matt: hardware access)
+### BR.6 · Reality check on tester hardware and macOS 15 (P1 · S to measure, M to act · hardware: M4 MacBook Pro + 4K display, no M1)
 
 The app has run on one machine (macOS 26, M2 Pro, a 1080p display at 1×).
 
@@ -169,7 +171,11 @@ The app has run on one machine (macOS 26, M2 Pro, a 1080p display at 1×).
   - The 1080p baselines on the M2 Pro are already 13–15 ms for Cytokinesis, Stave and Skein. Alfvén measured a p50 of 9.99 ms against its declared 2.2 ms.
   - There is no render-resolution cap outside ray-march. Tier detection is a name match on "m3"/"m4".
   - The governor's particle and mesh rungs are dead, and Low Power Mode only turns off bloom.
-  - **Do:** one session on a base M1 or M2 Air, and one at Retina or 5K, reading `RENDER_TARGET` and `frame_gpu_ms` (`FRAME_BUDGET_RES=2880x1864` and `5120x2880` also run the harness). Then decide the global pixel cap below.
+  - **Do (per decision 4):**
+    - Run one session on the M4 MacBook Pro's built-in Retina display, on battery with Low Power Mode on and off, and one on the 4K display. Read `RENDER_TARGET` and `frame_gpu_ms`. `FRAME_BUDGET_RES=2880x1864` and `3840x2160` also run the harness.
+    - Apply the conservative cap (about 1440p-equivalent, compositor-upscaled) and exclude Alfvén on tier-1 Macs, which can't be measured without an M1.
+    - Use the M4 and 4K numbers to decide whether a cap is also needed above tier 1.
+    - The M4 is tier 2 by the name match, so it says nothing about base-M1 frame rates. Scale from it with care.
 - **Cold first launch (D6).** Measured about 4.2 s of main-thread shader compilation on the installed 0.9.0 build before any window appears, plus 5.6 s unattributed before the first log. That happens again after every app or OS update, and is likely 8–10 s on an M1. If the M1 run confirms it, show the window first and compile off the main thread (or ship a precompiled library).
 
 ---
@@ -262,17 +268,17 @@ For the whole background preparation, stem- and mood-driven motion lurches every
 - **F6:** Settings is reachable only during playback. Add ⌘, and the Idle gear from UX_SPEC §4.1.
 - **D8:** "Move to primary display" uses `NSScreen.main` (the key window's screen), so it does nothing from the secondary display.
 
-### BR.15 · Controls that do nothing (P2 · S · Needs Matt: wire or hide)
+### BR.15 · Controls that do nothing (P2 · S · decided: hide)
 
 - **F5 / E5:** "Hidden scene families", "Quality ceiling" and "Device tier" never reach scene selection. The quality ceiling is also saved as data but read back as a string, so it is always nil.
 - **E4:** the live-adaptation keys (`-` `+` `.` `←` `→`) use wall-clock time against a session-relative plan, so none does what its toast says. `-` re-applies the excluded scene 8 s later and pins it.
 - **E14:** adaptation toasts are on by default, though UX_SPEC says off.
 
-Recommended default for the beta: **hide all of these**, and wire them after.
+**Decided (decision 6): hide all of these for the beta**, and wire them after.
 
 ### BR.16 · Honest copy and credits (P2 · S)
 
-- **A7.** The permission screen says "Nothing ever leaves your Mac", and Info.plist says "Nothing is recorded or sent anywhere". But every track's title and artist go to itunes.apple.com and musicbrainz.org, and SECURITY_POSTURE doesn't list MusicBrainz, whose fetcher is unthrottled (C13). **Suggested:** "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz." Throttle MusicBrainz to its 1 request/s rule.
+- **A7.** The permission screen says "Nothing ever leaves your Mac", and Info.plist says "Nothing is recorded or sent anywhere". But every track's title and artist go to itunes.apple.com and musicbrainz.org, and SECURITY_POSTURE doesn't list MusicBrainz, whose fetcher is unthrottled (C13). **Decided copy (decision 9):** "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz." Throttle MusicBrainz to its 1 request/s rule.
 - **K7 / H9.** There is no attribution surface, and About says "MIT License" for everything. Unmet obligations:
   - Aurora Veil is CC BY-NC-SA 3.0.
   - PANNs is CC BY 4.0.
@@ -299,7 +305,7 @@ Most testers will stream.
 
 - **BUG-152.** The Apple Music path still takes the iTunes search's first hit, and 8 % of rows land on a different song. The verified lookup the scan uses already exists; route Apple Music through it.
 - **C7.** A transient iTunes failure (429, 5xx, timeout) is final for the session, and captive-portal HTML is cached permanently as "no preview". Retry with backoff; never cache a non-JSON body.
-- **C8 / A10 (Needs Matt: are testers outside the US?)** No storefront `country` is ever sent, so non-US testers match against the US catalog. Use the Mac's region, with US as the fallback.
+- **C8 / A10 (decided: the Mac's region, US fallback).** No storefront `country` is ever sent, so non-US testers match against the US catalog. Use the Mac's region, with US as the fallback.
 
 ### BR.20 · Flash check v2 (P2 · M)
 
@@ -331,7 +337,7 @@ Grouped by area. Each is P2/P3 and small to medium; lane reports have the detail
   - **D11:** `framebufferOnly = false` for developer-only video.
   - **G5:** Volumetric Lithograph loses its half-resolution march after a resize.
 - **Planner:**
-  - **E9:** planned crossfades are never performed. Every change is a hard cut on a 2–3 Hz tick, not on a bar. **Needs Matt**: he may prefer hard cuts.
+  - **E9:** planned crossfades are never performed. Every change is a hard cut on a 2–3 Hz tick, not on a bar. **Decided:** keep hard cuts for the beta.
   - **E10:** reactive mode opens on the same scene every time.
   - **E11:** duplicate songs in a playlist, or consecutive same-title songs.
 - **Scan:**
@@ -339,7 +345,7 @@ Grouped by area. Each is P2/P3 and small to medium; lane reports have the detail
   - **G12:** a zero row height gives `Int(NaN)` mid-scan.
   - **SCAN-LIM:** non-English Spotify, compact view, 100+ songs.
 - **App:**
-  - **A8 / F17:** local-file-only use sits behind the Screen Recording permission, and users see it again after every session. **Needs Matt**: local-file sessions don't use the tap and could skip it.
+  - **A8 / F17:** local-file-only use sits behind the Screen Recording permission, and users see it again after every session. **Decided:** let local-file sessions start without it (they don't use the tap). This is small, so take it with BR.14.
   - **G10:** permission poll loops stack.
   - **A14:** file paths are logged publicly.
 - **Scenes:**
@@ -366,8 +372,8 @@ These come from the abandoned-work sweep, §Abandoned work:
 
 | When | Work | Matt's time |
 |---|---|---|
-| Sep 30 – Oct 2 | BR.0 merge + rehearsal. BR.1, BR.2, BR.3, BR.4, BR.5 in parallel sessions (independent files). BR.6 CI step. | Decisions 1–5 below; the rehearsal |
-| As soon as hardware is available | BR.6 measurement sessions (base M1 or M2 Air; Retina or 5K; macOS 15) | Two short sessions |
+| Sep 30 – Oct 2 | BR.0 merge + rehearsal. BR.1, BR.2, BR.3, BR.4, BR.5 in parallel sessions (independent files). BR.6 CI step. | The rehearsal (decisions settled 09-29) |
+| Oct 1 – 3 | BR.6 measurement: M4 MacBook Pro built-in Retina (plus battery and Low Power Mode) and the 4K display; macOS 15 if the MacBook Pro runs it | Two short sessions |
 | Oct 3 – Oct 8 | BR.7–BR.14 (engineering), in the order listed | None until review |
 | Oct 6 – Oct 10 | BR.15–BR.20 | The BR.18 streaming pass |
 | Oct 11 | Freeze. Ledger reconciliation (§Known-issues ledger) | — |
@@ -488,36 +494,32 @@ This follows the explanations-not-verdicts format: what each item is, why it exi
 
 ---
 
-## Decisions needed from Matt
+## Decisions — accepted by Matt, 2026-09-29
 
-Each has a recommendation and a default that a session can proceed on if no answer comes.
+Matt's answer: *"accept all the defaults. note that I cannot get an M1 Air, but I have a 4k display and an M4 Macbook Pro."* Each decision below is now settled as stated.
 
-1. **Beta roster.**
-   - Call it at 27 and spend Oct 1–11 on Tier 1–2 (**recommended**), or attempt one more scene.
-   - Default: call it, and retire DH.0 / SUMI.0 / GG.0 to the post-beta slate.
-2. **Volumetric Lithograph.**
-   - Its declared costs (24 ms / 18 ms) exceed the 16.6 ms budget on every tier, so it is certified but never selected.
-   - Ship it excluded and count the roster as 26 (**recommended**), or re-measure it now.
-   - Default: excluded.
-3. **Fractal Tree on M1-family Macs.**
-   - Exclude it on pre-Apple8 GPUs for the beta (**recommended**), or try the native path on Apple7 once an M1 is available.
-   - Default: exclude.
-4. **Tester hardware.**
-   - Is an 8 GB M1 or M2 Air, and a Retina or 5K display, available for one session each before Oct 8?
-   - If not, the default is a conservative global render cap (about 1440p-equivalent, upscaled by the compositor) plus excluding Alfvén on tier 1. That trades sharpness on big displays for frame rate on small Macs.
-5. **Where tester reports go** (BR.5).
-   - A consent-first zip the tester attaches to an email or GitHub issue (**recommended**), or something else.
-   - Default: zip plus a pre-filled GitHub issue link.
-6. **Dead controls** (BR.15).
-   - Hide "Hidden scene families", "Quality ceiling", "Device tier" and the live-adaptation keys for the beta (**recommended**), or wire them now.
-   - Default: hide.
-7. **Local-file use without Screen Recording** (A8 / F17). Local-file sessions don't use the system-audio tap. Letting them start without the permission (**recommended**) removes a scary prompt for local-only testers. Default: allow.
-8. **Non-US testers** (BR.19). If any, use the Mac's region for the iTunes storefront. Default: yes.
-9. **Privacy copy** (BR.16). Adopt "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz." or supply wording. Default: that sentence.
-10. **Scene changes** (E9). Planned crossfades are never performed, and changes are hard cuts on a 2–3 Hz tick. Keep that for the beta (**recommended** unless Matt dislikes it), or crossfade or align to bar lines.
-11. **Recruiting copy.** The CLEAN.2.5b decision's floor excludes Sonoma and Intel testers; the invite and download page should say so.
-12. **D-113** (the Milkdrop authors notification). It is a courtesy decision, triggered by the repo going public on about 08-31, and still open.
-13. **Branch, stash and worktree cleanup** (I19). A list for Matt's review. Nothing is deleted without his yes.
+These are recorded here and in `ENGINEERING_PLAN.md` §Phase BR, not as a D-number yet. The next free D-number on `main` is held by the unmerged `clean-2-5b` branch, and filing past it would break the D-number continuity gate. File one D-entry for this set once that branch merges.
+
+1. **Beta roster: call it at 27.** Oct 1–11 goes to Tier 1–2. DH.0 / SUMI.0 / GG.0 move to the post-beta slate.
+2. **Volumetric Lithograph: ships excluded** (never auto-selected). In practice the roster is 26. Re-measure after the beta.
+3. **Fractal Tree: excluded on pre-Apple8 GPUs** (M1 family) for the beta (BR.1). Try the native path on Apple7 when an M1 is available.
+4. **Tester hardware.** No M1 Air is available, so the low-end default applies. Matt has a 4K display and an M4 MacBook Pro, so the high-resolution half of BR.6 is measured, not guessed.
+   - **Low end (unmeasurable):** a conservative render cap of about 1440p-equivalent, upscaled by the compositor, on tier-1 Macs, and Alfvén excluded on tier 1.
+   - **High resolution (measured):** one session on the M4 MacBook Pro's built-in Retina display (about 2.9–3.5 MP drawn at 2×) and one at 4K (8.3 MP), reading `RENDER_TARGET` and `frame_gpu_ms`. Whether the cap also applies above tier 1 is decided from those numbers.
+   - **The MacBook Pro is also the first laptop run.** It covers:
+     - the display-sleep fix (BR.2) on battery;
+     - Low Power Mode;
+     - a thermal soak;
+     - the fresh-account DMG session, and DIST-LIM's macOS 15 check if that Mac runs 15.
+5. **Tester reports: a consent-first zip plus a pre-filled GitHub issue link** (BR.5).
+6. **Dead controls: hidden for the beta.** That covers "Hidden scene families", "Quality ceiling", "Device tier" and the live-adaptation keys (BR.15). They get wired after the beta.
+7. **Local files start without the Screen Recording permission** (A8 / F17). Local-file sessions don't use the tap.
+8. **Song lookups use the Mac's region** for the iTunes storefront, with the US as the fallback (BR.19).
+9. **Privacy copy:** "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz." (BR.16).
+10. **Scene changes stay hard cuts for the beta** (E9). Crossfades or bar-aligned cuts come after.
+11. **Recruiting copy states macOS 15+ and Apple silicon only.**
+12. **D-113 (the Milkdrop authors notification) stays open.** It remains Matt's call; the default was no default.
+13. **No branch, stash or worktree is deleted** without Matt's per-item yes (I19 remains a list).
 
 ---
 
