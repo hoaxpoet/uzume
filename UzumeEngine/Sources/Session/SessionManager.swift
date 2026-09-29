@@ -223,10 +223,13 @@ public final class SessionManager: ObservableObject {
             tracks = try await connector.connect(source: source)
             logger.info("SessionManager: connected — \(tracks.count) track(s)")
         } catch {
-            logger.info("SessionManager: connection failed (\(error)) — degrading to reactive fallback")
+            // BR.7 (F10): not `.ready` — nothing was prepared. `.preparing` with no tracks shows the
+            // §9.3 recovery screen (pick another playlist / start reactive mode).
+            logger.info("SessionManager: connection failed (\(error)) — showing the recovery screen")
             currentPlan = SessionPlan(tracks: [])
+            preparingTracks = []
             progressiveReadinessLevel = .reactiveFallback
-            state = .ready
+            state = .preparing
             return
         }
 
@@ -329,7 +332,11 @@ public final class SessionManager: ObservableObject {
             )
             self.progressiveReadinessLevel = finalReadiness
 
-            if self.state == .preparing {
+            if self.state == .preparing, finalReadiness == .reactiveFallback {
+                // BR.7 (F10 / C11): every track failed — stay on `.preparing`, where the §9.3
+                // recovery screen shows, instead of a "Ready" with nothing prepared.
+                logger.info("SessionManager: nothing prepared — holding the recovery screen")
+            } else if self.state == .preparing {
                 // BUG-006.1 instrumentation: log the .ready transition with cache
                 // size so we can confirm the engine has a populated cache to wire
                 // (hypothesis 2 discriminator).
@@ -572,6 +579,24 @@ public final class SessionManager: ObservableObject {
         currentPlan = nil
         state = .idle
         logger.info("SessionManager: cancelled — returning to .idle")
+    }
+
+    /// "Start reactive mode" from the preparation recovery screen (BR.7 / F13): stop preparing
+    /// and play live-only, with no plan. `.preparing` → `.playing`; a no-op in any other state.
+    public func startReactiveMode() {
+        guard state == .preparing else { return }
+        streamingSessionGen &+= 1          // a late prep completion must not touch this session
+        preparer.cancelPreparation()
+        sessionPreparationTask?.cancel()
+        sessionPreparationTask = nil
+        statusCancellable?.cancel()
+        statusCancellable = nil
+        preparingTracks = []
+        currentPlan = SessionPlan(tracks: [])
+        progressiveReadinessLevel = .reactiveFallback
+        preparer.isPlaybackActive = true
+        state = .playing
+        logger.info("SessionManager: reactive mode from the recovery screen")
     }
 
     /// End the current session.

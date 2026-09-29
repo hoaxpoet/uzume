@@ -90,14 +90,20 @@ private final class PRDownloader: PreviewDownloading, @unchecked Sendable {
     }
 }
 
+/// No previews anywhere — every track fails (BR.7).
+private final class PRNoPreviewResolver: PreviewResolving, @unchecked Sendable {
+    func resolvePreviewURL(for track: TrackIdentity) async throws -> URL? { nil }
+}
+
 @MainActor
 private func makeSessionManager(
     connector: any PlaylistConnecting,
-    device: MTLDevice
+    device: MTLDevice,
+    resolver: any PreviewResolving = PRResolver()
 ) throws -> SessionManager {
     let sep = try PRStemSeparator(device: device)
     let preparer = SessionPreparer(
-        resolver: PRResolver(),
+        resolver: resolver,
         downloader: PRDownloader(),
         stemSeparator: sep,
         stemAnalyzer: PRStemAnalyzer(),
@@ -286,8 +292,42 @@ struct ProgressiveReadinessTests {
 
         await manager.startSession(source: .appleMusicCurrentPlaylist)
 
-        #expect(manager.state == .ready)
+        // BR.7 (F10): not "Ready" — `.preparing` with no tracks shows the recovery screen.
+        #expect(manager.state == .preparing)
+        #expect(manager.preparingTracks.isEmpty)
         #expect(manager.progressiveReadinessLevel == .reactiveFallback)
+    }
+
+    @Test func everyTrackFailed_holdsPreparing_neverReady() async throws {
+        let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
+        let tracks = (0..<4).map { TrackIdentity(title: "NoPreview \($0)", artist: "A") }
+        let manager = try makeSessionManager(
+            connector: PRConnector(tracks: tracks), device: device, resolver: PRNoPreviewResolver())
+        var states: [SessionState] = []
+        let cancellable = manager.$state.sink { states.append($0) }
+        defer { cancellable.cancel() }
+
+        await manager.startSession(source: .appleMusicCurrentPlaylist)
+        await waitUntilNotPreparing(manager)   // the prep task finishing, not a clock
+
+        #expect(manager.progressiveReadinessLevel == .reactiveFallback)
+        #expect(manager.state == .preparing, "the recovery screen, not a Ready with nothing prepared")
+        #expect(!states.contains(.ready))
+    }
+
+    @Test func startReactiveMode_fromTheRecoveryScreen_playsLiveWithNoPlan() async throws {
+        let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
+        let manager = try makeSessionManager(connector: PRFailingConnector(), device: device)
+        await manager.startSession(source: .appleMusicCurrentPlaylist)
+        #expect(manager.state == .preparing)
+
+        manager.startReactiveMode()
+        #expect(manager.state == .playing)
+        #expect(manager.currentPlan?.tracks.isEmpty == true)
+        #expect(manager.progressiveReadinessLevel == .reactiveFallback)
+
+        manager.startReactiveMode()   // a no-op outside .preparing
+        #expect(manager.state == .playing)
     }
 
     @Test func startNow_belowThreshold_isNoOp() async throws {
