@@ -10,6 +10,15 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-204543] BR.1 — photosensitivity promises the app now keeps (BUG-162, BUG-163)
+
+- **Reduce Motion works from launch (BUG-162).** With macOS Reduce Motion on, the visuals start reduced instead of waiting for the setting to change. macOS "Dim flashing lights" now counts the same way.
+- **The flashing-lights notice can't be skipped.** Opening a file, Finder's "Open With" or a drop now waits for the notice first. Its "Enable Reduce motion" button turns on Uzume's own Reduced motion setting instead of sending you to System Settings.
+- **No Fractal Tree on M1-family Macs (BUG-163).** Those GPUs draw a flashing colour field instead of the tree, so Uzume never picks it there.
+- **The tester build shows only checked scenes.** Shift+→ skips test patterns, diagnostics and uncertified scenes; "Show uncertified scenes" and the user-preset folder are developer-only.
+- **Flash testing covers three more scenes**, all under the limit: Fractal Tree, Ferrofluid Ocean's real lit picture, and Waveform. The check now refuses to "measure" a scene's depth buffer instead of its light.
+- Pending Matt's live checks in listening session 1.
+
 ### [dev-2026-09-29-182455] CLEAN.2.5b — Uzume installs on a stranger's Mac: signed by Plait & Pattern, notarized, one-command DMG
 
 - **A DMG anyone can open.** `Scripts/release.sh` builds a Developer ID–signed, notarized, stapled `Uzume-<version>-<build>.dmg` and checks it 15 ways before calling it done. Opening it shows only macOS's normal "downloaded from the internet" confirmation. Nothing is published; that is a separate call.
