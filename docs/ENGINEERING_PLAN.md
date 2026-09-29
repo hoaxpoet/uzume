@@ -1654,6 +1654,11 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment BUG157.1 — the StemSeparator concurrency test runs its callers on their own threads ✅ (2026-09-29)
+
+**Delivered.** BUG-157 (P3) was filed from one 198 s timeout of `StemSeparatorConcurrencyTests.concurrentSeparations_returnPerCallerOwnStems` and fixed in one increment, as P3 allows. It is the sibling named in BUG-156. The eight separations were queued on a default-QoS dispatch queue behind a pool the parallel suite keeps saturated. They now run on detached threads. Test-only; `StemSeparator` is unchanged; the 180 s budget is unchanged.
+**Done-when:** ✅ mechanism reproduced in-process (queued jobs start 9.79 s into 10 s of saturation; threads start in 0.1 ms; eight real separations take 0.97 s saturated vs 0.90 s idle); ✅ BUG-031 detection kept (lock defeated: red 7/9 on threads vs 5/6 on the old queue); ✅ two full engine runs (2115 tests): the test passed both. An instrumented run timed the body at 3.45 s under full load, with jobs starting at +2.03 s and the wait done at +3.45 s. The 157–170 s Swift Testing reports is the wait before the body gets a thread, which no in-test timeout covers. The only other failures were DocIntegrity: the BUG-number hole at 156 (cleared by rebasing onto main after #310) and the date-driven DOC.6 rotation (already rotated on main); ✅ KNOWN_ISSUES + release notes.
+
 ### Increment BUG156.1 — the end-of-track tests wait on an ordering, not the clock ✅ (2026-09-29)
 
 **Delivered.** BUG-156 (P3) was filed from one `onFileEnded_queueAdvanceChurn_neverHangs` failure on `ff-5` and fixed in one increment, as P3 allows. Root cause, measured: since LFSEEK.1 the queue-advance completion is `.dataPlayedBack`, which AVFAudio delivers from a timer in the process's default-QoS dispatch pool, and the parallel suite keeps that pool saturated. The churn test and `LocalFileSeekTests.seekMovesThePlayhead` now wait with `awaitPlayedBackEnd`: after the 5 s budget, a canary on the same pool decides between late and lost. Test-only; `LocalFilePlaybackProvider` is unchanged. Open product risk (unobserved) recorded in KNOWN_ISSUES.
