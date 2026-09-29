@@ -206,6 +206,8 @@
 		K10016 /* PresetCategoryBlocklistPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = K20016; };
 		K10020 /* PresetScoringContextProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = K20020; };
 		K10022 /* SessionRecorderRetentionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = K20022; };
+		CL1001 /* BuildFlavor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CL2001; };
+		CL1002 /* BuildFlavorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CL2002; };
 		K10040 /* SettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = K20040; };
 		K10041 /* SettingsMigratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = K20041; };
 		K10901 /* IdentityMigratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = K20901; };
@@ -437,6 +439,8 @@
 		K20016 /* PresetCategoryBlocklistPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetCategoryBlocklistPicker.swift; sourceTree = "<group>"; };
 		K20020 /* PresetScoringContextProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetScoringContextProvider.swift; sourceTree = "<group>"; };
 		K20022 /* SessionRecorderRetentionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRecorderRetentionPolicy.swift; sourceTree = "<group>"; };
+		CL2001 /* BuildFlavor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildFlavor.swift; sourceTree = "<group>"; };
+		CL2002 /* BuildFlavorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildFlavorTests.swift; sourceTree = "<group>"; };
 		K20040 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		K20041 /* SettingsMigratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMigratorTests.swift; sourceTree = "<group>"; };
 		K20901 /* IdentityMigratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityMigratorTests.swift; sourceTree = "<group>"; };
@@ -678,6 +682,7 @@
 				K20900 /* IdentityMigrator.swift */,
 				K20020 /* PresetScoringContextProvider.swift */,
 				K20022 /* SessionRecorderRetentionPolicy.swift */,
+				CL2001 /* BuildFlavor.swift */,
 				L20001 /* AccessibilityState.swift */,
 				L20002 /* AccessibilityLabels.swift */,
 				M20001 /* DisplayChangeCoordinator.swift */,
@@ -854,6 +859,7 @@
 				O20006 /* DashboardOverlayViewModelTests.swift */,
 				P20001 /* SettingsStoreEnvironmentRegressionTests.swift */,
 				P20002 /* EndedViewTests.swift */,
+				CL2002 /* BuildFlavorTests.swift */,
 				P20003 /* ConnectingViewCancelTests.swift */,
 				P20004 /* PlaybackChromeIndexBindingTests.swift */,
 				P20005 /* OrchestratorWiringRegressionTests.swift */,
@@ -1096,6 +1102,7 @@
 				K10016 /* PresetCategoryBlocklistPicker.swift in Sources */,
 				K10020 /* PresetScoringContextProvider.swift in Sources */,
 				K10022 /* SessionRecorderRetentionPolicy.swift in Sources */,
+				CL1001 /* BuildFlavor.swift in Sources */,
 				L10001 /* AccessibilityState.swift in Sources */,
 				L10002 /* AccessibilityLabels.swift in Sources */,
 				L10010 /* QualityGradeIndicator.swift in Sources */,
@@ -1182,6 +1189,7 @@
 				O10006 /* DashboardOverlayViewModelTests.swift in Sources */,
 				P10001 /* SettingsStoreEnvironmentRegressionTests.swift in Sources */,
 				P10002 /* EndedViewTests.swift in Sources */,
+				CL1002 /* BuildFlavorTests.swift in Sources */,
 				P10003 /* ConnectingViewCancelTests.swift in Sources */,
 				P10004 /* PlaybackChromeIndexBindingTests.swift in Sources */,
 				P10005 /* OrchestratorWiringRegressionTests.swift in Sources */,

@@ -10,35 +10,38 @@ struct DiagnosticsSettingsSection: View {
 
     var body: some View {
         Form {
-            Section(NSLocalizedString("settings.diagnostics.recorder.title", comment: "")) {
-                Toggle(
-                    NSLocalizedString("settings.diagnostics.recorder.label", comment: ""),
-                    isOn: Binding(
-                        get: { viewModel.sessionRecorderEnabled },
-                        set: { viewModel.sessionRecorderEnabled = $0 }
+            // BUG-157: the public build keeps no session records, so nothing here applies.
+            if BuildFlavor.current.recordsSessions {
+                Section(NSLocalizedString("settings.diagnostics.recorder.title", comment: "")) {
+                    Toggle(
+                        NSLocalizedString("settings.diagnostics.recorder.label", comment: ""),
+                        isOn: Binding(
+                            get: { viewModel.sessionRecorderEnabled },
+                            set: { viewModel.sessionRecorderEnabled = $0 }
+                        )
                     )
-                )
-                Text(NSLocalizedString("settings.diagnostics.recorder.caption", comment: ""))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    Text(NSLocalizedString("settings.diagnostics.recorder.caption", comment: ""))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
 
-                Picker(
-                    NSLocalizedString("settings.diagnostics.retention.label", comment: ""),
-                    selection: Binding(
-                        get: { viewModel.sessionRetention },
-                        set: { viewModel.sessionRetention = $0 }
-                    )
-                ) {
-                    Text(NSLocalizedString("settings.diagnostics.retention.last10", comment: ""))
-                        .tag(SessionRetentionPolicy.lastN10)
-                    Text(NSLocalizedString("settings.diagnostics.retention.last25", comment: ""))
-                        .tag(SessionRetentionPolicy.lastN25)
-                    Text(NSLocalizedString("settings.diagnostics.retention.keep_all", comment: ""))
-                        .tag(SessionRetentionPolicy.keepAll)
-                    Text(NSLocalizedString("settings.diagnostics.retention.one_day", comment: ""))
-                        .tag(SessionRetentionPolicy.oneDay)
-                    Text(NSLocalizedString("settings.diagnostics.retention.one_week", comment: ""))
-                        .tag(SessionRetentionPolicy.oneWeek)
+                    Picker(
+                        NSLocalizedString("settings.diagnostics.retention.label", comment: ""),
+                        selection: Binding(
+                            get: { viewModel.sessionRetention },
+                            set: { viewModel.sessionRetention = $0 }
+                        )
+                    ) {
+                        Text(NSLocalizedString("settings.diagnostics.retention.last10", comment: ""))
+                            .tag(SessionRetentionPolicy.lastN10)
+                        Text(NSLocalizedString("settings.diagnostics.retention.last25", comment: ""))
+                            .tag(SessionRetentionPolicy.lastN25)
+                        Text(NSLocalizedString("settings.diagnostics.retention.keep_all", comment: ""))
+                            .tag(SessionRetentionPolicy.keepAll)
+                        Text(NSLocalizedString("settings.diagnostics.retention.one_day", comment: ""))
+                            .tag(SessionRetentionPolicy.oneDay)
+                        Text(NSLocalizedString("settings.diagnostics.retention.one_week", comment: ""))
+                            .tag(SessionRetentionPolicy.oneWeek)
+                    }
                 }
             }
 
@@ -47,8 +50,10 @@ struct DiagnosticsSettingsSection: View {
             // frame-budget overruns; a separate toast surface was redundant.
 
             Section {
-                Button(NSLocalizedString("settings.diagnostics.open_sessions_folder", comment: "")) {
-                    viewModel.openSessionsFolder()
+                if BuildFlavor.current.recordsSessions {
+                    Button(NSLocalizedString("settings.diagnostics.open_sessions_folder", comment: "")) {
+                        viewModel.openSessionsFolder()
+                    }
                 }
 
                 Button(NSLocalizedString("settings.diagnostics.reset_onboarding", comment: ""), role: .destructive) {

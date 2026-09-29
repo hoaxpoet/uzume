@@ -48,7 +48,10 @@ struct UzumeApp: App {
         // Read the key directly to avoid a second SettingsStore allocation before @StateObject init.
         let rawPolicy = UserDefaults.standard.string(forKey: "uzume.settings.diagnostics.sessionRetention")
         let policy = SessionRetentionPolicy(rawValue: rawPolicy ?? "") ?? .lastN10
-        SessionRecorderRetentionPolicy.apply(policy: policy)
+        // The public build keeps no session records and never touches ~/Documents (BUG-157).
+        if BuildFlavor.current.recordsSessions {
+            SessionRecorderRetentionPolicy.apply(policy: policy)
+        }
         // Register Epilogue + Clash Display from the Renderer bundle so the
         // SwiftUI dashboard can resolve them via `.custom(_:size:)`. Falls back
         // silently to system fonts if the TTF/OTF files aren't bundled

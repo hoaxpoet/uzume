@@ -85,8 +85,11 @@ mkdir -p "$OUT"
 step "4/9 archiving (Release) — log: $OUT/archive.log"
 # ARCHS on the command line, not only in the pbxproj: SPM package targets don't
 # inherit the project's ARCHS, and the engine's Float16 doesn't exist on x86_64.
+# UZUME_BUILD_FLAVOR=public makes this the public build (BuildFlavor.swift): no
+# developer-only features, e.g. no session records in ~/Documents (BUG-157).
 xcodebuild -scheme "$SCHEME" -configuration Release -destination 'generic/platform=macOS' \
-  -archivePath "$ARCHIVE" -allowProvisioningUpdates ARCHS=arm64 archive > "$OUT/archive.log" 2>&1 \
+  -archivePath "$ARCHIVE" -allowProvisioningUpdates ARCHS=arm64 \
+  UZUME_BUILD_FLAVOR=public archive > "$OUT/archive.log" 2>&1 \
   || { tail -40 "$OUT/archive.log" >&2; die "xcodebuild archive"; }
 echo "archived: $ARCHIVE"
 
@@ -180,6 +183,10 @@ expect "Gatekeeper accepts the DMG" "$GKD" "accepted"
 
 check "stapled ticket on the app" xcrun stapler validate "$APP"
 check "stapled ticket on the DMG" xcrun stapler validate "$DMG"
+
+FLAVOR="$(plutil -extract UzumeBuildFlavor raw -o - "$APP/Contents/Info.plist" 2>/dev/null || true)"
+echo "--- UzumeBuildFlavor: $FLAVOR"
+expect "public build (no developer-only features)" "$FLAVOR" "^public$"
 
 ARCHS="$(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"; echo "--- lipo -archs: $ARCHS"
 expect "arm64 only" "$ARCHS" "^arm64$"

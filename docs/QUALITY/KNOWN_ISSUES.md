@@ -448,7 +448,7 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 **Decision (Matt, 2026-09-29).** *"For the public release, why do we need a diagnostic record of every session? We need to start distinguishing between the developer version of the app and the public release, which would have few features."* The public build records no sessions and never touches Documents; developer builds (Debug and Release) keep recording.
 
-**Verification criteria (written before the fix).** (1) Automated: `BuildFlavorTests` — the developer flavor records sessions, the public flavor does not — and `Scripts/release.sh` fails unless its archive compiled the app with `UZUME_PUBLIC`. (2) Manual: Task 8 on a fresh account shows no Documents question, and the rehearsal on Matt's account after resetting the Documents grant shows none either.
+**Verification criteria (written before the fix).** (1) Automated: `BuildFlavorTests` — the developer flavor records sessions, the public flavor does not — and `Scripts/release.sh` fails unless the exported app's Info.plist says `UzumeBuildFlavor = public`. (2) Manual: Task 8 on a fresh account shows no Documents question, and the rehearsal on Matt's account after resetting the Documents grant shows none either.
 
 ### BUG-158 — the Settings "record sessions" switch does nothing (2026-09-29)
 

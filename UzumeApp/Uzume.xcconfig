@@ -16,6 +16,10 @@ SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 // Scripts/release.sh (CLEAN.2.5b).
 #include "Version.xcconfig"
 
+// Developer vs public build (BuildFlavor.swift, BUG-157). Only Scripts/release.sh
+// overrides this to `public`; it reaches the app as Info.plist `UzumeBuildFlavor`.
+UZUME_BUILD_FLAVOR = developer
+
 // Spotify Web API client ID for the OAuth Authorization Code + PKCE flow.
 // PKCE uses only the public client ID — NO client secret (a native app must
 // not embed one). Do NOT put a real value here — this file is checked in.
