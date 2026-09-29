@@ -10,6 +10,11 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-213501] BR.3 — a Spotify / Apple Music song change no longer risks corrupting memory (BUG-165)
+
+- **Song changes are handled on the right threads.** When the streaming app moved to the next song, Uzume reset its scene and analysis state from a background thread while the visuals were still drawing, a crash or memory-corruption risk on every song change. Each reset now runs where that state lives.
+- Verified with ThreadSanitizer: the old way produced 100 race reports in the stress test; the new way produces none.
+
 ### [dev-2026-09-29-204543] BR.1 — photosensitivity promises the app now keeps (BUG-163, BUG-164)
 
 - **Reduce Motion works from launch (BUG-163).** With macOS Reduce Motion on, the visuals start reduced instead of waiting for the setting to change. macOS "Dim flashing lights" now counts the same way.
