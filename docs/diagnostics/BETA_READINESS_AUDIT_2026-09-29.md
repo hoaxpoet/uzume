@@ -405,6 +405,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Pause Spotify for 30 s or more, then end and restart: the tap race, and E2.
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - Judge stem timing at 4K: BUG-106.
+   - Start a long Spotify playlist early (Start now) and watch the first minutes while preparation continues behind playback: no energy / stem twitch each time a song finishes preparing (BR.9).
    - On the M4 MacBook Pro on battery, leave a session untouched past the display-off interval and run `pmset -g assertions` mid-session: BUG-162 (BR.2).
 3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM. Then force-quit Uzume and reopen it: it offers a problem report; create one and check the zip opens in Finder and the GitHub issue page opens (BUG-166, BR.5).
 
