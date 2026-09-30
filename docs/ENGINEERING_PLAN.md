@@ -245,7 +245,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.4** | 1 | ✅ fixed, PR open (P2 lines under AUDIT-2026-09-29) | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
 | **BR.5** | 1 | ✅ merged (#319) — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
 | **BR.6** | 1 | 🔨 BR.6a ✅ merged (#320, BUG-167); BR.6b cap + Alfvén exclusion ✅ merged (#325, BUG-168) — M4 / 4K measurement is Matt's | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
-| **BR.7** | 2 | ready | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
+| **BR.7** | 2 | ✅ fixed, PR open (BUG-169 + P2 lines) | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
 | **BR.8** | 2 | ready | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ready | Background preparation gets its own analyzers (C3/G3) |
 | **BR.10** | 2 | ready | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.7 — preparation never strands the tester ✅ (2026-09-29)
+
+**Delivered.** Audit C2 → BUG-169 (a failed track among the first three no longer hides Start now), plus F10/C11 (no Ready with nothing prepared: the §9.3 recovery screen holds), F13 (the recovery screen's reactive escape is wired; no "offline" for local files), F11 (Cancel during Connecting sticks) and C10 (missing ML weights say so at launch).
+**Done-when:** ✅ a failed track in 1–3 doesn't block Start now; ✅ no `.ready` with nothing prepared; ✅ the reactive-mode escape is wired; ✅ no offline screen for local files; ✅ missing weights say so (live: Weights folder hidden → notice + log line); ✅ Cancel during Connecting sticks (gated-connector test, both branches). Every engine-side change is negative-controlled.
+**Not done:** the preparation banners' own reactive/retry buttons; a build-phase weights check.
 
 ### Increment BR.4 — the public build shows testers only tester things ✅ (2026-09-29)
 

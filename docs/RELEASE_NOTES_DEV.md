@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-234710] BR.7 — preparation never strands the tester (BUG-169)
+
+- **"Start now" appears even if one of the first songs has no preview.** Before, a single missing preview among the first three songs (about one Spotify scan in five) kept testers waiting for the whole playlist, with only Cancel.
+- **No "Ready" when nothing could be prepared.** A failed connection or a playlist with no usable previews now shows the "couldn't prepare" screen, whose "Start reactive mode" button now works.
+- **Cancel while connecting stays cancelled.**
+- **No false "You're offline" for local files.**
+- **If Uzume's analysis files are missing, it says so** instead of quietly preparing nothing.
 ### [dev-2026-09-29-231449] BR.4 — the tester build shows only tester things
 
 - **The "Uzume isn't hearing any audio" card no longer tells testers to use Terminal**, and no longer appears while they're still opening Spotify. A frozen audio connection still shows it.

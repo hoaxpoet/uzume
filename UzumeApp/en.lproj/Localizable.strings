@@ -581,6 +581,9 @@
 "report.issue.title"                  = "Problem report: ";
 "report.issue.body"                   = "**What happened?**\n\n\n**What did you expect?**\n\n\nPlease drag %1$@ (shown in Finder) into this issue.\n\n`%2$@`";
 
+/* BR.7 (C10) — the ML weights are missing or damaged */
+"analysis_unavailable.title" = "Uzume can’t analyse music on this Mac";
+"analysis_unavailable.body"  = "Some of Uzume’s files are missing or damaged, so it can’t prepare playlists and will only follow the music live. Download and reinstall Uzume to fix this.";
 /* BR.4 (F18) — keys the Settings views referenced that did not exist (they showed as raw keys) */
 "settings.about.app.title"               = "Uzume";
 "settings.about.copy_debug_info.caption" = "Copies the version, macOS and graphics chip, for a bug report. No audio or personal data.";
