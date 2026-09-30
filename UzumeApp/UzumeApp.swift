@@ -260,6 +260,15 @@ struct UzumeApp: App {
                 }
             }
         }
+
+        // BR.14 / F6: Settings from every screen — Uzume › Settings… and ⌘, (the Idle gear opens
+        // it too). Playback keeps its own sheet from the chrome's gear.
+        Settings {
+            SettingsView(store: settingsStore)
+                .preferredColorScheme(.dark)
+                .environmentObject(engine)
+                .environmentObject(recentsStore)
+        }
     }
 
     // MARK: - LF.5 file-association dispatch

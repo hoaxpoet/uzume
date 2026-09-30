@@ -87,11 +87,27 @@ struct EscBehaviorTests {
 
     /// Source shape: playback no longer reads `NSApp.keyWindow`; Esc closes help before anything else.
     @Test func playbackTakesItsWindowFromTheView() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
             .appendingPathComponent("UzumeApp/Views/Playback/PlaybackView.swift")
         let src = try String(contentsOf: url, encoding: .utf8)
         #expect(!src.contains("NSApp.keyWindow"))
         #expect(src.contains(".background(HostWindowReader { attachWindow($0) })"))
         #expect(src.contains("if showHelp {"))
+    }
+
+    /// BR.14 / F6: Settings from every screen — a `Settings` scene (Uzume › Settings…, ⌘,)
+    /// carrying the environment its sections read, and the Idle gear (UX_SPEC §4.1).
+    @Test func settingsIsReachableOutsidePlayback() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let app = try String(contentsOf: root.appendingPathComponent("UzumeApp/UzumeApp.swift"), encoding: .utf8)
+        let scene = try #require(app.range(of: "        Settings {\n"))
+        let body = app[scene.lowerBound...].prefix(400)
+        #expect(body.contains("SettingsView(store: settingsStore)"))
+        #expect(body.contains(".environmentObject(engine)") && body.contains(".environmentObject(recentsStore)"))
+        let idlePath = root.appendingPathComponent("UzumeApp/Views/Idle/IdleView.swift")
+        let idle = try String(contentsOf: idlePath, encoding: .utf8)
+        #expect(idle.contains("SettingsLink {"))
     }
 }

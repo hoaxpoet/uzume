@@ -24,7 +24,9 @@ struct DisplayManagerTests {
         let fo = FullscreenObserver()
         let dm = DisplayManager(fullscreenObserver: fo)
         #expect(dm.primaryScreen == NSScreen.screens.first)
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
             .appendingPathComponent("UzumeApp/Services/DisplayManager.swift")
         let code = try String(contentsOf: url, encoding: .utf8)
             .split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }

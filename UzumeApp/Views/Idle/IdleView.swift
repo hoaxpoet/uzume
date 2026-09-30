@@ -13,6 +13,7 @@ struct IdleView: View {
     static let accessibilityID        = "uzume.view.idle"
     static let connectButtonID        = "uzume.idle.connectPlaylist"
     static let adHocButtonID          = "uzume.idle.startListening"
+    static let settingsButtonID       = "uzume.idle.settings"
 
     @EnvironmentObject private var engine: VisualizerEngine
     @EnvironmentObject private var errorStore: LocalFileErrorStore
@@ -62,6 +63,18 @@ struct IdleView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // UX_SPEC §4.1 (BR.14 / F6): the tertiary Settings gear, top-right.
+        .overlay(alignment: .topTrailing) {
+            SettingsLink {
+                Image(systemName: "gearshape")
+                    .foregroundColor(UzumeAppColor.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help(String(localized: "playback.controls.settings.tooltip"))
+            .accessibilityLabel(String(localized: "playback.controls.settings.tooltip"))
+            .accessibilityIdentifier(Self.settingsButtonID)
+            .padding(16)
+        }
         .background(UzumeAppColor.canvas)
         .accessibilityIdentifier(Self.accessibilityID)
         .sheet(isPresented: $showConnectorPicker, onDismiss: startPendingConnection) {
