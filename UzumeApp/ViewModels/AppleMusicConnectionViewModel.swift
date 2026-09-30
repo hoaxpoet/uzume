@@ -10,8 +10,7 @@
 //                               error -1728 (no track) and -1743 (automation denied). Both
 //                               produce an empty array; the connector does not throw.
 //     other error             → .error(localizedDescription)
-// - TODO(U.3-followup): Extend PlaylistConnectorError with .noCurrentPlaylist and
-//   .permissionDenied for proper error distinguishment. Add -1743 detection in connector.
+// - BR.10: -1743 → PlaylistConnectorError.automationPermissionDenied → .permissionDenied.
 
 import AppKit
 import Combine
@@ -118,6 +117,10 @@ final class AppleMusicConnectionViewModel: ObservableObject {
         } catch PlaylistConnectorError.appleMusicNotRunning {
             guard !Task.isCancelled else { return }
             state = .notRunning
+        } catch PlaylistConnectorError.automationPermissionDenied {
+            // BR.10 (C6 / F12): the screen that already exists, instead of "Checking every 2 s…" forever.
+            guard !Task.isCancelled else { return }
+            state = .permissionDenied
         } catch {
             guard !Task.isCancelled else { return }
             state = .error(userMessage(for: error))

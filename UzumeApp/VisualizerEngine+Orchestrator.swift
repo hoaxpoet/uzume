@@ -345,11 +345,16 @@ extension VisualizerEngine {
     func runOrchestratorLiveUpdate(mir: MIRPipeline) {
         guard analysisFrameCount % Self.orchestratorWireFrameDivisor == 0 else { return }
 
-        let snapshot = orchestratorLock.withLock {
-            OrchestratorWireSnapshot(
-                hasPlan: livePlan != nil,
-                trackIndex: liveTrackPlanIndex
-            )
+        let (snapshot, nowPlayingGone) = orchestratorLock.withLock {
+            (OrchestratorWireSnapshot(hasPlan: livePlan != nil, trackIndex: liveTrackPlanIndex),
+             nowPlayingUnavailable)
+        }
+
+        // BR.10 (E1): a plan but no now-playing, ever (Automation denied) — run reactive rather
+        // than freeze on the first scene with track 1's grid for the whole playlist.
+        if snapshot.hasPlan, snapshot.trackIndex == nil, nowPlayingGone {
+            applyReactiveUpdate(boundary: mir.latestStructuralPrediction)
+            return
         }
 
         if snapshot.hasPlan, snapshot.trackIndex == nil {

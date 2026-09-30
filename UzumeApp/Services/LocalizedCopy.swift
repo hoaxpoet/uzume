@@ -96,6 +96,8 @@ enum LocalizedCopy {
             return loc("error.playback.negative_nudge_twice")
         case .rePlanSucceeded:
             return loc("error.playback.replan_succeeded")
+        case .nowPlayingPermissionDenied(let appName):
+            return String(format: loc("error.playback.nowplaying_permission_denied"), appName, appName)
         }
     }
 

@@ -85,6 +85,7 @@ reads" are not reads — see the entry.)*
 | BUG-169 | P1 · **FIXED 2026-09-29 (BR.7, `ad30a7b2`)** — one failed track among the first three hid "Start now" until the whole playlist was prepared | session / preparation | **The readiness prefix counted only an unbroken run of `.ready` tracks from position 1**, so a no-preview track in rows 1–3 (≈1 Spotify-scan session in 5) held Preparing for minutes with only Cancel (audit C2). Fix: terminal non-ready tracks are skipped. Detail below |
 | BUG-170 | P1 · **FIXED 2026-09-29 (BR.8, `6d78eaf3`)** — a playlist over ~64 tracks lost its preparation before it played | session / cache | **The in-memory cache capped at 64 entries of ~7 MB each, and streaming preparation runs ~30× ahead of playback**, so tracks ~6–56 of a 120-track playlist were evicted unplayed and nothing re-prepared them (audit C1). Fix: entries keep no stem audio (nothing reads it); the cap is a 2048 safety bound. Detail below |
 | BUG-171 | P1 · **FIXED 2026-09-29 (BR.9)** — background preparation disturbed the live visuals' drivers | session / dsp.stem | **The preparer shared the live `StemAnalyzer` and `MoodClassifier`**, so each track landing behind playback pushed another song's frames through the live AGC and mood (audit C3/G3). Fix: the preparer has its own. Detail below |
+| BUG-172 | P1 · **FIXED 2026-09-29 (BR.10, `e28da378`) — pending live check (listening session 3)** — declining "control Spotify / Music" froze the session on one scene | session / app | **Automation denial (−1743) was swallowed**: streaming froze on the first scene with track 1's grid for every song; Apple Music looped "Checking every 2 seconds…" (audit E1, I3/A6/C6/F12). Fix: detected on both paths; streaming runs reactive with a toast; Apple Music shows its permission screen. Detail below |
 | BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
@@ -649,6 +650,29 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 **Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
 
 **Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
+
+### BUG-172 — declining "control Spotify / Music" froze the session on one scene (2026-09-29)
+
+*(Numbering: filed as BUG-168 on `br-10`; renumbered to BUG-172 behind BR.6b, BR.7, BR.8 and BR.9.)*
+
+**Severity:** P1 (a common first-run choice breaks the session with no explanation) · **Domain:** session / app · **Failure class:** `pipeline-wiring` · **Status:** Fixed 2026-09-29 (BR.10, `e28da378`) — **pending live check** (listening session 3: fresh account, click Don't Allow on the Spotify and Music prompts)
+
+**Actual** (audit E1 VERIFIED; I3/A6/C6/F12 ✔︎).
+- **Streaming.** `StreamingMetadata` logged −1743 at `.debug` and returned nil. No track change ever fired, so the orchestrator returned early on every tick. The whole playlist ran on the starting scene with track 1's pre-fired grid and stems, and the title read "—". Spotify testers first meet the prompt at Ready, and its copy ("to display what's currently playing") made declining look harmless.
+- **Apple Music.** `PlaylistConnector` turned −1743 into an empty playlist, so the view looped "Checking every 2 seconds…" forever. The `.permissionDenied` screen was unreachable (a TODO since 2026-04-23).
+- **Polling (E12/E14).** Local-file sessions polled Music and Spotify (prompts mid-session; a playing streaming app overrode the local track), and Spotify sessions prompted for Music.
+
+**Fix.**
+- Apple Music: −1743 → `PlaylistConnectorError.automationPermissionDenied` → the existing `.permissionDenied` screen.
+- Streaming: the poll returns playing / nothing / `automationDenied`, reported once per observation. The engine then:
+  - sets `nowPlayingUnavailable`, so a planned session runs **reactive** instead of freezing;
+  - drops the track-1 pre-fire;
+  - publishes `nowPlayingDeniedApp`, which the playback error bridge shows as a toast naming the app and the Automation setting (new `UserFacingError.nowPlayingPermissionDenied`, UX_SPEC §9.4).
+  - Both flags are cleared at every session boundary and on a real track change.
+- Polling: local-file modes start no poller; a streaming session asks only its own app, and never a closed one.
+- `NSAppleEventsUsageDescription` is reworded to say what declining costs.
+
+**Gates.** `NowPlayingPermissionTests` (denial reported once per observation, again after restart, ordered on poll count; which apps are asked; local-file modes don't poll); `PlaylistConnectorTests` (−1743 case); `AppleMusicConnectionViewModelTests` (→ `.permissionDenied`, no retry loop); `NowPlayingDenialWiringTests` (reactive fallback, toast, clearing on every path; source shape); `UserFacingErrorTests` (30 cases).
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -2976,6 +3000,7 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **E1 / I3 / A6 / C6 / F12 → BUG-172** (BR.10, 2026-09-29); **E12 / E14** fixed in the same increment (only the session's own app is polled; none for local files).
 - **C3 / G3 → BUG-171** (BR.9, 2026-09-29): fixed.
 - **C1 → BUG-170** (BR.8, 2026-09-29): fixed.
 - **BR.7 (2026-09-29).** C2 → **BUG-169**. The rest, fixed in the same increment:

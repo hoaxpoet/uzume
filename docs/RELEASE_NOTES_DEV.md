@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-004428] BR.10 — saying no to "control Spotify / Music" no longer breaks the session (BUG-172)
+
+- **Spotify or Music, permission declined:** Uzume says what's happening and where to allow it, and keeps choosing scenes by listening, instead of showing one scene for the whole playlist.
+- **Apple Music, permission declined:** the "allow Uzume in System Settings" screen appears, instead of "Checking every 2 seconds…" forever.
+- **Fewer permission prompts.** A Spotify session no longer asks to control Music, and local-file sessions don't ask about either.
+- The macOS prompt now says what declining costs.
 ### [dev-2026-09-30-001436] BR.9 — preparing the next songs no longer disturbs the visuals (BUG-171)
 
 - **The visuals no longer twitch while Uzume prepares songs in the background.** Preparation shared the live analysers, so each prepared song briefly pulled the energy and mood readings toward a different song. It now uses its own.

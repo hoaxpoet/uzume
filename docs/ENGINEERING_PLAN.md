@@ -248,7 +248,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.7** | 2 | ✅ fixed, PR open (BUG-169 + P2 lines) | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
 | **BR.8** | 2 | ✅ fixed, PR open (BUG-170) | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ✅ fixed, PR open (BUG-171) | Background preparation gets its own analyzers (C3/G3) |
-| **BR.10** | 2 | ready | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
+| **BR.10** | 2 | ✅ fixed, PR open (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
 | **BR.11** | 2 | ready | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
 | **BR.12** | 2 | ready | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
 | **BR.13** | 2 | ready | Local-file transport (B3/BUG-056, B4, B10) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.10 — the "control Spotify / Music" permission and its fallbacks ✅ (2026-09-29, pending live check)
+
+**Delivered.** Audit E1, I3/A6/C6/F12 → BUG-172, plus E12/E14. −1743 is detected on both paths: Apple Music shows its permission screen; a streaming session runs reactive with a toast that names the app and the Automation setting. Only the session's own app is polled, and nothing in local-file sessions. The Automation prompt copy is reworded.
+**Done-when:** ✅ −1743 detected on both paths, and the existing permission screen (Apple Music) or a toast (streaming) appears (tests); ✅ a streaming session with no now-playing falls back to reactive mode (wired on denial; source-shape test); ✅ only the session's own source is polled (tests); ✅ `NSAppleEventsUsageDescription` reworded.
+**Not done:** reactive fallback when now-playing is merely *absent* (web player, another app) without a denial — the session still waits for a matching track then; an "Open Automation settings" button in the toast (toasts carry no action).
 
 ### Increment BR.9 — background preparation gets its own analyzers ✅ (2026-09-29)
 

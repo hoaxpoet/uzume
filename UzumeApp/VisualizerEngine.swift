@@ -110,6 +110,15 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// the MainActor.
     let userFacingErrorSubject = PassthroughSubject<UserFacingError, Never>()
 
+    /// BR.10 (E1): the streaming app whose Automation access macOS denied ("Spotify" / "Music"),
+    /// or nil. Published (not one-shot) because the denial usually lands at Ready, before the
+    /// playback view's error bridge exists; the bridge reads it on appear. Cleared at every
+    /// session boundary and on a real track change.
+    @Published var nowPlayingDeniedApp: String?
+
+    /// The streaming Now Playing poller (BR.10: told which app to ask, and reports denial).
+    var streamingMetadata: StreamingMetadata?
+
     /// Raw album-artwork bytes for the live track (PNG / JPEG, depending on
     /// container). LF.6: populated alongside `currentTrack` for local-file
     /// sessions from the LF.5 persistent cache's `artwork.bin` sibling.
@@ -838,6 +847,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// analysis-queue mirror — same value, different access discipline.
     var liveTrackPlanIndex: Int?
 
+    /// BR.10 (E1): no now-playing can ever arrive (Automation denied), so a planned session runs
+    /// reactive instead of freezing on its first scene. Under `orchestratorLock`.
+    var nowPlayingUnavailable = false
+
     /// Once-per-track diagnostic latch for `runOrchestratorLiveUpdate(mir:)`
     /// (BUG-015 follow-up). When `false`, the next wire tick that actually
     /// reaches `applyLiveUpdate(...)` emits one `Orchestrator: wire active`
@@ -1123,6 +1136,11 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .sink { [weak self] newState in
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
+                if newState == .connecting || newState == .preparing {
+                    // BR.10: a new session starts with now-playing assumed available.
+                    self.orchestratorLock.withLock { self.nowPlayingUnavailable = false }
+                    self.nowPlayingDeniedApp = nil
+                }
                 self.playbackDuration.update(state: newState)
                 if newState == .connecting {
                     self.currentSessionPlanSeed = nil

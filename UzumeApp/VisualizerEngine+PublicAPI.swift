@@ -128,7 +128,15 @@ extension VisualizerEngine {
     }
 
     /// Start Core Audio tap capture (requires screen capture permission).
+    @MainActor
     private func startAudioCapture() {
+        // BR.10 (E14): ask only the session's own app — a Spotify session never prompts to
+        // control Music, and vice versa. An ad-hoc session asks both.
+        if case .playlist(let source)? = sessionManager.currentSource {
+            streamingMetadata?.allowedSources = source.isSpotify ? [.spotify] : [.appleMusic]
+        } else {
+            streamingMetadata?.allowedSources = [.appleMusic, .spotify]
+        }
         if let audioRouter = router as? AudioInputRouter {
             do {
                 try audioRouter.start(mode: .systemAudio)
