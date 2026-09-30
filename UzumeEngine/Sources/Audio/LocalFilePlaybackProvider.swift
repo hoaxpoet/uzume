@@ -618,9 +618,12 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // Read outside `lock`: the clock-queue hop must not nest inside it.
         let played = clock?.lastKnownPlayheadSeconds
         lock.withLock {
-            startSeconds = Self.resumeSeconds(played: played, fallback: startSeconds,
-                                              fileLength: file.length,
-                                              sampleRate: file.processingFormat.sampleRate)
+            startSeconds = Self.resumeSeconds(
+                played: played,
+                fallback: startSeconds,
+                fileLength: file.length,
+                sampleRate: file.processingFormat.sampleRate
+            )
             startPaused = userPaused
         }
         do {
