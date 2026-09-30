@@ -37,13 +37,11 @@ final class LiveAdaptationToastBridge {
 
     static let userDefaultsKey = "uzume.settings.visuals.showLiveAdaptationToasts"
 
-    // U.6b: default flipped to true for fresh installs.
-    // Existing users who explicitly set the key (either way) keep their choice.
-    private var isEnabled: Bool {
-        guard UserDefaults.standard.object(forKey: Self.userDefaultsKey) != nil else {
-            return true  // Key not set → new install → default on.
-        }
-        return UserDefaults.standard.bool(forKey: Self.userDefaultsKey)
+    // Off until the listener turns it on (UX_SPEC §7.4 / §8; Matt 2026-09-30, BR.15 — reverses
+    // U.6b's default-on, under which the Settings toggle read "off" while toasts showed).
+    // A stored choice, either way, is kept.
+    var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.userDefaultsKey)
     }
 
     // MARK: - Coalescing

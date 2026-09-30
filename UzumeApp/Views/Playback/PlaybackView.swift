@@ -220,7 +220,7 @@ struct PlaybackView: View {
     private func setup() {
         engine.startAudio()
 
-        // Build live-adaptation toast bridge (default on per U.6b).
+        // Build live-adaptation toast bridge (off until the listener turns it on — BR.15).
         let toastBridge = LiveAdaptationToastBridge(toastManager: toastManager)
 
         // Build action router — U.6b: uses live factory wired to the engine.
