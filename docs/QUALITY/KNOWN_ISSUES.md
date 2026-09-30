@@ -3045,6 +3045,11 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.16 (2026-09-30), honest copy and credits (P2, tracked here):**
+  - **A7** — the permission screens, both Info.plist usage strings and the scan permission now say *"Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz."* (decision 9); UX_SPEC, the tester notes and SECURITY_POSTURE follow. Fixed.
+  - **C13** — MusicBrainz lookups share one process-wide `RateGate`: one request per second (test).
+  - **K7 / H9** — Settings › About › Acknowledgements credits Beat This!, Open-Unmix, PANNs (CC BY 4.0) + AudioSet, nimitz's "Auroras" (CC BY-NC-SA 3.0), WebGL Fluid Simulation, the CMU mocap database (its requested wording) and the eight Milkdrop-inspired scenes, each linking to its source, plus a link to CREDITS.md. The licence line no longer claims MIT for everything. CREDITS.md's table gains Stave. Fixed (test: every row resolves and the named credits are present).
+  - **F16** — Settings no longer says "© 2026 Uzume contributors". **Open, Matt's call (CLEAN.2.5b §6):** the About box says "© 2026 Plait & Pattern" while `LICENSE` says "Matt Deming". The "© 2024 Matt" the audit saw is no longer in the tree.
 - **BR.14 (2026-09-30), window, keys, cursor, Settings (P2, tracked here):**
   - **F4 / D7** — playback takes its window from its own view (`HostWindowReader`), not `NSApp.keyWindow` (Spotify's, in the streaming flow), so ⌘F, Esc-exits-fullscreen and display handling attach. Fixed (tests); ⏳ ⌘F and Esc in green-button fullscreen with Spotify started first, listening session 2.
   - **F9** — the key monitor ignores keys aimed at another window (the Settings sheet), and Esc closes the help overlay before anything else. Fixed (tests).

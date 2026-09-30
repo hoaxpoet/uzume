@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-151115] BR.16 — honest privacy copy and credits
+
+- **The privacy promise is now accurate.** Every permission screen said nothing ever leaves your Mac, but each song's title and artist are looked up online. They now say: "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz."
+- **MusicBrainz is asked at most once a second**, as its rules require.
+- **Settings › About › Acknowledgements** credits the models, shaders, motion capture and Milkdrop presets Uzume builds on, each with a link. The licence line no longer claims MIT for all of it (Aurora Veil's shader is non-commercial).
+
 ### [dev-2026-09-30-142354] BR.14 — the window, keys and Settings behave
 
 - **Fullscreen and Esc work when Spotify was in front.** Uzume used to attach its fullscreen and display handling to whatever window was active when playback began — usually Spotify's — so ⌘F did nothing and Esc in fullscreen asked to end the session.
