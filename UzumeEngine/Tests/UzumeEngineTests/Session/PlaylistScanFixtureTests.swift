@@ -41,7 +41,7 @@ struct PlaylistScanFixtureTests {
         }
     }
 
-    @Test("reproduces the SCAN.0 gate: 144/144 rows, 99.2 % identified, 0 wrong songs")
+    @Test("reproduces the SCAN gate: 144/144 rows, 98.4 % identified (127/129, BR.19), 0 wrong songs")
     func reproducesGate() async throws {
         guard Self.folders.count == 4 else {
             Issue.record("scan fixtures absent at \(Self.root.path) — see fixturesPresent")
@@ -67,7 +67,9 @@ struct PlaylistScanFixtureTests {
         let wrong = results.reduce(0) { $0 + $1.wrong }
         let report = scanBenchReport(results)
         #expect(found == 144, "coverage moved — \(report)")
-        #expect(identified == 124 && judged == 125, "identification moved from 124/125 — \(report)")
+        // BR.19 (BUG-152): the ground truth is now verified too, so its 11 wrong-song rows became
+        // "no preview" and judged moved 125 → 129 (the title-only retry found four more).
+        #expect(identified == 127 && judged == 129, "identification moved from 127/129 — \(report)")
         #expect(wrong == 0, "a wrong song appeared — \(report)")
         #expect(Double(identified) / Double(judged) >= 0.95 && Double(wrong) / Double(judged) <= 0.02, "below the SCAN.0 bar")
     }
