@@ -466,7 +466,9 @@ extension VisualizerEngine {
             }
         }
 
-        guard let suggested = decision.suggestedPreset,
+        // REC.2: the diagnostic hold (L key / UZUME_PIN_SCENE) holds reactive sessions too.
+        guard !diagnosticPresetLocked,
+              let suggested = decision.suggestedPreset,
               elapsed - lastReactiveSwitchTime >= 60.0 else { return }
 
         guard let loadedPreset = presetLoader.presets.first(
@@ -563,6 +565,64 @@ extension VisualizerEngine {
         presetLoader.selectPreset(named: loaded.descriptor.name)
         applyPreset(loaded)
         showPresetName(loaded.descriptor.name)
+    }
+
+    // MARK: - REC.2 Scene Pin (dev launch switch)
+
+    /// REC.2: what `UZUME_PIN_SCENE` asks for, resolved against the loaded catalog.
+    enum ScenePin: Equatable {
+        /// Unset or empty — the first-scene path is unchanged.
+        case none
+        /// A loaded scene id: apply it first and hold it for the whole run.
+        case pinned(String)
+        /// Names no loaded scene. Playback must not start: a silent fallback films the wrong scene.
+        case unknown(String)
+    }
+
+    /// REC.2: pure resolution of the raw env value, so every branch is testable without an engine.
+    static func resolveScenePin(_ raw: String?, available: [String]) -> ScenePin {
+        guard let raw, !raw.isEmpty else { return .none }
+        return available.contains(raw) ? .pinned(raw) : .unknown(raw)
+    }
+
+    /// REC.2: resolves `UZUME_PIN_SCENE` against the gated catalog (so a pin cannot reach a scene this GPU or
+    /// build flavor excludes); logs an unknown name with the valid scenes; engages the
+    /// diagnostic hold (the `L`-key flag) for a known one. Call BEFORE audio starts, in the same
+    /// main-thread step as `applyFirstScene`, so no planned apply can be dispatched ahead of the pin.
+    @MainActor
+    func engageScenePin() -> ScenePin {
+        let ids = plannableCatalog.map(\.id)
+        let pin = Self.resolveScenePin(ProcessInfo.processInfo.environment["UZUME_PIN_SCENE"], available: ids)
+        switch pin {
+        case .none:
+            break
+        case .pinned:
+            diagnosticPresetLocked = true
+        case .unknown(let name):
+            let msg = "UZUME_PIN_SCENE '\(name)' names no loaded scene; not starting playback. "
+                + "Valid: \(ids.sorted().joined(separator: ", "))"
+            logger.error("\(msg, privacy: .public)")
+            sessionRecorder?.log("ERROR: \(msg)")
+        }
+        return pin
+    }
+
+    /// REC.2: the session's first scene: the pinned one via `applyPresetByID`, else the loader's
+    /// current preset (the pre-REC.2 behaviour). `.unknown` applies nothing.
+    @MainActor
+    func applyFirstScene(_ pin: ScenePin) {
+        switch pin {
+        case .pinned(let id):
+            applyPresetByID(id)
+            sessionRecorder?.log("REC.2: scene pinned to '\(id)'; plan and completion switches held")
+        case .none:
+            if let current = presetLoader.currentPreset {
+                applyPreset(current)
+                showPresetName(current.descriptor.name)
+            }
+        case .unknown:
+            break
+        }
     }
 
     /// Restores the live plan from a saved snapshot (for undo).

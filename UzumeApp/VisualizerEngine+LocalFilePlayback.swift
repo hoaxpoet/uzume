@@ -216,6 +216,9 @@ extension VisualizerEngine: LocalFilePreparing {
         // after its early returns learned to explain themselves. Returns false when the
         // session was ended by a start failure, so the caller stops rather than running the
         // post-start wiring against a session that no longer exists.
+        // REC.2: engage a pinned scene's hold before audio starts; an unknown pin starts nothing.
+        let scenePin = engageScenePin()
+        if case .unknown = scenePin { return }
         guard startLocalFileRouter(audioRouter, url: url, isMultiFile: isMultiFile) else { return }
 
         startStemPipeline()
@@ -224,10 +227,7 @@ extension VisualizerEngine: LocalFilePreparing {
 
         sessionManager.beginPlayback()
 
-        if let current = presetLoader.currentPreset {
-            applyPreset(current)
-            showPresetName(current.descriptor.name)
-        }
+        applyFirstScene(scenePin)
 
         refreshLocalFileCacheBytes()
     }
