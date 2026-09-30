@@ -5,11 +5,17 @@
     python3 tools/promo/cut_promo.py --self-test
 
 Frame rule (the whole method): output frame k shows track time t = k / fps. It comes from the segment whose
-[from, to) contains it, each edge snapped to its nearest output frame, using that take's frame whose map `track_time_s` is nearest t. If no take frame lies
-within 0.75 output frame of t (the takes start ~0.5 s into the song), the frame is black; a single 60 fps
-capture drop leaves the nearest frame at most half an output frame away, so drops never go black. That one rule does
-the 60 -> 30 decimation, absorbs capture drops, and puts every cut on the frame nearest its downbeat. Clips are
-never concatenated by duration: container timestamps drift (REC.1).
+[from, to) contains it, each edge snapped to its nearest output frame, using that take's frame whose map
+`track_time_s` is nearest t + the segment's `source_offset_s` (default 0: the scene as it rendered at that exact
+moment; a whole number of bars moves a beat-locked take to another stretch of the same song and keeps it on the
+beat). If no take frame lies within 0.75 output frame (the takes start ~0.5 s into the song), the frame is black;
+a single 60 fps capture drop leaves the nearest frame at most half an output frame away, so drops never go black.
+That one rule does the 60 -> 30 decimation, absorbs capture drops, and puts every cut on the frame nearest its
+downbeat. Clips are never concatenated by duration: container timestamps drift (REC.1).
+
+Framing: a full-height square of each take, centred plus `crop_offset_px`; `crop_width_px` wider than the height
+zooms out (the slice is scaled to the square's width and padded top and bottom with black), for scenes on a black
+ground whose subject outgrows the square.
 
 Stages: (1) select frames -> lossless `clean.mkv` (crop + scale, no tag, no fades) -> contact sheet + cover
 stills; (2) tag PNG (tools/promo/render_text.swift: this ffmpeg has no drawtext) + fades -> H.264 at each CRF
@@ -36,12 +42,13 @@ def nearest(times, t):
     return min(cands, key=lambda i: (abs(times[i] - t), i))
 
 
-def select(k, fps, bounds, maps):
+def select(k, fps, bounds, maps, offsets=None):
     """(segment index, take frame index or None for black) for output frame k.
-    bounds: segment edges [b0, b1, ..., bn]; maps: per-segment ascending track times."""
-    t = k / fps
+    bounds: segment edges [b0, b1, ..., bn]; maps: per-segment ascending track times;
+    offsets: per-segment source time offsets in seconds (default all 0)."""
     # A segment starts on the output frame nearest its cut, so every cut lands within half an output frame.
     seg = max(i for i in range(len(bounds) - 1) if round(bounds[i] * fps) <= k)
+    t = k / fps + (offsets[seg] if offsets else 0.0)
     i = nearest(maps[seg], t)
     return seg, (i if abs(maps[seg][i] - t) <= 0.75 / fps else None)
 
@@ -62,6 +69,9 @@ def self_test():
     assert select(29, fps, bounds, maps) == (0, 27)          # 0.9667 = j 28 -> index 27, still take A
     assert select(30, fps, bounds, maps) == (1, 60)          # 1.000 is the frame nearest the cut -> take B
     assert select(31, fps, bounds, maps) == (1, 62)          # 1.0333 -> take B, frame 62
+    # A source offset of 1.5 s reads take B 1.5 s later: 1.0333 + 1.5 = 2.5333 -> frame 152.
+    assert select(31, fps, bounds, maps, [0.0, 1.5]) == (1, 152)
+    assert select(15, fps, bounds, maps, [0.0, 1.5]) == (0, 0)   # segment A untouched
     print("self-test: ok")
 
 
@@ -109,7 +119,8 @@ def build_clean(e, work):
             r = list(csv.DictReader(f))
         rows.append(r)
         maps.append([float(x["track_time_s"]) for x in r])
-    plan = [select(k, fps, bounds, maps) for k in range(n)]
+    offsets = [float(s.get("source_offset_s", 0.0)) for s in segs]
+    plan = [select(k, fps, bounds, maps, offsets) for k in range(n)]
     fb = size * size * 3 // 2
     black = bytes([16]) * (size * size) + bytes([128]) * (size * size // 2)
     clean = os.path.join(work, "clean.mkv")
@@ -120,10 +131,11 @@ def build_clean(e, work):
     for seg, s in enumerate(segs):
         path = expand(s["take"])
         w, h = probe_size(path)
-        side = min(w, h)
-        x = max(0, min(w - side, (w - side) // 2 + int(s.get("crop_offset_px", 0))))
+        cw = min(w, max(h, int(s.get("crop_width_px", h))))
+        x = max(0, min(w - cw, (w - cw) // 2 + int(s.get("crop_offset_px", 0))))
         dec = subprocess.Popen(["ffmpeg", "-v", "fatal", "-i", path, "-vf",
-                                f"crop={side}:{side}:{x}:0,scale={size}:{size}:flags=lanczos",
+                                f"crop={cw}:{h}:{x}:0,scale={size}:-2:flags=lanczos,"
+                                f"pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:black",
                                 "-f", "rawvideo", "-pix_fmt", "yuv420p", "-"], stdout=subprocess.PIPE)
         cur, frame, prev = -1, None, None
         for k in (k for k in range(n) if plan[k][0] == seg):

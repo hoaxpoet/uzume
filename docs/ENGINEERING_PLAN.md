@@ -1689,23 +1689,26 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** `tools/promo/cut_promo.py` + `edit.json` rebuild
 `~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4` in one command: 32.167 s, 1080×1080, 30 fps
-CFR, H.264 High CRF 16 (8.2 Mbps), AAC-LC 48 kHz 256 kbps, true peak −1.1 dBTP. Hard cuts on offline bars:
-Fractal Tree 0–8.71, Ferrofluid Ocean –14.56, Cymatic Resonance –20.39, Fireflies –24.31, Kagura –28.21, Fireflies
+CFR, H.264 High CRF 16 (7.2 Mbps), AAC-LC 48 kHz 256 kbps, true peak −1.1 dBTP. Matt's order, hard cuts on
+offline bars: Kagura 0–8.71, Ferrofluid Ocean –14.56, Cymatic Resonance –20.39, Fractal Tree –26.28, Fireflies
 –32.16. End tag "Uzume / uzume.io" from 30.21, picture to black over the last 0.5 s, audio out over 1.0 s.
-**Re-cut after Matt's review (2026-09-30).** In the first cut, Kagura opened the video over 0–8.71 and only swayed
-("warm-up exercises … not synced"). Kagura makes no dance pick before 16.47 s of this song. The engine's beat grid
-for the quiet intro is uneven (half-beats at 1.9–2.6 s, a missed beat near 5 s; 16-beat interval CV > 0.08 until
-≈ 13 s), so `KaguraSafetyNet` holds the rest sway until it has 8 steady beats. Its only twist in 0–34 s is 24.31–28.21
-(`KAGURA_PICK` beat 51). A reshoot gives the same result. Matt moved Kagura to its twist; Fractal Tree now opens,
-while its crown still fits the square (x 718–1774 of the centred 560–2000 crop), which also ends the clipping the
-full-grown tree had at 20–26 s. **Open lead:** Kagura cannot dance through an intro whose beat grid is uneven. That
-is beat-sync territory, not filed. Also written: `contact_sheet.png`, `cover_1..3.png`. `--self-test` checks the frame rule on a
+**Kagura is retimed, not live (Matt, 2026-09-30).** In the first cut Kagura only swayed over 0–8.71 ("warm-up
+exercises … not synced"). Kagura makes no dance pick before 16.47 s of this song. The engine's beat grid for the
+quiet intro is uneven (half-beats at 1.9–2.6 s, a missed beat near 5 s; 16-beat interval CV > 0.08 until ≈ 13 s),
+so `KaguraSafetyNet` holds the rest sway until it has 8 steady beats. A reshoot gives the same result. Matt kept
+Kagura as the opener: `source_offset_s` 23.27 moves its twist (engine bar 24.22, `KAGURA_PICK` beat 51) onto the
+intro's first audible bar at 0.95, and its next engine bars land exactly on 4.85 and 6.80. That gives the twist at
+0.95–4.85 and the cabbage patch at 4.85–8.71, which also cancels the engine's ≈ 0.09 s early lead there. The dance
+keeps the louder section's arm reach. Frame 0 now shows Kagura, not black. **Fractal Tree is zoomed out**
+(`crop_width_px` 2240, offset −36): its grown crown (source x 254–2234) is wider than a 1440 square, so the slice is
+scaled to 1080 wide and padded with the scene's own black (pad Y = 16 = background). **Open lead:** live, Kagura
+cannot dance through an intro whose beat grid is uneven. That is beat-sync territory, not filed. Also written: `contact_sheet.png`, `cover_1..3.png`. `--self-test` checks the frame rule on a
 synthetic map with a drop and a cut between frames; it fails with the pre-fix `[from, to)` rule.
 **Matt's calls (2026-09-30), from stop conditions in the prompt.** (1) **Offline bars, not the engine's
 downbeats:** the engine ran 23–123 ms early, and a low-band onset check of the song put the kick on the offline
 bars (8.700, 26.290, 30.230 s). The engine counts 3 bars between consecutive cuts, all `beat_in_bar` 1; both sets
-are recorded in `edit.json`. (2) **Black for the first 0.5 s:** the takes start at ≈ 0.51–0.57 s (REC.2), so frames
-0–15 are black and frame 0 (LinkedIn's pre-play frame) is black; use a cover as the custom thumbnail. (3) **End tag
+are recorded in `edit.json`. (2) **Black where no take covers the song:** the takes start at ≈ 0.51–0.57 s (REC.2), so frames the chosen
+take can't cover are black. With Kagura retimed, none are. (3) **End tag
 by CoreText:** Homebrew's ffmpeg 8.1 / 9.0.2 is built without freetype, so there is no `drawtext`; `render_text.swift`
 draws a PNG that ffmpeg overlays. The face is **Alumni Sans SemiBold** (uzume-site `--font-display`, BRAND.md
 wordmark), not UX_SPEC's Clash Display: the site wins.

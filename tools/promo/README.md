@@ -13,9 +13,12 @@ python3 tools/promo/cut_promo.py --edit tools/promo/edit.json
   targets. A reshot take or a moved cut is an edit there, then one command.
 - **Frame rule.** Output frame k shows track time k / fps, taken from the segment containing it (edges snapped to
   the nearest output frame) using the take frame whose map time is nearest. Nothing is concatenated by duration.
-  Frames the takes don't cover (the first ~0.5 s of the song) are black.
+  Frames the takes don't cover (the first ~0.5 s of the song) are black. A segment's `source_offset_s` reads its
+  take that much later in the song: a whole number of bars keeps a beat-locked scene on the beat (the 2026-10 cut
+  uses it to open on Kagura's twist, which live only happens from 24 s). Record why in the segment's `note`.
 - **Crop.** Each take's full-height square (1440×1440 from 2560×1440), centred plus `crop_offset_px` (source
-  pixels), scaled down to `size`. Never upscaled.
+  pixels), scaled down to `size`. Never upscaled. `crop_width_px` wider than the height zooms out: the slice is
+  scaled to the square's width and padded with black, for a scene on a black ground that outgrows the square.
 - **Text.** Homebrew's ffmpeg has no `drawtext` (built without freetype), so `render_text.swift` draws the end
   tag and contact-sheet labels with macOS CoreText and ffmpeg overlays the PNG.
 - **Outputs** beside the video: `contact_sheet.png` (first/middle/last frame per segment), `cover_1..3.png`

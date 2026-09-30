@@ -6,14 +6,16 @@
   "audio": "~/Documents/uzume_promo/linkedin-2026-10/track.mp3",
   "fps": 30,
   "size": 1080,
-  "_times": "Cut, tag-in and end times are the OFFLINE beat track's bars (Matt's pick, 2026-09-30). The engine's downbeats ran 23-123 ms earlier (nearest engine downbeat per time in *_engine, from the incoming take's REC.2 map; every one has beat_in_bar 1). A low-band onset check of track.mp3 put the kick at 8.700, 26.290 and 30.230 s, on the offline bars. Takes start ~0.51-0.57 s into the song; the frames before the opening take's first frame are black (Matt's pick).",
+  "_times": "Cut, tag-in and end times are the OFFLINE beat track's bars (Matt's pick, 2026-09-30). The engine's downbeats ran 23-123 ms earlier (nearest engine downbeat per time in *_engine, from the incoming take's REC.2 map; every one has beat_in_bar 1). A low-band onset check of track.mp3 put the kick at 8.700, 26.290 and 30.230 s, on the offline bars. Every segment shows its scene at the same moment of the song except where source_offset_s says otherwise.",
   "segments": [
     {
-      "scene": "Fractal Tree",
+      "scene": "Kagura",
       "from": 0.0,
       "from_source": "track start",
-      "take": "~/Documents/uzume_promo/linkedin-2026-10/take_4_fractal-tree.mp4",
-      "map": "~/Documents/uzume_promo/linkedin-2026-10/take_4_fractal-tree_map.csv",
+      "source_offset_s": 23.27,
+      "note": "Retimed, not live (Matt, 2026-09-30): live, Kagura sways through this song's first 16.5 s (the intro's engine beat grid is uneven, so KaguraSafetyNet holds the rest). Its only twist in 0-34 s starts on the engine bar at 24.22 s (KAGURA_PICK beat 51). Offset 23.27 s = 24.22 - 0.95 puts that bar on the intro's first audible bar (0.95); the take's next engine bars (28.12, 30.07) land on 4.85 and 6.80, the offline bars. Twist 0.95-4.85, cabbage patch 4.85-8.71. The dance keeps the louder section's arm reach.",
+      "take": "~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura.mp4",
+      "map": "~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura_map.csv",
       "crop_offset_px": 0
     },
     {
@@ -41,37 +43,26 @@
       "crop_offset_px": 0
     },
     {
-      "scene": "Fireflies",
+      "scene": "Fractal Tree",
       "from": 20.39,
       "from_source": "offline bar",
       "from_engine": {
         "take_frame": 1185,
-        "track_time_s": 20.289
+        "track_time_s": 20.292
       },
-      "take": "~/Documents/uzume_promo/linkedin-2026-10/take_5_fireflies.mp4",
-      "map": "~/Documents/uzume_promo/linkedin-2026-10/take_5_fireflies_map.csv",
-      "crop_offset_px": 0
-    },
-    {
-      "scene": "Kagura",
-      "from": 24.31,
-      "from_source": "offline bar",
-      "from_engine": {
-        "take_frame": 1421,
-        "track_time_s": 24.22
-      },
-      "note": "Kagura's only twist in 0-34 s: KAGURA_PICK beat 51 -> twist (24.31) until beat 59 -> cabbage (28.21), session 2026-09-30T15-45-51Z. Before 16.47 s it sways: the engine's beat grid for this song's quiet intro is uneven (interval CV > 0.08 until ~13 s) and KaguraSafetyNet holds the rest until 8 steady beats.",
-      "take": "~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura.mp4",
-      "map": "~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura_map.csv",
-      "crop_offset_px": 0
+      "crop_width_px": 2240,
+      "crop_offset_px": -36,
+      "note": "Zoomed out (Matt, 2026-09-30): over 20.39-26.28 the grown crown spans source x 254-2234, wider than a 1440 square. A 2240-wide slice centred on the tree (x 124-2364, ~130 px margin each side) is scaled to 1080 wide and padded with the scene's black.",
+      "take": "~/Documents/uzume_promo/linkedin-2026-10/take_4_fractal-tree.mp4",
+      "map": "~/Documents/uzume_promo/linkedin-2026-10/take_4_fractal-tree_map.csv"
     },
     {
       "scene": "Fireflies",
-      "from": 28.21,
+      "from": 26.28,
       "from_source": "offline bar",
       "from_engine": {
-        "take_frame": 1656,
-        "track_time_s": 28.121
+        "take_frame": 1539,
+        "track_time_s": 26.171
       },
       "take": "~/Documents/uzume_promo/linkedin-2026-10/take_5_fireflies.mp4",
       "map": "~/Documents/uzume_promo/linkedin-2026-10/take_5_fireflies_map.csv",
@@ -138,5 +129,5 @@
     "true_peak_max_dbtp": -1.0,
     "gain_margin_db": 0.1
   },
-  "_order": "Matt, 2026-09-30: Kagura moved to its twist (24.31-28.21); Fractal Tree opens over the quiet intro; Fireflies on both sides of Kagura, carrying the end tag."
+  "_order": "Matt's order: Kagura (twist, retimed) opens, then Ferrofluid Ocean, Cymatic Resonance, Fractal Tree (zoomed out), Fireflies with the end tag."
 }
