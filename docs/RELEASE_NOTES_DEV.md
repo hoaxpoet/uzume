@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-003403] BR.6b — M1/M2-class Macs render at a size they can hold (BUG-168)
+
+- **A ceiling on render size for tier-1 Macs** (M1, M2, M2 Pro by the current detection). The visuals draw at most about 2560×1440 and macOS scales them to the screen. On the M2 Pro, that keeps every measured scene but one under the 60 fps budget; at native 4K, 13 of 23 miss it.
+- **Alfvén is left out on those Macs** for the beta: it measured about 4× its declared cost.
+- Visible on the Mac mini: its 4K display now shows the scenes upscaled from 2560×1440.
+- Still to measure: the M4 MacBook Pro and the 4K display (Matt's sessions).
+
 ### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
 
 - **A broken shader can no longer reach a tester unnoticed.** Every pull request now compiles every shader the app compiles at launch, the same way the app does. It also builds the Release configuration that ships. Before, a shader error first showed up on a tester's Mac, as a crash on every launch or a scene silently missing.
