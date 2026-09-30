@@ -259,6 +259,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
+| **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 stays in the audit backlog, unfiled, so br-11 keeps BUG-173. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
 
