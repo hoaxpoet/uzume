@@ -251,7 +251,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.10** | 2 | ✅ fixed, PR open (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
 | **BR.11** | 2 | ✅ fixed, PR open (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
 | **BR.12** | 2 | ✅ PR open — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
-| **BR.13** | 2 | ready | Local-file transport (B3/BUG-056, B4, B10) |
+| **BR.13** | 2 | ✅ PR open — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
 | **BR.15** | 2 | ready | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
 | **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.13 — local-file transport ✅ (2026-09-29, pending live checks)
+
+**Delivered.** Audit B3 (extends BUG-056), B4, B10 as P2 lines under AUDIT-2026-09-29. `LocalFilePlaybackProvider` restarts on a device change at `PlayheadAnalysisClock.lastKnownPlayheadSeconds` (wrapped into the file), keeps a listener pause (`userPaused` / one-shot `startPaused`, so a paused restart or seek never plays), and retries once after 0.5 s before a `provider.restart FAILED` diagnostic. `VisualizerEngine.stopSessionAudio()` runs on every session boundary (`stopsSessionAudio`: Connecting, Preparing, Idle, End; deduplicated). `LoopingFileReader` always emits stereo.
+**Done-when:** ✅ device change mid-song resumes at the playhead, still playing; ✅ while paused stays paused at the same point; ✅ resume point wraps (tests; negative control: 3 failures); ✅ session boundaries stop audio (test); ✅ mono emitted as stereo (test; negative control: 500 failures). ⏳ AirPods swap mid-song and while paused, and opening a second source while one plays — listening session 1.
+**Not done:** surfacing a twice-failed restart to the listener (it is logged and in the session log; the stall card covers the silence).
 
 ### Increment BR.12 — one audio-capture lifecycle ✅ (2026-09-29, pending live checks)
 

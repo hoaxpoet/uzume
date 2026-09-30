@@ -129,7 +129,7 @@ reads" are not reads — see the entry.)*
 | AUDIT-2026-06-09 | P2/P3 | audit backlog | Full-codebase audit findings not individually filed |
 | BUG-060 | P3 | renderer / app.hang | App hang requiring force-quit: render loop died one frame after a `preset → Gossamer` switch (`22-10-50Z`); no stack captured. **RECURRED (Matt, 2026-08-03)** — this falsifies the "likely resolved by NACRE.2b" status, so the scene-apply race is fixed but is **not** the hang mechanism. **One clean instance 2026-09-09 (PR.18 M7, session `2026-09-09T22-36-18Z`):** a live `preset → Gossamer` switch ran 81 s / 5414 frames afterwards with `failures=0` and `unpresented=0` on every heartbeat. That is non-recurrence in ONE run and **not** evidence of a fix — the defect has always been intermittent, PR.18 touched only the fragment shader, and no mechanism was investigated. Recorded so the next occurrence is not read as a regression from the V.8 uplift. Needs a `sample`/stack capture on the next occurrence; do not re-run the non-recurrence watch |
 | BUG-058 | P3 | audio.capture / resource-management | RARE intermittent: a mid-session output-device swap *occasionally* freezes the tap (`performReinstall` doesn't complete; stale-buffer freeze, not silence). G1 device-swap recovery is otherwise robust (validated 12/12, 2026-06-17); the single freeze was un-reproduced — likely a `coreaudiod`-settling transient. Instrumented |
-| BUG-056 | P3 | local-file / audio | Local-file playback restarts the track from the top on an output-device change (AVAudioEngine teardown/restart, no resume-from-position) |
+| BUG-056 | P3 | local-file / audio | Local-file playback restarts the track from the top on an output-device change — fixed BR.13 (resume at the playhead, keep a pause), pending live check (session 1) |
 | BUG-055 | P2 | app.ui / permission | Silent system-audio tap after a rebuild: stale Screen-Recording grant; `CGPreflightScreenCaptureAccess` returns stale-`true` → app shows "ready", renders a flatline. **Symptom half RESOLVED 2026-06-17** (`a0a9ded`, silent-tap detector + fix-ladder card) — the app now explains the failure instead of lying. **Durable root still OPEN and externally BLOCKED** on CLEAN.2.5b: a stable signing identity needs a paid Apple Developer membership. Detector half closes on Matt's manual UX validation of the card |
 | BUG-054 | P3 | dsp.key | Key detection has never been accurate enough to use — 1024-pt FFT can't resolve semitones < 1 kHz, full-mix chroma, no constant-Q. Non-load-bearing today |
 | BUG-036 | P2 | audio.capture / performance | Heap allocations on the real-time audio thread (three sites) |
@@ -3045,6 +3045,10 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.13 (2026-09-29), local-file transport (P2, tracked here):**
+  - **B3 (extends BUG-056)** — an output-device change resumes at the last playhead, keeps a pause (no audible restart behind a paused UI), and retries once before reporting. Fixed (`LocalFileSeekTests`; negative control red); ⏳ AirPods swap mid-song and while paused, listening session 1.
+  - **B4** — every session boundary (Connecting, Preparing, Idle, End) stops the previous session's audio, so a new local source or Cancel no longer leaves the old track playing or its end-of-file advance firing mid-preparation. Fixed (test); ⏳ open a second file while one plays, listening session 1.
+  - **B10** — a mono local file is emitted as stereo (the same sample on both channels) instead of being averaged in pairs an octave high. Fixed (`PlayheadAnalysisClockTests`; negative control red).
 - **BR.12 (2026-09-29), audio capture lifecycle (P2, tracked here):**
   - **G2 / B14** — start, stop and reinstall run on one serial lifecycle queue; `stopCapture` bumps a generation token and a reinstall scheduled before it does nothing. Fixed; TSan-clean (`TapLifecycleStressTests`; negative control without the queue: 10 races).
   - **G8** — a failed device-change reinstall keeps the capture intent and the device monitor, so the next device change retries. Fixed (test).
@@ -4111,7 +4115,7 @@ Instrumented re-test (session `2026-06-17T14-54-49Z`): **12 rapid back-and-forth
 **Reproduction steps:** play a local file; mid-playback change the macOS default output (System Settings → Sound → Output, or ⌥-click the menu-bar volume). The track restarts from the beginning.
 **Session artifacts:** `2026-06-16T21-32-50Z` — `session.log` shows `provider.teardown … player.stop … engine.stop` at 21:33:57 and again at 21:34:12 (two output swaps), each followed by a restart from the top.
 **Verification criteria (for the fix):**
-- [ ] On an `AVAudioEngineConfigurationChange` (output change), the provider reconfigures and **resumes from the saved frame position** rather than restarting at 0.
+- [x] On an `AVAudioEngineConfigurationChange` (output change), the provider reconfigures and **resumes from the saved frame position** rather than restarting at 0. *(BR.13, 2026-09-29: resumes at the clock's last playhead, keeps a pause, retries once; `LocalFileSeekTests`, negative control red.)*
 - [ ] Manual: swap output mid-local-file → playback continues (≤ a small glitch), not a restart.
 
 **Note:** distinct from **G1** (the *system-tap* reinstall on the streaming path — `DefaultOutputDeviceMonitor` / `performReinstall`); local-file uses AVAudioEngine and never engages the tap, so a local-file output-swap does NOT validate G1.

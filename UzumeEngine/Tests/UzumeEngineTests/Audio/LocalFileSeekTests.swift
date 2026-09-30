@@ -61,6 +61,47 @@ struct LocalFileSeekTests {
         #expect(provider.isPaused)
     }
 
+    // MARK: BR.13 / B3 — an output-device change resumes at the playhead and keeps a pause
+
+    @Test("a device change mid-song resumes where the listener was, still playing")
+    func deviceChangeResumesAtThePlayhead() throws {
+        guard let url = Self.fixture() else { return }
+        let provider = LocalFilePlaybackProvider(url: url)
+        try provider.start()
+        defer { provider.stop() }
+        try provider.seek(to: 20)
+        Thread.sleep(forTimeInterval: 0.3)
+        provider.simulateConfigurationChangeForTesting()
+        Thread.sleep(forTimeInterval: 0.3)
+        #expect(!provider.isPaused)
+        let at = try #require(provider.playheadSeconds)
+        #expect((20...21.5).contains(at), "resumed at \(at) s, not ~20.5 s")
+    }
+
+    @Test("a device change while paused stays paused at the same point")
+    func deviceChangeWhilePausedStaysPaused() throws {
+        guard let url = Self.fixture() else { return }
+        let provider = LocalFilePlaybackProvider(url: url)
+        try provider.start()
+        defer { provider.stop() }
+        try provider.seek(to: 20)
+        Thread.sleep(forTimeInterval: 0.3)
+        provider.pause()
+        provider.simulateConfigurationChangeForTesting()
+        #expect(provider.isPaused, "the restart played a paused track aloud")
+        provider.resume()
+        Thread.sleep(forTimeInterval: 0.3)
+        let at = try #require(provider.playheadSeconds)
+        #expect((20...21.5).contains(at), "resumed at \(at) s after the pause, not ~20.5 s")
+    }
+
+    @Test("the resume point wraps inside the file and falls back when the clock never ticked")
+    func resumePointWraps() {
+        let rate = 48_000.0, length = AVAudioFramePosition(10 * rate)
+        #expect(LocalFilePlaybackProvider.resumeSeconds(played: 23, fallback: 0, fileLength: length, sampleRate: rate) == 3)
+        #expect(LocalFilePlaybackProvider.resumeSeconds(played: nil, fallback: 4, fileLength: length, sampleRate: rate) == 4)
+    }
+
     @Test("the track clock moves to the seek point and keeps the beat grid")
     func mirClockFollowsTheSeek() {
         let mir = MIRPipeline()

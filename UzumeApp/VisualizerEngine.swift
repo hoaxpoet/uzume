@@ -822,6 +822,8 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// recent LF SessionOrigin into `lastEndedLocalFileOrigin` for the
     /// EndedView "Play <name> again" CTA.
     var lastLocalFileSourceCancellable: AnyCancellable?
+    /// BR.13 / B4: stops the previous session's audio at every session boundary.
+    var sessionAudioCancellable: AnyCancellable?
 
     /// Seeded LCG perturbation value shared between `buildPlan()` and `extendPlan()`.
     /// Reset to nil when a new session begins (`.connecting` state), so each session
@@ -1198,35 +1200,17 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // surface's default.
                     self.startListeningForFirstAudio()
                 }
-                if newState == .ended {
-                    // LF.5.fix.2-FU2: halt the stem analyzer timer BEFORE
-                    // stopping the audio router. The timer fires every 5 s
-                    // and drains the stem lookahead buffer; without this
-                    // call the analyzer kept running for ~60-120 s after
-                    // Stop on the verification session 2026-05-28T19-42-50Z
-                    // (12 separations on stale / silence frames). Cancelling
-                    // first means no further dispatch lands after the audio
-                    // router teardown.
-                    self.stopStemPipeline()
-                    // LF.5.fix D-LF5-2: Uzume IS the player for local-file
-                    // sessions, so End Session must actually stop audio. For
-                    // streaming sessions stop() also tears down the Core Audio
-                    // process tap (correct behaviour at session end — the
-                    // streaming app keeps playing, Uzume stops analysing).
-                    // Either way, idempotent + safe.
-                    if let audioRouter = self.router as? AudioInputRouter {
-                        audioRouter.stop()
-                    }
-                    // LF.5.fix D-LF5-3: reset transport state so a new session
-                    // (or a re-open of the same file) doesn't inherit a stale
-                    // paused flag.
-                    self.isLocalFilePaused = false
-                    self.mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): no file plays now
-                    // LF.5.fix.3-C: release the URL marker so a re-open of
-                    // the same file starts cleanly.
-                    self.lastStartedLocalFilePlaybackURL = nil
-                }
             }
+
+        // BR.13 / B4: every session boundary stops the previous session's audio — not only End.
+        // Opening a new local source while one played left the old audio running (the router
+        // stopped only on `.ended`), Cancel landed on Idle with music playing and no Stop, and the
+        // old track's end-of-file advance started the new queue mid-preparation. Deduplicated so a
+        // redundant re-emit of a state never stops audio a session has just started.
+        sessionAudioCancellable = mgr.$state
+            .removeDuplicates()
+            .filter { Self.stopsSessionAudio($0) }
+            .sink { [weak self] _ in self?.stopSessionAudio() }
 
         // GAP H (2026-05-28): stash the most recent LF SessionOrigin across
         // endSession so EndedView can offer a "Play <name> again" CTA. The

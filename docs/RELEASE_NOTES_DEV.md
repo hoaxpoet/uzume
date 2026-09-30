@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-015424] BR.13 — local files keep their place
+
+- **Switching speakers or AirPods no longer restarts the song.** A local file carries on from where it was, and a paused song stays paused, instead of starting over out loud while the screen says paused.
+- **Opening something new stops the old song.** Opening another file, folder or playlist, or cancelling, used to leave the previous song playing, and its ending could start the new queue before it was ready.
+- **Mono files are heard at the right pitch.** They were analysed an octave too high.
+- Pending live checks in listening session 1.
 ### [dev-2026-09-30-013733] BR.12 — audio capture stays in one piece through device swaps and Core Audio restarts
 
 - **Starting, stopping and re-creating the audio tap happen one at a time.** Ending a session while AirPods connect could leave a stray tap feeding the analysis, so the analysis could run twice as fast and beat sync go wrong. Each step now waits for the one before it, and a re-create that was queued before the session ended does nothing.

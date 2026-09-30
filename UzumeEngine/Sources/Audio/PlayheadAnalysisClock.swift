@@ -78,6 +78,9 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
     private var smoother = PlaybackClockSmoother()
     private var cursor: AVAudioFramePosition = -1
     private var scratch: [Float]
+    /// The last playhead the player reported (BR.13 / B3). Survives a pause and an engine stop,
+    /// when `position()` goes nil, so a restart can resume where the listener was.
+    private var lastPlayhead: Double?
 
     /// One tick's worth of zeros, delivered when the playhead is not moving (BUG-130).
     private let silence: [Float]
@@ -159,6 +162,10 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
     /// The raw playhead in seconds into the file — the LFSEEK.1 test hook for the seek offset.
     var playheadSeconds: Double? { position() }
 
+    /// The last playhead a tick saw, in seconds into the schedule (BR.13 / B3). Blocks on the
+    /// clock queue, so never call it from there.
+    var lastKnownPlayheadSeconds: Double? { queue.sync { lastPlayhead } }
+
     // MARK: - Private
 
     /// Driven by `timer`; `internal` only so the regression test can step it deterministically
@@ -172,6 +179,7 @@ public final class PlayheadAnalysisClock: @unchecked Sendable {
         // is the complementary write CLAUDE.md prescribes, and it lets the existing chain decay to
         // silence on its own rather than bolting a second decay path onto the publisher.
         guard let raw = position() else { return stall() }
+        lastPlayhead = raw
         let smoothed = smoother.position(rawSeconds: raw, now: CACurrentMediaTime())
         let target = AVAudioFramePosition(smoothed * reader.sampleRate)
 
