@@ -18,10 +18,19 @@ struct DisplayManagerTests {
         #expect(dm.allScreens.count == NSScreen.screens.count)
     }
 
-    @Test func init_primaryScreen_isNSScreenMain() {
+    /// BR.14 / D8: the primary display is the menu-bar screen (`screens[0]`), not `NSScreen.main`
+    /// — the key window's screen, which from the secondary display named the secondary.
+    @Test func init_primaryScreen_isTheMenuBarScreen() throws {
         let fo = FullscreenObserver()
         let dm = DisplayManager(fullscreenObserver: fo)
-        #expect(dm.primaryScreen == NSScreen.main)
+        #expect(dm.primaryScreen == NSScreen.screens.first)
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("UzumeApp/Services/DisplayManager.swift")
+        let code = try String(contentsOf: url, encoding: .utf8)
+            .split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+        #expect(!code.contains { $0.contains("NSScreen.main") }, "DisplayManager reads NSScreen.main again")
     }
 
     @Test func screenParametersChange_updatesAllScreens() async throws {

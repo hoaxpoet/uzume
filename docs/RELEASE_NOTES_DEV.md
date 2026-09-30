@@ -10,6 +10,16 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-142354] BR.14 — the window, keys and Settings behave
+
+- **Fullscreen and Esc work when Spotify was in front.** Uzume used to attach its fullscreen and display handling to whatever window was active when playback began — usually Spotify's — so ⌘F did nothing and Esc in fullscreen asked to end the session.
+- **Esc in Settings or over the shortcut help no longer asks to end the session.** It closes what's in front.
+- **Closing the window ends the session.** Listening, the recording indicator and analysis stop instead of running on with no window.
+- **The pointer hides** along with the playback controls.
+- **Settings from anywhere:** Uzume › Settings… (⌘,) and a gear on the start screen.
+- **"Move to primary display" works from the second display.**
+- Pending live checks in listening session 2.
+
 ### [dev-2026-09-30-015424] BR.13 — local files keep their place
 
 - **Switching speakers or AirPods no longer restarts the song.** A local file carries on from where it was, and a paused song stays paused, instead of starting over out loud while the screen says paused.
