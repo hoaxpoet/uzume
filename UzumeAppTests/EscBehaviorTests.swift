@@ -15,7 +15,7 @@ struct EscBehaviorTests {
 
     @Test func esc_whenFullscreen_exitsFullscreen_doesNotEndSession() async throws {
         let fo = FullscreenObserver()
-        let window = NSWindow()
+        let window = NSWindow.offscreen(CGRect(x: 0, y: 0, width: 200, height: 100))
         fo.attach(to: window)
 
         // Manually set isFullscreen by posting the notification
@@ -42,7 +42,7 @@ struct EscBehaviorTests {
 
     @Test func esc_whenWindowed_requestsEndSession() {
         let fo = FullscreenObserver()
-        let window = NSWindow()
+        let window = NSWindow.offscreen(CGRect(x: 0, y: 0, width: 200, height: 100))
         fo.attach(to: window)
         #expect(!fo.isFullscreen)
 
