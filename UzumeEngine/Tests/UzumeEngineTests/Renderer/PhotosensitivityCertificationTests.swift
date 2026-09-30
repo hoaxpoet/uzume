@@ -151,7 +151,8 @@ struct PhotosensitivityCertificationTests {
 
         let ctx = try MetalContext()
         let drive = FlashHarnessSupport.worstCaseBeatTrain()
-        let luma = try renderLuminanceSequence(preset: preset, features: drive, context: ctx)
+        let samples = try renderLuminanceSequence(preset: preset, features: drive, context: ctx)
+        let luma = samples.map(\.luma)
         let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: FlashHarnessSupport.fps)
 
         let lo = luma.min() ?? 0, hi = luma.max() ?? 0
@@ -187,6 +188,7 @@ struct PhotosensitivityCertificationTests {
             — exceeds Harding/WCAG 2.3.1. P1 safety finding: bring to Matt, do not tune away.
             """
         )
+        FlashHarnessSupport.assertRegionalAndRedSafe(name: name, samples: samples)   // BR.20 / I8
     }
 
     /// Guards against a vacuous pass: if the Shaders bundle fails to load, the
@@ -205,7 +207,7 @@ struct PhotosensitivityCertificationTests {
         preset: PresetLoader.LoadedPreset,
         features: [FeatureVector],
         context ctx: MetalContext
-    ) throws -> [Double] {
+    ) throws -> [FlashHarnessSupport.FlashSample] {
         let size = renderSize
         let texDesc = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: ctx.pixelFormat, width: size, height: size, mipmapped: false)
@@ -246,7 +248,7 @@ struct PhotosensitivityCertificationTests {
         let nimbusState: NimbusState? =
             preset.descriptor.name == "Nimbus" ? NimbusState(device: ctx.device) : nil
 
-        var luma: [Double] = []
+        var luma: [FlashHarnessSupport.FlashSample] = []
         luma.reserveCapacity(features.count)
         var pixels = [UInt8](repeating: 0, count: size * size * 4)
 
@@ -287,7 +289,7 @@ struct PhotosensitivityCertificationTests {
             guard cmdBuf.status == .completed else { throw FlashGateError.renderFailed }
             texture.getBytes(&pixels, bytesPerRow: size * 4,
                              from: MTLRegionMake2D(0, 0, size, size), mipmapLevel: 0)
-            luma.append(FlashHarnessSupport.meanRelativeLuminance(pixels))
+            luma.append(FlashHarnessSupport.sample(pixels, width: size, height: size))
         }
         return luma
     }
