@@ -176,4 +176,16 @@ struct HandleLocalFileReadyIdempotencyRegressionTests {
             #expect(!VisualizerEngine.stopsSessionAudio(state), "\(state) would stop the session's own audio")
         }
     }
+
+    @Test("BR.14 / F14: closing the window ends a live session, and the window close is wired to it")
+    func test_windowCloseEndsLiveSession() throws {
+        for state in [SessionState.connecting, .preparing, .ready, .playing] {
+            #expect(VisualizerEngine.windowCloseEndsSession(state), "\(state) ran on with no window")
+        }
+        for state in [SessionState.idle, .ended] {
+            #expect(!VisualizerEngine.windowCloseEndsSession(state))
+        }
+        let app = try String(contentsOf: repoRoot().appendingPathComponent("UzumeApp/UzumeApp.swift"), encoding: .utf8)
+        #expect(stripComments(app).contains(".onDisappear { engine.handleWindowClosed() }"))
+    }
 }
