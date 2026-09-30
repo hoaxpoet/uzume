@@ -257,7 +257,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.16** | 2 | ✅ merged (#334) | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
 | **BR.17** | 2 | ✅ PR open — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | 🔨 PR open — K6c done; K6a kept (Matt, option A); ⏸ Matt's streaming review of the top ten | Streaming fidelity for the newest scenes (K6) |
-| **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
+| **BR.19** | 2 | ✅ merged (#338) — BUG-152 spot-check (session 2) | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
 | **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
@@ -1708,6 +1708,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 **Delivered.** K6c: `RenderPipeline.warmedUpLiveStems` + `liveStemWarmup01` — the eight live stem deviation routes (all four stems' `EnergyRel` / `EnergyDev`) ramp in quadratically over each track's first 10 s when no local-file series is installed; the aurora driver skips its own gate on those frames. K6a: **no change**, per Matt (2026-09-30, option A of three: keep the preview level / live energy measure / treat as unknown).
 **Done-when:** ✅ the warm-up caps the track-start overswing on the real BUG-041 series (red arm without it); ✅ only the stem routes are gated, and never on the local-file series (tests); ✅ full engine suite green (2160 + 216). ⏸ **Stop and report:** Matt's streaming review of the top ten scenes decides whether it lands.
 **Not done:** a live energy level for streaming (declined for the beta).
+
+### Increment BR.19 — the right song, reliably ✅ (2026-09-30)
+
+**Delivered.** BUG-152 (every track through `ScreenReadMatchPolicy`), C7 (`PreviewResolver.retryDelays` backoff, non-JSON 200s transient), C8 / A10 (`ITunesStorefront.country` on the preview, artwork and metadata requests).
+**Done-when:** ✅ before/after on the four SCAN playlists (ScanBench): wrong song 11 → 0, right 125 → 129, no preview 8 → 15; ✅ transient failures retried then uncached, captive-portal HTML uncached (tests); ✅ the request names the storefront, unknown → US (tests); ✅ the offline SCAN gate re-pinned (127/129, 0 wrong) and no longer backs off on a cache miss.
+**Not done:** a region without an iTunes store gets no preview (no US second try); the metadata fetcher (`ITunesSearchFetcher`) still takes its own first hit for genre/BPM hints.
 
 ### Increment BR.17 — output devices as testers have them ✅ (2026-09-30, pending live check)
 

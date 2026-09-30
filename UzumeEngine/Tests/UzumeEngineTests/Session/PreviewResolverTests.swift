@@ -17,11 +17,24 @@ private final class AtomicCounter: @unchecked Sendable {
 
 // MARK: - Helpers
 
+/// Records the `country` of every request (BR.19 / C8).
+private final class RequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen: [String?] = []
+    func record(_ request: URLRequest) {
+        let items = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems
+        lock.withLock { seen.append(items?.first { $0.name == "country" }?.value) }
+    }
+    var countries: [String?] { lock.withLock { seen } }
+}
+
 private func makeResolver() -> PreviewResolver {
     // PUB.6: a PRIVATE limiter per test — the production default is the
     // process-wide ITunesRateLimiter.shared, which parallel test suites would
     // contend on (and rateLimiting_respectsLimit mutates the window config).
-    PreviewResolver(rateLimiter: ITunesRateLimiter())
+    let resolver = PreviewResolver(rateLimiter: ITunesRateLimiter())
+    resolver.retryDelays = [.zero, .zero]   // BR.19: the backoff's order, not its wall-clock
+    return resolver
 }
 
 private func makeTrack(
@@ -141,8 +154,10 @@ struct PreviewResolverTests {
         let elapsed = Date().timeIntervalSince(start)
         // 4 requests at 3/0.5s limit means the 4th must wait at least ~0.5s.
         #expect(elapsed >= 0.4)
-        // All 4 calls eventually went through.
-        #expect(counter.value == 4)
+        // All 4 lookups went through; each is two requests, because the stub answers every
+        // track with "Bohemian Rhapsody — Queen" and a non-matching first hit gets one
+        // title-only retry (BR.19 / BUG-152 verification).
+        #expect(counter.value == 8)
     }
 
     // MARK: - Network Timeout
@@ -249,13 +264,11 @@ struct PreviewResolverTests {
             return (itunesResponse(), ok200())
         }
 
+        // BR.19 / C7: the 429 is retried inside the lookup, so it succeeds on attempt two.
         let track = makeTrack()
         let first = try await resolver.resolvePreviewURL(for: track)
-        #expect(first == nil, "429 resolves nil for this attempt")
-
-        let second = try await resolver.resolvePreviewURL(for: track)
-        #expect(fetchCount == 2, "retry must re-query, not hit a poisoned cache entry")
-        #expect(second != nil, "retry after a transient failure must be able to succeed")
+        #expect(fetchCount == 2, "one retry after the 429")
+        #expect(first != nil, "a transient failure is retried, not final")
     }
 
     // A definitive 200-with-empty-results IS cached (that genuinely means
@@ -272,6 +285,63 @@ struct PreviewResolverTests {
         let track = makeTrack()
         _ = try await resolver.resolvePreviewURL(for: track)
         _ = try await resolver.resolvePreviewURL(for: track)
-        #expect(fetchCount == 1, "definitive no-preview is cached; no re-query")
+        #expect(fetchCount == 2, "the full search + one title-only retry; then cached, no re-query")
+    }
+
+    // MARK: - BR.19
+
+    /// C7: every attempt failing still leaves the track uncached — the next lookup re-queries.
+    @Test func persistentFailure_isRetried_thenLeftUncached() async throws {
+        let resolver = makeResolver()
+        let counter = AtomicCounter()
+        resolver.networkFetcher = { req in
+            counter.increment()
+            // swiftlint:disable:next force_unwrapping
+            return (Data(), HTTPURLResponse(url: req.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!)
+        }
+        let track = makeTrack()
+        #expect(try await resolver.resolvePreviewURL(for: track) == nil)
+        #expect(counter.value == 3, "the first attempt + two retries")
+        _ = try await resolver.resolvePreviewURL(for: track)
+        #expect(counter.value == 6, "not cached: the next lookup asks again")
+    }
+
+    /// C7: a captive portal answers 200 with HTML — transient, never a cached "no preview".
+    @Test func captivePortalHTML_isNotCached() async throws {
+        let resolver = makeResolver()
+        let counter = AtomicCounter()
+        resolver.networkFetcher = { _ in
+            counter.increment()
+            return counter.value == 1 ? (Data("<html>Log in to Wi-Fi</html>".utf8), ok200()) : (itunesResponse(), ok200())
+        }
+        let track = makeTrack()
+        #expect(try await resolver.resolvePreviewURL(for: track) == nil)
+        #expect(try await resolver.resolvePreviewURL(for: track) != nil, "the portal page was not cached")
+    }
+
+    /// BUG-152: a first hit that is another song is rejected, not trusted.
+    @Test func aDifferentSong_isRejected() async throws {
+        let resolver = makeResolver()
+        resolver.networkFetcher = { _ in (itunesResponse(), ok200()) }   // always "Bohemian Rhapsody — Queen"
+        let wrong = try await resolver.resolvePreviewURL(for: makeTrack(title: "Not Techno", artist: "i_o"))
+        #expect(wrong == nil)
+        let right = try await resolver.resolvePreviewURL(for: makeTrack())
+        #expect(right != nil)
+    }
+
+    /// C8: the request names the Mac's storefront; an unknown region asks the US store.
+    @Test func requestsNameTheStorefront() async throws {
+        #expect(ITunesStorefront.country(for: "GB") == "GB")
+        #expect(ITunesStorefront.country(for: "de") == "DE")
+        #expect(ITunesStorefront.country(for: nil) == "US")
+        #expect(ITunesStorefront.country(for: "419") == "US", "a UN region code is not a store")
+        let resolver = makeResolver()
+        let asked = RequestLog()
+        resolver.networkFetcher = { req in
+            asked.record(req)
+            return (itunesResponse(), ok200())
+        }
+        _ = try await resolver.resolvePreviewURL(for: makeTrack())
+        #expect(asked.countries == [ITunesStorefront.country])
     }
 }

@@ -99,6 +99,9 @@ public func evaluateScanFixture(
 
     let resolver = PreviewResolver(rateLimiter: ITunesRateLimiter(maxRequestsPerWindow: 1_000_000))
     resolver.networkFetcher = { try await cache.fetch($0) }
+    // The bench's transport is a cache: an offline miss is final, not a blip to back off from
+    // (with the BR.19 retries an offline gate waited 8 s per miss).
+    resolver.retryDelays = []
     let gaps = Set(scan.gaps.flatMap { $0.first...$0.last })
     for (index, track) in truth.enumerated() {
         let number = index + 1

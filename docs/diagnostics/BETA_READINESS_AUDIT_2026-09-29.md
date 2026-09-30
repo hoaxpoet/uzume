@@ -439,6 +439,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - With Spotify started first: ⌘F toggles fullscreen, and Esc in green-button fullscreen leaves fullscreen without asking to end (BR.14, F4 / D7). From the secondary display, "Move to primary display" moves the window (D8). Close the window mid-session: the recording indicator goes off (F14).
    - Judge stem timing at 4K: BUG-106.
    - The top ten scenes on streaming, watching each song's first ten seconds: instrument-driven motion eases in rather than lurching (BR.18, K6c). This review decides whether BR.18 lands.
+   - On an Apple Music playlist, the detailed preparation view names the playlist's own songs, and any it can't match are skipped rather than swapped (BR.19, BUG-152).
    - With AirPods: Kagura, Fireflies or Membrane — do the beat accents land with the beat? Relaunch with `UZUME_DEVICE_LATENCY=0` for the before. `session.log` records `OUTPUT_LATENCY device=… ms` (BR.17, I4 / B7).
    - End the session while AirPods connect, then start a new one: one tap, analysis at normal speed (BR.12, G2/B14).
    - Mid-session, run `sudo killall coreaudiod`: visuals respond again within a few seconds (BR.12, B5).

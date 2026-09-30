@@ -15,6 +15,11 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 - **No lurch at the start of a streamed song.** On Spotify and Apple Music, the instrument-driven motion used to start at nothing and then overshoot for about ten seconds as Uzume learned each song, and only Ferrofluid Ocean was protected. Every scene now eases in over those seconds. Local files are unchanged.
 - **Fireflies and Kagura on streaming** still use one energy level per song, from its preview: the meadow doesn't thin in quiet parts, as it does with local files (Matt's call for the beta).
 - Waiting on Matt's streaming review of the top ten scenes.
+### [dev-2026-09-30-165358] BR.19 — the right song, reliably (BUG-152)
+
+- **Uzume no longer prepares the wrong song.** For about 1 song in 12, the preview it analysed was a different song (an underscore or accent in a name, or a song the catalog lacks). Every song is now checked — title, artist and length must agree — and skipped if nothing matches. On four real playlists: 11 wrong songs → 0, and 4 more songs found.
+- **A network blip is no longer final.** A busy or failing lookup is retried a few seconds later, and a Wi-Fi login page is never remembered as "this song has no preview".
+- **Your country's catalog.** Lookups ask the store for your Mac's region instead of always the US.
 
 ### [dev-2026-09-30-153337] BR.17 — AirPods, and high-sample-rate output
 
