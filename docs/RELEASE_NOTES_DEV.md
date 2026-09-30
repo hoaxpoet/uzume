@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
+
+- **A broken shader can no longer reach a tester unnoticed.** Every pull request now compiles every shader the app compiles at launch, the same way the app does. It also builds the Release configuration that ships. Before, a shader error first showed up on a tester's Mac, as a crash on every launch or a scene silently missing.
+- Proven red on a deliberately broken shader, then green after the revert.
+- Still open: launching the notarized build on macOS 15 (BR.6b).
+
 ### [dev-2026-09-29-215718] BR.5 — testers can send Matt evidence (BUG-166)
 
 - **Help › Report a Problem.** Uzume asks first, then saves a zip of its recent log messages, any Uzume crash or freeze reports, and the Mac's model, macOS and graphics chip, with the build number and commit. No audio, nothing sent. The zip opens in Finder and a pre-filled GitHub issue opens for the tester to attach it.
