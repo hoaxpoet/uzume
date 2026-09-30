@@ -201,3 +201,21 @@ struct MetadataPreFetcherTests {
         #expect(tags.filter { $0 == "rock" }.count == 1)
     }
 }
+
+// MARK: - BR.16 (C13): MusicBrainz is held to one request per second
+
+@Suite("MusicBrainz rate gate (BR.16)")
+struct MusicBrainzRateGateTests {
+
+    /// Five lookups at once take at least four intervals: the gate spaces them, it does not
+    /// let a burst through. (A lower bound only — sleeping never returns early.)
+    @Test func aBurstIsSpacedByTheInterval() async {
+        let gate = RateGate(interval: .milliseconds(100))
+        let start = ContinuousClock.now
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<5 { group.addTask { await gate.wait() } }
+        }
+        #expect(ContinuousClock.now - start >= .milliseconds(400))
+    }
+
+}

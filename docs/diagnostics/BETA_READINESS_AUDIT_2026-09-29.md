@@ -438,6 +438,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - With Spotify started first: ⌘F toggles fullscreen, and Esc in green-button fullscreen leaves fullscreen without asking to end (BR.14, F4 / D7). From the secondary display, "Move to primary display" moves the window (D8). Close the window mid-session: the recording indicator goes off (F14).
    - Judge stem timing at 4K: BUG-106.
+   - With AirPods: Kagura, Fireflies or Membrane — do the beat accents land with the beat? Relaunch with `UZUME_DEVICE_LATENCY=0` for the before. `session.log` records `OUTPUT_LATENCY device=… ms` (BR.17, I4 / B7).
    - End the session while AirPods connect, then start a new one: one tap, analysis at normal speed (BR.12, G2/B14).
    - Mid-session, run `sudo killall coreaudiod`: visuals respond again within a few seconds (BR.12, B5).
    - Start a long Spotify playlist early (Start now) and watch the first minutes while preparation continues behind playback: no energy / stem twitch each time a song finishes preparing (BR.9).

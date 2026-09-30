@@ -40,4 +40,24 @@ struct LocalizationKeyCoverageTests {
         }
         #expect(missing.isEmpty, "keys with no string (shown raw): \(missing.sorted { $0.key < $1.key })")
     }
+
+    /// BR.16: the Acknowledgements rows hold their keys in a table, out of the scan's reach.
+    /// Each must resolve and link somewhere; the table must cover every licence CREDITS.md
+    /// names as a live obligation.
+    @MainActor
+    @Test func everyAcknowledgementResolves_andLinks() {
+        let sentinel = "\u{0}missing"
+        for entry in AboutSettingsSection.acknowledgements {
+            let resolved = Bundle.main.localizedString(forKey: entry.key, value: sentinel, table: nil)
+            #expect(resolved != sentinel, "\(entry.key)")
+            #expect(entry.url.scheme?.hasPrefix("http") == true)
+        }
+        let text = AboutSettingsSection.acknowledgements
+            .map { Bundle.main.localizedString(forKey: $0.key, value: "", table: nil) }
+            .joined(separator: " ")
+        for credit in ["Beat This!", "Open-Unmix", "PANNs", "CC BY 4.0", "nimitz", "CC BY-NC-SA 3.0",
+                       "Pavel Dobryakov", "mocap.cs.cmu.edu", "NSF EIA-0196217", "Stave"] {
+            #expect(text.contains(credit), "missing credit: \(credit)")
+        }
+    }
 }
