@@ -100,7 +100,7 @@ extension StemFFTEngine {
             forwardImagOutput: imagOutData
         ]
         let dispatchID = currentDispatchID
-        BUG012Probe.notice(
+        BUG012Probe.log(   // BUG-177: info, not notice — ~66/s during local prep flooded the log
             "MPSGraph.run forward CALL",
             dispatchID: dispatchID,
             detail: bug012BufferSummary(
@@ -115,7 +115,7 @@ extension StemFFTEngine {
             targetOperations: nil,
             resultsDictionary: targets
         )
-        BUG012Probe.notice(
+        BUG012Probe.log(   // BUG-177: info, not notice — ~66/s during local prep flooded the log
             "MPSGraph.run forward RETURN",
             dispatchID: dispatchID
         )
@@ -263,7 +263,7 @@ extension StemFFTEngine {
         ]
         let targets: [MPSGraphTensor: MPSGraphTensorData] = [inverseRealOutput: outData]
         let dispatchID = currentDispatchID
-        BUG012Probe.notice(
+        BUG012Probe.log(   // BUG-177: info, not notice — ~66/s during local prep flooded the log
             "MPSGraph.run inverse CALL",
             dispatchID: dispatchID,
             detail: bug012BufferSummary(
@@ -278,7 +278,7 @@ extension StemFFTEngine {
             targetOperations: nil,
             resultsDictionary: targets
         )
-        BUG012Probe.notice(
+        BUG012Probe.log(   // BUG-177: info, not notice — ~66/s during local prep flooded the log
             "MPSGraph.run inverse RETURN",
             dispatchID: dispatchID
         )

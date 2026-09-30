@@ -68,3 +68,21 @@ extension StemSeparator {
         return mono
     }
 }
+
+// MARK: - Padding
+
+extension StemSeparator {
+
+    /// Pad with zeros or truncate an array to exactly `targetCount` elements.
+    func padOrTruncate(_ input: [Float], to targetCount: Int) -> [Float] {
+        if input.count == targetCount {
+            return input
+        } else if input.count > targetCount {
+            return Array(input.prefix(targetCount))
+        } else {
+            var result = input
+            result.append(contentsOf: [Float](repeating: 0, count: targetCount - input.count))
+            return result
+        }
+    }
+}

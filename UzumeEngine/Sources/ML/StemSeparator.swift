@@ -145,6 +145,12 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     ///   - sampleRate: Input sample rate in Hz.
     /// - Returns: Separation result with per-stem metadata.
     public func separate(audio: [Float], channelCount: Int, sampleRate: Float) throws -> StemSeparationResult {
+        // BUG-177: drain MPSGraph's autoreleased objects (~32 MB) per call — a background loop
+        // (local-file prep) otherwise held them all: 23 GB for a 9-minute song, then out of memory.
+        try autoreleasepool { try separateInPool(audio: audio, channelCount: channelCount, sampleRate: sampleRate) }
+    }
+
+    private func separateInPool(audio: [Float], channelCount: Int, sampleRate: Float) throws -> StemSeparationResult {
         let bug012ID = logBUG012SeparateEnter(audio: audio, channelCount: channelCount, sampleRate: sampleRate)
         defer { BUG012Probe.log("separate EXIT", dispatchID: bug012ID) }
         let monoFrames = audio.count / max(channelCount, 1)
@@ -326,21 +332,6 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
         }
 
         return output
-    }
-
-    // MARK: - Padding
-
-    /// Pad with zeros or truncate an array to exactly `targetCount` elements.
-    private func padOrTruncate(_ input: [Float], to targetCount: Int) -> [Float] {
-        if input.count == targetCount {
-            return input
-        } else if input.count > targetCount {
-            return Array(input.prefix(targetCount))
-        } else {
-            var result = input
-            result.append(contentsOf: [Float](repeating: 0, count: targetCount - input.count))
-            return result
-        }
     }
 
     // MARK: - Deinterleave
