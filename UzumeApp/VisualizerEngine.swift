@@ -1012,12 +1012,11 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         // playlist, runtime hits the same cache on track-change so the
         // network request from the runtime side is a no-op.
         let metadataFetcher = MetadataPreFetcher(fetchers: Self.buildFetcherList())
-        // SessionManager is always created — uses the same component instances as the engine.
+        // SessionManager is always created. Its preparer has its own stem analyzer and mood
+        // classifier (BR.9); only the separator is shared (it is call-isolated, CLEAN.1.2).
         // Ad-hoc mode never invokes the preparer; session mode uses it for pre-analysis.
         self.sessionManager = Self.makeSessionManager(
             sep: sep,
-            analyzer: analyzer,
-            classifier: classifier,
             device: ctx.device,
             sessionRecorder: self.sessionRecorder,
             metadataFetcher: metadataFetcher

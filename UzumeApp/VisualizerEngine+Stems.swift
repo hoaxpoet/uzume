@@ -39,6 +39,13 @@ extension VisualizerEngine {
         }
     }
 
+    /// Fresh analysis instances for background preparation — never the live pipeline's
+    /// (BR.9 / audit C3, G3). Shared, every track landing behind playback pushed ~430 frames of
+    /// another song through the live AGC and ~1,300 through the live mood; neither has weights.
+    static func makePreparerAnalysis() -> (stemAnalyzer: StemAnalyzer, moodClassifier: MoodClassifier) {
+        (StemAnalyzer(sampleRate: StemSeparator.modelSampleRate), MoodClassifier())
+    }
+
     /// Start the background stem separation timer at `stemSeparationPeriodSeconds`.
     func startStemPipeline() {
         guard stemSeparator != nil else {
