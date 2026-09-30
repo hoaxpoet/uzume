@@ -1,0 +1,177 @@
+track,stage,wall_ms,cpu_ms,cpu_cores,audio_s,ms_per_audio_s
+"01 - Speed Of Life.flac",content_hash,30.4,12.3,0.40,167.17,0.18
+"01 - Speed Of Life.flac",cache_probe,0.1,0.1,1.00,167.17,0.00
+"01 - Speed Of Life.flac",metadata_artwork,17.8,10.8,0.61,167.17,0.11
+"01 - Speed Of Life.flac",decode,187.9,187.3,1.00,167.17,1.12
+"01 - Speed Of Life.flac",loudness_profile,18.7,18.5,0.99,167.17,0.11
+"01 - Speed Of Life.flac",stem_separation,204.0,154.5,0.76,167.17,1.22
+"01 - Speed Of Life.flac",stem_warmup,33.3,33.1,1.00,167.17,0.20
+"01 - Speed Of Life.flac",mir,254.6,254.1,1.00,167.17,1.52
+"01 - Speed Of Life.flac",beat_grid,1117.0,858.7,0.77,167.17,6.68
+"01 - Speed Of Life.flac",grid_onset_calibration,46.1,46.0,1.00,167.17,0.28
+"01 - Speed Of Life.flac",instrument_family,285.7,262.8,0.92,167.17,1.71
+"01 - Speed Of Life.flac",sweep_separate,3520.0,2343.8,0.67,167.17,21.06
+"01 - Speed Of Life.flac",sweep_analyze,543.9,988.8,1.82,167.17,3.25
+"01 - Speed Of Life.flac",stem_series_sweep,3545.7,2370.0,0.67,167.17,21.21
+"01 - Speed Of Life.flac",cache_write,13.2,7.9,0.60,167.17,0.08
+"01 - Speed Of Life.flac",TRACK_TOTAL,5755.5,4216.5,0.73,167.17,34.43
+"02 - Breaking Glass.flac",content_hash,25.9,7.3,0.28,112.89,0.23
+"02 - Breaking Glass.flac",cache_probe,0.1,0.1,1.02,112.89,0.00
+"02 - Breaking Glass.flac",metadata_artwork,1.9,2.0,1.10,112.89,0.02
+"02 - Breaking Glass.flac",decode,119.2,119.0,1.00,112.89,1.06
+"02 - Breaking Glass.flac",loudness_profile,11.8,11.8,1.00,112.89,0.10
+"02 - Breaking Glass.flac",stem_separation,117.5,84.4,0.72,112.89,1.04
+"02 - Breaking Glass.flac",stem_warmup,31.9,31.8,1.00,112.89,0.28
+"02 - Breaking Glass.flac",mir,131.7,131.4,1.00,112.89,1.17
+"02 - Breaking Glass.flac",beat_grid,268.7,93.5,0.35,112.89,2.38
+"02 - Breaking Glass.flac",grid_onset_calibration,34.6,34.5,1.00,112.89,0.31
+"02 - Breaking Glass.flac",instrument_family,183.2,165.4,0.90,112.89,1.62
+"02 - Breaking Glass.flac",sweep_separate,2087.4,1412.7,0.68,112.89,18.49
+"02 - Breaking Glass.flac",sweep_analyze,364.0,645.3,1.77,112.89,3.22
+"02 - Breaking Glass.flac",stem_series_sweep,2141.6,1467.1,0.69,112.89,18.97
+"02 - Breaking Glass.flac",cache_write,10.6,5.4,0.50,112.89,0.09
+"02 - Breaking Glass.flac",TRACK_TOTAL,3078.8,2154.0,0.70,112.89,27.27
+"03 - What In The World.flac",content_hash,28.8,9.1,0.32,143.11,0.20
+"03 - What In The World.flac",cache_probe,0.1,0.1,0.99,143.11,0.00
+"03 - What In The World.flac",metadata_artwork,1.3,1.5,1.15,143.11,0.01
+"03 - What In The World.flac",decode,153.5,153.3,1.00,143.11,1.07
+"03 - What In The World.flac",loudness_profile,14.6,14.6,1.00,143.11,0.10
+"03 - What In The World.flac",stem_separation,110.7,73.2,0.66,143.11,0.77
+"03 - What In The World.flac",stem_warmup,31.7,31.6,1.00,143.11,0.22
+"03 - What In The World.flac",mir,193.3,192.9,1.00,143.11,1.35
+"03 - What In The World.flac",beat_grid,334.0,100.6,0.30,143.11,2.33
+"03 - What In The World.flac",grid_onset_calibration,43.8,43.8,1.00,143.11,0.31
+"03 - What In The World.flac",instrument_family,232.1,210.1,0.91,143.11,1.62
+"03 - What In The World.flac",sweep_separate,2439.7,1643.6,0.67,143.11,17.05
+"03 - What In The World.flac",sweep_analyze,461.4,802.9,1.74,143.11,3.22
+"03 - What In The World.flac",stem_series_sweep,2489.3,1693.5,0.68,143.11,17.39
+"03 - What In The World.flac",cache_write,9.2,5.9,0.65,143.11,0.06
+"03 - What In The World.flac",TRACK_TOTAL,3642.6,2530.4,0.69,143.11,25.45
+"04 - Sound And Vision.flac",content_hash,35.3,12.4,0.35,183.43,0.19
+"04 - Sound And Vision.flac",cache_probe,0.1,0.1,0.99,183.43,0.00
+"04 - Sound And Vision.flac",metadata_artwork,1.4,1.6,1.14,183.43,0.01
+"04 - Sound And Vision.flac",decode,204.6,204.2,1.00,183.43,1.12
+"04 - Sound And Vision.flac",loudness_profile,19.3,19.2,1.00,183.43,0.10
+"04 - Sound And Vision.flac",stem_separation,117.7,74.6,0.63,183.43,0.64
+"04 - Sound And Vision.flac",stem_warmup,31.6,31.4,0.99,183.43,0.17
+"04 - Sound And Vision.flac",mir,294.2,293.9,1.00,183.43,1.60
+"04 - Sound And Vision.flac",beat_grid,432.9,131.5,0.30,183.43,2.36
+"04 - Sound And Vision.flac",grid_onset_calibration,57.2,57.1,1.00,183.43,0.31
+"04 - Sound And Vision.flac",instrument_family,276.7,258.0,0.93,183.43,1.51
+"04 - Sound And Vision.flac",sweep_separate,3165.5,2220.7,0.70,183.43,17.26
+"04 - Sound And Vision.flac",sweep_analyze,587.2,1078.8,1.84,183.43,3.20
+"04 - Sound And Vision.flac",stem_series_sweep,3241.7,2297.2,0.71,183.43,17.67
+"04 - Sound And Vision.flac",cache_write,13.1,8.4,0.64,183.43,0.07
+"04 - Sound And Vision.flac",TRACK_TOTAL,4726.0,3389.8,0.72,183.43,25.76
+"05 - Always Crashing In The Same Car.flac",content_hash,38.2,15.0,0.39,213.73,0.18
+"05 - Always Crashing In The Same Car.flac",cache_probe,0.1,0.1,1.00,213.73,0.00
+"05 - Always Crashing In The Same Car.flac",metadata_artwork,1.6,1.7,1.05,213.73,0.01
+"05 - Always Crashing In The Same Car.flac",decode,232.6,232.2,1.00,213.73,1.09
+"05 - Always Crashing In The Same Car.flac",loudness_profile,21.8,21.7,1.00,213.73,0.10
+"05 - Always Crashing In The Same Car.flac",stem_separation,122.6,76.7,0.63,213.73,0.57
+"05 - Always Crashing In The Same Car.flac",stem_warmup,33.1,33.1,1.00,213.73,0.16
+"05 - Always Crashing In The Same Car.flac",mir,387.2,386.7,1.00,213.73,1.81
+"05 - Always Crashing In The Same Car.flac",beat_grid,498.2,150.5,0.30,213.73,2.33
+"05 - Always Crashing In The Same Car.flac",grid_onset_calibration,61.2,61.1,1.00,213.73,0.29
+"05 - Always Crashing In The Same Car.flac",instrument_family,325.5,304.3,0.93,213.73,1.52
+"05 - Always Crashing In The Same Car.flac",sweep_separate,3485.6,2412.0,0.69,213.73,16.31
+"05 - Always Crashing In The Same Car.flac",sweep_analyze,684.1,1209.6,1.77,213.73,3.20
+"05 - Always Crashing In The Same Car.flac",stem_series_sweep,3555.3,2482.0,0.70,213.73,16.63
+"05 - Always Crashing In The Same Car.flac",cache_write,12.0,8.3,0.69,213.73,0.06
+"05 - Always Crashing In The Same Car.flac",TRACK_TOTAL,5289.7,3773.5,0.71,213.73,24.75
+"06 - Be My Wife.flac",content_hash,35.0,12.1,0.35,176.64,0.20
+"06 - Be My Wife.flac",cache_probe,0.1,0.1,0.99,176.64,0.00
+"06 - Be My Wife.flac",metadata_artwork,1.8,1.7,0.95,176.64,0.01
+"06 - Be My Wife.flac",decode,197.2,196.9,1.00,176.64,1.12
+"06 - Be My Wife.flac",loudness_profile,18.1,18.0,1.00,176.64,0.10
+"06 - Be My Wife.flac",stem_separation,120.9,75.0,0.62,176.64,0.68
+"06 - Be My Wife.flac",stem_warmup,31.3,31.2,1.00,176.64,0.18
+"06 - Be My Wife.flac",mir,271.4,271.1,1.00,176.64,1.54
+"06 - Be My Wife.flac",beat_grid,405.9,122.4,0.30,176.64,2.30
+"06 - Be My Wife.flac",grid_onset_calibration,50.2,50.2,1.00,176.64,0.28
+"06 - Be My Wife.flac",instrument_family,264.0,250.8,0.95,176.64,1.49
+"06 - Be My Wife.flac",sweep_separate,3068.4,2140.3,0.70,176.64,17.37
+"06 - Be My Wife.flac",sweep_analyze,570.5,1060.0,1.86,176.64,3.23
+"06 - Be My Wife.flac",stem_series_sweep,3122.5,2194.8,0.70,176.64,17.68
+"06 - Be My Wife.flac",cache_write,12.1,8.2,0.68,176.64,0.07
+"06 - Be My Wife.flac",TRACK_TOTAL,4530.6,3232.7,0.71,176.64,25.65
+"07 - A New Career In A New Town.flac",content_hash,30.5,10.6,0.35,173.27,0.18
+"07 - A New Career In A New Town.flac",cache_probe,0.1,0.1,1.00,173.27,0.00
+"07 - A New Career In A New Town.flac",metadata_artwork,2.3,1.8,0.78,173.27,0.01
+"07 - A New Career In A New Town.flac",decode,182.0,181.7,1.00,173.27,1.05
+"07 - A New Career In A New Town.flac",loudness_profile,17.8,17.8,1.00,173.27,0.10
+"07 - A New Career In A New Town.flac",stem_separation,112.8,74.8,0.66,173.27,0.65
+"07 - A New Career In A New Town.flac",stem_warmup,31.8,31.7,1.00,173.27,0.18
+"07 - A New Career In A New Town.flac",mir,268.9,268.3,1.00,173.27,1.55
+"07 - A New Career In A New Town.flac",beat_grid,406.3,119.8,0.29,173.27,2.35
+"07 - A New Career In A New Town.flac",grid_onset_calibration,50.1,50.1,1.00,173.27,0.29
+"07 - A New Career In A New Town.flac",instrument_family,261.7,248.0,0.95,173.27,1.51
+"07 - A New Career In A New Town.flac",sweep_separate,2867.2,1944.7,0.68,173.27,16.55
+"07 - A New Career In A New Town.flac",sweep_analyze,561.0,987.8,1.76,173.27,3.24
+"07 - A New Career In A New Town.flac",stem_series_sweep,2912.6,1990.4,0.68,173.27,16.81
+"07 - A New Career In A New Town.flac",cache_write,11.9,8.5,0.72,173.27,0.07
+"07 - A New Career In A New Town.flac",TRACK_TOTAL,4289.1,3003.7,0.70,173.27,24.75
+"08 - Warszawa.flac",content_hash,53.6,19.6,0.36,383.67,0.14
+"08 - Warszawa.flac",cache_probe,0.1,0.1,1.00,383.67,0.00
+"08 - Warszawa.flac",metadata_artwork,1.3,1.5,1.14,383.67,0.00
+"08 - Warszawa.flac",decode,390.1,389.6,1.00,383.67,1.02
+"08 - Warszawa.flac",loudness_profile,39.4,39.3,1.00,383.67,0.10
+"08 - Warszawa.flac",stem_separation,122.3,75.2,0.62,383.67,0.32
+"08 - Warszawa.flac",stem_warmup,32.1,32.1,1.00,383.67,0.08
+"08 - Warszawa.flac",mir,1111.1,1109.1,1.00,383.67,2.90
+"08 - Warszawa.flac",beat_grid,845.3,250.2,0.30,383.67,2.20
+"08 - Warszawa.flac",grid_onset_calibration,110.2,110.0,1.00,383.67,0.29
+"08 - Warszawa.flac",instrument_family,551.9,524.6,0.95,383.67,1.44
+"08 - Warszawa.flac",sweep_separate,5928.2,4124.2,0.70,383.67,15.45
+"08 - Warszawa.flac",sweep_analyze,1234.9,2244.1,1.82,383.67,3.22
+"08 - Warszawa.flac",stem_series_sweep,6029.9,4226.5,0.70,383.67,15.72
+"08 - Warszawa.flac",cache_write,18.0,11.9,0.66,383.67,0.05
+"08 - Warszawa.flac",TRACK_TOTAL,9305.6,6790.0,0.73,383.67,24.25
+"09 - Art Decade.flac",content_hash,33.9,12.6,0.37,227.16,0.15
+"09 - Art Decade.flac",cache_probe,0.1,0.1,1.01,227.16,0.00
+"09 - Art Decade.flac",metadata_artwork,2.3,1.8,0.80,227.16,0.01
+"09 - Art Decade.flac",decode,233.6,233.2,1.00,227.16,1.03
+"09 - Art Decade.flac",loudness_profile,23.3,23.2,1.00,227.16,0.10
+"09 - Art Decade.flac",stem_separation,121.5,72.0,0.59,227.16,0.53
+"09 - Art Decade.flac",stem_warmup,31.2,31.0,1.00,227.16,0.14
+"09 - Art Decade.flac",mir,431.9,431.1,1.00,227.16,1.90
+"09 - Art Decade.flac",beat_grid,533.6,164.2,0.31,227.16,2.35
+"09 - Art Decade.flac",grid_onset_calibration,64.1,64.0,1.00,227.16,0.28
+"09 - Art Decade.flac",instrument_family,335.0,319.5,0.95,227.16,1.47
+"09 - Art Decade.flac",sweep_separate,3819.5,2602.9,0.68,227.16,16.81
+"09 - Art Decade.flac",sweep_analyze,732.1,1327.3,1.81,227.16,3.22
+"09 - Art Decade.flac",stem_series_sweep,3830.2,2614.1,0.68,227.16,16.86
+"09 - Art Decade.flac",cache_write,17.7,12.7,0.72,227.16,0.08
+"09 - Art Decade.flac",TRACK_TOTAL,5658.5,3979.7,0.70,227.16,24.91
+"10 - Weeping Wall.flac",content_hash,34.3,12.9,0.37,208.24,0.16
+"10 - Weeping Wall.flac",cache_probe,0.1,0.1,1.00,208.24,0.00
+"10 - Weeping Wall.flac",metadata_artwork,1.4,1.6,1.16,208.24,0.01
+"10 - Weeping Wall.flac",decode,219.6,219.2,1.00,208.24,1.05
+"10 - Weeping Wall.flac",loudness_profile,21.6,21.5,1.00,208.24,0.10
+"10 - Weeping Wall.flac",stem_separation,106.0,71.4,0.67,208.24,0.51
+"10 - Weeping Wall.flac",stem_warmup,32.4,32.4,1.00,208.24,0.16
+"10 - Weeping Wall.flac",mir,373.8,373.2,1.00,208.24,1.79
+"10 - Weeping Wall.flac",beat_grid,466.0,141.6,0.30,208.24,2.24
+"10 - Weeping Wall.flac",grid_onset_calibration,65.4,65.4,1.00,208.24,0.31
+"10 - Weeping Wall.flac",instrument_family,320.4,298.0,0.93,208.24,1.54
+"10 - Weeping Wall.flac",sweep_separate,3437.9,2372.5,0.69,208.24,16.51
+"10 - Weeping Wall.flac",sweep_analyze,673.1,1195.9,1.78,208.24,3.23
+"10 - Weeping Wall.flac",stem_series_sweep,3492.0,2427.1,0.70,208.24,16.77
+"10 - Weeping Wall.flac",cache_write,15.6,10.3,0.66,208.24,0.08
+"10 - Weeping Wall.flac",TRACK_TOTAL,5148.9,3674.9,0.71,208.24,24.73
+"11 - Subterraneans.flac",content_hash,50.1,18.4,0.37,339.29,0.15
+"11 - Subterraneans.flac",cache_probe,0.1,0.1,1.00,339.29,0.00
+"11 - Subterraneans.flac",metadata_artwork,1.9,1.9,0.97,339.29,0.01
+"11 - Subterraneans.flac",decode,330.0,329.5,1.00,339.29,0.97
+"11 - Subterraneans.flac",loudness_profile,34.7,34.6,1.00,339.29,0.10
+"11 - Subterraneans.flac",stem_separation,123.5,74.6,0.60,339.29,0.36
+"11 - Subterraneans.flac",stem_warmup,31.8,31.7,1.00,339.29,0.09
+"11 - Subterraneans.flac",mir,1282.0,1280.3,1.00,339.29,3.78
+"11 - Subterraneans.flac",beat_grid,775.4,271.5,0.35,339.29,2.29
+"11 - Subterraneans.flac",grid_onset_calibration,104.1,103.9,1.00,339.29,0.31
+"11 - Subterraneans.flac",instrument_family,493.9,470.2,0.95,339.29,1.46
+"11 - Subterraneans.flac",sweep_separate,5466.5,3849.1,0.70,339.29,16.11
+"11 - Subterraneans.flac",sweep_analyze,1095.2,2028.4,1.85,339.29,3.23
+"11 - Subterraneans.flac",stem_series_sweep,5530.3,3913.6,0.71,339.29,16.30
+"11 - Subterraneans.flac",cache_write,18.8,13.7,0.73,339.29,0.06
+"11 - Subterraneans.flac",TRACK_TOTAL,8776.9,6544.0,0.75,339.29,25.87

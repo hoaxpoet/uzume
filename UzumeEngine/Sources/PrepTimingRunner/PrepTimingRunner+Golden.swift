@@ -44,6 +44,15 @@ final class WindowTap: StemSeparating, @unchecked Sendable {
         return result
     }
 
+    /// Forwarded, or the harness would measure the protocol's per-window default instead of
+    /// the production batched path.
+    func separateBatch(monoWindows: [[Float]], sampleRate: Float) throws -> [StemSeparationResult] {
+        let results = try inner.separateBatch(monoWindows: monoWindows, sampleRate: sampleRate)
+        if keep >= windows, keep < windows + results.count { kept = results[keep - windows].stemWaveforms }
+        windows += results.count
+        return results
+    }
+
     var stemLabels: [String] { inner.stemLabels }
     var stemBuffers: [UMABuffer<Float>] { inner.stemBuffers }
     var outputSampleRate: Float? { inner.outputSampleRate }
