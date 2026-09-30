@@ -156,3 +156,69 @@ struct SessionManagerCancelTests {
         #expect(manager.state == .idle)
     }
 }
+
+// MARK: - BR.7 (F11): Cancel during Connecting sticks
+
+/// A connector that blocks until the test releases it — so Cancel lands mid-connect by order,
+/// not by timing. `failing` makes the released connect throw instead.
+private final class GatedConnector: PlaylistConnecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var entered: CheckedContinuation<Void, Never>?
+    private var gate: CheckedContinuation<Void, Never>?
+    private var hasEntered = false
+    let failing: Bool
+    init(failing: Bool) { self.failing = failing }
+
+    func connect(source: PlaylistSource) async throws -> [TrackIdentity] {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            lock.withLock {
+                gate = cont
+                hasEntered = true
+                entered?.resume()
+                entered = nil
+            }
+        }
+        if failing { throw URLError(.notConnectedToInternet) }
+        return [TrackIdentity(title: "A", artist: "X"), TrackIdentity(title: "B", artist: "X")]
+    }
+
+    func waitUntilEntered() async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            let already = lock.withLock { () -> Bool in
+                if hasEntered { return true }
+                entered = cont
+                return false
+            }
+            if already { cont.resume() }
+        }
+    }
+
+    func release() { lock.withLock { gate?.resume(); gate = nil } }
+}
+
+@Suite("Cancel during Connecting sticks (BR.7 / F11)")
+@MainActor
+struct CancelDuringConnectingTests {
+
+    @Test(arguments: [false, true])
+    func cancelMidConnect_thenTheConnectFinishes_staysIdle(failing: Bool) async throws {
+        let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
+        let connector = GatedConnector(failing: failing)
+        let manager = makeManager(connector: connector, separator: try InstantSeparator(device: device))
+        var states: [SessionState] = []
+        let cancellable = manager.$state.sink { states.append($0) }
+        defer { cancellable.cancel() }
+
+        let start = Task { await manager.startSession(source: .appleMusicCurrentPlaylist) }
+        await connector.waitUntilEntered()
+        #expect(manager.state == .connecting)
+
+        manager.cancel()
+        connector.release()
+        await start.value
+
+        #expect(manager.state == .idle)
+        #expect(!states.contains(.preparing), "a connect finishing after Cancel must not start preparing")
+        #expect(!states.contains(.ready))
+    }
+}

@@ -50,12 +50,8 @@ final class PlaybackKeyMonitor {
     /// original event otherwise (pass through to AppKit default handling).
     @MainActor
     private func handle(event: NSEvent, registry: PlaybackShortcutRegistry) -> NSEvent? {
-        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        let key = event.charactersIgnoringModifiers ?? ""
-
         for shortcut in registry.shortcuts {
-            guard key.lowercased() == shortcut.key.lowercased(),
-                  mods == shortcut.modifiers else { continue }
+            guard shortcut.matches(event: event) else { continue }   // one rule (BR.4 / F8)
             shortcut.action()
             logger.debug("PlaybackKeyMonitor: dispatched '\(shortcut.id)'")
             return nil // Consume — don't pass to AppKit

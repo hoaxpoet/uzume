@@ -74,8 +74,11 @@ extension VisualizerEngine {
 
     // MARK: - Routing Helpers
 
-    /// Open the analysis diagnostic log file in the user's home directory.
-    static func openDiagnosticLog() -> FileHandle? {
+    /// Open the analysis diagnostic log file in the user's home directory. Nil (no file) in the
+    /// public build (BR.4 / H11): it wrote into every tester's home folder, and `FileHandle.write`
+    /// raises an uncatchable exception on a full disk.
+    static func openDiagnosticLog(flavor: BuildFlavor = .current) -> FileHandle? {
+        guard flavor.showsDeveloperDiagnostics else { return nil }
         let path = NSHomeDirectory() + "/uzume_diag.log"
         FileManager.default.createFile(atPath: path, contents: nil)
         return FileHandle(forWritingAtPath: path)

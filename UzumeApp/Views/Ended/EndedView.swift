@@ -6,10 +6,9 @@
 //
 // QR.4 (D-091): replaces the U.1 stub with a session-summary card +
 // primary "Start another session" CTA + secondary "Open sessions folder".
-// `sessionDuration` plumbing is deferred — `SessionManager` does not
-// currently track a session-start timestamp, and adding it requires
-// session-state changes outside QR.4 scope. Track count is sourced from
-// the parent (`ContentView`); duration shows "—" with a TODO follow-up.
+// BR.4 (I10): the duration is how long the session played (`VisualizerEngine`
+// stamps `.playing` → `.ended`); the count is the plan's track count, pluralised.
+// A line with nothing to say (never played / no planned tracks) is hidden.
 //
 // GAP H (2026-05-28): when the session that just ended was a local-file
 // session, surface a "Play <name> again" CTA between the primary and the
@@ -51,12 +50,16 @@ struct EndedView: View {
                 .foregroundColor(UzumeAppColor.textPrimary)
 
             VStack(spacing: 6) {
-                Text(formattedTrackCount)
-                    .font(.body)
-                    .foregroundColor(UzumeAppColor.textSecondary)
-                Text(formattedDuration)
-                    .font(.body)
-                    .foregroundColor(UzumeAppColor.textTertiary)
+                if let count = Self.trackCountText(trackCount) {
+                    Text(count)
+                        .font(.body)
+                        .foregroundColor(UzumeAppColor.textSecondary)
+                }
+                if let duration = Self.durationText(sessionDuration) {
+                    Text(duration)
+                        .font(.body)
+                        .foregroundColor(UzumeAppColor.textTertiary)
+                }
             }
 
             Spacer().frame(height: 8)
@@ -106,19 +109,22 @@ struct EndedView: View {
 
     // MARK: - Formatting
 
-    private var formattedTrackCount: String {
-        String(format: String(localized: "ended.summary.tracks"), trackCount)
+    /// "1 track" / "12 tracks"; nil (no line) for a session with no planned tracks (BR.4 / I10).
+    static func trackCountText(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return count == 1
+            ? String(localized: "ended.summary.track_one")
+            : String(format: String(localized: "ended.summary.tracks"), count)
     }
 
-    private var formattedDuration: String {
-        guard let seconds = sessionDuration else {
-            return String(format: String(localized: "ended.summary.duration"), "—")
-        }
+    /// "12m 5s"; nil (no line) when the session never played — it used to show "—".
+    static func durationText(_ sessionDuration: TimeInterval?) -> String? {
+        guard let seconds = sessionDuration else { return nil }
         let formatter = DateComponentsFormatter()
         formatter.unitsStyle = .abbreviated
         formatter.allowedUnits = [.hour, .minute, .second]
         formatter.zeroFormattingBehavior = .dropLeading
-        let formatted = formatter.string(from: seconds) ?? "—"
+        guard let formatted = formatter.string(from: seconds) else { return nil }
         return String(format: String(localized: "ended.summary.duration"), formatted)
     }
 
@@ -162,5 +168,29 @@ extension EndedView {
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         }
         NSWorkspace.shared.open(url)
+    }
+}
+
+// MARK: - PlaybackDurationClock
+
+/// Stamps `.playing` → `.ended` for the Ended screen's duration (BR.4 / I10). A new session
+/// (`.connecting` / `.preparing`) forgets the last one; `.ready` and `.idle` change nothing.
+struct PlaybackDurationClock {
+    private var startedAt: Date?
+    private(set) var lastSessionSeconds: TimeInterval?
+
+    mutating func update(state: SessionState, now: Date = Date()) {
+        switch state {
+        case .playing:
+            if startedAt == nil { startedAt = now }
+        case .ended:
+            lastSessionSeconds = startedAt.map { now.timeIntervalSince($0) }
+            startedAt = nil
+        case .connecting, .preparing:
+            startedAt = nil
+            lastSessionSeconds = nil
+        case .idle, .ready:
+            break
+        }
     }
 }

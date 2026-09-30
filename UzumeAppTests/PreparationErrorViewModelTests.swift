@@ -59,6 +59,14 @@ struct PreparationErrorViewModelTests {
         #expect(bundle.sut.presentationState == .normal)
     }
 
+    @Test("BR.7 (F10): nothing to prepare (a failed connection) → the recovery screen")
+    func test_zeroTracks_showsRecoveryScreen() async {
+        let bundle = makeSUT(statuses: [:], totalTrackCount: 0)
+        bundle.subject.send([:])
+        await Task.yield()
+        #expect(bundle.sut.presentationState == .fullScreen(.allTracksFailedToPrepare))
+    }
+
     @Test("going offline after downloads start → fullScreen networkOffline")
     func test_offlineAfterStart_showsFullScreen() async {
         let track = makeTrack("Track 1")
@@ -170,5 +178,36 @@ struct PreparationErrorViewModelTests {
         await Task.yield()
         // One track is ready — not all failed.
         #expect(bundle.sut.presentationState == .normal)
+    }
+}
+
+// MARK: - BR.7 (F13): the escapes are wired
+
+@Suite("Preparation escapes are wired (BR.7)")
+struct PreparationEscapeWiringTests {
+    @Test func recoveryReactiveEscape_andLocalFileReachability_areWired() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("UzumeApp/ContentView.swift")
+        let src = try String(contentsOf: url, encoding: .utf8)
+        #expect(src.contains("onStartReactive: isLocalFile ? nil : { engine.sessionManager.startReactiveMode() }"))
+        let localReachability = "reachability: isLocalFile ? StubReachabilityMonitor(initialValue: true)"
+        #expect(src.contains(localReachability))
+    }
+}
+
+// MARK: - BR.7 (C10): missing ML weights say so
+
+@Suite("Missing ML weights are announced (BR.7)")
+struct MissingAnalysisNoticeWiringTests {
+    @Test func launchShowsTheNotice_whenTheSeparatorDidNotLoad() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let app = try String(contentsOf: root.appendingPathComponent("UzumeApp/UzumeApp.swift"), encoding: .utf8)
+        #expect(app.contains("if engine.analysisUnavailable { MissingAnalysisNotice.show() }"))
+        let stems = try String(
+            contentsOf: root.appendingPathComponent("UzumeApp/VisualizerEngine+Stems.swift"), encoding: .utf8)
+        #expect(stems.contains("var analysisUnavailable: Bool { stemSeparator == nil }"))
+        #expect(Bundle.main.localizedString(forKey: "analysis_unavailable.title", value: "∅", table: nil) != "∅")
     }
 }

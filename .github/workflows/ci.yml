@@ -94,6 +94,21 @@ jobs:
           swift build --package-path UzumeEngine \
             --only-use-versions-from-resolved-file
 
+      # BR.6a (audit H8): build the configuration that SHIPS. Release is whole-module
+      # optimised with warnings-as-errors and has its own `#else` arms; a Release-only
+      # compile error otherwise first surfaces as a failed release.sh. arm64 only, as shipped.
+      - name: Build Release (arm64, signing disabled)
+        run: |
+          xcodebuild -scheme UzumeApp -configuration Release -destination 'platform=macOS' \
+            ARCHS=arm64 -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO build
+
+      # BR.6a (audit H1): compile every shader the app compiles at launch, through the app's
+      # own source assembly (ShaderLibrary + PresetLoader) and the runtime Metal compiler on
+      # the runner's paravirtual GPU. A renderer failure is a crash on every launch; a scene
+      # failure silently drops the scene. FAILS (never skips) without a Metal device.
+      - name: Shader compile gate (every .metal, app source assembly)
+        run: swift test --package-path UzumeEngine --filter ShaderCompileGateTests
+
       # Pinned to the dev version (CLEAN.5.4b) — NOT `brew install` latest, which
       # floats (0.63.3 ≠ dev 0.63.2 was CI run #2's red). Download the exact
       # portable binary (universal; runs on arm64). Bump: change SWIFTLINT_VERSION
