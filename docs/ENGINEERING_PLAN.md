@@ -243,8 +243,8 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.2** | 1 | ✅ merged (#316) — pending Matt's live `pmset` check (BUG-162) | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ✅ merged (#318) — TSan-clean (BUG-165) | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
 | **BR.4** | 1 | ready | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
-| **BR.5** | 1 | ✅ fixed, PR open — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
-| **BR.6** | 1 | ready | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
+| **BR.5** | 1 | ✅ merged (#319) — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
+| **BR.6** | 1 | 🔨 BR.6a ✅ PR open (CI compiles shaders + builds Release, BUG-167); BR.6b (measure + cap) next | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
 | **BR.7** | 2 | ready | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
 | **BR.8** | 2 | ready | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ready | Background preparation gets its own analyzers (C3/G3) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.6a — CI builds Release and compiles every shader ✅ (2026-09-29)
+
+**Delivered.** Audit H1 → BUG-167 (mitigated), plus H8. `ci.yml` gains **Build Release (arm64)** and the **shader compile gate** (`ShaderCompileGateTests`). The gate compiles the renderer library (`ShaderLibrary`) and every scene `.metal` (`PresetLoader`) through the app's own source assembly, with the runtime compiler on the runner's paravirtual Metal device. It fails, never skips, without a device, and names each dropped file.
+**Done-when:** ✅ a CI step builds Release and compiles every shader through the app's source assembly; ✅ red on a deliberately broken shader, then reverted (PR #320: `a03d5da8` → `8be6121e`); ✅ green on the merged-main head.
+**Not done:** the macOS 15 launch of the notarized DMG (BR.6b / DIST-LIM); a precompiled `.metallib` (Tier 3).
 
 ### Increment BR.5 — evidence from testers ✅ (2026-09-29, pending live check)
 
