@@ -80,6 +80,17 @@ public final class MIRPipeline: @unchecked Sendable {
     /// that need a Float (FeatureVector field, BeatSyncSnapshot CSV column)
     /// cast at the read site, not the storage site.
     public private(set) var elapsedSeconds: Double = 0
+
+    /// BR.11 (audit B2): where the track clock comes from. Nil (streaming): `elapsedSeconds`
+    /// accumulates each frame's `deltaTime`. Set (local files): it IS the player's playhead,
+    /// wrapped at the file length — so a loop wraps it, a pause holds it and a restart moves it.
+    /// Accumulating, a single-file loop never wrapped (stems froze on the last frame from the
+    /// second loop) and every pause added up to 1.5 s of lead. Read on the analysis queue.
+    public var elapsedSecondsSource: (@Sendable () -> Double?)? {
+        get { lock.withLock { _elapsedSecondsSource } }
+        set { lock.withLock { _elapsedSecondsSource = newValue } }
+    }
+    private var _elapsedSecondsSource: (@Sendable () -> Double?)?
     /// Latest structural prediction from StructuralAnalyzer.
     public private(set) var latestStructuralPrediction: StructuralPrediction = .none
     /// Number of onsets detected per second (for BPM debugging).
@@ -267,8 +278,12 @@ public final class MIRPipeline: @unchecked Sendable {
             deltaTime: deltaTime
         )
 
+        // BR.11 (B2): read the playhead BEFORE taking this pipeline's lock — the source takes
+        // the player's own lock, and the two must never nest.
+        let playhead = elapsedSecondsSource?()
+
         // Update CPU-side properties under lock.
-        updateCPUSideProperties(context)
+        updateCPUSideProperties(context, playhead: playhead)
 
         // Run structural analysis and write recording row.
         updateStructuralAnalysis(context)
@@ -304,10 +319,10 @@ public final class MIRPipeline: @unchecked Sendable {
     }
 
     /// Update all CPU-side properties from analyzer results (under lock).
-    private func updateCPUSideProperties(_ ctx: ProcessContext) {
+    private func updateCPUSideProperties(_ ctx: ProcessContext, playhead: Double?) {
         lock.lock()
 
-        elapsedSeconds += Double(ctx.deltaTime)
+        if let playhead { elapsedSeconds = playhead } else { elapsedSeconds += Double(ctx.deltaTime) }
         featureStability = Float(min(1.0, max(0.0, (elapsedSeconds - 3.0) / 7.0)))
 
         latestChroma = ctx.chroma.chroma

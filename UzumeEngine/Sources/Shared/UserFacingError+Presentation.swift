@@ -86,7 +86,7 @@ extension UserFacingError {
         case .silenceExtended, .tapReinstallAllFailed, .mpsGraphAllocationFailure,
              .sampleRateMismatch, .audioLevelsLow, .displayDisconnectedMidSession,
              .negativeNudgeTwice, .rePlanSucceeded, .localFilePlaybackFailed,
-             .presetCompileFailed:
+             .presetCompileFailed, .nowPlayingPermissionDenied:
             return .bottomRightToast
         case .tapReinstallAttempt, .frameBudgetExceeded, .drawableSizeMismatch:
             return .logOnly
@@ -106,7 +106,7 @@ extension UserFacingError {
             return .fatal
         case .screenCapturePermissionDenied, .appleScriptPermissionDenied,
              .spotifyUnreachable, .sampleRateMismatch, .audioLevelsLow,
-             .localFilePlaybackFailed, .presetCompileFailed:
+             .localFilePlaybackFailed, .presetCompileFailed, .nowPlayingPermissionDenied:
             return .warning
         case .mpsGraphAllocationFailure, .stemSeparationFailed, .previewNotFound:
             return .degradation
@@ -198,6 +198,7 @@ extension UserFacingError {
         case .mpsGraphAllocationFailure: return "mpsgraph.alloc.fail"
         case .sampleRateMismatch: return "audio.samplerate.mismatch"
         case .audioLevelsLow:    return "audio.levels.low"
+        case .nowPlayingPermissionDenied: return "nowplaying.permission.denied"
         default:                 return nil
         }
     }

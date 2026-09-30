@@ -302,6 +302,19 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// Seconds into the file the player is at, as the analysis clock reads it (LFSEEK.1 test hook).
     var playheadSeconds: Double? { lock.withLock { analysisClock }?.playheadSeconds }
 
+    /// BR.11 (B2): the playhead wrapped at the file length — the local-file track clock. The
+    /// player keeps counting across a loop; the track restarts.
+    public var trackPlayheadSeconds: Double? {
+        let (clock, file) = lock.withLock { (analysisClock, audioFile) }
+        guard let raw = clock?.playheadSeconds, let file else { return nil }
+        return Self.wrapped(raw, fileSeconds: Double(file.length) / file.processingFormat.sampleRate)
+    }
+
+    /// `raw` seconds of playback wrapped into a file `fileSeconds` long.
+    static func wrapped(_ raw: Double, fileSeconds: Double) -> Double {
+        fileSeconds > 0 ? raw.truncatingRemainder(dividingBy: fileSeconds) : raw
+    }
+
     /// `true` while the engine + player exist and the player is not currently
     /// playing (paused state). `false` when stopped or actively playing.
     /// Used by the transport controls view model to render the right glyph

@@ -20,7 +20,10 @@ extension SessionManager {
     ///   real would mean storing a metadata-only entry on the analysisError
     ///   path — a readiness-semantics change to take up deliberately, not a
     ///   side effect of a doc fix.
-    /// - A `.failed` track (or any in-flight track) in the prefix breaks the run.
+    /// - The prefix counts `.ready` tracks from position 1 and SKIPS terminal non-ready ones
+    ///   (`.failed`, `.partial`); only a track still in flight ends it (BR.7 / audit C2). Before,
+    ///   one failed track among the first three (≈1 Spotify-scan session in 5) hid Start now
+    ///   until every track was terminal — minutes, with only Cancel.
     /// - `fullyPrepared` requires every track to be in a terminal state
     ///   (`.ready`, `.partial`, or `.failed`) with at least one usable track.
     /// - `reactiveFallback` when all terminal tracks are `.failed` (nothing to plan).
@@ -56,13 +59,14 @@ extension SessionManager {
             }
             if isReady { readyCount += 1 }
 
-            // Prefix: consecutive qualifying tracks from position 1.
+            // Prefix: `.ready` tracks from position 1, skipping terminal non-ready ones
+            // (BR.7 / C2). Only `.ready` counts (PUB.6); an in-flight track ends the run.
             if !prefixBroken {
-                // Only `.ready` qualifies. (The D-056 `.partial`-with-profile
-                // arm was deleted at PUB.6 — unreachable; see the doc comment.)
-                let countsForPrefix: Bool
-                if case .ready = status { countsForPrefix = true } else { countsForPrefix = false }
-                if countsForPrefix { prefixCount += 1 } else { prefixBroken = true }
+                switch status {
+                case .ready:            prefixCount += 1
+                case .failed, .partial: break
+                default:                prefixBroken = true
+                }
             }
         }
 

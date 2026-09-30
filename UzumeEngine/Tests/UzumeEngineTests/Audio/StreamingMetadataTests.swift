@@ -213,3 +213,108 @@ struct StreamingMetadataTests {
         #expect(callCount.value == 1)
     }
 }
+
+// MARK: - BR.11 (audit E2): a pause is not a new song
+
+@Suite("A pause is not a new song (BR.11)")
+struct PauseIsNotANewSongTests {
+
+    /// Scripted poll results, one per poll, then the last forever; counts polls.
+    private final class Script: @unchecked Sendable {
+        private let lock = NSLock()
+        private var steps: [NowPlayingInfo?]
+        private var polls = 0
+        init(_ steps: [NowPlayingInfo?]) { self.steps = steps }
+        func next() -> NowPlayingInfo? {
+            lock.withLock {
+                polls += 1
+                return steps.count > 1 ? steps.removeFirst() : steps.first ?? nil
+            }
+        }
+        var pollCount: Int { lock.withLock { polls } }
+    }
+
+    private func info(_ title: String) -> NowPlayingInfo {
+        NowPlayingInfo(title: title, artist: "Artist", album: nil, duration: 200)
+    }
+
+    private func run(_ script: Script, untilPolls polls: Int) async throws -> [TrackChangeEvent] {
+        let metadata = StreamingMetadata(pollInterval: .milliseconds(5))
+        let events = AtomicValue<[TrackChangeEvent]>([])
+        metadata.nowPlayingReader = { script.next() }
+        metadata.onTrackChange = { events.value.append($0) }
+        metadata.startObserving()
+        for _ in 0..<400 where script.pollCount < polls { try await Task.sleep(for: .milliseconds(10)) }
+        metadata.stopObserving()
+        return events.value
+    }
+
+    @Test func pausedThenResumed_sameSong_firesOnce() async throws {
+        // Playing A, then paused (nil) for several polls, then A again.
+        let script = Script([info("A"), nil, nil, nil, info("A"), info("A")])
+        let events = try await run(script, untilPolls: 8)
+        #expect(events.count == 1, "the resume is not a second track change")
+        #expect(events.first?.current.title == "A")
+    }
+
+    @Test func pausedThenADifferentSong_isATrackChange() async throws {
+        let script = Script([info("A"), nil, nil, info("B"), info("B")])
+        let events = try await run(script, untilPolls: 7)
+        #expect(events.map(\.current.title) == ["A", "B"])
+        #expect(events.last?.previous?.title == "A", "B's previous is A, not nil")
+    }
+}
+
+// MARK: - BR.10 (audit E1, E12, E14): Automation denied; only the session's own app
+
+@Suite("Now Playing: Automation denied, and only the session's own app (BR.10)")
+struct NowPlayingPermissionTests {
+
+    /// Counts polls and denials from any thread; `waitUntil` orders on the signal, not the clock.
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var polls = 0
+        private var denials: [MetadataSource] = []
+        func poll() { lock.withLock { polls += 1 } }
+        func deny(_ source: MetadataSource) { lock.withLock { denials.append(source) } }
+        var pollCount: Int { lock.withLock { polls } }
+        var denied: [MetadataSource] { lock.withLock { denials } }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<400 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    @Test func automationDenied_isReportedOncePerObservation() async throws {
+        let metadata = StreamingMetadata(pollInterval: .milliseconds(10))
+        let counter = Counter()
+        metadata.queryReader = { counter.poll(); return .automationDenied(.spotify) }
+        metadata.onAutomationDenied = { counter.deny($0) }
+
+        metadata.startObserving()
+        try await waitUntil { counter.pollCount >= 5 }
+        metadata.stopObserving()
+        #expect(counter.pollCount >= 5)
+        #expect(counter.denied == [.spotify], "one report, not one per 2 s poll")
+
+        metadata.startObserving()        // a new session reports again
+        try await waitUntil { counter.denied.count >= 2 }
+        metadata.stopObserving()
+        #expect(counter.denied == [.spotify, .spotify])
+    }
+
+    @Test func aSpotifySession_neverAsksMusic_andAClosedAppIsNeverAsked() {
+        #expect(StreamingMetadata.appsToQuery(allowed: [.spotify], appleMusicRunning: true, spotifyRunning: true)
+                == [.spotify])
+        #expect(StreamingMetadata.appsToQuery(allowed: [.appleMusic], appleMusicRunning: true, spotifyRunning: true)
+                == [.appleMusic])
+        #expect(StreamingMetadata.appsToQuery(allowed: [.appleMusic, .spotify],
+                                              appleMusicRunning: false, spotifyRunning: true) == [.spotify])
+    }
+
+    @Test func localFileModes_startNoNowPlayingPolling() {
+        #expect(InputMode.systemAudio.isCapture)
+        #expect(!InputMode.localFilePlayback(URL(fileURLWithPath: "/tmp/a.m4a")).isCapture)
+        #expect(!InputMode.localFile(URL(fileURLWithPath: "/tmp/a.m4a")).isCapture)
+    }
+}

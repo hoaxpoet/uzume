@@ -66,7 +66,9 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
 
     // MARK: - Init
 
-    public init() {}
+    public init() {
+        lifecycleQueue.setSpecific(key: Self.lifecycleQueueKey, value: true)
+    }
 
     // MARK: - Configuration
 
@@ -109,9 +111,18 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
     /// visualizer keeps receiving audio instead of freezing (CLEAN.1.5 / GAP-1).
     private let deviceMonitor = DefaultOutputDeviceMonitor()
 
-    /// Serial queue for tap reinstall — kept OFF the monitor's listener queue so
-    /// teardown/destroy never runs reentrantly from inside the Core Audio callback.
-    private let reinstallQueue = DispatchQueue(label: "io.uzume.audio.tapReinstall")
+    /// BR.12 (audit G2 / B14): ONE serial queue for every lifecycle step — start, stop and the
+    /// device-change reinstall. They used to run on main, the router's tap-management queue and
+    /// a reinstall queue with no shared ordering: ending a session during an AirPods switch
+    /// could leave an orphan tap running, and two sequences creating at once fed one callback
+    /// from two IO procs (analysis at 2×, raced scratch buffers). Kept OFF the monitor's
+    /// listener queue so teardown never runs reentrantly inside the Core Audio callback.
+    private let lifecycleQueue = DispatchQueue(label: "io.uzume.audio.tapLifecycle")
+    private static let lifecycleQueueKey = DispatchSpecificKey<Bool>()
+
+    /// Bumped by every `stopCapture`. A reinstall queued by a device change that a stop has
+    /// since overtaken is dropped instead of re-creating a tap nothing owns. Under `stateLock`.
+    private var lifecycleGeneration: UInt64 = 0
 
     private let stateLock = NSLock()
 
@@ -137,6 +148,10 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
     ///
     /// - Parameter mode: System-wide or app-specific capture.
     public func startCapture(mode: CaptureMode = .systemAudio) throws {
+        try onLifecycleQueue { try startCaptureOnLifecycleQueue(mode: mode) }
+    }
+
+    private func startCaptureOnLifecycleQueue(mode: CaptureMode) throws {
         stateLock.lock()
         guard !_isCapturing else {
             stateLock.unlock()
@@ -167,13 +182,13 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
             // CLEAN.1.5 (GAP-1): reinstall the tap when the default output device
             // changes (AirPods connect / monitor unplug) so visuals don't freeze
             // on the now-dead device. The listener fires on the monitor's queue;
-            // the actual reinstall is dispatched to `reinstallQueue`.
+            // the actual reinstall is dispatched to `lifecycleQueue`.
             deviceMonitor.start { [weak self] in
                 // BUG-058: breadcrumb the monitor FIRING (os_log .info isn't persisted,
                 // so session.log is the only post-hoc record of whether the
                 // default-output-change listener actually delivered).
                 self?.onCaptureDiagnostic?("device-change monitor FIRED → scheduling performReinstall")
-                self?.reinstallQueue.async { [weak self] in self?.performReinstall() }
+                self?.scheduleReinstall()
             }
 
             let sr = self.sampleRate
@@ -185,9 +200,23 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
             // "Tap reinstall #N" line disambiguate the two in session.log.
             armInstallProbeAndLog(kind: "install via startCapture")
         } catch {
-            stateLock.withLock { _isCapturing = false }
+            // BR.12 (G8): the create steps no longer tear down on their own (a reinstall must
+            // keep the monitor); a failed START undoes everything.
+            deviceMonitor.stop()
+            teardownTapResources()
+            stateLock.withLock {
+                _isCapturing = false
+                currentMode = nil
+            }
             throw error
         }
+    }
+
+    /// Queue a reinstall for the current capture (device change or Core Audio restart), tagged
+    /// with the lifecycle generation so a stop that lands first cancels it.
+    private func scheduleReinstall() {
+        let generation = stateLock.withLock { lifecycleGeneration }
+        lifecycleQueue.async { [weak self] in self?.performReinstall(generation: generation) }
     }
 
     // MARK: - Capture Setup Steps
@@ -199,7 +228,6 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         var newTapID: AudioObjectID = 0
         let tapStatus = AudioHardwareCreateProcessTap(tapDesc, &newTapID)
         guard tapStatus == noErr else {
-            stateLock.withLock { _isCapturing = false }
             throw AudioCaptureError.tapCreationFailed(tapStatus)
         }
 
@@ -222,7 +250,6 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         var newAggregateID: AudioDeviceID = 0
         let aggStatus = AudioHardwareCreateAggregateDevice(aggDesc as CFDictionary, &newAggregateID)
         guard aggStatus == noErr else {
-            cleanup()
             throw AudioCaptureError.aggregateDeviceCreationFailed(aggStatus)
         }
 
@@ -256,7 +283,6 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         }
 
         guard procStatus == noErr, let procID = newProcID else {
-            cleanup()
             throw AudioCaptureError.ioProcCreationFailed(procStatus)
         }
 
@@ -267,7 +293,6 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
     private func startDevice(aggregateID: AudioDeviceID, procID: AudioDeviceIOProcID) throws {
         let startStatus = AudioDeviceStart(aggregateID, procID)
         guard startStatus == noErr else {
-            cleanup()
             throw AudioCaptureError.deviceStartFailed(startStatus)
         }
     }
@@ -279,8 +304,16 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         // hang inside cleanup() (AudioDeviceStop / DestroyAggregate / DestroyTap)
         // is distinguishable from a hang in the subsequent create sequence.
         onCaptureDiagnostic?("stopCapture: ENTER → cleanup")
-        cleanup()
-        onCaptureDiagnostic?("stopCapture: cleanup done")
+        stateLock.withLock { lifecycleGeneration &+= 1 }   // BR.12: overtakes any queued reinstall
+        // BR.12: queued, not waited for, from outside the lifecycle queue — a reinstall stuck in a
+        // Core Audio call (the BUG-058 class) must not turn End Session into an app hang. A later
+        // start still runs strictly after this cleanup (the queue is serial).
+        if DispatchQueue.getSpecific(key: Self.lifecycleQueueKey) == true {
+            cleanup()
+        } else {
+            lifecycleQueue.async { [weak self] in self?.cleanup() }
+        }
+        onCaptureDiagnostic?("stopCapture: cleanup queued")
         logger.info("Audio capture stopped")
     }
 
@@ -324,7 +357,12 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         )
 
         let status = AudioObjectGetPropertyData(tapID, &addr, 0, nil, &formatSize, &format)
-        if status == noErr {
+        // BR.12 (audit G6): a 0 / NaN / infinite rate traps downstream (InputLevelMonitor's bin
+        // math, the raw-tap WAV header). Keep the defaults rather than accept it.
+        if status == noErr, !Self.isUsableSampleRate(format.mSampleRate) {
+            logger.error("Tap reported an unusable sample rate (\(format.mSampleRate)) — keeping \(self.sampleRate) Hz")
+            onCaptureDiagnostic?("readTapFormat: unusable rate \(format.mSampleRate) — kept \(sampleRate) Hz")
+        } else if status == noErr {
             sampleRate = Float(format.mSampleRate)
             channelCount = format.mChannelsPerFrame
             logger.info("Tap format: \(format.mSampleRate) Hz, \(format.mChannelsPerFrame) ch, \(format.mBitsPerChannel) bit")
@@ -334,11 +372,15 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
     }
 
     /// Reinstall the tap against the current default output device (CLEAN.1.5 /
-    /// GAP-1). Runs on `reinstallQueue` — never the monitor's listener queue — so
-    /// the teardown/create calls (incl. `cleanup()` on a create failure, which
-    /// removes the listener) never reenter the Core Audio property callback.
-    private func performReinstall() {
-        let mode: CaptureMode? = stateLock.withLock { _isCapturing ? currentMode : nil }
+    /// GAP-1). Runs on `lifecycleQueue` — never the monitor's listener queue — so the
+    /// teardown/create calls never reenter the Core Audio property callback, and never
+    /// interleave with a start or stop (BR.12).
+    private func performReinstall(generation: UInt64) {
+        // BR.12 (G8): replay the INTENDED capture (kept after a failed reinstall, cleared only by
+        // a stop), not just a running one — so the next device change retries.
+        let mode: CaptureMode? = stateLock.withLock {
+            lifecycleGeneration == generation ? currentMode : nil
+        }
         guard let mode else {
             // BUG-058: a fired monitor whose reinstall no-ops (capture already torn
             // down) is itself a diagnosis — record it rather than returning silently.
@@ -362,6 +404,8 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
             let newProcID = try createIOProc(aggregateID: newAggregateID)
             onCaptureDiagnostic?("performReinstall: IO proc created → startDevice")
             try startDevice(aggregateID: newAggregateID, procID: newProcID)
+            // BR.12 (G8): a reinstall after a failed one is what brings capture back.
+            stateLock.withLock { _isCapturing = true }
             logger.info("Tap reinstalled after device change (tap \(newTapID))")
             armInstallProbeAndLog(kind: "reinstall via device-change")  // BUG-057
         } catch {
@@ -385,11 +429,14 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
             // breadcrumbs to session.log. Recovery remains the app-layer
             // card → user action (D-165 fallback), or any path that restarts
             // capture.
+            // BR.12 (G8): tear down what this attempt created (the create steps no longer do),
+            // keep the monitor AND the intended mode, so the next device change tries again.
+            teardownTapResources()
             stateLock.withLock { _isCapturing = false }
             logger.error("Tap reinstall failed after device change: \(String(describing: error))")
             onCaptureDiagnostic?(
                 "reinstall via device-change FAILED: \(String(describing: error)) — "
-                + "capture marked stopped (was left marked capturing pre-PUB.6); monitor still running")
+                + "capture marked stopped; monitor still running, next device change retries")
         }
     }
 
@@ -409,64 +456,6 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
         // `stateLock` held.**
         let claimed = claimTapResourcesForTeardown()
         Self.destroyTapResources(claimed)
-    }
-
-    /// The tap/aggregate/IO-proc handles this instance owns, as handed to teardown.
-    struct TapResources: Equatable {
-        let aggregate: AudioDeviceID
-        let tap: AudioObjectID
-        let proc: AudioDeviceIOProcID?
-
-        static func == (lhs: TapResources, rhs: TapResources) -> Bool {
-            lhs.aggregate == rhs.aggregate && lhs.tap == rhs.tap
-        }
-
-        var isEmpty: Bool { aggregate == 0 && tap == 0 && proc == nil }
-    }
-
-    /// BUG-139: take the handles and zero the fields in one locked step, then get
-    /// out of the way. Returning before any destroy call is the property that
-    /// makes the deadlock impossible, and it is what `SystemAudioCaptureTeardownTests`
-    /// pins. Zeroing here also makes teardown idempotent: a second caller (a racing
-    /// `stopCapture()` and `deinit`, say) claims nothing and destroys nothing.
-    func claimTapResourcesForTeardown() -> TapResources {
-        stateLock.withLock {
-            let claimed = TapResources(aggregate: aggregateID, tap: tapID, proc: procID)
-            aggregateID = 0
-            tapID = 0
-            procID = nil
-            return claimed
-        }
-    }
-
-    /// BUG-139 gate support. The handles are only ever produced by real CoreAudio
-    /// calls that need hardware + Screen Recording, so without this the claim/clear
-    /// contract cannot be exercised at all and its gate would assert nothing.
-    /// Seeds handles ONLY — never destroy what this sets; `destroyTapResources`
-    /// on a fabricated aggregate id would call into the HAL with a bogus handle.
-    /// Deliberately NOT `#if DEBUG`: `internal` already confines it to `@testable`
-    /// importers, and a DEBUG gate broke optimized test builds (`swift test -c release`).
-    func seedTapResourcesForTesting(aggregate: AudioDeviceID, tap: AudioObjectID) {
-        stateLock.withLock {
-            aggregateID = aggregate
-            tapID = tap
-        }
-    }
-
-    /// Destroy claimed handles. MUST run with no lock held — every call here can
-    /// block on the HAL. `nonisolated static` so it cannot reach instance state
-    /// and silently reacquire the lock this exists to avoid.
-    nonisolated private static func destroyTapResources(_ refs: TapResources) {
-        if refs.aggregate != 0 {
-            AudioDeviceStop(refs.aggregate, refs.proc)
-            if let proc = refs.proc {
-                AudioDeviceDestroyIOProcID(refs.aggregate, proc)
-            }
-            AudioHardwareDestroyAggregateDevice(refs.aggregate)
-        }
-        if refs.tap != 0 {
-            AudioHardwareDestroyProcessTap(refs.tap)
-        }
     }
 
     // MARK: - BUG-057 Instrumentation
@@ -532,10 +521,114 @@ public final class SystemAudioCapture: AudioCapturing, @unchecked Sendable {
     private func cleanup() {
         deviceMonitor.stop()
         teardownTapResources()
-        stateLock.withLock { _isCapturing = false }
+        stateLock.withLock {
+            _isCapturing = false
+            currentMode = nil
+        }
     }
 
     deinit {
         cleanup()
+    }
+}
+
+// MARK: - BR.12 lifecycle helpers + test hooks
+
+extension SystemAudioCapture {
+
+    /// A sample rate the DSP chain can use (BR.12 / G6).
+    static func isUsableSampleRate(_ rate: Double) -> Bool { rate.isFinite && rate > 0 }
+
+    /// Run `body` on `lifecycleQueue` — inline when already on it (a lifecycle step calling
+    /// another), synchronously otherwise, so callers keep their blocking, throwing contract.
+    fileprivate func onLifecycleQueue<T>(_ body: () throws -> T) rethrows -> T {
+        if DispatchQueue.getSpecific(key: Self.lifecycleQueueKey) == true { return try body() }
+        return try lifecycleQueue.sync(execute: body)
+    }
+
+    // Test hooks (internal: `@testable` importers only).
+
+    /// Set the intended capture without creating a tap (the create path needs hardware and
+    /// Screen Recording, so the lifecycle rules couldn't be exercised otherwise).
+    func seedCaptureIntentForTesting(_ mode: CaptureMode?) { stateLock.withLock { currentMode = mode } }
+
+    /// Whether a capture is intended (kept after a failed reinstall, cleared by a stop).
+    var hasCaptureIntentForTesting: Bool { stateLock.withLock { currentMode != nil } }
+
+    /// The current lifecycle generation.
+    var lifecycleGenerationForTesting: UInt64 { stateLock.withLock { lifecycleGeneration } }
+
+    /// Run a reinstall tagged `generation` on the lifecycle queue and wait for it.
+    func performReinstallForTesting(generation: UInt64) {
+        lifecycleQueue.sync { performReinstall(generation: generation) }
+    }
+
+    /// Queue a device-change reinstall exactly as the monitor does.
+    func simulateDeviceChangeForTesting() { scheduleReinstall() }
+
+    /// Wait for everything queued on the lifecycle queue so far.
+    func drainLifecycleQueueForTesting() { lifecycleQueue.sync {} }
+}
+
+// MARK: - BUG-139 teardown handles
+
+extension SystemAudioCapture {
+
+    /// The tap/aggregate/IO-proc handles this instance owns, as handed to teardown.
+    struct TapResources: Equatable {
+        let aggregate: AudioDeviceID
+        let tap: AudioObjectID
+        let proc: AudioDeviceIOProcID?
+
+        static func == (lhs: TapResources, rhs: TapResources) -> Bool {
+            lhs.aggregate == rhs.aggregate && lhs.tap == rhs.tap
+        }
+
+        var isEmpty: Bool { aggregate == 0 && tap == 0 && proc == nil }
+    }
+
+    /// BUG-139: take the handles and zero the fields in one locked step, then get
+    /// out of the way. Returning before any destroy call is the property that
+    /// makes the deadlock impossible, and it is what `SystemAudioCaptureTeardownTests`
+    /// pins. Zeroing here also makes teardown idempotent: a second caller (a racing
+    /// `stopCapture()` and `deinit`, say) claims nothing and destroys nothing.
+    func claimTapResourcesForTeardown() -> TapResources {
+        stateLock.withLock {
+            let claimed = TapResources(aggregate: aggregateID, tap: tapID, proc: procID)
+            aggregateID = 0
+            tapID = 0
+            procID = nil
+            return claimed
+        }
+    }
+
+    /// BUG-139 gate support. The handles are only ever produced by real CoreAudio
+    /// calls that need hardware + Screen Recording, so without this the claim/clear
+    /// contract cannot be exercised at all and its gate would assert nothing.
+    /// Seeds handles ONLY — never destroy what this sets; `destroyTapResources`
+    /// on a fabricated aggregate id would call into the HAL with a bogus handle.
+    /// Deliberately NOT `#if DEBUG`: `internal` already confines it to `@testable`
+    /// importers, and a DEBUG gate broke optimized test builds (`swift test -c release`).
+    func seedTapResourcesForTesting(aggregate: AudioDeviceID, tap: AudioObjectID) {
+        stateLock.withLock {
+            aggregateID = aggregate
+            tapID = tap
+        }
+    }
+
+    /// Destroy claimed handles. MUST run with no lock held — every call here can
+    /// block on the HAL. `nonisolated static` so it cannot reach instance state
+    /// and silently reacquire the lock this exists to avoid.
+    nonisolated private static func destroyTapResources(_ refs: TapResources) {
+        if refs.aggregate != 0 {
+            AudioDeviceStop(refs.aggregate, refs.proc)
+            if let proc = refs.proc {
+                AudioDeviceDestroyIOProcID(refs.aggregate, proc)
+            }
+            AudioHardwareDestroyAggregateDevice(refs.aggregate)
+        }
+        if refs.tap != 0 {
+            AudioHardwareDestroyProcessTap(refs.tap)
+        }
     }
 }

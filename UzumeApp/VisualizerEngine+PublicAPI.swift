@@ -55,10 +55,21 @@ extension VisualizerEngine {
             return
         }
         sessionRecorder?.log("WIRING: startListeningForFirstAudio → SYSTEM-AUDIO TAP at .ready")
+        // BR.12 (B6): a working tap is silent here until the listener presses play — no ladder.
+        (router as? AudioInputRouter)?.holdColdInstallLadder()
         startAudioCapture()
         // BUG-160: the detector starts at `.active` and reports only changes; without this, music
         // that starts within 1.5 s never produces a transition and the `.silent` above sticks.
         (router as? AudioInputRouter)?.markAwaitingFirstAudio()
+    }
+
+    /// Ready's Retry (BR.12 / B6): recreate the tap and wait for first audio afresh.
+    @MainActor
+    func retryFirstAudioListening() {
+        guard let audioRouter = router as? AudioInputRouter, isSystemAudioCaptureRunning else { return }
+        sessionRecorder?.log("WIRING: Ready Retry → reinstalling the tap")
+        audioRouter.reinstallTapNow()
+        audioRouter.markAwaitingFirstAudio()
     }
 
     /// Start audio capture and metadata observation.
@@ -128,7 +139,16 @@ extension VisualizerEngine {
     }
 
     /// Start Core Audio tap capture (requires screen capture permission).
+    @MainActor
     private func startAudioCapture() {
+        mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): streaming accumulates its own clock
+        // BR.10 (E14): ask only the session's own app — a Spotify session never prompts to
+        // control Music, and vice versa. An ad-hoc session asks both.
+        if case .playlist(let source)? = sessionManager.currentSource {
+            streamingMetadata?.allowedSources = source.isSpotify ? [.spotify] : [.appleMusic]
+        } else {
+            streamingMetadata?.allowedSources = [.appleMusic, .spotify]
+        }
         if let audioRouter = router as? AudioInputRouter {
             do {
                 try audioRouter.start(mode: .systemAudio)
@@ -196,17 +216,27 @@ extension VisualizerEngine {
     /// music — the whole-frame flash D-157 removed, never flash-measured — so mesh-shader
     /// scenes (Fractal Tree) are excluded there for the beta.
     static func capableCatalog(
-        _ catalog: [PresetDescriptor], supportsNativeMeshShaders: Bool
+        _ catalog: [PresetDescriptor], supportsNativeMeshShaders: Bool, tier: DeviceTier = .tier2
     ) -> [PresetDescriptor] {
-        supportsNativeMeshShaders ? catalog : catalog.filter { !$0.passes.contains(.meshShader) }
+        catalog.filter { descriptor in
+            if !supportsNativeMeshShaders && descriptor.passes.contains(.meshShader) { return false }
+            // BR.6b (decision 4): Alfvén measured p50 9.99 ms against its declared 2.2 ms on an
+            // M2 Pro; unmeasurable on an M1, so tier-1 Macs don't get it for the beta.
+            if tier == .tier1 && tier1ExcludedScenes.contains(descriptor.name) { return false }
+            return true
+        }
     }
+
+    /// Scenes excluded on tier-1 GPUs for the beta (decision 4).
+    static let tier1ExcludedScenes: Set<String> = ["Alfvén"]
 
     /// `capableCatalog` over every loaded scene, for this engine's GPU. Same `.apple8`
     /// test as `PresetLoader+Mesh` / `MeshGenerator`.
     var plannableCatalog: [PresetDescriptor] {
         Self.capableCatalog(
             presetLoader.presets.map(\.descriptor),
-            supportsNativeMeshShaders: context.device.supportsFamily(.apple8)
+            supportsNativeMeshShaders: context.device.supportsFamily(.apple8),
+            tier: Self.detectDeviceTier(device: context.device)
         )
     }
 }

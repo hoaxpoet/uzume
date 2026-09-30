@@ -90,14 +90,20 @@ private final class PRDownloader: PreviewDownloading, @unchecked Sendable {
     }
 }
 
+/// No previews anywhere — every track fails (BR.7).
+private final class PRNoPreviewResolver: PreviewResolving, @unchecked Sendable {
+    func resolvePreviewURL(for track: TrackIdentity) async throws -> URL? { nil }
+}
+
 @MainActor
 private func makeSessionManager(
     connector: any PlaylistConnecting,
-    device: MTLDevice
+    device: MTLDevice,
+    resolver: any PreviewResolving = PRResolver()
 ) throws -> SessionManager {
     let sep = try PRStemSeparator(device: device)
     let preparer = SessionPreparer(
-        resolver: PRResolver(),
+        resolver: resolver,
         downloader: PRDownloader(),
         stemSeparator: sep,
         stemAnalyzer: PRStemAnalyzer(),
@@ -169,7 +175,7 @@ struct ProgressiveReadinessTests {
         #expect(result == .readyForFirstTracks)
     }
 
-    @Test func failedAtPosition1_breaks_prefix_returns_preparing() {
+    @Test func failedAtPosition1_isSkipped_butTwoReady_isStillPreparing() {
         let tracks = (0..<5).map { makeTrack("T\($0)") }
         let statuses: [TrackIdentity: TrackPreparationStatus] = [
             tracks[0]: .ready,
@@ -178,7 +184,8 @@ struct ProgressiveReadinessTests {
             // tracks[3] and [4] remain .queued (non-terminal) so allTerminal=false,
             // which means the prefix guard applies.
         ]
-        // prefix = 1 (fails at index 1) < threshold(3); not all terminal.
+        // BR.7 / C2: the failed track is skipped, so prefix = 2 (tracks 0, 2), which ends at the
+        // queued track 3 — still < threshold(3); not all terminal.
         let result = SessionManager.computeReadiness(
             statuses: statuses, trackList: tracks, cache: StemCache()
         )
@@ -192,7 +199,7 @@ struct ProgressiveReadinessTests {
     // NEVER counts for the prefix, cache profile or not. If D-056's intent is
     // ever made real (metadata-only cache entries on the analysisError path),
     // resurrect the old expectation alongside that change.
-    @Test func partial_withProfile_stillBlocksPrefix() {
+    @Test func partial_withProfile_neverCounts() {
         let tracks = (0..<5).map { makeTrack("T\($0)") }
         let cache = cacheWithProfile(for: tracks[1], bpm: 120.0, genreTags: ["electronic"])
         let statuses: [TrackIdentity: TrackPreparationStatus] = [
@@ -202,15 +209,15 @@ struct ProgressiveReadinessTests {
             tracks[3]: .queued,
             tracks[4]: .queued,
         ]
-        // Prefix breaks at index 1 (1 < threshold) even with a synthetic
-        // cached profile → still .preparing.
+        // The partial track doesn't count (PUB.6) even with a synthetic cached profile; BR.7
+        // skips it, so prefix = 2 (< threshold) → still .preparing.
         let result = SessionManager.computeReadiness(
             statuses: statuses, trackList: tracks, cache: cache
         )
         #expect(result == .preparing)
     }
 
-    @Test func partial_withoutMetadata_blocks_prefix() {
+    @Test func partial_withoutMetadata_neverCounts() {
         let tracks = (0..<5).map { makeTrack("T\($0)") }
         // index 1 is .partial but has NO metadata in cache → blocks prefix.
         // tracks[3] and [4] are .queued so allTerminal=false and prefix guard applies.
@@ -223,8 +230,30 @@ struct ProgressiveReadinessTests {
         let result = SessionManager.computeReadiness(
             statuses: statuses, trackList: tracks, cache: StemCache()
         )
-        // prefix = 1 (breaks at .partial with no metadata) < threshold(3).
+        // prefix = 2 (the partial is skipped, not counted) < threshold(3).
         #expect(result == .preparing)
+    }
+
+    // MARK: - BR.7 / audit C2: a failure among the first three never hides Start now
+
+    @Test(arguments: [0, 1, 2])
+    func oneFailedAmongTheFirstThree_threeReady_unlocksStartNow(failedAt: Int) {
+        let tracks = (0..<8).map { makeTrack("T\($0)") }
+        var statuses: [TrackIdentity: TrackPreparationStatus] = [:]
+        for index in 0..<4 { statuses[tracks[index]] = .ready }
+        statuses[tracks[failedAt]] = .failed(reason: "no preview")
+        // 3 ready + 1 failed in the first four; tracks 4–7 still queued (not all terminal).
+        let result = SessionManager.computeReadiness(statuses: statuses, trackList: tracks, cache: StemCache())
+        #expect(result == .readyForFirstTracks)
+    }
+
+    @Test func aTrackStillPreparing_endsThePrefix() {
+        let tracks = (0..<6).map { makeTrack("T\($0)") }
+        let statuses: [TrackIdentity: TrackPreparationStatus] = [
+            tracks[0]: .ready, tracks[1]: .queued, tracks[2]: .ready, tracks[3]: .ready,
+        ]
+        // Order still matters: a queued track 1 means track 1 might play first, unprepared.
+        #expect(SessionManager.computeReadiness(statuses: statuses, trackList: tracks, cache: StemCache()) == .preparing)
     }
 
     @Test func fiftyPctOrMore_notAllTerminal_returns_partiallyPlanned() {
@@ -263,8 +292,42 @@ struct ProgressiveReadinessTests {
 
         await manager.startSession(source: .appleMusicCurrentPlaylist)
 
-        #expect(manager.state == .ready)
+        // BR.7 (F10): not "Ready" — `.preparing` with no tracks shows the recovery screen.
+        #expect(manager.state == .preparing)
+        #expect(manager.preparingTracks.isEmpty)
         #expect(manager.progressiveReadinessLevel == .reactiveFallback)
+    }
+
+    @Test func everyTrackFailed_holdsPreparing_neverReady() async throws {
+        let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
+        let tracks = (0..<4).map { TrackIdentity(title: "NoPreview \($0)", artist: "A") }
+        let manager = try makeSessionManager(
+            connector: PRConnector(tracks: tracks), device: device, resolver: PRNoPreviewResolver())
+        var states: [SessionState] = []
+        let cancellable = manager.$state.sink { states.append($0) }
+        defer { cancellable.cancel() }
+
+        await manager.startSession(source: .appleMusicCurrentPlaylist)
+        await waitUntilNotPreparing(manager)   // the prep task finishing, not a clock
+
+        #expect(manager.progressiveReadinessLevel == .reactiveFallback)
+        #expect(manager.state == .preparing, "the recovery screen, not a Ready with nothing prepared")
+        #expect(!states.contains(.ready))
+    }
+
+    @Test func startReactiveMode_fromTheRecoveryScreen_playsLiveWithNoPlan() async throws {
+        let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
+        let manager = try makeSessionManager(connector: PRFailingConnector(), device: device)
+        await manager.startSession(source: .appleMusicCurrentPlaylist)
+        #expect(manager.state == .preparing)
+
+        manager.startReactiveMode()
+        #expect(manager.state == .playing)
+        #expect(manager.currentPlan?.tracks.isEmpty == true)
+        #expect(manager.progressiveReadinessLevel == .reactiveFallback)
+
+        manager.startReactiveMode()   // a no-op outside .preparing
+        #expect(manager.state == .playing)
     }
 
     @Test func startNow_belowThreshold_isNoOp() async throws {

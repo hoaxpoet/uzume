@@ -133,6 +133,13 @@ final class PreparationErrorViewModel: ObservableObject {
         // Guard prevents lower-priority rules from overriding an active offline error.
         if case .fullScreen(.networkOffline) = presentationState { return }
 
+        // Rule 2a (BR.7 / F10): nothing to prepare at all — the connection failed. SessionManager
+        // holds `.preparing` with no tracks rather than claiming "Ready".
+        if totalTrackCount == 0 {
+            presentationState = .fullScreen(.allTracksFailedToPrepare)
+            return
+        }
+
         // Rule 2: All tracks failed.
         if totalTrackCount > 0,
            !trackStatuses.isEmpty,
