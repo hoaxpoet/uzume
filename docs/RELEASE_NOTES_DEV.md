@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-144510] BR.15 — the tester build hides controls that don't work yet
+
+- **Settings:** "Device tier", "Quality ceiling", "Hidden scene families" and the adaptation-message toggle are gone from the tester build. None of them changed which scenes play.
+- **Keys:** − + . ← → and ⌘R are gone from the tester build and its ? overlay. They didn't do what their messages said (− pinned the scene you disliked). ⇧← ⇧→ (cut to another scene) and ⌘Z stay.
+- The developer build keeps all of them, to be wired after the beta.
+
 ### [dev-2026-09-30-015424] BR.13 — local files keep their place
 
 - **Switching speakers or AirPods no longer restarts the song.** A local file carries on from where it was, and a paused song stays paused, instead of starting over out loud while the screen says paused.
