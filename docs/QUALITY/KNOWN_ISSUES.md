@@ -3045,6 +3045,12 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.12 (2026-09-29), audio capture lifecycle (P2, tracked here):**
+  - **G2 / B14** — start, stop and reinstall run on one serial lifecycle queue; `stopCapture` bumps a generation token and a reinstall scheduled before it does nothing. Fixed; TSan-clean (`TapLifecycleStressTests`; negative control without the queue: 10 races).
+  - **G8** — a failed device-change reinstall keeps the capture intent and the device monitor, so the next device change retries. Fixed (test).
+  - **B5** — a Core Audio restart (`kAudioHardwarePropertyServiceRestarted`) re-registers the monitor's listeners and reinstalls the tap. Fixed (test via the seam); ⏳ live `killall coreaudiod` mid-session, listening session 2. **Not done:** a tap that goes silent *without* a service restart still skips the retry ladder once audio has been heard.
+  - **B6** — the cold-install ladder is held while Ready waits for audio (released at Playing / Ended / Idle), and Ready's Retry reinstalls the tap on demand. Fixed (test).
+  - **G6** — a tap reporting a non-finite or zero sample rate is rejected at install. Fixed (test).
 - **BR.1 (2026-09-29).** F1/F1b → **BUG-163**; K1/D1 → **BUG-164**. P2 findings fixed in the same increment, tracked here:
   - **F7** — the photosensitivity notice gates every path to visuals (ContentView; ⌘O / Open With / drop included). Fixed (`8d294d8f`); live-verified on the local-file path (ack forced NO stops at `.ready`, YES logs `playback started`).
   - **F6** — the notice's "Enable Reduce motion" sets the in-app Reduced motion to Always on (UX_SPEC §3.3). Fixed (`8d294d8f`).

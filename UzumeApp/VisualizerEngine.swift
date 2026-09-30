@@ -1148,6 +1148,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .sink { [weak self] newState in
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
+                // BR.12 (B6): Ready held the cold-install ladder; anything past Ready releases it.
+                if newState == .playing || newState == .ended || newState == .idle {
+                    (self.router as? AudioInputRouter)?.releaseColdInstallLadder()
+                }
                 if newState == .connecting || newState == .preparing {
                     self.orchestratorLock.withLock { self.liveTrackIsOffPlan = false }   // BR.11
                     // BR.10: a new session starts with now-playing assumed available.

@@ -10,6 +10,14 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-013733] BR.12 — audio capture stays in one piece through device swaps and Core Audio restarts
+
+- **Starting, stopping and re-creating the audio tap happen one at a time.** Ending a session while AirPods connect could leave a stray tap feeding the analysis, so the analysis could run twice as fast and beat sync go wrong. Each step now waits for the one before it, and a re-create that was queued before the session ended does nothing.
+- **A failed recovery no longer gives up for good.** If re-creating the tap after a device change failed, Uzume stopped watching for device changes. It now keeps watching and tries again on the next one.
+- **Restarting Core Audio no longer leaves Uzume silent.** Uzume notices the restart and re-creates its tap.
+- **Ready no longer re-creates a working tap while you get the music going.** A Retry on the Ready screen re-creates it on demand instead.
+- **A tap that reports an impossible sample rate is refused** instead of crashing the level meter.
+- Pending live checks in listening session 2 (AirPods swap while ending, `killall coreaudiod` mid-session).
 ### [dev-2026-09-30-011211] BR.11 — Uzume keeps up with how people actually listen (BUG-173)
 
 - **Pausing is just pausing.** Pausing Spotify or Music and resuming no longer restarts the song's visuals from scratch.

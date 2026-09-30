@@ -218,7 +218,8 @@ struct ContentView: View {
                 audioSignalStatePublisher: engine.captureState.$audioSignalState.eraseToAnyPublisher(),
                 planPublisher: engine.$livePlannedSession.eraseToAnyPublisher(),
                 onBeginPlayback: { engine.sessionManager.beginPlayback() },
-                reduceMotion: viewModel.reduceMotion
+                reduceMotion: viewModel.reduceMotion,
+                onRetry: { engine.retryFirstAudioListening() }   // BR.12 (B6)
             )
         }
     }

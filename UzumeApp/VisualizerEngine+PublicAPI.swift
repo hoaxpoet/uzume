@@ -55,10 +55,21 @@ extension VisualizerEngine {
             return
         }
         sessionRecorder?.log("WIRING: startListeningForFirstAudio → SYSTEM-AUDIO TAP at .ready")
+        // BR.12 (B6): a working tap is silent here until the listener presses play — no ladder.
+        (router as? AudioInputRouter)?.holdColdInstallLadder()
         startAudioCapture()
         // BUG-160: the detector starts at `.active` and reports only changes; without this, music
         // that starts within 1.5 s never produces a transition and the `.silent` above sticks.
         (router as? AudioInputRouter)?.markAwaitingFirstAudio()
+    }
+
+    /// Ready's Retry (BR.12 / B6): recreate the tap and wait for first audio afresh.
+    @MainActor
+    func retryFirstAudioListening() {
+        guard let audioRouter = router as? AudioInputRouter, isSystemAudioCaptureRunning else { return }
+        sessionRecorder?.log("WIRING: Ready Retry → reinstalling the tap")
+        audioRouter.reinstallTapNow()
+        audioRouter.markAwaitingFirstAudio()
     }
 
     /// Start audio capture and metadata observation.
