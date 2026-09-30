@@ -1,0 +1,55 @@
+{
+  "_about": "PROMO.1 — LinkedIn launch cut, 2026-10. Edit here, rebuild with: python3 tools/promo/cut_promo.py --edit tools/promo/edit.json",
+  "output": "~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4",
+  "work_dir": "~/Documents/uzume_promo/linkedin-2026-10/promo_work",
+  "contact_sheet": "~/Documents/uzume_promo/linkedin-2026-10/contact_sheet.png",
+  "audio": "~/Documents/uzume_promo/linkedin-2026-10/track.mp3",
+  "fps": 30,
+  "size": 1080,
+  "_times": "Cut, tag-in and end times are the OFFLINE beat track's bars (Matt's pick, 2026-09-30). The engine's downbeats ran 23-123 ms earlier (nearest engine downbeat per time in *_engine below, from the incoming take's REC.2 map; every one has beat_in_bar 1, and the engine counts 3 bars between consecutive cuts). A low-band onset check of track.mp3 put the kick at 8.700, 26.290 and 30.230 s, on the offline bars. Takes start ~0.51-0.57 s into the song; the frames before Kagura's first frame are black (Matt's pick).",
+  "segments": [
+    {"scene": "Kagura", "from": 0.0, "from_source": "track start",
+     "take": "~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura.mp4",
+     "map": "~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura_map.csv", "crop_offset_px": 0},
+    {"scene": "Ferrofluid Ocean", "from": 8.71, "from_source": "offline bar (full band enters)",
+     "from_engine": {"take_frame": 487, "track_time_s": 8.687},
+     "take": "~/Documents/uzume_promo/linkedin-2026-10/take_2_ferrofluid-ocean.mp4",
+     "map": "~/Documents/uzume_promo/linkedin-2026-10/take_2_ferrofluid-ocean_map.csv", "crop_offset_px": 0},
+    {"scene": "Cymatic Resonance", "from": 14.56, "from_source": "offline bar",
+     "from_engine": {"take_frame": 837, "track_time_s": 14.512},
+     "take": "~/Documents/uzume_promo/linkedin-2026-10/take_3_cymatic-resonance.mp4",
+     "map": "~/Documents/uzume_promo/linkedin-2026-10/take_3_cymatic-resonance_map.csv", "crop_offset_px": 0},
+    {"scene": "Fractal Tree", "from": 20.39, "from_source": "offline bar",
+     "from_engine": {"take_frame": 1185, "track_time_s": 20.292},
+     "take": "~/Documents/uzume_promo/linkedin-2026-10/take_4_fractal-tree.mp4",
+     "map": "~/Documents/uzume_promo/linkedin-2026-10/take_4_fractal-tree_map.csv", "crop_offset_px": 0},
+    {"scene": "Fireflies", "from": 26.28, "from_source": "offline bar",
+     "from_engine": {"take_frame": 1539, "track_time_s": 26.171},
+     "take": "~/Documents/uzume_promo/linkedin-2026-10/take_5_fireflies.mp4",
+     "map": "~/Documents/uzume_promo/linkedin-2026-10/take_5_fireflies_map.csv", "crop_offset_px": 0}
+  ],
+  "end": 32.16,
+  "end_source": "offline bar",
+  "end_engine": {"take_frame": 1891, "track_time_s": 32.037},
+  "video_fade_out_s": 0.5,
+  "audio_fade_out_s": 1.0,
+  "tag": {
+    "in": 30.21, "in_source": "offline bar",
+    "in_engine": {"take_frame": 1774, "track_time_s": 30.087},
+    "fade_in_s": 0.3,
+    "_font": "uzume.io's wordmark face (uzume-site tokens.css --font-display, BRAND.md: Alumni Sans SemiBold, tracking -0.02em). UX_SPEC's Clash Display is superseded; the site wins.",
+    "font": "~/Documents/Projects/uzume-site/brand/fonts/AlumniSans.ttf",
+    "weight": 600, "tracking_em": -0.02, "alpha": 0.85, "shadow_px": 2,
+    "lines": [
+      {"text": "Uzume", "size": 170, "center_y": 790},
+      {"text": "uzume.io", "size": 64, "center_y": 905}
+    ]
+  },
+  "covers": [
+    {"scene": "Ferrofluid Ocean", "out": "~/Documents/uzume_promo/linkedin-2026-10/cover_1.png"},
+    {"scene": "Cymatic Resonance", "out": "~/Documents/uzume_promo/linkedin-2026-10/cover_2.png"},
+    {"scene": "Kagura", "out": "~/Documents/uzume_promo/linkedin-2026-10/cover_3.png"}
+  ],
+  "encode": {"crf_candidates": [16, 17, 18], "target_mbps": 12, "audio_kbps": 256,
+             "true_peak_max_dbtp": -1.0, "gain_margin_db": 0.1}
+}
