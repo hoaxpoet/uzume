@@ -81,6 +81,7 @@ reads" are not reads — see the entry.)*
 | BUG-165 | P1 · **FIXED 2026-09-29 (BR.3, `773f6a24`) — TSan-clean; crash frequency was never measured** — a streaming song change reset renderer and analysis state from the poller's pool thread | app / concurrency | **The Now Playing callback ran `mir.reset()`, `resetPerTrackPresetState()` and `resetStemPipeline` inline on a pool thread**, racing the render loop (Witchlight's beads, Meniscus's waves) and the analysis queue with no lock (audit G1). Fix: `TrackChangeResetRouter` sends each reset to its owner. Detail below |
 | BUG-166 | P1 · **FIXED 2026-09-29 (BR.5, `a2e8ae9c`) — pending live check (listening session 3: the public DMG's unclean-exit offer)** — nothing a tester experienced could reach Matt | app / diagnostics | **No report path, no crash forwarding for Developer ID apps, no identifiable build, and a watchdog that waited on the thread it watched** (audit H3/F16, D3). Fix: Help › Report a Problem (consent-first zip + pre-filled issue), abnormal-exit marker, independent main-thread watchdog. Detail below |
 | BUG-167 | P1 · **MITIGATED 2026-09-29 (BR.6a, `e8a33c53`) — CI now compiles every shader; the macOS 15 launch is still open (BR.6b)** — every shader compiles on the tester's Mac at launch, and CI never compiled one | build / renderer | **A renderer shader failure is a `fatalError` on every launch; a scene failure silently drops the scene**, and CI built neither Metal nor Release (audit H1/H8). Fix: CI builds Release (arm64) and runs `ShaderCompileGateTests` through the app's own source assembly. Detail below |
+| BUG-168 | P1 · **FIXED 2026-09-29 (BR.11, `1a160ba0`) — pending live check (listening session 2)** — pausing Spotify / Music for more than ~2 s counted as a new song | audio / session | **A paused player answers nothing, and nothing cleared the song**, so resuming fired a track change: analysis re-warmed, the grid reinstalled, Skein's canvas wiped and the song's first planned scene cut back in (audit E2). Fix: nothing playing keeps the song; the same song returning is a resume. Detail below |
 | BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
@@ -597,6 +598,24 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 **Fix.** Two CI steps (`ci.yml`): **Build Release (arm64, signing disabled)**, and the **shader compile gate**, `ShaderCompileGateTests`. The gate compiles through `ShaderLibrary` and `PresetLoader` (the app's own source assembly) with the runtime Metal compiler on the runner's paravirtual GPU. It fails, never skips, without a device, and names every dropped scene file.
 
 **Gates.** Local negative controls: `int half = 1;` in `Nebula.metal` → `dropped → ["Nebula.metal"]`; in `NoiseGen.metal` → `MTLLibraryErrorDomain`. CI negative control on PR #320: the same break in `Nebula.metal` (`a03d5da8`), then its revert (`8be6121e`) — results recorded in the PR.
+
+### BUG-168 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
+
+*(Numbering: the next number after `origin/main`'s BUG-167; earlier open PRs claim numbers ahead of it, so this renumbers at merge.)*
+
+**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
+
+**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
+- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
+- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
+- cut the song's first planned scene back in;
+- restarted the track clock at 0, so every later planned change landed offset.
+
+A single failed poll mid-song did the same.
+
+**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
+
+**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -2924,6 +2943,12 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **E2 → BUG-168** (BR.11, 2026-09-29). The rest of BR.11, fixed in the same increment:
+  - **E7** — a song that isn't in the plan (autoplay after the playlist, an ad, a podcast) runs reactive instead of holding the last planned scene (`f3303199`).
+  - **E8 / B2** — the local-file track clock is the playhead wrapped at the file length (loops wrap it, pauses hold it: no more ~1.5 s lead per pause), and the planned-scene lookup wraps at the track's planned length (a loop or repeat-one walks its scenes again) (`f3303199`, `8a844712`). Live loop check queued (session 1); the recorder's `features.csv` stayed empty on the Debug runs, so it wasn't shown live here.
+  - **E6** — the session clear also runs at `.idle`, so "Start listening now" after a session starts clean, including the reactive switch clock (`461224a8`).
+  - **E3** — local-file playback finds its plan entry by identity, so one failed file no longer shifts every later file (`461224a8`).
+  - **G7** — the metadata pre-fetch and the live Beat This! grid are dropped if the song changed while they ran (`461224a8`).
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.

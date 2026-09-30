@@ -10,6 +10,15 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-011211] BR.11 — Uzume keeps up with how people actually listen (BUG-168)
+
+- **Pausing is just pausing.** Pausing Spotify or Music and resuming no longer restarts the song's visuals from scratch.
+- **Songs outside the playlist** (Spotify's autoplay afterwards, ads, podcasts) now get scenes that change with the music, instead of the last scene held forever.
+- **A looping song keeps changing scenes** on every loop, and a local file's visuals stay in time through pauses.
+- **"Start listening now" after a session starts fresh.**
+- **One bad file in a local playlist** no longer puts every later song on the wrong scenes.
+- **Slow lookups** can no longer attach the previous song's tempo or key to the next song.
+
 ### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
 
 - **A broken shader can no longer reach a tester unnoticed.** Every pull request now compiles every shader the app compiles at launch, the same way the app does. It also builds the Release configuration that ships. Before, a shader error first showed up on a tester's Mac, as a crash on every launch or a scene silently missing.
