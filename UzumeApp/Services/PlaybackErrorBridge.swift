@@ -107,6 +107,7 @@ final class PlaybackErrorBridge {
     private let onStallChanged: (@MainActor (Bool) -> Void)?
 
     private let stallDwellTicks: Int
+    private let flavor: BuildFlavor
 
     /// True while the prominent audio-stall overlay card should be shown.
     /// Source of truth for the card; exposed for unit tests of the gate.
@@ -143,8 +144,10 @@ final class PlaybackErrorBridge {
             Empty().eraseToAnyPublisher(),
         isSpotifySourceProvider: (@MainActor () -> Bool)? = nil,
         oneShotErrorPublisher: AnyPublisher<UserFacingError, Never> =
-            Empty().eraseToAnyPublisher()
+            Empty().eraseToAnyPublisher(),
+        flavor: BuildFlavor = .current
     ) {
+        self.flavor = flavor
         self.toastManager = toastManager
         self.tracker = tracker
         self.frameCountProvider = frameCountProvider
@@ -332,15 +335,13 @@ final class PlaybackErrorBridge {
         }
 
         let fresh = advanced && currentSignalState != .silent
-        // Suppress the card on a likely PAUSE: the tap is alive (callbacks still
-        // advancing) but silent, AND the session has already had real audio — so
-        // the source is paused, not broken (the fix-ladder doesn't apply, and the
-        // card would auto-clear on resume anyway). A genuinely broken tap (never
-        // delivered → provider false) or a frozen IO-proc (Mode B → !advanced)
-        // still raises the card.
+        // Suppress on a likely PAUSE: the tap is alive (callbacks advancing) but silent after real
+        // audio, so the source is paused, not broken. In the PUBLIC build a live-but-silent tap never
+        // raises it, even before any audio — a tester still opening Spotify (BR.4 / I2, F3); the
+        // BUG-057 reinstall ladder still runs. A frozen IO-proc (Mode B, !advanced) always raises it.
         let isLikelyPause = advanced
             && currentSignalState == .silent
-            && (hasEverDetectedSignalProvider?() ?? false)
+            && (!flavor.showsDeveloperDiagnostics || (hasEverDetectedSignalProvider?() ?? false))
         if fresh || isLikelyPause {
             nonFreshTicks = 0
             hideStallCard()

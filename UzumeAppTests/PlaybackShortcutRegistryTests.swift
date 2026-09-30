@@ -79,3 +79,53 @@ struct PlaybackShortcutRegistryTests {
         #expect(router.nudgeCalls.count == 2)
     }
 }
+
+// MARK: - BR.4 (F8): the public build's keys
+
+@Suite("Public build keys (BR.4)")
+@MainActor
+struct PublicBuildShortcutTests {
+
+    private func registry(_ flavor: BuildFlavor) -> PlaybackShortcutRegistry {
+        PlaybackShortcutRegistry(
+            actionRouter: StubActionRouter(),
+            onToggleFullscreen: {},
+            onMoveToSecondaryDisplay: {},
+            onToggleOverlay: {},
+            onToggleDebug: {},
+            onHandleEsc: {},
+            onShowHelp: {},
+            onToggleDiagnosticHold: {},
+            onToggleAudioStallCard: {},
+            onDecreaseBeatPhaseOffset: {},
+            onIncreaseBeatPhaseOffset: {},
+            onCycleBarPhaseOffset: {},
+            onDecreaseAudioOutputLatency: {},
+            onIncreaseAudioOutputLatency: {},
+            flavor: flavor
+        )
+    }
+
+    @Test func public_hasNoDeveloperKeysOrBugIDs() {
+        let shortcuts = registry(.public).shortcuts
+        #expect(!shortcuts.contains { $0.category == .developer })
+        #expect(!shortcuts.contains { $0.label.contains("BUG-") })
+        #expect(shortcuts.filter { $0.key == "." }.count == 1, "'.' has one binding (reshuffle)")
+        #expect(registry(.developer).shortcuts.contains { $0.category == .developer }, "developer build unchanged")
+    }
+
+    @Test func plus_firesWithShift_asOnUSAndUKLayouts() throws {
+        let plus = try #require(registry(.public).shortcut(withID: "moreLikeThis"))
+        #expect(plus.matches(characters: "+", modifiers: [.shift]), "US/UK: + is Shift+=")
+        #expect(plus.matches(characters: "+", modifiers: []), "layouts / numpad with an unshifted +")
+        #expect(!plus.matches(characters: "+", modifiers: [.command]))
+    }
+
+    @Test func lettersAndArrows_keepExactShift() throws {
+        let reg = registry(.developer)
+        let nudge = try #require(reg.shortcuts.first { $0.key == "\u{F703}" && $0.modifiers.isEmpty })
+        #expect(!nudge.matches(characters: "\u{F703}", modifiers: [.shift]), "→ and ⇧→ stay distinct")
+        let help = try #require(reg.shortcut(withID: "helpOverlay"))
+        #expect(help.matches(characters: "?", modifiers: [.shift]))
+    }
+}

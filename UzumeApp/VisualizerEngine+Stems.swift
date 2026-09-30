@@ -46,6 +46,11 @@ extension VisualizerEngine {
         (StemAnalyzer(sampleRate: StemSeparator.modelSampleRate), MoodClassifier())
     }
 
+    /// BR.7 (audit C10): the stem separator could not load — its ML weights are missing or
+    /// corrupt. Preparation then marks every track partial and nothing is analysed; the app
+    /// says so once at launch instead of degrading silently.
+    var analysisUnavailable: Bool { stemSeparator == nil }
+
     /// Start the background stem separation timer at `stemSeparationPeriodSeconds`.
     func startStemPipeline() {
         guard stemSeparator != nil else {

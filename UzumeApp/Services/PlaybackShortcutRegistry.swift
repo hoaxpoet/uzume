@@ -35,8 +35,29 @@ struct PlaybackShortcut: Identifiable {
     /// Returns true when the event matches this shortcut's key + modifiers.
     func matches(event: NSEvent) -> Bool {
         guard let chars = event.charactersIgnoringModifiers else { return false }
-        let exactMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        return chars.lowercased() == key.lowercased() && exactMods == modifiers
+        return matches(characters: chars, modifiers: event.modifierFlags)
+    }
+
+    /// The matching rule, testable without an `NSEvent`.
+    ///
+    /// Shift is ignored for punctuation / symbol keys (BR.4 / F8): the character already says
+    /// whether Shift was needed, and layouts differ — "+" is Shift+= on US and UK keyboards, so
+    /// an exact match made "More of this style" unreachable there. Letters and arrows keep exact
+    /// Shift (⇧B ≠ B, ⇧→ ≠ →).
+    func matches(characters chars: String, modifiers flags: NSEvent.ModifierFlags) -> Bool {
+        guard chars.lowercased() == key.lowercased() else { return false }
+        var eventMods = flags.intersection([.command, .shift, .option, .control])
+        var wanted = modifiers
+        if Self.isSymbolKey(key) {
+            eventMods.remove(.shift)
+            wanted.remove(.shift)
+        }
+        return eventMods == wanted
+    }
+
+    private static func isSymbolKey(_ key: String) -> Bool {
+        let symbols = CharacterSet.punctuationCharacters.union(.symbols)
+        return !key.isEmpty && key.unicodeScalars.allSatisfy { symbols.contains($0) }
     }
 }
 
@@ -82,7 +103,8 @@ final class PlaybackShortcutRegistry {
         onIncreaseBeatPhaseOffset: (@MainActor () -> Void)? = nil,
         onCycleBarPhaseOffset: (@MainActor () -> Void)? = nil,
         onDecreaseAudioOutputLatency: (@MainActor () -> Void)? = nil,
-        onIncreaseAudioOutputLatency: (@MainActor () -> Void)? = nil
+        onIncreaseAudioOutputLatency: (@MainActor () -> Void)? = nil,
+        flavor: BuildFlavor = .current
     ) {
         var all = Self.buildShortcuts(
             actionRouter: actionRouter,
@@ -194,7 +216,9 @@ final class PlaybackShortcutRegistry {
             ))
         }
         #endif
-        shortcuts = all
+        // BR.4 (F8): no developer keys in the public build — not in the help overlay, and not
+        // live (`,` pulled the visuals off the beat until relaunch; `.` was bound twice).
+        shortcuts = flavor.showsDeveloperDiagnostics ? all : all.filter { $0.category != .developer }
     }
     // swiftlint:enable function_body_length
 

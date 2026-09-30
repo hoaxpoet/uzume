@@ -16,7 +16,9 @@ import Shared
 public struct CachedTrackData: Sendable {
 
     /// Separated stem waveforms, ordered [vocals, drums, bass, other].
-    /// Each is mono Float32 at 44100 Hz, ~10 seconds long.
+    /// Each is mono Float32 at 44100 Hz, ~10 seconds long. Carried from preparation to the
+    /// on-disk cache; **empty in the in-memory `StemCache`** (BR.8 / audit C1): playback reads
+    /// the features, grids, series and profile, never the waveforms.
     public let stemWaveforms: [[Float]]
 
     /// Pre-analyzed per-stem energy snapshot ready for GPU buffer(3) upload.
@@ -129,6 +131,21 @@ public struct CachedTrackData: Sendable {
         )
     }
 
+    /// BR.8 (C1) — the same entry without its ~7 MB of separated audio, as `StemCache` keeps it.
+    public func withoutStemWaveforms() -> CachedTrackData {
+        CachedTrackData(
+            stemWaveforms: [],
+            stemFeatures: stemFeatures,
+            trackProfile: trackProfile,
+            beatGrid: beatGrid,
+            drumsBeatGrid: drumsBeatGrid,
+            gridOnsetOffsetMs: gridOnsetOffsetMs,
+            instrumentFamilySeries: instrumentFamilySeries,
+            loudnessProfile: loudnessProfile,
+            stemFeatureSeries: stemFeatureSeries
+        )
+    }
+
     /// LFSTEM.1 — copy carrying a full-file stem series. Same shape and same reason as
     /// `with(loudnessProfile:)`: only the local-file call site knows the decode covered the
     /// whole track, and `analyzePreview` is shared with streaming.
@@ -169,11 +186,12 @@ public final class StemCache: @unchecked Sendable {
 
     // MARK: - Init
 
-    /// Default in-memory LRU cap. Each `CachedTrackData` holds ~10 s of 4 separated
-    /// stems (~7 MB), so 64 bounds the cache to ~450 MB — the same order as the on-disk
-    /// `PersistentStemCache` LRU. Streaming preview data has no disk backing, so an
-    /// evicted track is re-prepared on next demand (CLEAN.3.5).
-    public static let defaultMaxEntries = 64
+    /// Default in-memory LRU cap — a safety bound, not a working limit. It was 64 while each
+    /// entry held ~7 MB of separated stems (CLEAN.3.5). Streaming preparation runs far ahead of
+    /// playback and nothing re-prepares an evicted track, so a 120-track playlist lost tracks
+    /// ~6–56 before they played (BR.8 / audit C1). Entries no longer keep the waveforms, so
+    /// they are small, and 2048 covers any playlist a tester will prepare.
+    public static let defaultMaxEntries = 2048
 
     /// Creates a cache with the default LRU cap. Kept as a distinct no-arg initializer
     /// (rather than a defaulted parameter on `init(maxEntries:)`) so existing
@@ -196,7 +214,7 @@ public final class StemCache: @unchecked Sendable {
     /// least-recently-used track if this pushes the cache past `maxEntries` (CLEAN.3.5).
     public func store(_ data: CachedTrackData, for identity: TrackIdentity) {
         lock.withLock {
-            storage[identity] = data
+            storage[identity] = data.withoutStemWaveforms()   // BR.8 / C1: nothing reads them back
             touchLocked(identity)
             evictIfNeededLocked()
         }
