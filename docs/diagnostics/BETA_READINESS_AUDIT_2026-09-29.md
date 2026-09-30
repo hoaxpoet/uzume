@@ -540,7 +540,7 @@ This follows the explanations-not-verdicts format: what each item is, why it exi
 
 Matt's answer: *"accept all the defaults. note that I cannot get an M1 Air, but I have a 4k display and an M4 Macbook Pro."* Each decision below is now settled as stated.
 
-These are recorded here and in `ENGINEERING_PLAN.md` §Phase BR, not as a D-number yet. The next free D-number on `main` is held by the unmerged `clean-2-5b` branch, and filing past it would break the D-number continuity gate. File one D-entry for this set once that branch merges.
+**Filed as D-262 (2026-09-30)**, once `clean-2-5b` (D-261) had merged. The list below is unchanged; D-262 notes the two refinements made since (adaptation toasts off; one copyright holder).
 
 1. **Beta roster: call it at 27.** Oct 1–11 goes to Tier 1–2. DH.0 / SUMI.0 / GG.0 move to the post-beta slate.
 2. **Volumetric Lithograph: ships excluded** (never auto-selected). In practice the roster is 26. Re-measure after the beta.
