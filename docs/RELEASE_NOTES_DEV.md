@@ -10,6 +10,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-000123] BR.8 — long playlists keep their preparation (BUG-170)
+
+- **Playlists over about 64 songs no longer lose their preparation.** Uzume used to drop prepared songs from memory before they played, so most of a long playlist played without its planned scenes. It now keeps only what playback needs, which is small, and keeps all of it.
 ### [dev-2026-09-29-234710] BR.7 — preparation never strands the tester (BUG-169)
 
 - **"Start now" appears even if one of the first songs has no preview.** Before, a single missing preview among the first three songs (about one Spotify scan in five) kept testers waiting for the whole playlist, with only Cancel.
