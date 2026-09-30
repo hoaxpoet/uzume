@@ -226,6 +226,9 @@ struct PhotosensitivityCertificationTests {
         else { throw FlashGateError.bufferAllocationFailed }
         _ = stem.contents().initializeMemory(as: UInt8.self, repeating: 0, count: MemoryLayout<StemFeatures>.size)
         _ = hist.contents().initializeMemory(as: UInt8.self, repeating: 0, count: 4096 * floatStride)
+        // BR.20: the history's grid BPM (slot 2418) is the train's own tempo — the worst case a
+        // BPM-aware scene (Membrane's strike cap) must be measured at, not the "no grid" zero.
+        hist.contents().bindMemory(to: Float.self, capacity: 4096)[2418] = Float(FlashHarnessSupport.accentHz * 60)
         _ = slot.contents().initializeMemory(as: UInt8.self, repeating: 0, count: 1024)
 
         var scene: MTLBuffer?
