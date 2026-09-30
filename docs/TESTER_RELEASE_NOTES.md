@@ -9,7 +9,7 @@ Thank you for trying Uzume. This page is what we know is rough, so you don't spe
 
 ## How it listens
 
-- **Spotify or Apple Music:** Uzume listens to what your Mac plays (it asks to record system audio; nothing is recorded or sent anywhere). Start the music in your player when Uzume says it's ready.
+- **Spotify or Apple Music:** Uzume listens to what your Mac plays (it asks to record system audio; your audio never leaves your Mac — Uzume only looks up song details, such as genre and length, on Apple's iTunes and MusicBrainz). Start the music in your player when Uzume says it's ready.
 - **Local files** (File › Open Local File, or drop files on the window): Uzume plays them itself, and the visuals are timed to the music exactly.
 - **Streaming is slightly behind.** With Spotify or Apple Music, the parts of a scene that follow individual instruments run about 2.5 seconds behind the music. The overall energy and the beat follow immediately. Local files don't have this delay.
 - **Bluetooth headphones and speakers** add their own delay, which Uzume doesn't correct for yet, so visuals can look early. Wired or built-in speakers are best for judging timing.

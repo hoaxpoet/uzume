@@ -22,7 +22,7 @@
 // MARK: - §9.1 Permission errors
 
 "error.permission.screen_capture.headline" = "Uzume needs permission to hear music playing on your Mac.";
-"error.permission.screen_capture.body"     = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Nothing ever leaves your Mac.";
+"error.permission.screen_capture.body"     = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Your audio never leaves your Mac. Uzume looks up song details on Apple’s iTunes and MusicBrainz.";
 "error.permission.screen_capture.why_label" = "Why does this need screen recording permission?";
 "error.permission.screen_capture.why_body"  = "On macOS, permission to capture system audio is bundled with screen recording permission. Apple groups them together. Uzume uses only the audio portion.";
 
@@ -106,7 +106,7 @@
 // MARK: - Onboarding
 
 "onboarding.permission.headline"        = "Uzume needs permission to hear music playing on your Mac.";
-"onboarding.permission.body"            = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Nothing ever leaves your Mac.";
+"onboarding.permission.body"            = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Your audio never leaves your Mac. Uzume looks up song details on Apple’s iTunes and MusicBrainz.";
 "onboarding.permission.grant"           = "Allow Access";
 "onboarding.permission.open_settings"   = "Already allowed it? Open System Settings";
 "onboarding.permission.why_label"       = "Why does this need screen recording permission?";
@@ -535,7 +535,7 @@
 "connector.spotify.scan.body"                  = "Open the playlist in Spotify, then start the scan. You’ll scroll through it once.";
 "connector.spotify.scan.start_button"          = "Start scan";
 "connector.spotify.scan.drop_prompt"           = "Or drop screenshots of the playlist here.";
-"connector.spotify.scan.permission.body"       = "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere.";
+"connector.spotify.scan.permission.body"       = "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing from your screen is saved or sent; Uzume looks up song details on Apple’s iTunes and MusicBrainz.";
 "connector.spotify.scan.permission.button"     = "Allow Access";
 "connector.spotify.scan.permission.settings_link" = "Already allowed it? Open System Settings";
 "connector.spotify.scan.scanning_status"       = "Scroll through the playlist in Spotify. Uzume is reading along.";
