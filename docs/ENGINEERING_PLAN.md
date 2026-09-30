@@ -243,8 +243,8 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.2** | 1 | ✅ merged (#316) — pending Matt's live `pmset` check (BUG-162) | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ✅ merged (#318) — TSan-clean (BUG-165) | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
 | **BR.4** | 1 | ✅ fixed, PR open (P2 lines under AUDIT-2026-09-29) | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
-| **BR.5** | 1 | ✅ fixed, PR open — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
-| **BR.6** | 1 | ready | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
+| **BR.5** | 1 | ✅ merged (#319) — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
+| **BR.6** | 1 | 🔨 BR.6a ✅ merged (#320, BUG-167); BR.6b cap + Alfvén exclusion ✅ merged (#325, BUG-168) — M4 / 4K measurement is Matt's | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
 | **BR.7** | 2 | ready | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
 | **BR.8** | 2 | ready | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ready | Background preparation gets its own analyzers (C3/G3) |
@@ -1702,6 +1702,18 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 **Delivered.** `BuildFlavor.showsDeveloperDiagnostics` (developer only) gates the rest of the developer surface. The no-audio card has no Terminal step and stays quiet before any audio (a frozen tap still raises it). No developer keys or bug IDs; `+` fires on US/UK keyboards; `.` has one binding. The three raw Settings keys have strings, and a test checks every referenced key exists. The Ended screen shows the real playing time and a pluralised count. No `~/uzume_diag.log`. A one-page [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md).
 **Done-when:** ✅ stall card (tests); ✅ keys, help, `+`, `.` (tests); ✅ string keys + existence test (negative-controlled); ✅ Ended screen (tests); ✅ no diag log (test); ✅ hot-reload folder off (BR.1); ✅ tester note.
 **Not done:** a public-flavor build was not run (all by test); the developer build's double `.` binding.
+
+### Increment BR.6b — tier-1 render cap and Alfvén exclusion ✅ (2026-09-29, measurement pending)
+
+**Delivered.** Audit D4/K2 → BUG-168. Tier-1 Macs cap the drawable at ~2560×1440 (compositor-upscaled) and don't get Alfvén (decision 4). Release harness numbers at 1080p / 1440p / 4K on the M2 Pro are in the audit (§BR.6).
+**Done-when:** ✅ tier-1 cap (tests, incl. a real-window delegate check); ✅ Alfvén excluded on tier 1 (test); ⏳ M4 MacBook Pro Retina (battery, Low Power Mode on/off) + 4K sessions with `RENDER_TARGET` / `frame_gpu_ms`, and a cold first launch after a fresh install — Matt's sessions; ⏳ whether a cap applies above tier 1 → DECISION-NEEDED with those numbers.
+**Note:** the M2 Pro Mac mini is tier 1 by the name match, so its 4K display now renders at 2560×1440 and is upscaled.
+
+### Increment BR.6a — CI builds Release and compiles every shader ✅ (2026-09-29)
+
+**Delivered.** Audit H1 → BUG-167 (mitigated), plus H8. `ci.yml` gains **Build Release (arm64)** and the **shader compile gate** (`ShaderCompileGateTests`). The gate compiles the renderer library (`ShaderLibrary`) and every scene `.metal` (`PresetLoader`) through the app's own source assembly, with the runtime compiler on the runner's paravirtual Metal device. It fails, never skips, without a device, and names each dropped file.
+**Done-when:** ✅ a CI step builds Release and compiles every shader through the app's source assembly; ✅ red on a deliberately broken shader, then reverted (PR #320: `a03d5da8` → `8be6121e`); ✅ green on the merged-main head.
+**Not done:** the macOS 15 launch of the notarized DMG (BR.6b / DIST-LIM); a precompiled `.metallib` (Tier 3).
 
 ### Increment BR.5 — evidence from testers ✅ (2026-09-29, pending live check)
 
