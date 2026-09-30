@@ -244,7 +244,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.3** | 1 | ✅ merged (#318) — TSan-clean (BUG-165) | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
 | **BR.4** | 1 | ready | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
 | **BR.5** | 1 | ✅ merged (#319) — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
-| **BR.6** | 1 | 🔨 BR.6a ✅ PR open (CI compiles shaders + builds Release, BUG-167); BR.6b (measure + cap) next | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
+| **BR.6** | 1 | 🔨 BR.6a ✅ merged (#320, BUG-167); BR.6b cap + Alfvén exclusion ✅ PR open (BUG-168) — M4 / 4K measurement is Matt's | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
 | **BR.7** | 2 | ready | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
 | **BR.8** | 2 | ready | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ready | Background preparation gets its own analyzers (C3/G3) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.6b — tier-1 render cap and Alfvén exclusion ✅ (2026-09-29, measurement pending)
+
+**Delivered.** Audit D4/K2 → BUG-168. Tier-1 Macs cap the drawable at ~2560×1440 (compositor-upscaled) and don't get Alfvén (decision 4). Release harness numbers at 1080p / 1440p / 4K on the M2 Pro are in the audit (§BR.6).
+**Done-when:** ✅ tier-1 cap (tests, incl. a real-window delegate check); ✅ Alfvén excluded on tier 1 (test); ⏳ M4 MacBook Pro Retina (battery, Low Power Mode on/off) + 4K sessions with `RENDER_TARGET` / `frame_gpu_ms`, and a cold first launch after a fresh install — Matt's sessions; ⏳ whether a cap applies above tier 1 → DECISION-NEEDED with those numbers.
+**Note:** the M2 Pro Mac mini is tier 1 by the name match, so its 4K display now renders at 2560×1440 and is upscaled.
 
 ### Increment BR.6a — CI builds Release and compiles every shader ✅ (2026-09-29)
 
