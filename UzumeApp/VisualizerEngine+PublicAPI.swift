@@ -129,6 +129,7 @@ extension VisualizerEngine {
 
     /// Start Core Audio tap capture (requires screen capture permission).
     private func startAudioCapture() {
+        mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): streaming accumulates its own clock
         if let audioRouter = router as? AudioInputRouter {
             do {
                 try audioRouter.start(mode: .systemAudio)

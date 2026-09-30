@@ -1183,6 +1183,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // (or a re-open of the same file) doesn't inherit a stale
                     // paused flag.
                     self.isLocalFilePaused = false
+                    self.mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): no file plays now
                     // LF.5.fix.3-C: release the URL marker so a re-open of
                     // the same file starts cleanly.
                     self.lastStartedLocalFilePlaybackURL = nil

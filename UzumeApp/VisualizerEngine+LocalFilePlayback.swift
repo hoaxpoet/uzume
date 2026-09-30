@@ -288,6 +288,7 @@ extension VisualizerEngine: LocalFilePreparing {
             // Start the LF audio router (AVAudioEngine path).
             do {
                 try audioRouter.start(mode: .localFilePlayback(url))
+                bindLocalFileTrackClock(audioRouter)
                 lfLogger.info("[LF.4] LF playback router started: \(url.lastPathComponent, privacy: .public)")
                 // LF.5.fix.3-C: mark this URL as the "committed" playback so
                 // a subsequent duplicate .ready emission no-ops at the guard
@@ -416,6 +417,7 @@ extension VisualizerEngine: LocalFilePreparing {
             do {
                 sessionRecorder?.log("WIRING: advanceLocalFileQueue audioRouter.start BEGIN")
                 try audioRouter.start(mode: .localFilePlayback(nextURL))
+                bindLocalFileTrackClock(audioRouter)
                 sessionRecorder?.log("WIRING: advanceLocalFileQueue audioRouter.start COMPLETE")
                 nowPlaying.setTrackIndex(nextIdx)
                 isLocalFilePaused = false                                   // restart implies playing
@@ -518,6 +520,14 @@ extension VisualizerEngine: LocalFilePreparing {
         mirPipeline.seek(to: seconds)
         orchestratorLock.withLock { lastAppliedPlannedPresetID = nil }
         sessionRecorder?.log("WIRING: seekLocalFile to=\(String(format: "%.1f", seconds))s")
+    }
+
+    /// BR.11 (audit B2): the track clock scenes, stems, the plan and the grid read
+    /// (`mirPipeline.elapsedSeconds`) follows this file's playhead, wrapped at its length.
+    /// Cleared by every non-local-file start and at `.ended`.
+    func bindLocalFileTrackClock(_ audioRouter: AudioInputRouter) {
+        let provider = audioRouter.currentLocalFileProvider
+        mirPipeline.elapsedSecondsSource = { [weak provider] in provider?.trackPlayheadSeconds }
     }
 
     /// Stop LF playback and end the session. Drives the transport bar's Stop
