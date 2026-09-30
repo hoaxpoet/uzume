@@ -25,10 +25,11 @@ final class LoopingFileReader {
     /// monotonically-increasing cursor across loop boundaries and never think about the wrap.
     let frameCount: AVAudioFramePosition
 
-    /// Channels the reader EMITS — 2 when the file has 2 or more, else 1. Matches
-    /// `LocalFilePlaybackProvider.handleTapBuffer`'s layout exactly, so the downstream contract
-    /// is unchanged.
-    let channelCount: Int
+    /// Channels the reader EMITS — always 2. A mono file is duplicated onto both channels
+    /// (BR.13 / B10): every consumer downstream — `FFTProcessor.processStereo`, the stem sample
+    /// buffer — reads interleaved L/R pairs, so a mono stream averaged adjacent samples and was
+    /// analysed an octave high at half its duration. Files with more than 2 channels emit the first 2.
+    let channelCount = 2
 
     let sampleRate: Double
 
@@ -62,7 +63,6 @@ final class LoopingFileReader {
         self.blockCapacity = capacity
         self.frameCount = file.length
         self.sampleRate = format.sampleRate
-        self.channelCount = format.channelCount >= 2 ? 2 : 1
         self.block = [Float](repeating: 0, count: capacity * self.channelCount)
     }
 
@@ -124,7 +124,7 @@ final class LoopingFileReader {
         }
         let got = Int(scratch.frameLength)
         guard got > 0, let planes = scratch.floatChannelData else { return }
-        if channelCount == 2 {
+        if scratch.format.channelCount >= 2 {
             let left = planes[0], right = planes[1]
             for i in 0..<got {
                 block[i * 2] = left[i]
@@ -132,7 +132,10 @@ final class LoopingFileReader {
             }
         } else {
             let mono = planes[0]
-            for i in 0..<got { block[i] = mono[i] }
+            for i in 0..<got {
+                block[i * 2] = mono[i]
+                block[i * 2 + 1] = mono[i]
+            }
         }
         blockFrames = got
     }
