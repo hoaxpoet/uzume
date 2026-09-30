@@ -77,6 +77,8 @@ public final class AudioInputRouter: @unchecked Sendable {
 
     /// Pending reinstall work item, if any. Cancelled on `.active`.
     var reinstallWorkItem: DispatchWorkItem?
+    /// BR.12 (audit B6): held while Ready waits for first audio (under `lock`).
+    var coldInstallLadderHeld = false
 
     /// Backoff schedule for tap-reinstall attempts after entering `.silent`.
     /// 3 attempts is enough to ride out a typical scrub-induced disconnect
