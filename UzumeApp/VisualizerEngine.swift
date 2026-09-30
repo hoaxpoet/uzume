@@ -470,16 +470,18 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Stem separator (MPSGraph on GPU).
     let stemSeparator: StemSeparator?
 
-    /// Ring buffer accumulating interleaved stereo PCM for stem separation.
-    /// Buffer capacity is sized at `StemSeparator.modelSampleRate` (44100 Hz)
-    /// for `maxSeconds` of stereo audio; on a 48 kHz tap it still holds ≈ 13.8 s,
-    /// which exceeds every consumer's 10 s window. The actual tap rate is
-    /// supplied to the rate-aware `snapshotLatest`/`rms` overloads so the
-    /// retrieved sample count matches real wall-clock time. (D-079, QR.1)
-    let stemSampleBuffer = StemSampleBuffer(
-        sampleRate: Double(StemSeparator.modelSampleRate),
-        maxSeconds: 15
-    )
+    /// Ring buffer accumulating interleaved stereo PCM for stem separation, beat analysis and
+    /// recalibration. Consumers read windows of up to 12 s at the ACTUAL tap rate (the rate-aware
+    /// `snapshotLatest`/`rms` overloads, D-079 / QR.1), so the capacity is sized for the highest
+    /// output rate a tester's device may run at (BR.17 / G4). It was sized at 44.1 kHz × 15 s:
+    /// at 88.2 or 96 kHz a 10 s window no longer fit, the warm-up guard never passed, and live
+    /// stems silently never computed.
+    let stemSampleBuffer = VisualizerEngine.makeStemSampleBuffer()
+
+    /// 192 kHz × 13 s stereo (~20 MB): every consumer window (≤ 12 s) fits at any common rate.
+    static func makeStemSampleBuffer() -> StemSampleBuffer {
+        StemSampleBuffer(sampleRate: 192_000, maxSeconds: 13)
+    }
 
     /// Lock guarding `_tapSampleRate`. Writes happen on the audio thread; reads
     /// from `stemQueue` and `analysisQueue`. Cross-core visibility for an
