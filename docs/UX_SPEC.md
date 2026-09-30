@@ -786,6 +786,8 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 
 ### 10.2 Visuals
 
+*Beta (BR.15, decision 6): Device tier, Quality ceiling, the scene-family blocklist and the adaptation-toast toggle are developer-build only until they are wired.*
+
 - **Device tier** — Auto (default) / Force M1/M2 (Tier 1) / Force M3+ (Tier 2). Override for testing or deliberate quality trade-off.
 - **Quality ceiling** — Auto / Performance (disables SSGI, reduces mesh density) / Balanced (default) / Ultra (ignores frame-budget governor; for recording/capture)
 - **Output display** — picker listing all connected displays. Selecting moves Uzume there. (§7.9 Mode A)

@@ -1632,6 +1632,10 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.15 (2026-09-30), controls that do nothing — hidden for the beta (decision 6; P2, tracked here).** `BuildFlavor.exposesUnwiredControls` (developer only):
+  - **F5 / E5** — Settings' "Device tier", "Quality ceiling" and "Hidden scene families" are hidden in the public build (none reaches scene selection). **Open:** wiring them after the beta; the quality ceiling's data-vs-string read-back goes with it.
+  - **E4** — the keys `+` `-` `.` `←` `→` and `⌘R` are hidden in the public build and gone from its `?` overlay; ⇧← ⇧→ and ⌘Z stay. **Open:** the session-clock, exclusion and re-plan fixes (E4's fix direction), after the beta.
+  - **E14** — the adaptation-toast toggle is hidden in the public build with the keys, and toasts are **off until turned on** (Matt 2026-09-30, reversing U.6b's default-on): `LiveAdaptationToastBridge` now reads an unset key as off, like the Settings toggle and UX_SPEC §7.4. Fixed (test; negative control: default-on → red — the older timing test passed under both).
 - **BR.14 (2026-09-30), window, keys, cursor, Settings (P2, tracked here):**
   - **F4 / D7** — playback takes its window from its own view (`HostWindowReader`), not `NSApp.keyWindow` (Spotify's, in the streaming flow), so ⌘F, Esc-exits-fullscreen and display handling attach. Fixed (tests); ⏳ ⌘F and Esc in green-button fullscreen with Spotify started first, listening session 2.
   - **F9** — the key monitor ignores keys aimed at another window (the Settings sheet), and Esc closes the help overlay before anything else. Fixed (tests).
