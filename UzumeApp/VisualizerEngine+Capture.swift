@@ -190,6 +190,8 @@ extension VisualizerEngine {
             let resolvedPlanIndex = self.indexInLivePlan(matching: event.current)
             self.orchestratorLock.withLock {
                 self.liveTrackPlanIndex = resolvedPlanIndex
+                // BR.11 (E7): a known song with no plan entry — the orchestrator runs reactive.
+                self.liveTrackIsOffPlan = resolvedPlanIndex == nil
                 // BUG-015 diagnostic: reset the per-track wire-active log
                 // latch so the next analysis tick that reaches
                 // `applyLiveUpdate(...)` produces exactly one diagnostic

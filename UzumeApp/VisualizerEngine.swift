@@ -834,6 +834,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// analysis-queue mirror — same value, different access discipline.
     var liveTrackPlanIndex: Int?
 
+    /// BR.11 (E7): the playing song is known and matches no plan entry. Under `orchestratorLock`;
+    /// set by every streaming track change, cleared at session boundaries.
+    var liveTrackIsOffPlan = false
+
     /// Once-per-track diagnostic latch for `runOrchestratorLiveUpdate(mir:)`
     /// (BUG-015 follow-up). When `false`, the next wire tick that actually
     /// reaches `applyLiveUpdate(...)` emits one `Orchestrator: wire active`
@@ -1120,6 +1124,9 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .sink { [weak self] newState in
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
+                if newState == .connecting || newState == .preparing {
+                    self.orchestratorLock.withLock { self.liveTrackIsOffPlan = false }   // BR.11
+                }
                 if newState == .connecting {
                     self.currentSessionPlanSeed = nil
                     // LF.6.fix.1 (BUG-024): wipe stale LF artwork at session
