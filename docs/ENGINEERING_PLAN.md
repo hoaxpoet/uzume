@@ -1685,6 +1685,32 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment REC.2 — pinned-scene capture for promo footage ✅ (2026-09-30)
+
+**Delivered.** `UZUME_PIN_SCENE=<scene id>` (RUNBOOK §Diagnostic Session Captures): `engageScenePin()` engages
+`diagnosticPresetLocked` before audio starts, and `applyFirstScene` applies the pin through `applyPresetByID` in the
+same main-thread step, on both first-scene sites (`handleLocalFileReady`, `startAudio`). An unknown id logs the valid
+scenes and starts no session; the launch `.task` checks it before preparation begins. The reactive (ad-hoc) apply now
+honours the same hold. It had ignored it, so the `L` key never held a system-audio session without a plan. Tests:
+`OrchestratorWiringRegressionTests.test_scenePin_resolution` (pinned / unknown / unset) and `test_scenePin_wiring`.
+**Capture.** Five takes of `track.mp3` (Sherman's March to the Sea), Release build, fullscreen on the LG. Each
+`session.log` has exactly one `preset →` (its pinned scene), capture dropped 0 and render 59.79–59.93 fps:
+`15-45-51Z` Kagura, `15-48-37Z` Ferrofluid Ocean, `15-49-26Z` Cymatic Resonance, `15-50-14Z` Fractal Tree,
+`15-51-02Z` Fireflies. The trimmed H.264 mp4s, frame maps and `ALIGNMENT.md` are in
+`~/Documents/uzume_promo/linkedin-2026-10/`. The first Kagura run (`15-43-59Z`) finished its countdown before the
+window went fullscreen and relocked mid-take; it is kept as a record, not used.
+**Done-when:** ✅ pin applies the named scene first and sets the hold; ✅ unknown applies nothing and logs; ✅ unset
+unchanged; ✅ one scene per take, no switches; ✅ five mp4s + maps, one map row per frame. ⚠ **Clip start moved:**
+capture begins after the writer's 30 stable frames (REC.1, not changed), so no take has track time 0–0.51 s. Matt
+chose to start each clip at its first real frame (≈ 0.51–0.57 s → 34.000 s), not to hold a frame or change REC.1.
+**Measurement learnings (durable).** (1) Fullscreen on the LG 4K ("looks like" 1920×1080) the drawable is
+**2560×1440**, not 1080p: REC.1's "1920×1080" was the display setting. (2) Video frame *k* is `features.csv` row
+29 + *k* when capture drops are 0. Three things agree on that: the lock rule, the row/frame counts, and interval
+walking. (3) `playback_time_s` **steps** against wallclock during start-up (≈ +10 ms near 1 s, ≈ +15 ms near
+6–7 s), so a single linear clock fit leaves 34 ms residuals. Use a rolling median of the offset. (4) Recorder
+wallclock stamps jitter by milliseconds. Resampling to CFR on those raw stamps made spurious repeat/skip pairs (66
+of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase leaves only real late renders.
+
 ### Increment CLEAN.2.5b — a signed, notarized Uzume a stranger can install ✅ (2026-09-29, branch `clean-2-5b`, pushed; PR open)
 
 **Delivered.** Uzume is signed by Plait & Pattern, LLC (`TYK3BXQ5D4`). `Scripts/release.sh` is one command: clean-tree + untracked-input check → weights → build number bump (committed, never reused) → Release archive (arm64) → Developer ID export (`Scripts/ExportOptions.plist`) → notarize + staple app → DMG → sign, notarize, staple DMG → 15 self-checks (signature, authority, team, hardened runtime, exact entitlements, Gatekeeper app + DMG, staples, arm64, public flavor, embedded git SHA, dSYM UUID). Floor macOS 15.0, Apple Silicon only, 0.9.0, "Copyright © 2026 Plait & Pattern." `NSAudioCaptureUsageDescription` declared — on macOS 26 a new account is asked for system audio separately, so without it a tester's tap would be silent. New **developer vs public build** (`BuildFlavor`, D-261 §8): the public build keeps no session records (no Documents question, BUG-158). The fresh-account run found and fixed two pre-existing P1s (collapsed with Matt's approval): **BUG-160** Ready never advanced when music began within 1.5 s of the tap (the silence detector was never told Ready assumed silence) and **BUG-161** a crash on the scan review's Continue (session started inside a closing sheet). Also: the per-frame stem-series publish moved out from behind the recorder guard (the public build would have lost local-file stems).

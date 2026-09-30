@@ -751,6 +751,23 @@ Every Uzume launch creates `~/Documents/uzume_sessions/<ISO-timestamp>/` and wri
 - `stems/<NNNN>_<title>/{drums,bass,vocals,other}.wav` — listenable mono PCM dump per stem-separation cycle. Good for verifying separation quality on a real track.
 - `session.log` — startup banner, signal state transitions, track changes, scene changes, video writer state.
 
+**Capture launch switches** (env vars; Debug and Release builds alike):
+
+- `UZUME_RECORD_VIDEO=1` — diagnostic `video.mp4`, H.264 ≈ 30 fps. `=capture` — `video.mov`, ProRes 422,
+  every rendered frame (REC.1; ≈ 1.1–2.2 GB/min at 1080p). Unset → no video.
+- `UZUME_PIN_SCENE=<scene id>` (REC.2) — the first scene of every session (local-file or system audio) is the
+  named one, and the `L`-key hold (`diagnosticPresetLocked`) is engaged before audio starts, so no plan
+  switch, reactive switch or completion event replaces it for the whole run. The id is the sidecar `name`,
+  e.g. `Ferrofluid Ocean`. An unknown id logs `UZUME_PIN_SCENE '<id>' names no loaded scene … Valid: …` to
+  `session.log` and starts no session — never a silent fallback. A pinned run's `session.log` has exactly one
+  `preset → <id>`, followed by `REC.2: scene pinned to '<id>'`. Capture starts after the writer's 30 stable
+  frames, so the first recorded frame is at track time ≈ 0.51 s, not 0 (REC.2). Fullscreen on the LG 4K
+  ("looks like" 1920×1080) the drawable is 2560×1440. Promo recipe:
+
+  ```bash
+  open -n Uzume.app --env UZUME_LOCAL_FILE_PLAYBACK="$HOME/track.mp3" --env UZUME_RECORD_VIDEO=capture --env UZUME_PIN_SCENE=Kagura
+  ```
+
 **Triage isolation rules** (when a session looks wrong):
 
 | Symptom | Most likely root cause |

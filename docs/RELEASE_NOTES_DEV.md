@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-162430] REC.2 — record one scene for a whole song
+
+- **`UZUME_PIN_SCENE=<scene>` keeps Uzume on one scene.** The session opens on the named scene and stays there. The plan, live switching and scene-completion events leave it alone. A misspelt name is logged with the valid names and nothing starts, so a take never records the wrong scene by accident. Dev launch switch only; no UI.
+- **The `L` hold now holds sessions without a plan too.** Before, a system-audio session with no playlist plan could still switch scenes while held.
+- **Five promo takes recorded** of Sherman's March to the Sea (Kagura, Ferrofluid Ocean, Cymatic Resonance, Fractal Tree, Fireflies). Each is trimmed to the song's first 34 s, with a frame-to-song-time map, in `~/Documents/uzume_promo/linkedin-2026-10/`. Each clip starts at its first recorded frame, about half a second into the song.
+
 ### [dev-2026-09-30-142354] BR.14 — the window, keys and Settings behave
 
 - **Fullscreen and Esc work when Spotify was in front.** Uzume used to attach its fullscreen and display handling to whatever window was active when playback began — usually Spotify's — so ⌘F did nothing and Esc in fullscreen asked to end the session.
