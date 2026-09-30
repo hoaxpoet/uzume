@@ -257,6 +257,16 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Accessed only from the ray-march draw path, like `auroraDrumsSmoothed`.
     var auroraTrackWarmup01: Float = 1.0
 
+    /// BR.18 / K6c — the same per-track warm-up for EVERY stem route on live separation: the
+    /// deviation primitives start at zero and overswing 1.2–3.3× for ~10 s after each track's
+    /// first separation (BUG-041), and eleven certified scenes read them with no gate of their
+    /// own. 0 → 1 over `liveStemWarmupSeconds`, reset with the aurora's. The local-file series
+    /// is correct from second 0 and is never gated. Render-thread only, like the aurora state.
+    var liveStemWarmup01: Float = 1.0
+
+    /// This frame's snapshot was gated by `liveStemWarmup01` (so the aurora skips its own).
+    var liveStemWarmupApplied = false
+
     /// FBS.S5 (D-158) — smoothed aurora palette phase (τ ≈ 3 s EMA over the
     /// composite pitch/valence hue target), patched into the stems snapshot at
     /// `StemFeatures.auroraPalettePhase`. Replaces the shader's per-pixel raw
@@ -567,6 +577,7 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         // re-converges) and drop the previous track's smoothed value.
         auroraTrackWarmup01 = 0
         auroraDrumsSmoothed = 0
+        liveStemWarmup01 = 0   // BR.18 / K6c
     }
 
     /// Advance accumulated audio time by one frame.

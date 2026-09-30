@@ -234,7 +234,8 @@ extension RenderPipeline {
         // exact production arithmetic.
         let auroraStep = Self.auroraDriverStep(
             smoothed: auroraDrumsSmoothed,
-            warmup01: auroraTrackWarmup01,
+            // BR.18: on live stems the snapshot is already warmed up — don't gate twice.
+            warmup01: liveStemWarmupApplied ? 1 : auroraTrackWarmup01,
             drumsDev: stemFeatures.drumsEnergyDev,
             dt: frameDt)
         auroraDrumsSmoothed = auroraStep.smoothed
