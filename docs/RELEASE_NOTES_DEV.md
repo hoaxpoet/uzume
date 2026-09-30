@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-004428] BR.10 — saying no to "control Spotify / Music" no longer breaks the session (BUG-168)
+
+- **Spotify or Music, permission declined:** Uzume says what's happening and where to allow it, and keeps choosing scenes by listening, instead of showing one scene for the whole playlist.
+- **Apple Music, permission declined:** the "allow Uzume in System Settings" screen appears, instead of "Checking every 2 seconds…" forever.
+- **Fewer permission prompts.** A Spotify session no longer asks to control Music, and local-file sessions don't ask about either.
+- The macOS prompt now says what declining costs.
+
 ### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
 
 - **A broken shader can no longer reach a tester unnoticed.** Every pull request now compiles every shader the app compiles at launch, the same way the app does. It also builds the Release configuration that ships. Before, a shader error first showed up on a tester's Mac, as a crash on every launch or a scene silently missing.

@@ -81,6 +81,7 @@ reads" are not reads — see the entry.)*
 | BUG-165 | P1 · **FIXED 2026-09-29 (BR.3, `773f6a24`) — TSan-clean; crash frequency was never measured** — a streaming song change reset renderer and analysis state from the poller's pool thread | app / concurrency | **The Now Playing callback ran `mir.reset()`, `resetPerTrackPresetState()` and `resetStemPipeline` inline on a pool thread**, racing the render loop (Witchlight's beads, Meniscus's waves) and the analysis queue with no lock (audit G1). Fix: `TrackChangeResetRouter` sends each reset to its owner. Detail below |
 | BUG-166 | P1 · **FIXED 2026-09-29 (BR.5, `a2e8ae9c`) — pending live check (listening session 3: the public DMG's unclean-exit offer)** — nothing a tester experienced could reach Matt | app / diagnostics | **No report path, no crash forwarding for Developer ID apps, no identifiable build, and a watchdog that waited on the thread it watched** (audit H3/F16, D3). Fix: Help › Report a Problem (consent-first zip + pre-filled issue), abnormal-exit marker, independent main-thread watchdog. Detail below |
 | BUG-167 | P1 · **MITIGATED 2026-09-29 (BR.6a, `e8a33c53`) — CI now compiles every shader; the macOS 15 launch is still open (BR.6b)** — every shader compiles on the tester's Mac at launch, and CI never compiled one | build / renderer | **A renderer shader failure is a `fatalError` on every launch; a scene failure silently drops the scene**, and CI built neither Metal nor Release (audit H1/H8). Fix: CI builds Release (arm64) and runs `ShaderCompileGateTests` through the app's own source assembly. Detail below |
+| BUG-168 | P1 · **FIXED 2026-09-29 (BR.10, `e28da378`) — pending live check (listening session 3)** — declining "control Spotify / Music" froze the session on one scene | session / app | **Automation denial (−1743) was swallowed**: streaming froze on the first scene with track 1's grid for every song; Apple Music looped "Checking every 2 seconds…" (audit E1, I3/A6/C6/F12). Fix: detected on both paths; streaming runs reactive with a toast; Apple Music shows its permission screen. Detail below |
 | BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
@@ -597,6 +598,29 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 **Fix.** Two CI steps (`ci.yml`): **Build Release (arm64, signing disabled)**, and the **shader compile gate**, `ShaderCompileGateTests`. The gate compiles through `ShaderLibrary` and `PresetLoader` (the app's own source assembly) with the runtime Metal compiler on the runner's paravirtual GPU. It fails, never skips, without a device, and names every dropped scene file.
 
 **Gates.** Local negative controls: `int half = 1;` in `Nebula.metal` → `dropped → ["Nebula.metal"]`; in `NoiseGen.metal` → `MTLLibraryErrorDomain`. CI negative control on PR #320: the same break in `Nebula.metal` (`a03d5da8`), then its revert (`8be6121e`) — results recorded in the PR.
+
+### BUG-168 — declining "control Spotify / Music" froze the session on one scene (2026-09-29)
+
+*(Numbering: the next number after `origin/main`'s BUG-167; open PR #325 also claims BUG-168, so this renumbers at merge.)*
+
+**Severity:** P1 (a common first-run choice breaks the session with no explanation) · **Domain:** session / app · **Failure class:** `pipeline-wiring` · **Status:** Fixed 2026-09-29 (BR.10, `e28da378`) — **pending live check** (listening session 3: fresh account, click Don't Allow on the Spotify and Music prompts)
+
+**Actual** (audit E1 VERIFIED; I3/A6/C6/F12 ✔︎).
+- **Streaming.** `StreamingMetadata` logged −1743 at `.debug` and returned nil. No track change ever fired, so the orchestrator returned early on every tick. The whole playlist ran on the starting scene with track 1's pre-fired grid and stems, and the title read "—". Spotify testers first meet the prompt at Ready, and its copy ("to display what's currently playing") made declining look harmless.
+- **Apple Music.** `PlaylistConnector` turned −1743 into an empty playlist, so the view looped "Checking every 2 seconds…" forever. The `.permissionDenied` screen was unreachable (a TODO since 2026-04-23).
+- **Polling (E12/E14).** Local-file sessions polled Music and Spotify (prompts mid-session; a playing streaming app overrode the local track), and Spotify sessions prompted for Music.
+
+**Fix.**
+- Apple Music: −1743 → `PlaylistConnectorError.automationPermissionDenied` → the existing `.permissionDenied` screen.
+- Streaming: the poll returns playing / nothing / `automationDenied`, reported once per observation. The engine then:
+  - sets `nowPlayingUnavailable`, so a planned session runs **reactive** instead of freezing;
+  - drops the track-1 pre-fire;
+  - publishes `nowPlayingDeniedApp`, which the playback error bridge shows as a toast naming the app and the Automation setting (new `UserFacingError.nowPlayingPermissionDenied`, UX_SPEC §9.4).
+  - Both flags are cleared at every session boundary and on a real track change.
+- Polling: local-file modes start no poller; a streaming session asks only its own app, and never a closed one.
+- `NSAppleEventsUsageDescription` is reworded to say what declining costs.
+
+**Gates.** `NowPlayingPermissionTests` (denial reported once per observation, again after restart, ordered on poll count; which apps are asked; local-file modes don't poll); `PlaylistConnectorTests` (−1743 case); `AppleMusicConnectionViewModelTests` (→ `.permissionDenied`, no retry loop); `NowPlayingDenialWiringTests` (reactive fallback, toast, clearing on every path; source shape); `UserFacingErrorTests` (30 cases).
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -2924,6 +2948,7 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **E1 / I3 / A6 / C6 / F12 → BUG-168** (BR.10, 2026-09-29); **E12 / E14** fixed in the same increment (only the session's own app is polled; none for local files).
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.

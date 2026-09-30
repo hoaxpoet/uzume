@@ -406,7 +406,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - Judge stem timing at 4K: BUG-106.
    - On the M4 MacBook Pro on battery, leave a session untouched past the display-off interval and run `pmset -g assertions` mid-session: BUG-162 (BR.2).
-3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM. Then force-quit Uzume and reopen it: it offers a problem report; create one and check the zip opens in Finder and the GitHub issue page opens (BUG-166, BR.5).
+3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM. On the first Spotify session, click **Don't Allow** on "control Spotify": a toast explains it and the scenes still change with the music; on Apple Music, Don't Allow shows the permission screen (BUG-168, BR.10). Then force-quit Uzume and reopen it: it offers a problem report; create one and check the zip opens in Finder and the GitHub issue page opens (BUG-166, BR.5).
 
 ---
 
