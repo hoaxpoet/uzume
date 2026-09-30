@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-000123] BR.8 — long playlists keep their preparation (BUG-167)
+
+- **Playlists over about 64 songs no longer lose their preparation.** Uzume used to drop prepared songs from memory before they played, so most of a long playlist played without its planned scenes. It now keeps only what playback needs, which is small, and keeps all of it.
+
 ### [dev-2026-09-29-215718] BR.5 — testers can send Matt evidence (BUG-166)
 
 - **Help › Report a Problem.** Uzume asks first, then saves a zip of its recent log messages, any Uzume crash or freeze reports, and the Mac's model, macOS and graphics chip, with the build number and commit. No audio, nothing sent. The zip opens in Finder and a pre-filled GitHub issue opens for the tester to attach it.
