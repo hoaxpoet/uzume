@@ -470,16 +470,24 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Stem separator (MPSGraph on GPU).
     let stemSeparator: StemSeparator?
 
-    /// Ring buffer accumulating interleaved stereo PCM for stem separation.
-    /// Buffer capacity is sized at `StemSeparator.modelSampleRate` (44100 Hz)
-    /// for `maxSeconds` of stereo audio; on a 48 kHz tap it still holds ≈ 13.8 s,
-    /// which exceeds every consumer's 10 s window. The actual tap rate is
-    /// supplied to the rate-aware `snapshotLatest`/`rms` overloads so the
-    /// retrieved sample count matches real wall-clock time. (D-079, QR.1)
-    let stemSampleBuffer = StemSampleBuffer(
-        sampleRate: Double(StemSeparator.modelSampleRate),
-        maxSeconds: 15
-    )
+    /// Ring buffer accumulating interleaved stereo PCM for stem separation, beat analysis and
+    /// recalibration. Consumers read windows of up to 12 s at the ACTUAL tap rate (the rate-aware
+    /// `snapshotLatest`/`rms` overloads, D-079 / QR.1), so the capacity is sized for the highest
+    /// output rate a tester's device may run at (BR.17 / G4). It was sized at 44.1 kHz × 15 s:
+    /// at 88.2 or 96 kHz a 10 s window no longer fit, the warm-up guard never passed, and live
+    /// stems silently never computed.
+    let stemSampleBuffer = VisualizerEngine.makeStemSampleBuffer()
+
+    /// 192 kHz × 13 s stereo (~20 MB): every consumer window (≤ 12 s) fits at any common rate.
+    static func makeStemSampleBuffer() -> StemSampleBuffer {
+        StemSampleBuffer(sampleRate: 192_000, maxSeconds: 13)
+    }
+
+    /// BR.17 / I4, B7: watches the default output device so the beat-phase offset follows it.
+    let outputLatencyMonitor = DefaultOutputDeviceMonitor()
+
+    /// The developer `,`/`.` trim on top of the device-derived offset. Main thread only.
+    var audioOutputLatencyTrimMs: Float = 0
 
     /// Lock guarding `_tapSampleRate`. Writes happen on the audio thread; reads
     /// from `stemQueue` and `analysisQueue`. Cross-core visibility for an
@@ -646,19 +654,30 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         logger.info("Bar-phase offset cycled to \(tracker.barPhaseOffset) (BUG-007.4)")
     }
 
-    /// Tap-to-output audio latency in milliseconds (BUG-007.6). Default 50 ms.
-    /// Backed by `LiveBeatDriftTracker.audioOutputLatencyMs`. Persists across tracks.
-    var audioOutputLatencyMs: Float {
-        get { mirPipeline.liveDriftTracker.audioOutputLatencyMs }
-        set { mirPipeline.liveDriftTracker.audioOutputLatencyMs = newValue }
-    }
+    /// Tap-to-output audio latency in milliseconds (BUG-007.6): the device's latency, at least
+    /// 50 ms, plus the developer trim (BR.17). Backed by `LiveBeatDriftTracker.audioOutputLatencyMs`.
+    var audioOutputLatencyMs: Float { mirPipeline.liveDriftTracker.audioOutputLatencyMs }
 
-    /// Adjust audio output latency by `delta` ms (BUG-007.6). Setter clamps to ±500 ms.
+    /// Adjust the developer trim by `delta` ms (BUG-007.6); the tracker clamps to ±500 ms.
     /// `,` key = −5 ms, `.` key = +5 ms in the developer shortcut map.
     func adjustAudioOutputLatency(ms delta: Float) {
-        audioOutputLatencyMs += delta
+        audioOutputLatencyTrimMs += delta
+        applyOutputLatency()
         let actual = audioOutputLatencyMs
         logger.info("Audio output latency adjusted to \(actual, format: .fixed(precision: 1)) ms (BUG-007.6)")
+    }
+
+    /// BR.17 / I4, B7: read the default output device's latency and set the beat-phase display
+    /// offset from it. Main thread (the trim is main-confined).
+    func applyOutputLatency() {
+        let device = outputLatencyMonitor.currentDefaultOutputDeviceID()
+        let deviceMs = OutputLatency.milliseconds(of: device)
+        let compensation = OutputLatency.compensationMs(deviceMs: deviceMs)
+        mirPipeline.liveDriftTracker.audioOutputLatencyMs = compensation + audioOutputLatencyTrimMs
+        let reported = deviceMs.map { String(format: "%.1f", $0) } ?? "unreadable"
+        let offset = String(format: "%.1f", compensation)
+        logger.info("OUTPUT_LATENCY device=\(reported, privacy: .public) ms → offset \(offset, privacy: .public) ms")
+        sessionRecorder?.log("OUTPUT_LATENCY device=\(reported) ms offset=\(compensation) ms")
     }
 
     /// Current frame-budget quality level. Read directly from the governor each
@@ -988,11 +1007,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         self.presetLoader = loader
         self.shaderLibrary = lib
         self.mirPipeline = MIRPipeline()
-        // BUG-007.6: internal-Mac-speaker tap-to-output latency calibration.
-        // Empirical default from session 2026-05-07T18-21-37Z analysis. Tunable
-        // at runtime via `,`/`.` developer shortcuts. AirPods / Bluetooth users
-        // will need a higher value; surfaces as a setting in a future increment.
-        self.mirPipeline.liveDriftTracker.audioOutputLatencyMs = 50.0
+        // BUG-007.6: the tuned 50 ms built-in-speaker offset, raised to the output device's own
+        // latency when that is larger (Bluetooth) — at launch and on every device change
+        // (BR.17 / I4, B7). `,`/`.` developer keys trim on top.
+        self.mirPipeline.liveDriftTracker.audioOutputLatencyMs = OutputLatency.baselineMs
         // CSP.3 (2026-05-27): Ferrofluid Ocean cold-start fix toggle. Reads
         // UserDefaults at app launch; default ON (CSP.3 is the experimental
         // arm of Matt's A/B). To run the off-side without recompiling:
@@ -1120,6 +1138,12 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         // available. The weak reference lets SessionManager survive engine
         // teardown cleanly.
         sessionManager.localFilePreparer = self
+
+        // BR.17 / I4, B7: the beat-phase offset follows the output device (AirPods, speakers).
+        applyOutputLatency()
+        _ = outputLatencyMonitor.start { [weak self] in
+            DispatchQueue.main.async { self?.applyOutputLatency() }
+        }
 
         // LF.6.streaming-S5: assemble the streaming-side artwork publisher.
         // Built post-phase-2 so the publish closure can `[weak self]`-capture
