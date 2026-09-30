@@ -1632,6 +1632,13 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.14 (2026-09-30), window, keys, cursor, Settings (P2, tracked here):**
+  - **F4 / D7** — playback takes its window from its own view (`HostWindowReader`), not `NSApp.keyWindow` (Spotify's, in the streaming flow), so ⌘F, Esc-exits-fullscreen and display handling attach. Fixed (tests); ⏳ ⌘F and Esc in green-button fullscreen with Spotify started first, listening session 2.
+  - **F9** — the key monitor ignores keys aimed at another window (the Settings sheet), and Esc closes the help overlay before anything else. Fixed (tests).
+  - **F14** — closing the window ends a live session (capture, recording indicator and stem separation stop). Fixed (test). *Chosen over quitting: the Dock reopens onto the Ended screen.*
+  - **F19** — the pointer hides with the playback chrome and returns on the next mouse move. Fixed (tests).
+  - **F6** — Settings from every screen: Uzume › Settings… / ⌘, (a `Settings` scene) and the Idle gear (UX_SPEC §4.1). Fixed (test + live: ⌘, opened Settings on the Debug build).
+  - **D8** — "Move to primary display" targets the menu-bar screen (`NSScreen.screens[0]`), not `NSScreen.main`. Fixed (test); ⏳ from the secondary display, listening session 2.
 - **BR.13 (2026-09-29), local-file transport (P2, tracked here):**
   - **B3 (extends BUG-056)** — an output-device change resumes at the last playhead, keeps a pause (no audible restart behind a paused UI), and retries once before reporting. Fixed (`LocalFileSeekTests`; negative control red); ⏳ AirPods swap mid-song and while paused, listening session 1.
   - **B4** — every session boundary (Connecting, Preparing, Idle, End) stops the previous session's audio, so a new local source or Cancel no longer leaves the old track playing or its end-of-file advance firing mid-preparation. Fixed (test); ⏳ open a second file while one plays, listening session 1.

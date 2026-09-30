@@ -1,6 +1,8 @@
 // DisplayManager — Tracks connected displays and moves the window between them.
 //
-// Screen identification: NSScreen.main is the primary (menu bar) screen.
+// Screen identification: `NSScreen.screens.first` is the primary (menu bar) screen. NOT
+// `NSScreen.main`, which is the KEY window's screen — from the secondary display it named the
+// secondary, so "Move to primary" did nothing (BR.14 / D8).
 // Moving between displays in fullscreen requires exit → move → re-enter because
 // macOS doesn't support a direct fullscreen-window migration between screens.
 // This is the "fullscreen quirk" documented in Apple DTS notes.
@@ -23,8 +25,11 @@ final class DisplayManager: ObservableObject {
     // MARK: - Published
 
     @Published private(set) var allScreens: [NSScreen] = NSScreen.screens
-    @Published private(set) var currentScreen: NSScreen? = NSScreen.main
-    @Published private(set) var primaryScreen: NSScreen? = NSScreen.main
+    @Published private(set) var currentScreen: NSScreen? = DisplayManager.menuBarScreen
+    @Published private(set) var primaryScreen: NSScreen? = DisplayManager.menuBarScreen
+
+    /// The primary display: the one with the menu bar, `NSScreen.screens[0]` (BR.14 / D8).
+    static var menuBarScreen: NSScreen? { NSScreen.screens.first }
 
     // MARK: - Private
 
@@ -54,7 +59,7 @@ final class DisplayManager: ObservableObject {
     func attach(to window: NSWindow) {
         self.window = window
         currentScreen = window.screen
-        primaryScreen = NSScreen.main
+        primaryScreen = Self.menuBarScreen
     }
 
     // MARK: - Move Actions
@@ -62,7 +67,7 @@ final class DisplayManager: ObservableObject {
     /// Move the window to the next non-primary screen, cycling if multiple are connected.
     func moveToSecondaryDisplay() {
         let screens = NSScreen.screens
-        let primary = NSScreen.main
+        let primary = Self.menuBarScreen
         let nonPrimary = screens.filter { $0 != primary }
 
         guard !nonPrimary.isEmpty else {
@@ -85,7 +90,7 @@ final class DisplayManager: ObservableObject {
 
     /// Move the window back to the primary (menu-bar) screen.
     func moveToPrimaryDisplay() {
-        guard let primary = NSScreen.main else { return }
+        guard let primary = Self.menuBarScreen else { return }
         moveWindow(to: primary)
     }
 
@@ -130,8 +135,8 @@ final class DisplayManager: ObservableObject {
     private func handleScreenChange() {
         let prev = allScreens
         allScreens = NSScreen.screens
-        primaryScreen = NSScreen.main
-        currentScreen = window?.screen ?? NSScreen.main
+        primaryScreen = Self.menuBarScreen
+        currentScreen = window?.screen ?? Self.menuBarScreen
 
         let added   = Set(allScreens).subtracting(Set(prev))
         let removed = Set(prev).subtracting(Set(allScreens))

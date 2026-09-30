@@ -252,7 +252,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.11** | 2 | ✅ fixed, PR open (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
 | **BR.12** | 2 | ✅ PR open — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
 | **BR.13** | 2 | ✅ PR open — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
-| **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
+| **BR.14** | 2 | ✅ PR open — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
 | **BR.15** | 2 | ready | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
 | **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
 | **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
@@ -1697,6 +1697,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.14 — window, keys, cursor, Settings ✅ (2026-09-30, pending live checks)
+
+**Delivered.** Audit F4/D7, F9, F14, F19, F6, D8 as P2 lines under AUDIT-2026-09-29. `HostWindowReader` (in `FullscreenObserver.swift`) hands `PlaybackView.attachWindow` the window it is in; `PlaybackKeyMonitor.window` + `targetsPlayback` pass other windows' keys through; Esc closes help first; `VisualizerEngine.handleWindowClosed()` ends a live session; `PlaybackChromeViewModel.hideCursor` hides the pointer with the chrome; a `Settings` scene + Idle `SettingsLink`; `DisplayManager.menuBarScreen`.
+**Done-when:** ✅ window from the view, other windows' keys pass through, Esc over help (tests); ✅ window close ends a live session (test); ✅ pointer hides with the chrome (tests); ✅ ⌘, opens Settings (test + live Debug run); ✅ primary = menu-bar screen (test). ⏳ ⌘F / Esc with Spotify frontmost, and "Move to primary" from the secondary display — listening session 2.
+**Not done:** the pointer only hides while Uzume is the active app (`setHiddenUntilMouseMoves`); F14 ends the session rather than quitting (the audit allowed either).
 
 ### Increment BR.13 — local-file transport ✅ (2026-09-29, pending live checks)
 

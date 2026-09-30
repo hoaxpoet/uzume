@@ -2,6 +2,7 @@
 
 import AppKit
 import Foundation
+import SwiftUI
 
 // MARK: - FullscreenObserver
 
@@ -71,5 +72,31 @@ final class FullscreenObserver: ObservableObject {
         // Safe: observers are removed before retain cycle can form.
         if let obs = enterObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = exitObserver { NotificationCenter.default.removeObserver(obs) }
+    }
+}
+
+// MARK: - HostWindowReader
+
+/// Hands a SwiftUI view the `NSWindow` it is actually in (BR.14 / F4, D7). `NSApp.keyWindow` at
+/// `onAppear` is whichever app is frontmost — in the streaming flow, Spotify — so fullscreen and
+/// display handling never attached: ⌘F did nothing and Esc in green-button fullscreen asked to end
+/// the session. The window is reported whenever the view joins one, so a late join is not lost.
+struct HostWindowReader: NSViewRepresentable {
+    let onWindow: @MainActor (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView { ReportingView(onWindow: onWindow) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class ReportingView: NSView {
+        let onWindow: @MainActor (NSWindow) -> Void
+        init(onWindow: @escaping @MainActor (NSWindow) -> Void) {
+            self.onWindow = onWindow
+            super.init(frame: .zero)
+        }
+        @available(*, unavailable) required init?(coder: NSCoder) { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { onWindow(window) }
+        }
     }
 }
