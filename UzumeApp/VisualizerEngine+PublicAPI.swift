@@ -130,6 +130,7 @@ extension VisualizerEngine {
     /// Start Core Audio tap capture (requires screen capture permission).
     @MainActor
     private func startAudioCapture() {
+        mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): streaming accumulates its own clock
         // BR.10 (E14): ask only the session's own app — a Spotify session never prompts to
         // control Music, and vice versa. An ad-hoc session asks both.
         if case .playlist(let source)? = sessionManager.currentSource {

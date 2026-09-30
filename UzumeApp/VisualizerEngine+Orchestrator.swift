@@ -229,15 +229,9 @@ extension VisualizerEngine {
         // / `plannedEndTime` are cumulative across the playlist). Convert to
         // track-relative via the parent track's `plannedStartTime` before
         // comparing against `elapsedTrackTime`.
-        let activeSegment: PlannedPresetSegment? = {
-            guard plan.tracks.indices.contains(trackIndex) else { return nil }
-            let track = plan.tracks[trackIndex]
-            return track.segments.first(where: { segment in
-                let segStart = segment.plannedStartTime - track.plannedStartTime
-                let segEnd = segment.plannedEndTime - track.plannedStartTime
-                return elapsedTrackTime >= segStart && elapsedTrackTime < segEnd
-            }) ?? track.segments.first
-        }()
+        let activeSegment: PlannedPresetSegment? = plan.tracks.indices.contains(trackIndex)
+            ? Self.activeSegment(in: plan.tracks[trackIndex], elapsedTrackTime: elapsedTrackTime)
+            : nil
         let activePresetWaitsForCompletion = activeSegment?.preset.waitForCompletionEvent ?? false
 
         // LFPLAN.3: EXECUTE the plan — apply the active segment's preset when it changes.
@@ -253,6 +247,20 @@ extension VisualizerEngine {
 
         let patched = plan.applying(adaptation, at: trackIndex)
         orchestratorLock.withLock { livePlan = patched }
+    }
+
+    /// The planned segment playing `elapsedTrackTime` into `track`. BR.11 (audit E8): the time
+    /// wraps at the track's planned length, so a single-file loop or streaming repeat-one walks
+    /// its scenes again. Before, past the end it fell back to the first segment and held it for
+    /// every later loop.
+    static func activeSegment(in track: PlannedTrack, elapsedTrackTime: TimeInterval) -> PlannedPresetSegment? {
+        let length = track.plannedEndTime - track.plannedStartTime
+        let time = length > 0 ? elapsedTrackTime.truncatingRemainder(dividingBy: length) : elapsedTrackTime
+        return track.segments.first(where: { segment in
+            let segStart = segment.plannedStartTime - track.plannedStartTime
+            let segEnd = segment.plannedEndTime - track.plannedStartTime
+            return time >= segStart && time < segEnd
+        }) ?? track.segments.first
     }
 
     /// LFPLAN.4: cold-start suppression window for plan execution. Planned auto-applies
@@ -345,14 +353,16 @@ extension VisualizerEngine {
     func runOrchestratorLiveUpdate(mir: MIRPipeline) {
         guard analysisFrameCount % Self.orchestratorWireFrameDivisor == 0 else { return }
 
-        let (snapshot, nowPlayingGone) = orchestratorLock.withLock {
+        let (snapshot, offPlan, nowPlayingGone) = orchestratorLock.withLock {
             (OrchestratorWireSnapshot(hasPlan: livePlan != nil, trackIndex: liveTrackPlanIndex),
-             nowPlayingUnavailable)
+             liveTrackIsOffPlan, nowPlayingUnavailable)
         }
 
-        // BR.10 (E1): a plan but no now-playing, ever (Automation denied) — run reactive rather
-        // than freeze on the first scene with track 1's grid for the whole playlist.
-        if snapshot.hasPlan, snapshot.trackIndex == nil, nowPlayingGone {
+        // BR.11 (audit E7): a song that isn't in the plan (autoplay after the playlist, an ad,
+        // a podcast) runs reactive instead of holding the last planned scene for as long as it plays.
+        // BR.10 (E1): so does a plan with no now-playing, ever (Automation denied) — rather than
+        // freeze on the first scene with track 1's grid for the whole playlist.
+        if snapshot.hasPlan, snapshot.trackIndex == nil, offPlan || nowPlayingGone {
             applyReactiveUpdate(boundary: mir.latestStructuralPrediction)
             return
         }

@@ -190,6 +190,8 @@ extension VisualizerEngine {
             let resolvedPlanIndex = self.indexInLivePlan(matching: event.current)
             self.orchestratorLock.withLock {
                 self.liveTrackPlanIndex = resolvedPlanIndex
+                // BR.11 (E7): a known song with no plan entry — the orchestrator runs reactive.
+                self.liveTrackIsOffPlan = resolvedPlanIndex == nil
                 // BUG-015 diagnostic: reset the per-track wire-active log
                 // latch so the next analysis tick that reaches
                 // `applyLiveUpdate(...)` produces exactly one diagnostic
@@ -274,9 +276,16 @@ extension VisualizerEngine {
 
     /// Run the metadata pre-fetcher for a new track and apply BPM/key on the main actor.
     func kickoffPreFetch(for track: TrackMetadata, fetcher: MetadataPreFetcher) {
+        let generation = currentTrackGeneration()   // BR.11 (G7): the song this lookup is for
         Task {
             let profile = await fetcher.prefetch(for: track)
             await MainActor.run {
+                // BR.11 (G7): a lookup that returns after the next song started is the last
+                // song's BPM / key / meter — drop it rather than dress the new song with it.
+                guard self.currentTrackGeneration() == generation else {
+                    captureLogger.info("Pre-fetch dropped — the song changed during the lookup")
+                    return
+                }
                 self.nowPlaying.setProfile(profile)
                 if let bpm = profile?.bpm {
                     self.estimatedTempo = bpm

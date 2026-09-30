@@ -424,6 +424,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Press Next and seek while preparation runs: BUG-156's product half.
    - Swap AirPods and speakers mid-song, then while paused: BUG-056 and B3.
    - Start a single file a few times: BUG-091.
+   - Let a single file loop twice and pause it a few times: scenes keep changing on the second loop and stay in time after each pause (BR.11, E8/B2).
    - Read the preparation readout and judge whether the scenes suit the songs: OBS-DS4-1, BUG-148, BUG-133, BUG-144, NRG.3, NRG.4.
    - Ready to Start after clearing its cache: BUG-134.
    - A bar-locked scene on a meterless song: BUG-117.

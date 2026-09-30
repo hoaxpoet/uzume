@@ -847,6 +847,18 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// analysis-queue mirror — same value, different access discipline.
     var liveTrackPlanIndex: Int?
 
+    /// BR.11 (audit G7): bumped by every song change (`resetStemPipeline`). A slow async result
+    /// (metadata pre-fetch, live Beat This! grid) captures it at start and is dropped if the song
+    /// changed meanwhile — they used to land on the next song. Under `orchestratorLock`.
+    var trackGeneration: UInt64 = 0
+
+    /// Read `trackGeneration` from any thread.
+    func currentTrackGeneration() -> UInt64 { orchestratorLock.withLock { trackGeneration } }
+
+    /// BR.11 (E7): the playing song is known and matches no plan entry. Under `orchestratorLock`;
+    /// set by every streaming track change, cleared at session boundaries.
+    var liveTrackIsOffPlan = false
+
     /// BR.10 (E1): no now-playing can ever arrive (Automation denied), so a planned session runs
     /// reactive instead of freezing on its first scene. Under `orchestratorLock`.
     var nowPlayingUnavailable = false
@@ -1137,6 +1149,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
                 if newState == .connecting || newState == .preparing {
+                    self.orchestratorLock.withLock { self.liveTrackIsOffPlan = false }   // BR.11
                     // BR.10: a new session starts with now-playing assumed available.
                     self.orchestratorLock.withLock { self.nowPlayingUnavailable = false }
                     self.nowPlayingDeniedApp = nil
@@ -1154,6 +1167,12 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // fetch from the prior session so a slow CDN response
                     // can never land on the new session's chrome.
                     self.streamingArtworkPublisher?.update(for: nil)
+                    self.clearSessionScopedSurfaces()
+                }
+                if newState == .idle {
+                    // BR.11 (E6): "Start listening now" goes .idle → .playing with no .connecting /
+                    // .preparing, so the last session's plan, plan index and reactive clock used to
+                    // carry into the ad-hoc session (BUG-024 class). Clearing at .idle covers it.
                     self.clearSessionScopedSurfaces()
                 }
                 if newState == .preparing {
@@ -1198,6 +1217,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // (or a re-open of the same file) doesn't inherit a stale
                     // paused flag.
                     self.isLocalFilePaused = false
+                    self.mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): no file plays now
                     // LF.5.fix.3-C: release the URL marker so a re-open of
                     // the same file starts cleanly.
                     self.lastStartedLocalFilePlaybackURL = nil
@@ -1272,9 +1292,15 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         orchestratorLock.withLock {
             livePlan = nil
             liveTrackPlanIndex = nil
+            // BR.11 (E6): the rest of the per-session orchestration state, cleared with the plan.
+            lastAppliedPlannedPresetID = nil
+            manualPresetOverrideThisTrack = false
+            lastPlannedApplyTrackTime = 0
+            liveTrackIsOffPlan = false
         }
         livePlannedSession = nil
         reactiveSessionStart = nil
+        lastReactiveSwitchTime = -.infinity   // BR.11 (E6): a new reactive session may switch at once
         // BC.1 — the track-scoped beat regularity and its GPU copy, cleared together
         // (the both-paths rule): a new session starts unknown, not with the last track's.
         currentTrackBeatIrregular = nil

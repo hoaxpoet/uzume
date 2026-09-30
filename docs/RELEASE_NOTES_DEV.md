@@ -10,6 +10,14 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-011211] BR.11 — Uzume keeps up with how people actually listen (BUG-173)
+
+- **Pausing is just pausing.** Pausing Spotify or Music and resuming no longer restarts the song's visuals from scratch.
+- **Songs outside the playlist** (Spotify's autoplay afterwards, ads, podcasts) now get scenes that change with the music, instead of the last scene held forever.
+- **A looping song keeps changing scenes** on every loop, and a local file's visuals stay in time through pauses.
+- **"Start listening now" after a session starts fresh.**
+- **One bad file in a local playlist** no longer puts every later song on the wrong scenes.
+- **Slow lookups** can no longer attach the previous song's tempo or key to the next song.
 ### [dev-2026-09-30-004428] BR.10 — saying no to "control Spotify / Music" no longer breaks the session (BUG-172)
 
 - **Spotify or Music, permission declined:** Uzume says what's happening and where to allow it, and keeps choosing scenes by listening, instead of showing one scene for the whole playlist.

@@ -86,6 +86,7 @@ reads" are not reads — see the entry.)*
 | BUG-170 | P1 · **FIXED 2026-09-29 (BR.8, `6d78eaf3`)** — a playlist over ~64 tracks lost its preparation before it played | session / cache | **The in-memory cache capped at 64 entries of ~7 MB each, and streaming preparation runs ~30× ahead of playback**, so tracks ~6–56 of a 120-track playlist were evicted unplayed and nothing re-prepared them (audit C1). Fix: entries keep no stem audio (nothing reads it); the cap is a 2048 safety bound. Detail below |
 | BUG-171 | P1 · **FIXED 2026-09-29 (BR.9)** — background preparation disturbed the live visuals' drivers | session / dsp.stem | **The preparer shared the live `StemAnalyzer` and `MoodClassifier`**, so each track landing behind playback pushed another song's frames through the live AGC and mood (audit C3/G3). Fix: the preparer has its own. Detail below |
 | BUG-172 | P1 · **FIXED 2026-09-29 (BR.10, `e28da378`) — pending live check (listening session 3)** — declining "control Spotify / Music" froze the session on one scene | session / app | **Automation denial (−1743) was swallowed**: streaming froze on the first scene with track 1's grid for every song; Apple Music looped "Checking every 2 seconds…" (audit E1, I3/A6/C6/F12). Fix: detected on both paths; streaming runs reactive with a toast; Apple Music shows its permission screen. Detail below |
+| BUG-173 | P1 · **FIXED 2026-09-29 (BR.11, `1a160ba0`) — pending live check (listening session 2)** — pausing Spotify / Music for more than ~2 s counted as a new song | audio / session | **A paused player answers nothing, and nothing cleared the song**, so resuming fired a track change: analysis re-warmed, the grid reinstalled, Skein's canvas wiped and the song's first planned scene cut back in (audit E2). Fix: nothing playing keeps the song; the same song returning is a resume. Detail below |
 | BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
@@ -673,6 +674,24 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 - `NSAppleEventsUsageDescription` is reworded to say what declining costs.
 
 **Gates.** `NowPlayingPermissionTests` (denial reported once per observation, again after restart, ordered on poll count; which apps are asked; local-file modes don't poll); `PlaylistConnectorTests` (−1743 case); `AppleMusicConnectionViewModelTests` (→ `.permissionDenied`, no retry loop); `NowPlayingDenialWiringTests` (reactive fallback, toast, clearing on every path; source shape); `UserFacingErrorTests` (30 cases).
+
+### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
+
+*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
+
+**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
+
+**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
+- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
+- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
+- cut the song's first planned scene back in;
+- restarted the track clock at 0, so every later planned change landed offset.
+
+A single failed poll mid-song did the same.
+
+**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
+
+**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -3000,6 +3019,12 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **E2 → BUG-173** (BR.11, 2026-09-29). The rest of BR.11, fixed in the same increment:
+  - **E7** — a song that isn't in the plan (autoplay after the playlist, an ad, a podcast) runs reactive instead of holding the last planned scene (`f3303199`).
+  - **E8 / B2** — the local-file track clock is the playhead wrapped at the file length (loops wrap it, pauses hold it: no more ~1.5 s lead per pause), and the planned-scene lookup wraps at the track's planned length (a loop or repeat-one walks its scenes again) (`f3303199`, `8a844712`). Live loop check queued (session 1); the recorder's `features.csv` stayed empty on the Debug runs, so it wasn't shown live here.
+  - **E6** — the session clear also runs at `.idle`, so "Start listening now" after a session starts clean, including the reactive switch clock (`461224a8`).
+  - **E3** — local-file playback finds its plan entry by identity, so one failed file no longer shifts every later file (`461224a8`).
+  - **G7** — the metadata pre-fetch and the live Beat This! grid are dropped if the song changed while they ran (`461224a8`).
 - **E1 / I3 / A6 / C6 / F12 → BUG-172** (BR.10, 2026-09-29); **E12 / E14** fixed in the same increment (only the session's own app is polled; none for local files).
 - **C3 / G3 → BUG-171** (BR.9, 2026-09-29): fixed.
 - **C1 → BUG-170** (BR.8, 2026-09-29): fixed.

@@ -249,7 +249,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.8** | 2 | ✅ fixed, PR open (BUG-170) | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ✅ fixed, PR open (BUG-171) | Background preparation gets its own analyzers (C3/G3) |
 | **BR.10** | 2 | ✅ fixed, PR open (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
-| **BR.11** | 2 | ready | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
+| **BR.11** | 2 | ✅ fixed, PR open (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
 | **BR.12** | 2 | ready | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
 | **BR.13** | 2 | ready | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
@@ -1696,6 +1696,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.11 — real listening habits ✅ (2026-09-29, pending live checks)
+
+**Delivered.** Audit E2 → BUG-173 (a pause is not a new song), plus E7 (off-plan songs run reactive), E8/B2 (the local-file clock follows the playhead; loops and repeat-one keep their scene timeline), E6 (ad-hoc sessions start with no stale plan), E3 (a failed file doesn't shift the plan) and G7 (late async results are dropped by track generation).
+**Done-when:** ✅ a paused player is not a track change (test, negative-controlled); ✅ off-plan songs get reactive scenes (wiring); ✅ loops and repeat-one keep their scene timeline (test, negative-controlled); ✅ the local-file clock follows the playhead (tests); ✅ ad-hoc sessions start with no stale plan (wiring); ✅ a failed file doesn't shift the plan (test); ✅ late async results are dropped by generation (wiring).
+**Not done:** the live loop and pause checks (sessions 1 and 2); streaming repeat-one still relies on the planned-length wrap (the player position isn't read for streaming).
 
 ### Increment BR.10 — the "control Spotify / Music" permission and its fallbacks ✅ (2026-09-29, pending live check)
 
