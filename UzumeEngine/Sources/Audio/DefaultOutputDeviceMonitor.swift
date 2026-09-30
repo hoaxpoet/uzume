@@ -28,6 +28,21 @@ public final class DefaultOutputDeviceMonitor: @unchecked Sendable {
     /// exact same block can be passed to `AudioObjectRemovePropertyListenerBlock`.
     private var listenerBlock: AudioObjectPropertyListenerBlock?
 
+    /// BR.12 (audit B5): the `kAudioHardwarePropertyServiceRestarted` listener, and the handler
+    /// both listeners call. coreaudiod restarting (wake from sleep, a `killall coreaudiod`)
+    /// destroys the tap AND this process's listeners ("added listeners must be re-established by
+    /// the client", AudioHardware.h); nothing recovered it before.
+    private var restartBlock: AudioObjectPropertyListenerBlock?
+    private var onChange: (@Sendable () -> Void)?
+
+    private static var restartAddress: AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyServiceRestarted,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+    }
+
     private let lock = NSLock()
 
     /// The property we watch: the system-wide default output device.
@@ -64,7 +79,13 @@ public final class DefaultOutputDeviceMonitor: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard listenerBlock == nil else { return true }
+        self.onChange = onChange
+        return registerLocked()
+    }
 
+    /// Add both listeners. Caller holds `lock`.
+    private func registerLocked() -> Bool {
+        guard let onChange else { return false }
         let block: AudioObjectPropertyListenerBlock = { _, _ in onChange() }
         var addr = Self.propertyAddress
         let status = AudioObjectAddPropertyListenerBlock(
@@ -75,20 +96,53 @@ public final class DefaultOutputDeviceMonitor: @unchecked Sendable {
             return false
         }
         listenerBlock = block
-        logger.info("Default-output-device listener registered")
+
+        let restart: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.handleServiceRestart() }
+        var restartAddr = Self.restartAddress
+        if AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &restartAddr, queue, restart) == noErr {
+            restartBlock = restart
+        } else {
+            logger.error("Failed to register the Core Audio restart listener")
+        }
+        logger.info("Default-output-device + service-restart listeners registered")
         return true
+    }
+
+    /// Remove both listeners. Caller holds `lock`.
+    private func unregisterLocked() {
+        if let block = listenerBlock {
+            var addr = Self.propertyAddress
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, queue, block)
+        }
+        if let block = restartBlock {
+            var addr = Self.restartAddress
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, queue, block)
+        }
+        listenerBlock = nil
+        restartBlock = nil
+    }
+
+    /// coreaudiod restarted: re-establish the listeners, then ask for a reinstall (the tap died
+    /// with the old daemon). Delivered on `queue`.
+    func handleServiceRestart() {
+        logger.error("Core Audio restarted — re-registering listeners and reinstalling the tap")
+        let handler = lock.withLock { () -> (@Sendable () -> Void)? in
+            guard listenerBlock != nil else { return nil }   // stopped meanwhile
+            unregisterLocked()
+            _ = registerLocked()
+            return onChange
+        }
+        handler?()
     }
 
     /// Stop watching. Safe to call when not started, and to call repeatedly.
     public func stop() {
         lock.lock()
         defer { lock.unlock() }
-        guard let block = listenerBlock else { return }
-        var addr = Self.propertyAddress
-        AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &addr, queue, block
-        )
-        listenerBlock = nil
+        guard listenerBlock != nil else { return }
+        unregisterLocked()
+        onChange = nil
         logger.info("Default-output-device listener removed")
     }
 

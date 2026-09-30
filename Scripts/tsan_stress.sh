@@ -20,6 +20,9 @@
 #                                        analysis queue while a pool-thread poller fires song
 #                                        changes through TrackChangeResetRouter; UZUME_STRESS=1)
 #   - TrackChangeResetRouterTests      (BR.3 — the router's thread contract)
+#   - TapLifecycleStressTests          (BR.12 / audit G2 — End Session during a device-change
+#                                        reinstall, from three threads; UZUME_STRESS=1)
+#   - TapLifecycleTests                (BR.12 — lifecycle generation, G8 intent, B6 ladder hold)
 #
 # Pass condition: exit 0 AND no "ThreadSanitizer: data race" / "WARNING:
 # ThreadSanitizer" line in the output. TSan is ~5-15× slower than a normal run
@@ -51,6 +54,8 @@ UZUME_STRESS=1 swift test --package-path UzumeEngine --sanitize=thread \
   --filter ConcurrencyAuditProbeTests \
   --filter streamingTrackChange_witchlightActive_raceFree \
   --filter TrackChangeResetRouterTests \
+  --filter tapLifecycle_endDuringReinstall_raceFree \
+  --filter TapLifecycleTests \
   > "$LOG" 2>&1
 TEST_EXIT=$?
 

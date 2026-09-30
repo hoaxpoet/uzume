@@ -249,9 +249,9 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.8** | 2 | ✅ fixed, PR open (BUG-170) | Long playlists keep their preparation (C1) |
 | **BR.9** | 2 | ✅ fixed, PR open (BUG-171) | Background preparation gets its own analyzers (C3/G3) |
 | **BR.10** | 2 | ✅ fixed, PR open (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
-| **BR.11** | 2 | ready | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
-| **BR.12** | 2 | ready | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
-| **BR.13** | 2 | ready | Local-file transport (B3/BUG-056, B4, B10) |
+| **BR.11** | 2 | ✅ fixed, PR open (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
+| **BR.12** | 2 | ✅ PR open — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
+| **BR.13** | 2 | ✅ PR open — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
 | **BR.15** | 2 | ready | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
 | **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
@@ -259,7 +259,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
-| **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 stays in the audit backlog, unfiled, so br-11 keeps BUG-173. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
+| **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
 
@@ -1697,6 +1697,24 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.13 — local-file transport ✅ (2026-09-29, pending live checks)
+
+**Delivered.** Audit B3 (extends BUG-056), B4, B10 as P2 lines under AUDIT-2026-09-29. `LocalFilePlaybackProvider` restarts on a device change at `PlayheadAnalysisClock.lastKnownPlayheadSeconds` (wrapped into the file), keeps a listener pause (`userPaused` / one-shot `startPaused`, so a paused restart or seek never plays), and retries once after 0.5 s before a `provider.restart FAILED` diagnostic. `VisualizerEngine.stopSessionAudio()` runs on every session boundary (`stopsSessionAudio`: Connecting, Preparing, Idle, End; deduplicated). `LoopingFileReader` always emits stereo.
+**Done-when:** ✅ device change mid-song resumes at the playhead, still playing; ✅ while paused stays paused at the same point; ✅ resume point wraps (tests; negative control: 3 failures); ✅ session boundaries stop audio (test); ✅ mono emitted as stereo (test; negative control: 500 failures). ⏳ AirPods swap mid-song and while paused, and opening a second source while one plays — listening session 1.
+**Not done:** surfacing a twice-failed restart to the listener (it is logged and in the session log; the stall card covers the silence).
+
+### Increment BR.12 — one audio-capture lifecycle ✅ (2026-09-29, pending live checks)
+
+**Delivered.** Audit G2/B14, G8, B5, B6, G6 as P2 lines under AUDIT-2026-09-29. `SystemAudioCapture` runs start / stop / reinstall on one serial `lifecycleQueue` with a generation token (stop bumps it; a stale reinstall no-ops). A failed reinstall keeps the mode and the monitor. `DefaultOutputDeviceMonitor` listens for `kAudioHardwarePropertyServiceRestarted`, re-registers and reinstalls. `AudioInputRouter.holdColdInstallLadder()` / `releaseColdInstallLadder()` / `reinstallTapNow()`; the app holds the ladder while Ready listens and Ready's Retry reinstalls. Tap sample rates must be finite and positive.
+**Done-when:** ✅ serial lifecycle + generation token, end-during-reinstall race-free (TSan stress; negative control 10 races); ✅ failed reinstall keeps intent + monitor (test); ✅ service-restart listener reinstalls (test); ✅ no cold-install recreate while Ready waits (test); ✅ bad tap rate rejected (test). ⏳ AirPods swap during a session end, and `killall coreaudiod` mid-session — listening session 2.
+**Not done:** a tap that dies silently without a Core Audio restart (B5's ladder-after-first-audio half); the stall card's in-app "Restart listening" (audit line 127) — the router action exists, the card button does not.
+
+### Increment BR.11 — real listening habits ✅ (2026-09-29, pending live checks)
+
+**Delivered.** Audit E2 → BUG-173 (a pause is not a new song), plus E7 (off-plan songs run reactive), E8/B2 (the local-file clock follows the playhead; loops and repeat-one keep their scene timeline), E6 (ad-hoc sessions start with no stale plan), E3 (a failed file doesn't shift the plan) and G7 (late async results are dropped by track generation).
+**Done-when:** ✅ a paused player is not a track change (test, negative-controlled); ✅ off-plan songs get reactive scenes (wiring); ✅ loops and repeat-one keep their scene timeline (test, negative-controlled); ✅ the local-file clock follows the playhead (tests); ✅ ad-hoc sessions start with no stale plan (wiring); ✅ a failed file doesn't shift the plan (test); ✅ late async results are dropped by generation (wiring).
+**Not done:** the live loop and pause checks (sessions 1 and 2); streaming repeat-one still relies on the planned-length wrap (the player position isn't read for streaming).
 
 ### Increment BR.10 — the "control Spotify / Music" permission and its fallbacks ✅ (2026-09-29, pending live check)
 

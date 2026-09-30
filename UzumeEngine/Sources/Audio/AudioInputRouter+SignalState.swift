@@ -84,6 +84,14 @@ extension AudioInputRouter {
         // delivered then died for real mid-session is treated as a pause and not
         // auto-recovered — rare, the reinstall was unreliable for it anyway, and
         // the silent-tap detector card surfaces it.
+        // BR.12 (audit B6): Ready brings the tap up before anything plays, so a WORKING tap is
+        // silent there by design. The cold-install ladder then recreated it at ~6, 16 and 46 s —
+        // the recreate lottery BUG-057 once lost. Held until playback; Retry reinstalls on demand.
+        if lock.withLock({ coldInstallLadderHeld }) {
+            logReinstall("Tap reinstall HELD — Ready is waiting for first audio")
+            return
+        }
+
         if silenceDetector.hasEverDetectedSignal {
             logReinstall(
                 "Tap reinstall SKIPPED — session has had audio; treating this silence as a user "
@@ -115,6 +123,40 @@ extension AudioInputRouter {
         lockHandle.withLock { reinstallWorkItem = workItem }
         tapMgmtQueue.asyncAfter(deadline: .now() + delay, execute: workItem)
         logReinstall("Tap reinstall scheduled in \(delay)s (attempt #\(attempt + 1))")
+    }
+
+    /// Hold the cold-install ladder while Ready waits for first audio (BR.12 / B6).
+    public func holdColdInstallLadder() {
+        lock.withLock { coldInstallLadderHeld = true }
+        cancelPendingReinstall()
+    }
+
+    /// Release the hold (playback began). A tap that is STILL silent and never delivered is
+    /// then treated as the broken cold install the ladder exists for.
+    public func releaseColdInstallLadder() {
+        let wasHeld = lock.withLock { () -> Bool in
+            defer { coldInstallLadderHeld = false }
+            return coldInstallLadderHeld
+        }
+        if wasHeld, silenceDetector.state == .silent, !silenceDetector.hasEverDetectedSignal {
+            scheduleNextReinstall()
+        }
+    }
+
+    /// Recreate the tap now — Ready's Retry (BR.12 / B6: the ladder is held there, so this is
+    /// the recovery for a tap that came up dead). Capture modes only.
+    public func reinstallTapNow() {
+        tapMgmtQueue.async { [weak self] in
+            guard let self else { return }
+            switch self.lock.withLock({ self.currentMode }) {
+            case .systemAudio:
+                self.performTapReinstall(captureMode: .systemAudio, attemptNumber: 0)
+            case .application(let bundleID):
+                self.performTapReinstall(captureMode: .application(bundleIdentifier: bundleID), attemptNumber: 0)
+            case .localFile, .localFilePlayback, nil:
+                break
+            }
+        }
     }
 
     /// Cancel any pending reinstall and reset the attempt counter.

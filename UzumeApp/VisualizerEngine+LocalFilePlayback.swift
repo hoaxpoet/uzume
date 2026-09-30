@@ -32,6 +32,7 @@ import Audio
 import Combine
 import DSP
 import Foundation
+import Orchestrator
 import ML
 import Session
 import Shared
@@ -192,7 +193,7 @@ extension VisualizerEngine: LocalFilePreparing {
         // surface publish (closes Gap A — pre-LF.6 every LF session rendered
         // "—" for title because `currentTrack` was never written from the LF
         // path). See `applyLocalFileTrackState(...)` for the unified write.
-        applyLocalFileTrackState(identity: identity, planIndex: 0)
+        applyLocalFileTrackState(identity: identity)
 
         // LF.5: wire the EOF callback BEFORE starting the audio router so we
         // can't miss an end-of-stream event for a very short fixture. Per
@@ -288,6 +289,7 @@ extension VisualizerEngine: LocalFilePreparing {
             // Start the LF audio router (AVAudioEngine path).
             do {
                 try audioRouter.start(mode: .localFilePlayback(url))
+                bindLocalFileTrackClock(audioRouter)
                 lfLogger.info("[LF.4] LF playback router started: \(url.lastPathComponent, privacy: .public)")
                 // LF.5.fix.3-C: mark this URL as the "committed" playback so
                 // a subsequent duplicate .ready emission no-ops at the guard
@@ -397,7 +399,7 @@ extension VisualizerEngine: LocalFilePreparing {
             // LF.5.fix D-LF5-1 + LF.6: orchestrator plan-mode wire + chrome
             // surface publish via the shared helper. See
             // `applyLocalFileTrackState(...)`.
-            applyLocalFileTrackState(identity: nextIdentity, planIndex: nextIdx)
+            applyLocalFileTrackState(identity: nextIdentity)
             sessionRecorder?.log("WIRING: advanceLocalFileQueue orchestratorLock COMPLETE")
             // BUG-044: mirror the streaming callback's per-track PRESET resets (Nimbus settle +
             // Skein §1.5 canvas wipe/reseed). Before this call existed, a local-file next/prev/EOF
@@ -416,6 +418,7 @@ extension VisualizerEngine: LocalFilePreparing {
             do {
                 sessionRecorder?.log("WIRING: advanceLocalFileQueue audioRouter.start BEGIN")
                 try audioRouter.start(mode: .localFilePlayback(nextURL))
+                bindLocalFileTrackClock(audioRouter)
                 sessionRecorder?.log("WIRING: advanceLocalFileQueue audioRouter.start COMPLETE")
                 nowPlaying.setTrackIndex(nextIdx)
                 isLocalFilePaused = false                                   // restart implies playing
@@ -520,6 +523,14 @@ extension VisualizerEngine: LocalFilePreparing {
         sessionRecorder?.log("WIRING: seekLocalFile to=\(String(format: "%.1f", seconds))s")
     }
 
+    /// BR.11 (audit B2): the track clock scenes, stems, the plan and the grid read
+    /// (`mirPipeline.elapsedSeconds`) follows this file's playhead, wrapped at its length.
+    /// Cleared by every non-local-file start and at `.ended`.
+    func bindLocalFileTrackClock(_ audioRouter: AudioInputRouter) {
+        let provider = audioRouter.currentLocalFileProvider
+        mirPipeline.elapsedSecondsSource = { [weak provider] in provider?.trackPlayheadSeconds }
+    }
+
     /// Stop LF playback and end the session. Drives the transport bar's Stop
     /// button. Equivalent to clicking "End session" on the existing chrome —
     /// triggers the D-LF5-2 .ended observer to tear down the audio router.
@@ -539,10 +550,15 @@ extension VisualizerEngine: LocalFilePreparing {
     /// the two call sites stay under SwiftLint's function-body-length cap and
     /// can't drift out of sync.
     @MainActor
-    private func applyLocalFileTrackState(identity: TrackIdentity, planIndex: Int) {
+    private func applyLocalFileTrackState(identity: TrackIdentity) {
         lastResolvedTrackIdentity = identity
         orchestratorLock.withLock {
+            // BR.11 (audit E3): the plan holds only PREPARED files, so its index is not the queue
+            // position — one failed file used to put every later file on the next file's scenes.
+            // Look the file up by identity; a failed file has no entry and runs reactive (E7).
+            let planIndex = Self.planIndex(of: identity, in: livePlan)
             liveTrackPlanIndex = planIndex
+            liveTrackIsOffPlan = livePlan != nil && planIndex == nil
             orchestratorWireLoggedThisTrack = false
             // LFPLAN.3: new track → plan resumes (clear manual hold) + first planned
             // segment applies (clear the last-applied marker).
@@ -552,6 +568,12 @@ extension VisualizerEngine: LocalFilePreparing {
             lastPlannedApplyTrackTime = 0
         }
         publishLocalFileTrackSurface(identity: identity)
+    }
+
+    /// The plan entry for `identity` (BR.11 / E3), or nil when it isn't planned (preparation
+    /// failed) or there is no plan.
+    static func planIndex(of identity: TrackIdentity, in plan: PlannedSession?) -> Int? {
+        plan?.tracks.firstIndex { $0.track == identity }
     }
 
     /// Publish the `TrackMetadata` + artwork bytes that drive `TrackInfoCardView`.
@@ -593,5 +615,34 @@ extension VisualizerEngine: LocalFilePreparing {
         guard let cache = persistentStemCache else { return nil }
         guard let entry = try? cache.load(hash: hash) else { return nil }
         return entry.artworkData
+    }
+}
+
+// MARK: - Session-boundary audio stop (BR.13 / B4)
+
+extension VisualizerEngine {
+
+    /// The states that end the previous session's audio: a new session starting, Idle, End.
+    nonisolated static func stopsSessionAudio(_ state: SessionState) -> Bool {
+        switch state {
+        case .connecting, .preparing, .idle, .ended: return true
+        case .ready, .playing: return false
+        }
+    }
+
+    /// Stop the stem analyzer, then the audio router, and clear the local-file transport state.
+    func stopSessionAudio() {
+        // LF.5.fix.2-FU2: halt the stem analyzer timer BEFORE stopping the audio router. It fires
+        // every 5 s and kept separating stale / silence frames for 60–120 s after Stop.
+        stopStemPipeline()
+        // LF.5.fix D-LF5-2: Uzume IS the player for local-file sessions, so this must stop audio.
+        // For streaming it tears down the process tap; the streaming app keeps playing. Idempotent.
+        if let audioRouter = router as? AudioInputRouter {
+            audioRouter.stop()
+        }
+        // LF.5.fix D-LF5-3 / LF.5.fix.3-C: no stale paused flag or URL marker in the next session.
+        isLocalFilePaused = false
+        lastStartedLocalFilePlaybackURL = nil
+        mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): no file plays now
     }
 }

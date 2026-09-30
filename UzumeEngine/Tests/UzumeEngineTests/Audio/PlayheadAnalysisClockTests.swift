@@ -28,13 +28,13 @@ struct PlayheadAnalysisClockTests {
 
     /// Write a float32 stereo file whose left channel ramps 0 → 1 over its length and whose right
     /// channel is the complement. Frame `i` is identifiable from its sample value alone.
-    static func writeRamp(frames: Int, sampleRate: Double = 44_100) throws -> URL {
+    static func writeRamp(frames: Int, sampleRate: Double = 44_100, channels: Int = 2) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("bug087_4_ramp_\(UUID().uuidString).wav")
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: 2,
+            AVNumberOfChannelsKey: channels,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,
             AVLinearPCMIsBigEndianKey: false,
@@ -49,7 +49,7 @@ struct PlayheadAnalysisClockTests {
         for i in 0..<frames {
             let v = Float(i) / Float(frames)
             planes[0][i] = v
-            planes[1][i] = 1 - v
+            if channels > 1 { planes[1][i] = 1 - v }
         }
         try file.write(from: buffer)
         return url
@@ -102,6 +102,21 @@ struct PlayheadAnalysisClockTests {
         for k in 0..<200 {
             let want = Self.ramp((4_000 + k) % n, of: n)
             #expect(abs(dst[k * 2] - want) < 1e-6, "lap-37 frame \(k)")
+        }
+    }
+
+    @Test("BR.13 / B10: a mono file is emitted as stereo, the same sample on both channels")
+    func readerUpmixesMono() throws {
+        let n = 2_000
+        let url = try Self.writeRamp(frames: n, channels: 1)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let reader = try #require(LoopingFileReader(file: try AVAudioFile(forReading: url)))
+        #expect(reader.channelCount == 2)
+        var dst = [Float](repeating: .nan, count: 500 * 2)
+        #expect(reader.read(from: 100, frames: 500, into: &dst) == 500 * 2)
+        for k in 0..<500 {
+            let want = Self.ramp(100 + k, of: n)
+            #expect(abs(dst[k * 2] - want) < 1e-6 && abs(dst[k * 2 + 1] - want) < 1e-6, "frame \(k)")
         }
     }
 

@@ -157,6 +157,9 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
     private(set) var pollingTask: Task<Void, Never>?
     private var _currentTrack: TrackMetadata?
     private var lastTrackIdentity: String?
+    /// The last track that played — survives a pause, so a change after one still has its
+    /// `previous` (BR.11 / E2).
+    private var lastTrack: TrackMetadata?
     /// Bumped by every `stopObserving()`. A poll only writes state or fires if
     /// the generation it started under is still current (BUG-142).
     private var generation = 0
@@ -230,6 +233,7 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
             generation &+= 1
             _currentTrack = nil
             lastTrackIdentity = nil
+            lastTrack = nil
             deniedReported = false
         }
         logger.info("Stopped observing Now Playing metadata")
@@ -269,10 +273,13 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
         if case .playing(let playing) = query { info = playing } else { info = nil }
 
         guard let info else {
+            // BR.11 (audit E2): nothing playing is a PAUSE (the scripts only answer while playing)
+            // or one failed poll — not the end of the song. Keep `lastTrackIdentity`, so the same
+            // song coming back is a resume: before, it fired as a new track and reset analysis,
+            // the grid, Skein's canvas and the planned scene after every pause over ~2 s.
             lock.withLock {
                 guard generation == gen else { return }
                 _currentTrack = nil
-                lastTrackIdentity = nil
             }
             return
         }
@@ -294,9 +301,10 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
 
         let (shouldFire, previous) = lock.withLock { () -> (Bool, TrackMetadata?) in
             guard generation == gen else { return (false, nil) }
-            let prev = _currentTrack
+            let prev = lastTrack
             let changed = identity != lastTrackIdentity
             _currentTrack = track
+            lastTrack = track
             lastTrackIdentity = identity
             return (changed, prev)
         }

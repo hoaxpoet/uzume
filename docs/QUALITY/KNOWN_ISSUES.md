@@ -7,7 +7,7 @@ Open and recently-resolved defects. Filed using `BUG_REPORT_TEMPLATE.md`. See `D
 *(Ledger reconciliation, 2026-09-30 (BR.KI). The 2026-09-29 beta-readiness audit (lane J,
 [`BETA_READINESS_2026-09-29/J_known_issues.md`](../diagnostics/BETA_READINESS_2026-09-29/J_known_issues.md))
 found this index claiming "everything in this table is open work" while about 29 of its ~60 rows were
-closed, six rows contradicting their own entry bodies, and most of BUG-150–172 missing. In this pass:
+closed, six rows contradicting their own entry bodies, and most of BUG-150–172 missing. BR.11–13 merged while this pass was open; their entries (BUG-173, BUG-056) are in the tables below. In this pass:
 every closed entry left §Open, verbatim. Fixes from the last 14 days went to §Resolved (recent). Older
 ones went to [`KNOWN_ISSUES_HISTORY.md`](KNOWN_ISSUES_HISTORY.md), along with the four oldest recent
 ones (BUG-136, 137, 138, 140), so §Resolved stays inside its 50 KB budget. BUG-054 closed as a
@@ -30,10 +30,10 @@ belongs in the second table, not the first.
 | BUG-060 | P3 | renderer / app.hang | The render loop died on a switch to Gossamer (2026-06-18). It recurred once, undated. No stack. | With BUG-085. |
 | BUG-091 | P1 | app.session / pipeline-wiring | One local file selected: preparation finishes and nothing ever plays; every audio field is 0. One instance (2026-08-17). Instrumented. | One reproduction: listening session 1, "start a single file a few times". |
 | BUG-152 | P2 | session / preview | About 8 % of streaming tracks without a scan match get analysed as a different song. | BR.19. |
-| BUG-056 | P3 | audio.localfile | Changing the output device restarts the local song from the top. | BR.13. |
 | BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. |
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
+| BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
 | BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
 | BUG-084 | P3 | dsp.stem | Stem deviation spikes to 35 against a ~3.4 ceiling. The one consumer is soft-kneed, so there is no visible effect. | After the beta. |
@@ -47,7 +47,7 @@ belongs in the second table, not the first.
 | DEAD-001 | P3 | app.viewmodel / dead-code | `ConnectorPickerViewModel.localFolderEnabled` is dead, and its comment claims a gate the build doesn't have. | With connector-capability work. |
 | DIST-LIM | P3 | build / distribution | The notarized build has never run on macOS 15, the stated minimum. Intel is unsupported (arm64 only). | One launch-and-stream on macOS 15 (also closes BUG-167). |
 | SCAN-LIM | P3 | session / playlist scan | The scan is untested on non-English Spotify, the compact list, 100+ songs and small windows. The web player can't be scanned. | Two real captures (non-English, compact), if cheap. |
-| AUDIT-2026-09-29 | P1–P3 | audit backlog | Beta-readiness findings not yet filed individually. Includes K8: Cytokinesis stops for its designed 4 s hold before regrowing (`MitosisGen2Geometry` `holdSeconds`), which reads as a freeze (Matt, 2026-09-04). | Phase BR (BR.11–BR.20); file each at pickup. |
+| AUDIT-2026-09-29 | P1–P3 | audit backlog | Beta-readiness findings not yet filed individually. | Phase BR (BR.11–BR.20); file each at pickup. |
 | AUDIT-2026-06-09 | P3 | audit backlog | The June audit's remaining P3 backlog. | After the beta. |
 
 ### Fixed — waiting on a live check
@@ -58,6 +58,7 @@ passes, the entry moves to §Resolved (recent).
 
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
+| BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
 | BUG-151 | P2 | audio.localfile | The local queue cut the last second off every song. | Session 1: listen to four or five song endings. |
 | BUG-156 | P3 | audio.localfile | The test flake is fixed. The product half is an unobserved risk: Next, Stop or seek could stall while preparation runs. | Session 1: press Next and seek repeatedly while preparation is running. |
 | BUG-163 | P1 | app / accessibility | Reduce Motion and Dim Flashing Lights weren't honoured at launch. | Session 1: launch with each one on. |
@@ -69,7 +70,8 @@ passes, the entry moves to §Resolved (recent).
 | BUG-144 | P2 | dsp.mir | A song's stored mood was its fade-out. Scoring no longer reads mood (NRG.3); only Kagura does. | Session 1, or close on Matt's call. |
 | OBS-DS4-1 | P3 | app.ui | The detailed preparation view looked uniform. BPM and mood are fixed; only key (BUG-149) remains. | Session 1: read the preparation view. |
 | BUG-139 | P2 | audio.capture | Tap teardown could deadlock against its own IO callback. | Session 2: start and stop twice, then three to five output swaps. |
-| BUG-070 | P2 | audio.capture | A failed tap reinstall left the capture state untruthful. The residual race (a session ended during silence) is BR.12's G2. | Session 2: output swaps; pause 30 s, then end and restart. |
+| BUG-070 | P2 | audio.capture | A failed tap reinstall left the capture state untruthful. The residual race (ending a session during silence) is fixed too: BR.12 G2, TSan-clean. | Session 2: output swaps; pause 30 s, then end and restart. |
+| BUG-173 | P1 | audio / session | Pausing Spotify or Music for more than ~2 s counted as a new song and reset the scene (BR.11). | Session 2: pause 30 s or more, then resume. |
 | BUG-106 | P2 | ml.stem | At 4K, stems ran a period late. The timing was measured live ✅; the felt half remains. | Session 2: stem-driven scenes, fullscreen at 4K. |
 | BUG-171 | P1 | session / dsp.stem | Background preparation jolted the live visuals' drivers. | Session 2: *Start now* on a long playlist; watch the first minutes. |
 | BUG-162 | P1 | app / session | The display slept and the Mac locked mid-session. | Session 2: on battery, past the display-off interval; run `pmset -g assertions`. |
@@ -82,6 +84,18 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-174 — Cytokinesis stops for four seconds before it regrows, and it reads as a freeze (2026-09-30)
+
+**Severity:** P3 (a scene reads as stalled; it recovers by itself) · **Domain:** `preset.fidelity` (Cytokinesis, `MitosisGen2`) · **Failure class:** `algorithm` (a designed hold with no motion in it) · **Status:** Open, not fixed · **Found by:** Matt, 2026-09-04 (*"Hangs for seconds before restart"*, the ENGINEERING_PLAN §Phase PR register); first filed here by the 2026-09-30 ledger reconciliation (audit item K8)
+
+**Expected:** the colony keeps visibly living between one growth cycle and the next.
+
+**Actual:** once the colony reaches its crowd size, `advanceStage` enters `.holding` for `holdSeconds` (default **4 s**, `MitosisGen2Geometry.swift:71`). During the hold, cell phase advances only in `.growing` and every radius already sits at its packing target, so nothing on screen moves. Then it dissolves and regrows.
+
+**Evidence:** the code path above; PR.4 found no frame stall in any recorded session (max frame gap 199 ms). This is the designed hold, not a renderer hang. That reading is **PLAUSIBLE**; Matt hasn't confirmed it's the moment he saw.
+
+**Fix direction (audit K8):** keep the cells breathing through the hold (a slow phase drift or membrane motion), or shorten it. The choice is a look decision for Matt.
 
 ### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
 
@@ -240,6 +254,24 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 - `NSAppleEventsUsageDescription` is reworded to say what declining costs.
 
 **Gates.** `NowPlayingPermissionTests` (denial reported once per observation, again after restart, ordered on poll count; which apps are asked; local-file modes don't poll); `PlaylistConnectorTests` (−1743 case); `AppleMusicConnectionViewModelTests` (→ `.permissionDenied`, no retry loop); `NowPlayingDenialWiringTests` (reactive fallback, toast, clearing on every path; source shape); `UserFacingErrorTests` (30 cases).
+
+### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
+
+*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
+
+**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
+
+**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
+- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
+- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
+- cut the song's first planned scene back in;
+- restarted the track clock at 0, so every later planned change landed offset.
+
+A single failed poll mid-song did the same.
+
+**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
+
+**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -1574,6 +1606,12 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
+- **E2 → BUG-173** (BR.11, 2026-09-29). The rest of BR.11, fixed in the same increment:
+  - **E7** — a song that isn't in the plan (autoplay after the playlist, an ad, a podcast) runs reactive instead of holding the last planned scene (`f3303199`).
+  - **E8 / B2** — the local-file track clock is the playhead wrapped at the file length (loops wrap it, pauses hold it: no more ~1.5 s lead per pause), and the planned-scene lookup wraps at the track's planned length (a loop or repeat-one walks its scenes again) (`f3303199`, `8a844712`). Live loop check queued (session 1); the recorder's `features.csv` stayed empty on the Debug runs, so it wasn't shown live here.
+  - **E6** — the session clear also runs at `.idle`, so "Start listening now" after a session starts clean, including the reactive switch clock (`461224a8`).
+  - **E3** — local-file playback finds its plan entry by identity, so one failed file no longer shifts every later file (`461224a8`).
+  - **G7** — the metadata pre-fetch and the live Beat This! grid are dropped if the song changed while they ran (`461224a8`).
 - **E1 / I3 / A6 / C6 / F12 → BUG-172** (BR.10, 2026-09-29); **E12 / E14** fixed in the same increment (only the session's own app is polled; none for local files).
 - **C3 / G3 → BUG-171** (BR.9, 2026-09-29): fixed.
 - **C1 → BUG-170** (BR.8, 2026-09-29): fixed.
@@ -1594,6 +1632,16 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.13 (2026-09-29), local-file transport (P2, tracked here):**
+  - **B3 (extends BUG-056)** — an output-device change resumes at the last playhead, keeps a pause (no audible restart behind a paused UI), and retries once before reporting. Fixed (`LocalFileSeekTests`; negative control red); ⏳ AirPods swap mid-song and while paused, listening session 1.
+  - **B4** — every session boundary (Connecting, Preparing, Idle, End) stops the previous session's audio, so a new local source or Cancel no longer leaves the old track playing or its end-of-file advance firing mid-preparation. Fixed (test); ⏳ open a second file while one plays, listening session 1.
+  - **B10** — a mono local file is emitted as stereo (the same sample on both channels) instead of being averaged in pairs an octave high. Fixed (`PlayheadAnalysisClockTests`; negative control red).
+- **BR.12 (2026-09-29), audio capture lifecycle (P2, tracked here):**
+  - **G2 / B14** — start, stop and reinstall run on one serial lifecycle queue; `stopCapture` bumps a generation token and a reinstall scheduled before it does nothing. Fixed; TSan-clean (`TapLifecycleStressTests`; negative control without the queue: 10 races).
+  - **G8** — a failed device-change reinstall keeps the capture intent and the device monitor, so the next device change retries. Fixed (test).
+  - **B5** — a Core Audio restart (`kAudioHardwarePropertyServiceRestarted`) re-registers the monitor's listeners and reinstalls the tap. Fixed (test via the seam); ⏳ live `killall coreaudiod` mid-session, listening session 2. **Not done:** a tap that goes silent *without* a service restart still skips the retry ladder once audio has been heard.
+  - **B6** — the cold-install ladder is held while Ready waits for audio (released at Playing / Ended / Idle), and Ready's Retry reinstalls the tap on demand. Fixed (test).
+  - **G6** — a tap reporting a non-finite or zero sample rate is rejected at install. Fixed (test).
 - **BR.1 (2026-09-29).** F1/F1b → **BUG-163**; K1/D1 → **BUG-164**. P2 findings fixed in the same increment, tracked here:
   - **F7** — the photosensitivity notice gates every path to visuals (ContentView; ⌘O / Open With / drop included). Fixed (`8d294d8f`); live-verified on the local-file path (ack forced NO stops at `.ready`, YES logs `playback started`).
   - **F6** — the notice's "Enable Reduce motion" sets the in-app Reduced motion to Always on (UX_SPEC §3.3). Fixed (`8d294d8f`).
@@ -1836,7 +1884,7 @@ Instrumented re-test (session `2026-06-17T14-54-49Z`): **12 rapid back-and-forth
 **Reproduction steps:** play a local file; mid-playback change the macOS default output (System Settings → Sound → Output, or ⌥-click the menu-bar volume). The track restarts from the beginning.
 **Session artifacts:** `2026-06-16T21-32-50Z` — `session.log` shows `provider.teardown … player.stop … engine.stop` at 21:33:57 and again at 21:34:12 (two output swaps), each followed by a restart from the top.
 **Verification criteria (for the fix):**
-- [ ] On an `AVAudioEngineConfigurationChange` (output change), the provider reconfigures and **resumes from the saved frame position** rather than restarting at 0.
+- [x] On an `AVAudioEngineConfigurationChange` (output change), the provider reconfigures and **resumes from the saved frame position** rather than restarting at 0. *(BR.13, 2026-09-29: resumes at the clock's last playhead, keeps a pause, retries once; `LocalFileSeekTests`, negative control red.)*
 - [ ] Manual: swap output mid-local-file → playback continues (≤ a small glitch), not a restart.
 
 **Note:** distinct from **G1** (the *system-tap* reinstall on the streaming path — `DefaultOutputDeviceMonitor` / `performReinstall`); local-file uses AVAudioEngine and never engages the tap, so a local-file output-swap does NOT validate G1.

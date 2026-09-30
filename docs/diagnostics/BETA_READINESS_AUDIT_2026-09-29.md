@@ -424,6 +424,8 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Press Next and seek while preparation runs: BUG-156's product half.
    - Swap AirPods and speakers mid-song, then while paused: BUG-056 and B3.
    - Start a single file a few times: BUG-091.
+   - While a song plays, open another file: the first song stops at once (BR.13, B4). Swap outputs mid-song and while paused: it continues from the same point, and a paused song stays silent (BR.13, B3 / BUG-056).
+   - Let a single file loop twice and pause it a few times: scenes keep changing on the second loop and stay in time after each pause (BR.11, E8/B2).
    - Read the preparation readout and judge whether the scenes suit the songs: OBS-DS4-1, BUG-148, BUG-133, BUG-144, NRG.3, NRG.4.
    - Ready to Start after clearing its cache: BUG-134.
    - A bar-locked scene on a meterless song: BUG-117.
@@ -435,6 +437,8 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Pause Spotify for 30 s or more, then end and restart: the tap race, and E2.
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - Judge stem timing at 4K: BUG-106.
+   - End the session while AirPods connect, then start a new one: one tap, analysis at normal speed (BR.12, G2/B14).
+   - Mid-session, run `sudo killall coreaudiod`: visuals respond again within a few seconds (BR.12, B5).
    - Start a long Spotify playlist early (Start now) and watch the first minutes while preparation continues behind playback: no energy / stem twitch each time a song finishes preparing (BR.9).
    - On the M4 MacBook Pro on battery, leave a session untouched past the display-off interval and run `pmset -g assertions` mid-session: BUG-162 (BR.2).
 3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM. On the first Spotify session, click **Don't Allow** on "control Spotify": a toast explains it and the scenes still change with the music; on Apple Music, Don't Allow shows the permission screen (BUG-172, BR.10). Then force-quit Uzume and reopen it: it offers a problem report; create one and check the zip opens in Finder and the GitHub issue page opens (BUG-166, BR.5).

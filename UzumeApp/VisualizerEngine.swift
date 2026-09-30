@@ -822,6 +822,8 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// recent LF SessionOrigin into `lastEndedLocalFileOrigin` for the
     /// EndedView "Play <name> again" CTA.
     var lastLocalFileSourceCancellable: AnyCancellable?
+    /// BR.13 / B4: stops the previous session's audio at every session boundary.
+    var sessionAudioCancellable: AnyCancellable?
 
     /// Seeded LCG perturbation value shared between `buildPlan()` and `extendPlan()`.
     /// Reset to nil when a new session begins (`.connecting` state), so each session
@@ -846,6 +848,18 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// analysis queue without a thread hop. This field is the lock-guarded
     /// analysis-queue mirror — same value, different access discipline.
     var liveTrackPlanIndex: Int?
+
+    /// BR.11 (audit G7): bumped by every song change (`resetStemPipeline`). A slow async result
+    /// (metadata pre-fetch, live Beat This! grid) captures it at start and is dropped if the song
+    /// changed meanwhile — they used to land on the next song. Under `orchestratorLock`.
+    var trackGeneration: UInt64 = 0
+
+    /// Read `trackGeneration` from any thread.
+    func currentTrackGeneration() -> UInt64 { orchestratorLock.withLock { trackGeneration } }
+
+    /// BR.11 (E7): the playing song is known and matches no plan entry. Under `orchestratorLock`;
+    /// set by every streaming track change, cleared at session boundaries.
+    var liveTrackIsOffPlan = false
 
     /// BR.10 (E1): no now-playing can ever arrive (Automation denied), so a planned session runs
     /// reactive instead of freezing on its first scene. Under `orchestratorLock`.
@@ -1136,7 +1150,12 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .sink { [weak self] newState in
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
+                // BR.12 (B6): Ready held the cold-install ladder; anything past Ready releases it.
+                if newState == .playing || newState == .ended || newState == .idle {
+                    (self.router as? AudioInputRouter)?.releaseColdInstallLadder()
+                }
                 if newState == .connecting || newState == .preparing {
+                    self.orchestratorLock.withLock { self.liveTrackIsOffPlan = false }   // BR.11
                     // BR.10: a new session starts with now-playing assumed available.
                     self.orchestratorLock.withLock { self.nowPlayingUnavailable = false }
                     self.nowPlayingDeniedApp = nil
@@ -1154,6 +1173,12 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // fetch from the prior session so a slow CDN response
                     // can never land on the new session's chrome.
                     self.streamingArtworkPublisher?.update(for: nil)
+                    self.clearSessionScopedSurfaces()
+                }
+                if newState == .idle {
+                    // BR.11 (E6): "Start listening now" goes .idle → .playing with no .connecting /
+                    // .preparing, so the last session's plan, plan index and reactive clock used to
+                    // carry into the ad-hoc session (BUG-024 class). Clearing at .idle covers it.
                     self.clearSessionScopedSurfaces()
                 }
                 if newState == .preparing {
@@ -1175,34 +1200,17 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                     // surface's default.
                     self.startListeningForFirstAudio()
                 }
-                if newState == .ended {
-                    // LF.5.fix.2-FU2: halt the stem analyzer timer BEFORE
-                    // stopping the audio router. The timer fires every 5 s
-                    // and drains the stem lookahead buffer; without this
-                    // call the analyzer kept running for ~60-120 s after
-                    // Stop on the verification session 2026-05-28T19-42-50Z
-                    // (12 separations on stale / silence frames). Cancelling
-                    // first means no further dispatch lands after the audio
-                    // router teardown.
-                    self.stopStemPipeline()
-                    // LF.5.fix D-LF5-2: Uzume IS the player for local-file
-                    // sessions, so End Session must actually stop audio. For
-                    // streaming sessions stop() also tears down the Core Audio
-                    // process tap (correct behaviour at session end — the
-                    // streaming app keeps playing, Uzume stops analysing).
-                    // Either way, idempotent + safe.
-                    if let audioRouter = self.router as? AudioInputRouter {
-                        audioRouter.stop()
-                    }
-                    // LF.5.fix D-LF5-3: reset transport state so a new session
-                    // (or a re-open of the same file) doesn't inherit a stale
-                    // paused flag.
-                    self.isLocalFilePaused = false
-                    // LF.5.fix.3-C: release the URL marker so a re-open of
-                    // the same file starts cleanly.
-                    self.lastStartedLocalFilePlaybackURL = nil
-                }
             }
+
+        // BR.13 / B4: every session boundary stops the previous session's audio — not only End.
+        // Opening a new local source while one played left the old audio running (the router
+        // stopped only on `.ended`), Cancel landed on Idle with music playing and no Stop, and the
+        // old track's end-of-file advance started the new queue mid-preparation. Deduplicated so a
+        // redundant re-emit of a state never stops audio a session has just started.
+        sessionAudioCancellable = mgr.$state
+            .removeDuplicates()
+            .filter { Self.stopsSessionAudio($0) }
+            .sink { [weak self] _ in self?.stopSessionAudio() }
 
         // GAP H (2026-05-28): stash the most recent LF SessionOrigin across
         // endSession so EndedView can offer a "Play <name> again" CTA. The
@@ -1272,9 +1280,15 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         orchestratorLock.withLock {
             livePlan = nil
             liveTrackPlanIndex = nil
+            // BR.11 (E6): the rest of the per-session orchestration state, cleared with the plan.
+            lastAppliedPlannedPresetID = nil
+            manualPresetOverrideThisTrack = false
+            lastPlannedApplyTrackTime = 0
+            liveTrackIsOffPlan = false
         }
         livePlannedSession = nil
         reactiveSessionStart = nil
+        lastReactiveSwitchTime = -.infinity   // BR.11 (E6): a new reactive session may switch at once
         // BC.1 — the track-scoped beat regularity and its GPU copy, cleared together
         // (the both-paths rule): a new session starts unknown, not with the last track's.
         currentTrackBeatIrregular = nil

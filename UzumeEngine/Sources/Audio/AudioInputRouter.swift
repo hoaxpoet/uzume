@@ -56,6 +56,10 @@ public final class AudioInputRouter: @unchecked Sendable {
     /// `stopInternal()`. LF.1. Internal for the transport extension
     /// (`AudioInputRouter+LocalFileTransport.swift`).
     var localFilePlaybackProvider: LocalFilePlaybackProvider?
+
+    /// BR.11 (B2): the playing local file's provider, for its track clock. Read on the thread that
+    /// starts playback (the provider itself is thread-safe); nil when no file plays.
+    public var currentLocalFileProvider: LocalFilePlaybackProvider? { localFilePlaybackProvider }
     let lock = NSLock()
 
     /// Monotonically increasing timestamp base.
@@ -77,6 +81,8 @@ public final class AudioInputRouter: @unchecked Sendable {
 
     /// Pending reinstall work item, if any. Cancelled on `.active`.
     var reinstallWorkItem: DispatchWorkItem?
+    /// BR.12 (audit B6): held while Ready waits for first audio (under `lock`).
+    var coldInstallLadderHeld = false
 
     /// Backoff schedule for tap-reinstall attempts after entering `.silent`.
     /// 3 attempts is enough to ride out a typical scrub-induced disconnect

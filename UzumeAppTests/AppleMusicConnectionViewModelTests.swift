@@ -177,7 +177,7 @@ struct NowPlayingDenialWiringTests {
 
     @Test func denial_runsReactive_andShowsTheToast() throws {
         let orchestrator = try src("UzumeApp/VisualizerEngine+Orchestrator.swift")
-        #expect(orchestrator.contains("if snapshot.hasPlan, snapshot.trackIndex == nil, nowPlayingGone {"))
+        #expect(orchestrator.contains("if snapshot.hasPlan, snapshot.trackIndex == nil, offPlan || nowPlayingGone {"))
         let audio = try src("UzumeApp/VisualizerEngine+Audio.swift")
         #expect(audio.contains("metadata.onAutomationDenied = { [weak self] source in"))
         #expect(audio.contains("self?.handleNowPlayingDenied(source)"))

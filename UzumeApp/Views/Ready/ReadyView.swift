@@ -51,14 +51,16 @@ struct ReadyView: View {
         audioSignalStatePublisher: AnyPublisher<AudioSignalState, Never>,
         planPublisher: AnyPublisher<PlannedSession?, Never>,
         onBeginPlayback: @escaping () -> Void,
-        reduceMotion: Bool
+        reduceMotion: Bool,
+        onRetry: (() -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: ReadyViewModel(
             origin: origin,
             sessionManager: sessionManager,
             audioSignalStatePublisher: audioSignalStatePublisher,
             planPublisher: planPublisher,
-            reduceMotion: reduceMotion
+            reduceMotion: reduceMotion,
+            onRetry: onRetry
         ))
         self.character = character
         self.onBeginPlayback = onBeginPlayback
