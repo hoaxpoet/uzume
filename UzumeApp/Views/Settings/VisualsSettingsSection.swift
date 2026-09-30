@@ -13,38 +13,41 @@ struct VisualsSettingsSection: View {
 
     var body: some View {
         Form {
-            Section(NSLocalizedString("settings.visuals.device_tier.label", comment: "")) {
-                Picker(
-                    NSLocalizedString("settings.visuals.device_tier.label", comment: ""),
-                    selection: Binding(
-                        get: { viewModel.deviceTierOverride },
-                        set: { viewModel.deviceTierOverride = $0 }
-                    )
-                ) {
-                    Text(NSLocalizedString("settings.visuals.device_tier.auto", comment: ""))
-                        .tag(DeviceTierOverride.auto)
-                    Text(NSLocalizedString("settings.visuals.device_tier.tier1", comment: ""))
-                        .tag(DeviceTierOverride.forceTier1)
-                    Text(NSLocalizedString("settings.visuals.device_tier.tier2", comment: ""))
-                        .tag(DeviceTierOverride.forceTier2)
-                }
-                .labelsHidden()
+            // BR.15 (E5): tier and quality ceiling never reach scene selection — developer build only.
+            if BuildFlavor.current.exposesUnwiredControls {
+                Section(NSLocalizedString("settings.visuals.device_tier.label", comment: "")) {
+                    Picker(
+                        NSLocalizedString("settings.visuals.device_tier.label", comment: ""),
+                        selection: Binding(
+                            get: { viewModel.deviceTierOverride },
+                            set: { viewModel.deviceTierOverride = $0 }
+                        )
+                    ) {
+                        Text(NSLocalizedString("settings.visuals.device_tier.auto", comment: ""))
+                            .tag(DeviceTierOverride.auto)
+                        Text(NSLocalizedString("settings.visuals.device_tier.tier1", comment: ""))
+                            .tag(DeviceTierOverride.forceTier1)
+                        Text(NSLocalizedString("settings.visuals.device_tier.tier2", comment: ""))
+                            .tag(DeviceTierOverride.forceTier2)
+                    }
+                    .labelsHidden()
 
-                Picker(
-                    NSLocalizedString("settings.visuals.quality_ceiling.label", comment: ""),
-                    selection: Binding(
-                        get: { viewModel.qualityCeiling },
-                        set: { viewModel.qualityCeiling = $0 }
-                    )
-                ) {
-                    Text(NSLocalizedString("settings.visuals.quality_ceiling.auto", comment: ""))
-                        .tag(QualityCeiling.auto)
-                    Text(NSLocalizedString("settings.visuals.quality_ceiling.performance", comment: ""))
-                        .tag(QualityCeiling.performance)
-                    Text(NSLocalizedString("settings.visuals.quality_ceiling.balanced", comment: ""))
-                        .tag(QualityCeiling.balanced)
-                    Text(NSLocalizedString("settings.visuals.quality_ceiling.ultra", comment: ""))
-                        .tag(QualityCeiling.ultra)
+                    Picker(
+                        NSLocalizedString("settings.visuals.quality_ceiling.label", comment: ""),
+                        selection: Binding(
+                            get: { viewModel.qualityCeiling },
+                            set: { viewModel.qualityCeiling = $0 }
+                        )
+                    ) {
+                        Text(NSLocalizedString("settings.visuals.quality_ceiling.auto", comment: ""))
+                            .tag(QualityCeiling.auto)
+                        Text(NSLocalizedString("settings.visuals.quality_ceiling.performance", comment: ""))
+                            .tag(QualityCeiling.performance)
+                        Text(NSLocalizedString("settings.visuals.quality_ceiling.balanced", comment: ""))
+                            .tag(QualityCeiling.balanced)
+                        Text(NSLocalizedString("settings.visuals.quality_ceiling.ultra", comment: ""))
+                            .tag(QualityCeiling.ultra)
+                    }
                 }
             }
 
@@ -97,23 +100,27 @@ struct VisualsSettingsSection: View {
                     .foregroundColor(.secondary)
             }
 
-            Section(NSLocalizedString("settings.visuals.blocklist.title", comment: "")) {
-                PresetCategoryBlocklistPicker(
-                    selection: Binding(
-                        get: { viewModel.excludedPresetCategories },
-                        set: { viewModel.excludedPresetCategories = $0 }
+            // BR.15 (E5, E14): the family blocklist has no consumer, and the adaptation toasts belong
+            // to keys the public build hides — developer build only.
+            if BuildFlavor.current.exposesUnwiredControls {
+                Section(NSLocalizedString("settings.visuals.blocklist.title", comment: "")) {
+                    PresetCategoryBlocklistPicker(
+                        selection: Binding(
+                            get: { viewModel.excludedPresetCategories },
+                            set: { viewModel.excludedPresetCategories = $0 }
+                        )
                     )
-                )
-            }
+                }
 
-            Section(NSLocalizedString("settings.visuals.toasts.title", comment: "")) {
-                Toggle(
-                    NSLocalizedString("settings.visuals.adaptation_toasts.label", comment: ""),
-                    isOn: Binding(
-                        get: { viewModel.showLiveAdaptationToasts },
-                        set: { viewModel.showLiveAdaptationToasts = $0 }
+                Section(NSLocalizedString("settings.visuals.toasts.title", comment: "")) {
+                    Toggle(
+                        NSLocalizedString("settings.visuals.adaptation_toasts.label", comment: ""),
+                        isOn: Binding(
+                            get: { viewModel.showLiveAdaptationToasts },
+                            set: { viewModel.showLiveAdaptationToasts = $0 }
+                        )
                     )
-                )
+                }
             }
 
             // BR.1 (F15): uncertified scenes never passed the flash gate — developer build only.
