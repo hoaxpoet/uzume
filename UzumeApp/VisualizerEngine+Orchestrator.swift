@@ -585,12 +585,13 @@ extension VisualizerEngine {
         return available.contains(raw) ? .pinned(raw) : .unknown(raw)
     }
 
-    /// REC.2: resolves `UZUME_PIN_SCENE`; logs an unknown name with the valid scenes; engages the
+    /// REC.2: resolves `UZUME_PIN_SCENE` against the gated catalog (so a pin cannot reach a scene this GPU or
+    /// build flavor excludes); logs an unknown name with the valid scenes; engages the
     /// diagnostic hold (the `L`-key flag) for a known one. Call BEFORE audio starts, in the same
     /// main-thread step as `applyFirstScene`, so no planned apply can be dispatched ahead of the pin.
     @MainActor
     func engageScenePin() -> ScenePin {
-        let ids = presetLoader.presets.map(\.descriptor.id)
+        let ids = plannableCatalog.map(\.id)
         let pin = Self.resolveScenePin(ProcessInfo.processInfo.environment["UZUME_PIN_SCENE"], available: ids)
         switch pin {
         case .none:
