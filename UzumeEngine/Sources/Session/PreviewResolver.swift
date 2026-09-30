@@ -127,25 +127,24 @@ public final class PreviewResolver: PreviewResolving, @unchecked Sendable {
             return match
         }
 
-        // SCAN (D-260): a title read off the screen may be cut off, so the first
-        // hit can't be trusted — ask for more and verify (ScreenReadMatchPolicy).
-        // Every other track sends the unchanged limit-1 request.
+        // SCAN (D-260) verification for EVERY track (BR.19 / BUG-152): the first hit
+        // for "artist title" was a different song for 8 % of rows (an underscore or an
+        // accent breaks the search; a song the catalog lacks returns whatever ranks
+        // first), and stems, grid and energy were then measured on the wrong music.
+        // A track that wasn't read off a screen is its own uncut reading.
         let reading = track.screenReading
-        let limit = reading == nil ? 1 : ScreenReadMatchPolicy.candidateLimit
+            ?? ScreenReading(title: track.title, titleCutOff: false, artistLine: track.artist)
+        let limit = ScreenReadMatchPolicy.candidateLimit
         guard let data = await search(term: "\(track.artist) \(track.title)", limit: limit, for: track) else {
             return nil   // transient failure — uncached (PUB.2)
         }
-        var match: PreviewMatch?
-        if let reading {
-            match = ScreenReadMatchPolicy.bestMatch(in: data, for: track, reading: reading)
-            // A badge fused onto a screen-read artist ("DSZA") spoils the search
-            // term itself: one title-only retry, verified the same way.
-            if match == nil, !track.artist.isEmpty {
-                guard let retry = await search(term: track.title, limit: limit, for: track) else { return nil }
-                match = ScreenReadMatchPolicy.bestMatch(in: retry, for: track, reading: reading)
-            }
-        } else {
-            match = parseMatch(from: data)
+        var match = ScreenReadMatchPolicy.bestMatch(in: data, for: track, reading: reading)
+        // A badge fused onto a screen-read artist ("DSZA"), or a character the search
+        // can't take in the artist, spoils the term itself: one title-only retry,
+        // verified the same way.
+        if match == nil, !track.artist.isEmpty {
+            guard let retry = await search(term: track.title, limit: limit, for: track) else { return nil }
+            match = ScreenReadMatchPolicy.bestMatch(in: retry, for: track, reading: reading)
         }
         stateLock.withLock { cache[track] = .some(match) }
         if let match {
@@ -172,24 +171,46 @@ public final class PreviewResolver: PreviewResolving, @unchecked Sendable {
     /// for a transient failure (thrown error / non-200), which callers must NOT
     /// cache: a poisoned entry made the D-061(d) network-recovery retry
     /// permanently unable to succeed for the track (PUB.2, ultra-review).
+    ///
+    /// BR.19 / C7: a 429, a 5xx or a thrown error (timeout, offline) is retried after each of
+    /// `retryDelays` — before, one blip was final for the session. A 200 whose body is not JSON
+    /// (a captive portal's login page) is transient too, never parsed into a cached "no preview".
     private func search(term: String, limit: Int, for track: TrackIdentity) async -> Data? {
-        // Enforce rate limit before sending a request.
-        await rateLimiter.acquire()
         guard let request = buildRequest(term: term, limit: limit) else {
             logger.error("Could not build iTunes search request for '\(track.title)'")
             return nil
         }
-        do {
-            let (data, response) = try await networkFetcher(request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                logger.info("Non-200 response for '\(track.title)' — returning nil uncached (transient)")
-                return nil
+        for attempt in 0...retryDelays.count {
+            if attempt > 0 { try? await Task.sleep(for: retryDelays[attempt - 1]) }
+            // Enforce rate limit before sending a request.
+            await rateLimiter.acquire()
+            do {
+                let (data, response) = try await networkFetcher(request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if status == 200 {
+                    guard Self.isJSON(data) else {
+                        logger.info("Non-JSON 200 for '\(track.title)' (captive portal?) — uncached")
+                        return nil
+                    }
+                    return data
+                }
+                guard status == 429 || (500...599).contains(status) else {
+                    logger.info("HTTP \(status) for '\(track.title)' — returning nil uncached")
+                    return nil
+                }
+                logger.info("HTTP \(status) for '\(track.title)' — retry \(attempt + 1)")
+            } catch {
+                logger.error("iTunes Search request failed for '\(track.title)': \(error) — retry \(attempt + 1)")
             }
-            return data
-        } catch {
-            logger.error("iTunes Search request failed for '\(track.title)': \(error)")
-            return nil
         }
+        return nil   // still failing after the retries: transient, uncached (PUB.2)
+    }
+
+    /// Backoff between attempts of one lookup (BR.19 / C7). Tests shorten it.
+    var retryDelays: [Duration] = [.seconds(2), .seconds(6)]
+
+    static func isJSON(_ data: Data) -> Bool {
+        (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
     }
 
     private func buildRequest(term: String, limit: Int) -> URLRequest? {
@@ -198,25 +219,11 @@ public final class PreviewResolver: PreviewResolving, @unchecked Sendable {
             URLQueryItem(name: "term", value: term),
             URLQueryItem(name: "media", value: "music"),
             URLQueryItem(name: "entity", value: "song"),
-            URLQueryItem(name: "limit", value: String(limit))
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "country", value: ITunesStorefront.country)   // BR.19 / C8
         ]
         guard let url = components.url else { return nil }
         return URLRequest(url: url, timeoutInterval: 10)
-    }
-
-    private func parseMatch(from data: Data) -> PreviewMatch? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let results = json["results"] as? [[String: Any]],
-              let first = results.first,
-              let previewString = first["previewUrl"] as? String,
-              let url = URL(string: previewString) else {
-            return nil
-        }
-        return PreviewMatch(
-            previewURL: url,
-            catalogTitle: first["trackName"] as? String,
-            catalogArtist: first["artistName"] as? String
-        )
     }
 }
 
