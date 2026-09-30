@@ -55,3 +55,36 @@ struct StemCacheEvictionTests {
         #expect(cache.count == 0)
     }
 }
+
+// MARK: - BR.8 (audit C1): long playlists keep their preparation
+
+@Suite("A long playlist keeps every prepared track (BR.8)")
+struct LongPlaylistCacheTests {
+
+    private func entry() -> CachedTrackData {
+        CachedTrackData(
+            stemWaveforms: (0..<4).map { _ in [Float](repeating: 0.1, count: 441_000) },   // ~7 MB
+            stemFeatures: .zero,
+            trackProfile: TrackProfile(bpm: 120)
+        )
+    }
+
+    /// Streaming preparation runs ~30× ahead of playback; at the old 64 cap tracks ~6–56 of a
+    /// 120-track playlist were evicted before they played, and nothing re-prepared them.
+    @Test func a120TrackSession_keepsEveryPreparedTrack() {
+        let cache = StemCache()
+        let tracks = (0..<120).map { TrackIdentity(title: "Track \($0)", artist: "A") }
+        for track in tracks { cache.store(entry(), for: track) }
+        #expect(cache.count == 120)
+        #expect(tracks.allSatisfy { cache.trackProfile(for: $0) != nil }, "every prepared track stays planned")
+    }
+
+    @Test func storedEntries_dropTheSeparatedAudio() throws {
+        let cache = StemCache()
+        let track = TrackIdentity(title: "T", artist: "A")
+        cache.store(entry(), for: track)
+        let kept = try #require(cache.loadForPlayback(track: track))
+        #expect(kept.stemWaveforms.isEmpty, "the 7 MB of stems is not held in memory")
+        #expect(kept.trackProfile.bpm == 120, "the playback fields survive")
+    }
+}

@@ -122,7 +122,9 @@ struct SessionLifecycleE2ETests {
         //    the cache on a track boundary. That data must be present + complete.
         let nextTrack = manager.cache.loadForPlayback(track: a2)
         #expect(nextTrack != nil, "A2's prepared data available on track change")
-        #expect(nextTrack?.stemWaveforms.count == 4, "A2 carries four stem waveforms by value")
+        // BR.8 (C1): the in-memory cache keeps no separated audio — nothing at playback reads it.
+        #expect(nextTrack?.stemWaveforms.isEmpty == true, "A2's entry carries no stem audio")
+        #expect(nextTrack?.stemFeatures != nil)
 
         // 6. END — must not leave an orphaned prep task behind.
         manager.endSession()

@@ -121,7 +121,7 @@ private final class MockSineDownloader: PreviewDownloading, @unchecked Sendable 
 
     let cached = result.cache.loadForPlayback(track: track)
     #expect(cached != nil, "Cache entry must exist")
-    #expect(cached?.stemWaveforms.count == 4, "Four stem waveforms expected")
+    #expect(cached?.stemWaveforms.isEmpty == true, "BR.8 (C1): the in-memory entry keeps no stem audio")
     #expect(cached?.stemFeatures != .zero, "StemFeatures must be non-zero")
     // BeatGrid defaults to .empty when no beatGridAnalyzer is injected (S6 nil-default contract).
     #expect(cached?.beatGrid == .empty)
