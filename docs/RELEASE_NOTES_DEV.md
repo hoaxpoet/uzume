@@ -2,7 +2,7 @@
 
 Internal release notes for the `main` branch. Audience: Matt and Claude Code. Each entry covers one session or a logical batch of increments. These notes complement `docs/ENGINEERING_PLAN.md` (authoritative for what's planned) and `docs/QUALITY/KNOWN_ISSUES.md` (authoritative for open defects).
 
-User-visible release notes are not yet in scope (no public build).
+User-visible release notes for the beta build: [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md) (BR.4).
 
 Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
@@ -10,12 +10,39 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
-### [dev-2026-09-30-004428] BR.10 — saying no to "control Spotify / Music" no longer breaks the session (BUG-168)
+### [dev-2026-09-30-004428] BR.10 — saying no to "control Spotify / Music" no longer breaks the session (BUG-172)
 
 - **Spotify or Music, permission declined:** Uzume says what's happening and where to allow it, and keeps choosing scenes by listening, instead of showing one scene for the whole playlist.
 - **Apple Music, permission declined:** the "allow Uzume in System Settings" screen appears, instead of "Checking every 2 seconds…" forever.
 - **Fewer permission prompts.** A Spotify session no longer asks to control Music, and local-file sessions don't ask about either.
 - The macOS prompt now says what declining costs.
+### [dev-2026-09-30-001436] BR.9 — preparing the next songs no longer disturbs the visuals (BUG-171)
+
+- **The visuals no longer twitch while Uzume prepares songs in the background.** Preparation shared the live analysers, so each prepared song briefly pulled the energy and mood readings toward a different song. It now uses its own.
+### [dev-2026-09-30-000123] BR.8 — long playlists keep their preparation (BUG-170)
+
+- **Playlists over about 64 songs no longer lose their preparation.** Uzume used to drop prepared songs from memory before they played, so most of a long playlist played without its planned scenes. It now keeps only what playback needs, which is small, and keeps all of it.
+### [dev-2026-09-29-234710] BR.7 — preparation never strands the tester (BUG-169)
+
+- **"Start now" appears even if one of the first songs has no preview.** Before, a single missing preview among the first three songs (about one Spotify scan in five) kept testers waiting for the whole playlist, with only Cancel.
+- **No "Ready" when nothing could be prepared.** A failed connection or a playlist with no usable previews now shows the "couldn't prepare" screen, whose "Start reactive mode" button now works.
+- **Cancel while connecting stays cancelled.**
+- **No false "You're offline" for local files.**
+- **If Uzume's analysis files are missing, it says so** instead of quietly preparing nothing.
+### [dev-2026-09-29-231449] BR.4 — the tester build shows only tester things
+
+- **The "Uzume isn't hearing any audio" card no longer tells testers to use Terminal**, and no longer appears while they're still opening Spotify. A frozen audio connection still shows it.
+- **No developer keys in the tester build.** The help overlay lists no bug IDs, and the keys that could pull the visuals off the beat are gone. `+` ("more of this style") now works on US and UK keyboards.
+- **Settings shows words, not string keys,** and a test now catches any missing string.
+- **The Ended screen says how long the session played,** and "1 track" rather than "1 tracks".
+- **No log file in the tester's home folder.**
+- **A one-page note for testers:** [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md).
+### [dev-2026-09-30-003403] BR.6b — M1/M2-class Macs render at a size they can hold (BUG-168)
+
+- **A ceiling on render size for tier-1 Macs** (M1, M2, M2 Pro by the current detection). The visuals draw at most about 2560×1440 and macOS scales them to the screen. On the M2 Pro, that keeps every measured scene but one under the 60 fps budget; at native 4K, 13 of 23 miss it.
+- **Alfvén is left out on those Macs** for the beta: it measured about 4× its declared cost.
+- Visible on the Mac mini: its 4K display now shows the scenes upscaled from 2560×1440.
+- Still to measure: the M4 MacBook Pro and the 4K display (Matt's sessions).
 
 ### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
 

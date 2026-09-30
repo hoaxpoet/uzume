@@ -81,7 +81,11 @@ reads" are not reads — see the entry.)*
 | BUG-165 | P1 · **FIXED 2026-09-29 (BR.3, `773f6a24`) — TSan-clean; crash frequency was never measured** — a streaming song change reset renderer and analysis state from the poller's pool thread | app / concurrency | **The Now Playing callback ran `mir.reset()`, `resetPerTrackPresetState()` and `resetStemPipeline` inline on a pool thread**, racing the render loop (Witchlight's beads, Meniscus's waves) and the analysis queue with no lock (audit G1). Fix: `TrackChangeResetRouter` sends each reset to its owner. Detail below |
 | BUG-166 | P1 · **FIXED 2026-09-29 (BR.5, `a2e8ae9c`) — pending live check (listening session 3: the public DMG's unclean-exit offer)** — nothing a tester experienced could reach Matt | app / diagnostics | **No report path, no crash forwarding for Developer ID apps, no identifiable build, and a watchdog that waited on the thread it watched** (audit H3/F16, D3). Fix: Help › Report a Problem (consent-first zip + pre-filled issue), abnormal-exit marker, independent main-thread watchdog. Detail below |
 | BUG-167 | P1 · **MITIGATED 2026-09-29 (BR.6a, `e8a33c53`) — CI now compiles every shader; the macOS 15 launch is still open (BR.6b)** — every shader compiles on the tester's Mac at launch, and CI never compiled one | build / renderer | **A renderer shader failure is a `fatalError` on every launch; a scene failure silently drops the scene**, and CI built neither Metal nor Release (audit H1/H8). Fix: CI builds Release (arm64) and runs `ShaderCompileGateTests` through the app's own source assembly. Detail below |
-| BUG-168 | P1 · **FIXED 2026-09-29 (BR.10, `e28da378`) — pending live check (listening session 3)** — declining "control Spotify / Music" froze the session on one scene | session / app | **Automation denial (−1743) was swallowed**: streaming froze on the first scene with track 1's grid for every song; Apple Music looped "Checking every 2 seconds…" (audit E1, I3/A6/C6/F12). Fix: detected on both paths; streaming runs reactive with a toast; Apple Music shows its permission screen. Detail below |
+| BUG-168 | P1 · **MITIGATED 2026-09-29 (BR.6b, `d04aa80d`) — tier-1 cap + Alfvén exclusion; the M4 / 4K measurement is Matt's (pending)** — no render-resolution ceiling outside ray-march | renderer / performance | **Retina and 5K testers render 2.5–7× the budgeted pixels** (audit D4, K2). Fix (decision 4): tier-1 Macs cap the drawable at ~2560×1440 (compositor-upscaled) and don't get Alfvén. Detail below |
+| BUG-169 | P1 · **FIXED 2026-09-29 (BR.7, `ad30a7b2`)** — one failed track among the first three hid "Start now" until the whole playlist was prepared | session / preparation | **The readiness prefix counted only an unbroken run of `.ready` tracks from position 1**, so a no-preview track in rows 1–3 (≈1 Spotify-scan session in 5) held Preparing for minutes with only Cancel (audit C2). Fix: terminal non-ready tracks are skipped. Detail below |
+| BUG-170 | P1 · **FIXED 2026-09-29 (BR.8, `6d78eaf3`)** — a playlist over ~64 tracks lost its preparation before it played | session / cache | **The in-memory cache capped at 64 entries of ~7 MB each, and streaming preparation runs ~30× ahead of playback**, so tracks ~6–56 of a 120-track playlist were evicted unplayed and nothing re-prepared them (audit C1). Fix: entries keep no stem audio (nothing reads it); the cap is a 2048 safety bound. Detail below |
+| BUG-171 | P1 · **FIXED 2026-09-29 (BR.9)** — background preparation disturbed the live visuals' drivers | session / dsp.stem | **The preparer shared the live `StemAnalyzer` and `MoodClassifier`**, so each track landing behind playback pushed another song's frames through the live AGC and mood (audit C3/G3). Fix: the preparer has its own. Detail below |
+| BUG-172 | P1 · **FIXED 2026-09-29 (BR.10, `e28da378`) — pending live check (listening session 3)** — declining "control Spotify / Music" froze the session on one scene | session / app | **Automation denial (−1743) was swallowed**: streaming froze on the first scene with track 1's grid for every song; Apple Music looped "Checking every 2 seconds…" (audit E1, I3/A6/C6/F12). Fix: detected on both paths; streaming runs reactive with a toast; Apple Music shows its permission screen. Detail below |
 | BUG-161 | P1 · **FIXED 2026-09-29 (CLEAN.2.5b, `b49a9722`) — live-verified: Continue did not crash, build 5** (2026-09-29, CLEAN.2.5b Task 8) — crash on the scan review's Continue | app / UI | **EXC_BAD_ACCESS inside AppKit's sheet-close animation (UpdateCycle, macOS 26).** Starting the session inside the connector sheet's callback removed IdleView while the sheet was up. Fix: close the sheet, start the session from `onDismiss`. Detail below |
 | DIST-LIM | P3 · **OPEN** (2026-09-29, CLEAN.2.5b) — supported but untested macOS versions; Intel unsupported | build / distribution | **What the notarized build has not been shown to run on.** The floor is macOS 15.0 (D-261), but only macOS 26 has been run; nothing has been tried on 15.x. Intel Macs are not supported (arm64-only binary). Detail below |
 | SCAN-LIM | P3 · **OPEN** (2026-09-28, SCAN) — residual limits of the playlist scan, untested or English-only | session / playlist scan | **What the Spotify screen scan has not been shown to handle.** A non-English Spotify interface (the "N songs" header count is read in English only; without it the list's end sets the count); the compact list view on real captures (synthetic tests only); a 100+ song playlist; the Spotify web player (only the desktop app's window is read); very small windows (heavier truncation; the pass bar was measured with both side panels open); Esc typed into Spotify (goes to Spotify, not the panel). Detail below |
@@ -599,9 +603,57 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 **Gates.** Local negative controls: `int half = 1;` in `Nebula.metal` → `dropped → ["Nebula.metal"]`; in `NoiseGen.metal` → `MTLLibraryErrorDomain`. CI negative control on PR #320: the same break in `Nebula.metal` (`a03d5da8`), then its revert (`8be6121e`) — results recorded in the PR.
 
-### BUG-168 — declining "control Spotify / Music" froze the session on one scene (2026-09-29)
+### BUG-168 — no render-resolution ceiling outside ray-march (2026-09-29)
 
-*(Numbering: the next number after `origin/main`'s BUG-167; open PR #325 also claims BUG-168, so this renumbers at merge.)*
+**Severity:** P1 (frame rate on tester laptops and large displays; the main-thread render loop also lags the chrome) · **Domain:** renderer / performance · **Failure class:** `resource-management` · **Status:** Mitigated 2026-09-29 (BR.6b, `d04aa80d`), per decision 4. **Pending:** Matt's M4 MacBook Pro (Retina, battery, Low Power Mode on/off) and 4K sessions, which decide whether any cap applies above tier 1; the cold-first-launch time.
+
+**Actual** (audit D4 PLAUSIBLE, K2). `MetalView` left `autoResizeDrawable` on, so every non-ray-march path allocated and shaded at the native backing size. Only ray-march (`marchScale`) and Nimbus had caps.
+
+**Measured (Release, Mac mini M2 Pro, macOS 26.5.1, `PresetFrameBudgetTests.presetFrameCost`, harness ms).** At 3840×2160, 13 of 23 measured scenes are over 16.6 ms. At the 2560×1440 cap, only Volumetric Lithograph is (already excluded, decision 2). The full table is in the audit, §BR.6.
+
+**Fix.** `CappedMTKView` (`MetalView.swift`): on tier-1 GPUs (`detectDeviceTier` — the m3/m4 name match, so the M2 Pro Mac mini is tier 1) `drawableSize` ≤ 2560×1440 pixels, aspect kept, never upscaled; the compositor scales it to the window. `capableCatalog` drops Alfvén on tier 1.
+
+**Gates.** `Tier1RenderBudgetTests`: the sizing math (Air 13", 5K, 4K, ≤ budget untouched); the cap only when set; in a real 3840×2160 offscreen window the drawable is capped **and** the render pipeline's `drawableSizeWillChange` receives the capped size; Alfvén excluded on tier 1 and kept on tier 2.
+
+### BUG-169 — one failed track among the first three hid "Start now" (2026-09-29)
+
+*(Numbering: filed as BUG-167 on `br-7`; renumbered to BUG-169 when BR.6a (#320, BUG-167) and BR.6b (#325, BUG-168) merged first.)*
+
+**Severity:** P1 (a common session strands the tester) · **Domain:** session / preparation · **Failure class:** `algorithm` · **Status:** Fixed 2026-09-29 (BR.7, `ad30a7b2`)
+
+**Actual** (audit C2, re-verified ✔︎). `computeReadiness` counted a run of `.ready` tracks from position 1, and any `.failed` or `.partial` track ended it. About 8 % of scanned rows get no verified preview, so roughly one Spotify-scan session in five had a failure in rows 1–3. "Start now" then stayed hidden until every track was terminal: about 3.5 min for 40 tracks, 10 for 100. Only Cancel was on screen, with no explanation.
+
+**Fix.** The prefix counts `.ready` tracks from position 1 and **skips** terminal non-ready ones (`.failed`, `.partial`); only a track still in flight ends it. Only `.ready` counts (PUB.6 unchanged).
+
+**Gates.** `ProgressiveReadinessTests`: one failure at position 0 / 1 / 2 with three ready → `readyForFirstTracks` (red on the old rule, all three); a queued track still ends the prefix; the older cases renamed to the new semantics.
+
+### BUG-170 — a playlist over ~64 tracks lost its preparation before it played (2026-09-29)
+
+*(Numbering: filed as BUG-167 on `br-8`; renumbered to BUG-170 behind BR.6a, BR.6b and BR.7.)*
+
+**Severity:** P1 · **Domain:** session / cache · **Failure class:** `resource-management` · **Status:** Fixed 2026-09-29 (BR.8, `6d78eaf3`)
+
+**Actual** (audit C1, re-verified ✔︎). `StemCache.defaultMaxEntries = 64`, evicting LRU. Each entry held ~7 MB of separated stems. Streaming preparation is never paced, so it runs about 30× ahead of playback. On a 120-track playlist, tracks ~6–56 were evicted before they played. They then played live-only: no prepared grid, no planned scene (the plan is built only from cached profiles), and "52 tracks not yet prepared" on screen. Nothing re-prepares an evicted track.
+
+**Fix.** `StemCache.store` keeps each entry **without its stem waveforms** (`CachedTrackData.withoutStemWaveforms()`). Nothing at playback reads them: the cache-hit branch uses the stem features, grids, stem series and profile. The on-disk `PersistentStemCache` is written from the preparation outcome and is unchanged. With small entries, the count cap is now a 2048 safety bound.
+
+**Gates.** `LongPlaylistCacheTests`: 120 tracks stored → all 120 still planned (red at the old 64 cap); stored entries drop the audio but keep the playback fields. Four tests that asserted the in-memory entry held 4 waveforms now assert it holds none.
+
+### BUG-171 — background preparation disturbed the live visuals' drivers (2026-09-29)
+
+*(Numbering: filed as BUG-167 on `br-9`; renumbered to BUG-171 behind BR.6a, BR.6b, BR.7 and BR.8.)*
+
+**Severity:** P1 (the primary visual drivers jump during normal streaming sessions) · **Domain:** session / `dsp.stem` · **Failure class:** `concurrency` (shared mutable analysis state) · **Status:** Fixed 2026-09-29 (BR.9). Visibility was never measured live; see the listening note below.
+
+**Actual** (audit C3/G3, re-verified ✔︎). `makeSessionManager` handed the engine's live `StemAnalyzer` and `MoodClassifier` to `SessionPreparer`, "to avoid double-loading the ML weights". Neither object has weights. Preparation runs about 430 `analyze` frames and about 1,300 `classify` calls per track on them, with no reset. That happens behind playback every few seconds, for minutes. So the live AGC level was ~97 % replaced and the deviation EMA moved ~38 %: live `bass` / `drums` energy and the `*Dev` drivers jumped or flattened for 1–2 s, and live mood snapped to the other song.
+
+**Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
+
+**Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
+
+### BUG-172 — declining "control Spotify / Music" froze the session on one scene (2026-09-29)
+
+*(Numbering: filed as BUG-168 on `br-10`; renumbered to BUG-172 behind BR.6b, BR.7, BR.8 and BR.9.)*
 
 **Severity:** P1 (a common first-run choice breaks the session with no explanation) · **Domain:** session / app · **Failure class:** `pipeline-wiring` · **Status:** Fixed 2026-09-29 (BR.10, `e28da378`) — **pending live check** (listening session 3: fresh account, click Don't Allow on the Spotify and Music prompts)
 
@@ -2948,7 +3000,23 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 **Status:** Open — index entry. The 2026-09-29 beta-readiness review (AUDIT.2, eleven read-only lanes) records 126 code findings (lane IDs A1–K9) and 22 abandoned-work items in [`docs/diagnostics/BETA_READINESS_AUDIT_2026-09-29.md`](../diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), with full evidence in [`docs/diagnostics/BETA_READINESS_2026-09-29/`](../diagnostics/BETA_READINESS_2026-09-29/). They are grouped into proposed increments BR.0–BR.20 (`ENGINEERING_PLAN.md` §Phase BR). They were deliberately **not** given BUG-numbers at review time: `main` (#311) and the unmerged `clean-2-5b` already both claim BUG-157. File each finding with the next free number from the tree when an increment picks it up. The review also lists this ledger's own drift (≈29 closed rows still in the Open Index, six index/body contradictions) for a reconciliation pass before the beta.
 
 - **B1 → BUG-162** (BR.2, 2026-09-29): fixed, pending live check.
-- **E1 / I3 / A6 / C6 / F12 → BUG-168** (BR.10, 2026-09-29); **E12 / E14** fixed in the same increment (only the session's own app is polled; none for local files).
+- **E1 / I3 / A6 / C6 / F12 → BUG-172** (BR.10, 2026-09-29); **E12 / E14** fixed in the same increment (only the session's own app is polled; none for local files).
+- **C3 / G3 → BUG-171** (BR.9, 2026-09-29): fixed.
+- **C1 → BUG-170** (BR.8, 2026-09-29): fixed.
+- **BR.7 (2026-09-29).** C2 → **BUG-169**. The rest, fixed in the same increment:
+  - **F10 / C11** — a failed connection or an all-failed playlist holds `.preparing` (the §9.3 recovery screen) instead of a "Ready" with nothing prepared (`b0156ae1`).
+  - **F13** — "Start reactive mode" on the recovery screen is wired (streaming; `SessionManager.startReactiveMode()`), and local-file sessions can't show "You're offline" (`b0156ae1`). The >90 s / >120 s banners still carry no button (not in BR.7's done-when).
+  - **F11** — Cancel during Connecting sticks: a connect finishing after it is ignored (`0f648f4f`).
+  - **C10** — missing ML weights say so once at launch, plus an `ANALYSIS_UNAVAILABLE` log line (`331202c2`); live-verified by hiding the app's Weights folder. A build-phase weights check is still open (release.sh checks; other builds don't).
+- **BR.4 (2026-09-29), the public build's tester surface** (`BuildFlavor.showsDeveloperDiagnostics`; verified by tests; no public-flavor build was run):
+  - **I2 / F3 / A9** — the no-audio card has no Terminal step, and a live-but-silent tap never raises it (a frozen tap still does). Fixed (`b4a33412`).
+  - **F8** — no developer keys or bug IDs (the `.developer` shortcuts are dropped); `+` fires on US/UK layouts (Shift ignored for symbol keys only); `.` has one binding. Fixed (`cfb4b5c4`). The developer build still binds `.` twice (latency +5 unreachable); that's a developer-only leftover.
+  - **F18** — the three raw keys in Settings got strings; `LocalizationKeyCoverageTests` checks every referenced key resolves. Fixed (`384c7963`).
+  - **I10** — the Ended screen shows the real playing time and "1 track" / "N tracks". Fixed (`b87e191e`).
+  - **H11 / A12** — no `~/uzume_diag.log` in the public build. Fixed (`a450ccad`).
+  - **A13 / G9** — the user-preset (hot-reload) folder is off in the public build: done at BR.1 (`1e47cca9`).
+  - **I2 tester notes** — [`docs/TESTER_RELEASE_NOTES.md`](../TESTER_RELEASE_NOTES.md).
+- **D4 / K2 → BUG-168** (BR.6b, 2026-09-29): tier-1 cap + Alfvén exclusion; M4/4K measurement pending (Matt).
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.

@@ -83,3 +83,57 @@ struct EndedViewTests {
         }
     }
 }
+
+// MARK: - BR.4 (I10): a real duration and a pluralised count
+
+@Suite("Ended screen summary (BR.4)")
+@MainActor
+struct EndedSummaryTests {
+
+    @Test func trackCount_isPluralised_andHiddenAtZero() {
+        #expect(EndedView.trackCountText(1) == "1 track")
+        #expect(EndedView.trackCountText(12) == "12 tracks")
+        #expect(EndedView.trackCountText(0) == nil)
+    }
+
+    @Test func duration_isReal_andHiddenWhenNeverPlayed() {
+        #expect(EndedView.durationText(725) == "12m 5s")
+        #expect(EndedView.durationText(nil) == nil, "no '—' placeholder")
+    }
+
+    @Test func durationClock_measuresPlayingToEnded_andResetsPerSession() {
+        var clock = PlaybackDurationClock()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        clock.update(state: .preparing, now: t0)
+        clock.update(state: .ready, now: t0.addingTimeInterval(5))
+        clock.update(state: .playing, now: t0.addingTimeInterval(10))
+        clock.update(state: .ended, now: t0.addingTimeInterval(735))
+        #expect(clock.lastSessionSeconds == 725, "playing → ended, not from preparation")
+        clock.update(state: .idle, now: t0.addingTimeInterval(800))
+        #expect(clock.lastSessionSeconds == 725)
+        clock.update(state: .connecting, now: t0.addingTimeInterval(900))
+        #expect(clock.lastSessionSeconds == nil, "a new session forgets the last")
+        clock.update(state: .ended, now: t0.addingTimeInterval(950))
+        #expect(clock.lastSessionSeconds == nil, "never played → no duration")
+    }
+
+    /// Source shape: ContentView passes the engine's measured duration, not a literal nil.
+    @Test func contentView_passesTheMeasuredDuration() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("UzumeApp/ContentView.swift")
+        let src = try String(contentsOf: url, encoding: .utf8)
+        #expect(src.contains("sessionDuration: engine.lastSessionPlaybackSeconds"))
+        #expect(!src.contains("sessionDuration: nil"))
+    }
+}
+
+// MARK: - BR.4 (H11): no ~/uzume_diag.log in the public build
+
+@Suite("No home-folder diagnostic log in the public build (BR.4)")
+struct PublicDiagnosticLogTests {
+    @Test func public_opensNoDiagnosticLog() {
+        #expect(VisualizerEngine.openDiagnosticLog(flavor: .public) == nil)
+    }
+}

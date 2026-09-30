@@ -172,7 +172,7 @@ struct SessionPreparerTests {
 
         let cached = result.cache.loadForPlayback(track: track)
         #expect(cached != nil)
-        #expect(cached?.stemWaveforms.count == 4)
+        #expect(cached?.stemWaveforms.isEmpty == true, "BR.8 (C1): the in-memory entry keeps no stem audio")
         #expect(cached?.stemFeatures != .zero)
         #expect(cached?.trackProfile != nil)
     }
@@ -402,7 +402,7 @@ struct StemCacheTests {
         #expect(loaded != nil)
         #expect(loaded?.trackProfile.bpm == 120)
         #expect(loaded?.trackProfile.key == "C major")
-        #expect(loaded?.stemWaveforms.count == 4)
+        #expect(loaded?.stemWaveforms.isEmpty == true, "BR.8 (C1): stored without the separated audio")
     }
 
     @Test func unknownTrack_returnsNil() {

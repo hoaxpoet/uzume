@@ -4,6 +4,7 @@
 //   K3 / E13 / F15 / A13: the public build reaches only certified, non-diagnostic scenes.
 
 import Foundation
+import MetalKit
 import Presets
 import Shared
 import Testing
@@ -129,5 +130,105 @@ struct PublicFlavorSceneReachTests {
         #expect(try src("UzumeApp/UzumeApp.swift").contains("engine.applyShowUncertifiedPresets(allowed && value)"))
         #expect(try src("UzumeApp/VisualizerEngine.swift")
             .contains("let userPresetsDir = BuildFlavor.current.exposesUncheckedScenes"))
+    }
+}
+
+// MARK: - BR.9 (audit C3 / G3): background preparation has its own analyzers
+
+@Suite("Background preparation never shares the live analyzers (BR.9)")
+struct PreparerAnalysisIsolationTests {
+
+    @Test func preparerAnalysis_isFreshEveryTime() {
+        let first = VisualizerEngine.makePreparerAnalysis()
+        let second = VisualizerEngine.makePreparerAnalysis()
+        #expect(first.stemAnalyzer !== second.stemAnalyzer)
+        #expect(first.moodClassifier !== second.moodClassifier)
+    }
+
+    /// Source shape: the session-manager factory takes no analyzer or classifier (so the live
+    /// ones can't be handed to it) and builds its own through `makePreparerAnalysis`.
+    @Test func sessionManagerFactory_buildsItsOwn() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let helpers = try String(
+            contentsOf: root.appendingPathComponent("UzumeApp/VisualizerEngine+InitHelpers.swift"), encoding: .utf8)
+        let factory = try #require(helpers.range(of: "static func makeSessionManager("))
+        let body = helpers[factory.lowerBound...].prefix(1_500)
+        #expect(!body.contains("analyzer: StemAnalyzer"), "no live analyzer parameter")
+        #expect(!body.contains("classifier: MoodClassifier"), "no live classifier parameter")
+        #expect(body.contains("let analysis = makePreparerAnalysis()"))
+        #expect(body.contains("stemAnalyzer: analysis.stemAnalyzer"))
+    }
+}
+
+// MARK: - Tier-1 render cap + Alfvén exclusion (BR.6b / decision 4)
+
+@Suite("Tier-1 Macs: capped drawable, no Alfvén (BR.6b)")
+@MainActor
+struct Tier1RenderBudgetTests {
+
+    @Test func cappedSize_keepsAspect_neverUpscales_staysWithinBudget() {
+        let cap = CappedMTKView.tier1MaxPixels
+        // MacBook Air 13" fullscreen (2560×1664 backing) and a 5K display.
+        for backing in [CGSize(width: 2560, height: 1664), CGSize(width: 5120, height: 2880),
+                        CGSize(width: 3840, height: 2160)] {
+            let out = CappedMTKView.cappedSize(backing, maxPixels: cap)
+            #expect(Double(out.width * out.height) <= cap)
+            #expect(abs(out.width / out.height - backing.width / backing.height) < 0.01)
+        }
+        #expect(CappedMTKView.cappedSize(CGSize(width: 3840, height: 2160), maxPixels: cap)
+                == CGSize(width: 2560, height: 1440))
+        // At or under the budget: untouched.
+        #expect(CappedMTKView.cappedSize(CGSize(width: 1920, height: 1080), maxPixels: cap)
+                == CGSize(width: 1920, height: 1080))
+    }
+
+    @Test func capOnlyApplies_whenSet() {
+        let view = CappedMTKView(frame: CGRect(x: 0, y: 0, width: 640, height: 360),
+                                 device: MTLCreateSystemDefaultDevice())
+        #expect(view.autoResizeDrawable, "native resolution by default (tier 2)")
+        view.maxDrawablePixels = CappedMTKView.tier1MaxPixels
+        #expect(!view.autoResizeDrawable)
+    }
+
+    private final class SizeSpy: NSObject, MTKViewDelegate {
+        var sizes: [CGSize] = []
+        func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { sizes.append(size) }
+        func draw(in view: MTKView) {}
+    }
+
+    /// In a real window larger than the budget, the drawable is capped AND the render pipeline
+    /// (the delegate) is told — so its textures follow the capped size, not the backing size.
+    @Test func inALargeWindow_theDrawableIsCapped_andTheDelegateHearsIt() throws {
+        let window = NSWindow.offscreen(CGRect(x: 0, y: 0, width: 3840, height: 2160))
+        defer { window.close() }
+        let view = CappedMTKView(frame: window.contentLayoutRect, device: MTLCreateSystemDefaultDevice())
+        let spy = SizeSpy()
+        view.delegate = spy
+        view.isPaused = true
+        view.maxDrawablePixels = CappedMTKView.tier1MaxPixels
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        view.layout()
+
+        let backing = view.convertToBacking(view.bounds).size
+        #expect(Double(backing.width * backing.height) > CappedMTKView.tier1MaxPixels, "window exceeds the budget")
+        #expect(Double(view.drawableSize.width * view.drawableSize.height) <= CappedMTKView.tier1MaxPixels)
+        let told = try #require(spy.sizes.last, "the delegate was never told the drawable size")
+        #expect(told == view.drawableSize)
+    }
+
+    @Test func alfven_excludedOnTier1_keptOnTier2() throws {
+        let json = """
+        {"name":"Alfv\\u00e9n","family":"particles",
+         "visual_density":0.5,"motion_intensity":0.5,
+         "color_temperature_range":[0.3,0.7],"fatigue_risk":"medium",
+         "complexity_cost":{"tier1":1.0,"tier2":1.0},
+         "transition_affordances":["crossfade"],"certified":true}
+        """
+        let alfven = try JSONDecoder().decode(PresetDescriptor.self, from: Data(json.utf8))
+        #expect(VisualizerEngine.capableCatalog([alfven], supportsNativeMeshShaders: true, tier: .tier1).isEmpty)
+        #expect(VisualizerEngine.capableCatalog([alfven], supportsNativeMeshShaders: true, tier: .tier2).count == 1)
     }
 }
