@@ -14,12 +14,12 @@
 	<key>CFBundleDisplayName</key>
 	<string>Uzume</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Uzume listens to your Mac’s audio to create visuals and, when you scan a playlist, reads the track names in your Spotify window. Nothing is recorded or sent anywhere.</string>
+	<string>Uzume listens to your Mac’s audio to create visuals and, when you scan a playlist, reads the track names in your Spotify window. Your audio never leaves your Mac. Uzume looks up song details on Apple’s iTunes and MusicBrainz.</string>
 	<!-- CLEAN.2.5b: the Core Audio process tap (SystemAudioCapture) is gated by
 	     the system-audio-capture permission; without this key a fresh user's tap
 	     installs but delivers silence. Must live in this file, not INFOPLIST_KEY_*. -->
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>Uzume listens to the music playing on your Mac to create its visuals. Nothing is recorded or sent anywhere.</string>
+	<string>Uzume listens to the music playing on your Mac to create its visuals. Your audio never leaves your Mac. Uzume looks up song details on Apple’s iTunes and MusicBrainz.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Uzume needs to know which song is playing in Spotify or Music to follow your playlist: without it, it can't use the songs it prepared and only reacts to the sound. It never controls your music.</string>
 	<key>NSAppleMusicUsageDescription</key>

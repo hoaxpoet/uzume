@@ -22,7 +22,7 @@
 // MARK: - §9.1 Permission errors
 
 "error.permission.screen_capture.headline" = "Uzume needs permission to hear music playing on your Mac.";
-"error.permission.screen_capture.body"     = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Nothing ever leaves your Mac.";
+"error.permission.screen_capture.body"     = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Your audio never leaves your Mac. Uzume looks up song details on Apple’s iTunes and MusicBrainz.";
 "error.permission.screen_capture.why_label" = "Why does this need screen recording permission?";
 "error.permission.screen_capture.why_body"  = "On macOS, permission to capture system audio is bundled with screen recording permission. Apple groups them together. Uzume uses only the audio portion.";
 
@@ -106,7 +106,7 @@
 // MARK: - Onboarding
 
 "onboarding.permission.headline"        = "Uzume needs permission to hear music playing on your Mac.";
-"onboarding.permission.body"            = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Nothing ever leaves your Mac.";
+"onboarding.permission.body"            = "To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn’t record your screen, your microphone, or anything else. Your audio never leaves your Mac. Uzume looks up song details on Apple’s iTunes and MusicBrainz.";
 "onboarding.permission.grant"           = "Allow Access";
 "onboarding.permission.open_settings"   = "Already allowed it? Open System Settings";
 "onboarding.permission.why_label"       = "Why does this need screen recording permission?";
@@ -366,7 +366,7 @@
 "settings.about.macos.label"    = "macOS";
 "settings.about.gpu.label"      = "GPU";
 "settings.about.license.title"  = "License";
-"settings.about.license.body"   = "MIT License. © 2026 Uzume contributors.";
+"settings.about.license.body"   = "Uzume’s own code is under the MIT License. The work credited below keeps its own licence — Aurora Veil’s shader is non-commercial (CC BY-NC-SA 3.0).";
 "settings.about.copy_debug_info" = "Copy debug info";
 
 // MARK: - Accessibility (a11y) — VoiceOver labels and hints. (U.9)
@@ -535,7 +535,7 @@
 "connector.spotify.scan.body"                  = "Open the playlist in Spotify, then start the scan. You’ll scroll through it once.";
 "connector.spotify.scan.start_button"          = "Start scan";
 "connector.spotify.scan.drop_prompt"           = "Or drop screenshots of the playlist here.";
-"connector.spotify.scan.permission.body"       = "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere.";
+"connector.spotify.scan.permission.body"       = "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing from your screen is saved or sent; Uzume looks up song details on Apple’s iTunes and MusicBrainz.";
 "connector.spotify.scan.permission.button"     = "Allow Access";
 "connector.spotify.scan.permission.settings_link" = "Already allowed it? Open System Settings";
 "connector.spotify.scan.scanning_status"       = "Scroll through the playlist in Spotify. Uzume is reading along.";
@@ -590,3 +590,14 @@
 "settings.about.app.title"               = "Uzume";
 "settings.about.copy_debug_info.caption" = "Copies the version, macOS and graphics chip, for a bug report. No audio or personal data.";
 "settings.visuals.blocklist.caption"     = "Scene families to leave out. Not applied yet in this build.";
+
+/* BR.16 (K7 / H9) — Settings › About › Acknowledgements. Full notices: docs/CREDITS.md. */
+"settings.about.ack.title"       = "Acknowledgements";
+"settings.about.ack.beat_this"   = "Beat This! — beat and downbeat tracking. Francesco Foscarin, Jan Schlüter, Gerhard Widmer; © 2024 Institute of Computational Perception, JKU Linz. MIT License.";
+"settings.about.ack.open_unmix"  = "Open-Unmix — separating songs into vocals, drums, bass and other. Fabian-Robert Stöter, Stefan Uhlich, Antoine Liutkus, Yuki Mitsufuji. MIT License.";
+"settings.about.ack.panns"       = "PANNs MobileNetV1 — instrument detection. Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley. Weights CC BY 4.0; AudioSet labels © Google, CC BY 4.0.";
+"settings.about.ack.auroras"     = "Aurora Veil — its shader is “Auroras” by nimitz (@stormoid), ported to Metal. CC BY-NC-SA 3.0: not covered by Uzume’s MIT License, and not for commercial use.";
+"settings.about.ack.fluid"       = "Alfvén — pressure solve from WebGL Fluid Simulation by Pavel Dobryakov, © 2017. MIT License.";
+"settings.about.ack.cmu"         = "Kagura — the data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.";
+"settings.about.ack.milkdrop"    = "Dragon Bloom, Fata Morgana, Floret, Glaze, Meniscus, Nacre, Stave and Witchlight are new works inspired by Milkdrop presets by Martin, Flexi, stahlregen, suksma, Rovastar, QBikal and the $$$ Royal mashups (projectM’s Cream of the Crop pack and butterchurn).";
+"settings.about.ack.full"        = "All notices and licence texts";

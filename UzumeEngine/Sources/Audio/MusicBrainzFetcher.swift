@@ -1,6 +1,7 @@
 // MusicBrainzFetcher — Queries MusicBrainz recording search API.
 // Free API, no authentication required. Returns genre tags and duration.
-// Rate limit: 1 request/second with a descriptive User-Agent.
+// Rate limit: 1 request/second with a descriptive User-Agent — enforced by `RateGate` (BR.16 / C13;
+// before, the header claimed it and nothing held it).
 
 import Foundation
 import Shared
@@ -25,7 +26,14 @@ public final class MusicBrainzFetcher: MetadataFetching, Sendable {
     /// User-Agent required by MusicBrainz API policy.
     private static let userAgent = "Uzume/1.0 (https://github.com/hoaxpoet/uzume)"
 
-    public init() {}
+    /// One gate per process: MusicBrainz limits a client, not a fetcher instance.
+    static let sharedGate = RateGate(interval: .seconds(1))
+
+    private let gate: RateGate
+
+    public init() { gate = Self.sharedGate }
+
+    init(gate: RateGate) { self.gate = gate }
 
     // MARK: - MetadataFetching
 
@@ -35,6 +43,7 @@ public final class MusicBrainzFetcher: MetadataFetching, Sendable {
             return nil
         }
 
+        await gate.wait()
         do {
             var request = URLRequest(url: url)
             request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
@@ -116,4 +125,22 @@ private struct MBRecording: Decodable {
 private struct MBTag: Decodable {
     let name: String
     let count: Int
+}
+
+// MARK: - RateGate
+
+/// Spaces callers at least `interval` apart, in arrival order. Each caller reserves the next free
+/// slot and sleeps until it — so a burst of preparation lookups becomes one request per interval.
+actor RateGate {
+    private let interval: Duration
+    private var nextSlot: ContinuousClock.Instant?
+
+    init(interval: Duration) { self.interval = interval }
+
+    func wait() async {
+        let now = ContinuousClock.now
+        let slot = max(now, nextSlot ?? now)
+        nextSlot = slot + interval
+        try? await Task.sleep(until: slot, clock: .continuous)
+    }
 }

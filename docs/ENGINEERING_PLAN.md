@@ -253,8 +253,8 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.12** | 2 | ✅ merged (#328) — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
 | **BR.13** | 2 | ✅ merged (#329) — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ✅ merged (#330) — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
-| **BR.15** | 2 | ✅ PR open — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
-| **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
+| **BR.15** | 2 | ✅ merged (#333) — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
+| **BR.16** | 2 | ✅ PR open | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
 | **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
@@ -1702,6 +1702,13 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.16 — honest copy and credits ✅ (2026-09-30)
+
+**Delivered.** Audit A7, C13, K7/H9 and part of F16, as P2 lines under AUDIT-2026-09-29. Decision 9's privacy line on every permission surface; `RateGate` (in `MusicBrainzFetcher.swift`) holds MusicBrainz to 1 request/s process-wide; `AboutSettingsSection.acknowledgements` + strings; the licence line corrected; CREDITS.md gains Stave and names the in-app surface.
+**Done-when:** ✅ no "nothing leaves / nothing sent" copy left in the app, Info.plist or UX_SPEC; ✅ a burst of five lookups takes ≥ 4 intervals (test); ✅ every acknowledgement resolves and links, and the named credits are present (test); ✅ CREDITS.md lists all eight Milkdrop-inspired scenes.
+**Also:** F16 — `LICENSE` and the About box both name Plait & Pattern (Matt, 2026-09-30).
+**Not done:** the Acknowledgements page was checked by test, not by eye.
 
 ### Increment BR.15 — controls that do nothing, hidden for the beta ✅ (2026-09-30)
 
