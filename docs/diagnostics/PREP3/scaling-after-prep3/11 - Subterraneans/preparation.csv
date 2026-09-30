@@ -1,0 +1,17 @@
+track,stage,wall_ms,cpu_ms,cpu_cores,audio_s,ms_per_audio_s
+"11 - Subterraneans.flac",content_hash,64.5,20.9,0.32,339.29,0.19
+"11 - Subterraneans.flac",cache_probe,0.1,0.1,1.00,339.29,0.00
+"11 - Subterraneans.flac",metadata_artwork,15.0,10.8,0.72,339.29,0.04
+"11 - Subterraneans.flac",decode,330.2,328.6,1.00,339.29,0.97
+"11 - Subterraneans.flac",loudness_profile,36.8,36.8,1.00,339.29,0.11
+"11 - Subterraneans.flac",stem_separation,187.4,146.6,0.78,339.29,0.55
+"11 - Subterraneans.flac",stem_warmup,30.5,30.5,1.00,339.29,0.09
+"11 - Subterraneans.flac",mir,1262.2,1260.9,1.00,339.29,3.72
+"11 - Subterraneans.flac",beat_grid,1460.2,963.4,0.66,339.29,4.30
+"11 - Subterraneans.flac",grid_onset_calibration,100.4,100.3,1.00,339.29,0.30
+"11 - Subterraneans.flac",instrument_family,502.6,475.9,0.95,339.29,1.48
+"11 - Subterraneans.flac",sweep_separate,19537.0,12896.5,0.66,339.29,57.58
+"11 - Subterraneans.flac",sweep_analyze,1213.7,1213.1,1.00,339.29,3.58
+"11 - Subterraneans.flac",stem_series_sweep,20781.2,14139.8,0.68,339.29,61.25
+"11 - Subterraneans.flac",cache_write,11.0,7.3,0.67,339.29,0.03
+"11 - Subterraneans.flac",TRACK_TOTAL,24782.4,17522.2,0.71,339.29,73.04

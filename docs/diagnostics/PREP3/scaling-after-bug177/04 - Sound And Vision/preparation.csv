@@ -1,0 +1,17 @@
+track,stage,wall_ms,cpu_ms,cpu_cores,audio_s,ms_per_audio_s
+"04 - Sound And Vision.flac",content_hash,35.1,13.7,0.39,183.43,0.19
+"04 - Sound And Vision.flac",cache_probe,0.1,0.1,1.00,183.43,0.00
+"04 - Sound And Vision.flac",metadata_artwork,13.8,10.5,0.76,183.43,0.08
+"04 - Sound And Vision.flac",decode,201.5,201.4,1.00,183.43,1.10
+"04 - Sound And Vision.flac",loudness_profile,20.1,20.1,1.00,183.43,0.11
+"04 - Sound And Vision.flac",stem_separation,205.4,157.2,0.77,183.43,1.12
+"04 - Sound And Vision.flac",stem_warmup,35.9,35.9,1.00,183.43,0.20
+"04 - Sound And Vision.flac",mir,297.8,297.5,1.00,183.43,1.62
+"04 - Sound And Vision.flac",beat_grid,1139.0,865.7,0.76,183.43,6.21
+"04 - Sound And Vision.flac",grid_onset_calibration,54.1,54.0,1.00,183.43,0.29
+"04 - Sound And Vision.flac",instrument_family,293.5,283.6,0.97,183.43,1.60
+"04 - Sound And Vision.flac",sweep_separate,10633.6,7354.3,0.69,183.43,57.97
+"04 - Sound And Vision.flac",sweep_analyze,588.1,587.3,1.00,183.43,3.21
+"04 - Sound And Vision.flac",stem_series_sweep,11239.0,7958.6,0.71,183.43,61.27
+"04 - Sound And Vision.flac",cache_write,12.2,6.3,0.52,183.43,0.07
+"04 - Sound And Vision.flac",TRACK_TOTAL,13547.8,9904.8,0.73,183.43,73.86

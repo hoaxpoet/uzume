@@ -1,0 +1,17 @@
+track,stage,wall_ms,cpu_ms,cpu_cores,audio_s,ms_per_audio_s
+"08 - Warszawa.flac",content_hash,70.0,22.5,0.32,383.67,0.18
+"08 - Warszawa.flac",cache_probe,0.1,0.1,1.00,383.67,0.00
+"08 - Warszawa.flac",metadata_artwork,14.8,10.6,0.72,383.67,0.04
+"08 - Warszawa.flac",decode,372.4,372.3,1.00,383.67,0.97
+"08 - Warszawa.flac",loudness_profile,40.7,40.7,1.00,383.67,0.11
+"08 - Warszawa.flac",stem_separation,197.6,152.7,0.77,383.67,0.52
+"08 - Warszawa.flac",stem_warmup,31.3,31.3,1.00,383.67,0.08
+"08 - Warszawa.flac",mir,1067.9,1067.1,1.00,383.67,2.78
+"08 - Warszawa.flac",beat_grid,1551.1,1009.5,0.65,383.67,4.04
+"08 - Warszawa.flac",grid_onset_calibration,113.5,113.4,1.00,383.67,0.30
+"08 - Warszawa.flac",instrument_family,577.6,545.9,0.95,383.67,1.51
+"08 - Warszawa.flac",sweep_separate,21819.5,14563.7,0.67,383.67,56.87
+"08 - Warszawa.flac",sweep_analyze,1370.2,1368.6,1.00,383.67,3.57
+"08 - Warszawa.flac",stem_series_sweep,23224.6,15967.0,0.69,383.67,60.53
+"08 - Warszawa.flac",cache_write,14.5,8.4,0.58,383.67,0.04
+"08 - Warszawa.flac",TRACK_TOTAL,27276.4,19341.8,0.71,383.67,71.09

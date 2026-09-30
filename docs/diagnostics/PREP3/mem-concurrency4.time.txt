@@ -1,0 +1,30 @@
+prep-timing: 11 file(s) · concurrency=4 · full local pipeline · cache=/private/tmp/claude-501/-Users-braesidebandit-Documents-Projects-uzume--claude-worktrees-awesome-diffie-95c9cc/fe17b0a8-eb50-4f36-9df1-90351d36858d/scratchpad/cache.Ahfl
+  [2/11] 02 - Breaking Glass.flac  17.0 s  energy 3 → 6 (typical 5) grid 94.9 BPM
+  [3/11] 03 - What In The World.flac  20.1 s  energy 7 → 8 (typical 7) grid 123.2 BPM
+  [4/11] 04 - Sound And Vision.flac  23.9 s  energy 5 → 7 (typical 7) grid 106.3 BPM
+  [1/11] 01 - Speed Of Life.flac  25.3 s  energy 6 → 7 (typical 7) grid 116.0 BPM
+  [6/11] 06 - Be My Wife.flac  21.1 s  energy 6 → 8 (typical 7) grid 114.1 BPM
+  [7/11] 07 - A New Career In A New Town.flac  21.1 s  energy 3 → 7 (typical 6) grid 125.9 BPM
+  [5/11] 05 - Always Crashing In The Same Car.flac  28.8 s  energy 4 → 8 (typical 7) grid 106.0 BPM
+  [9/11] 09 - Art Decade.flac  29.1 s  energy 2 → 5 (typical 4) grid 78.5 BPM
+  [10/11] 10 - Weeping Wall.flac  26.0 s  energy 4 → 6 (typical 4) grid 171.6 BPM
+  [8/11] 08 - Warszawa.flac  46.7 s  energy 3 → 6 (typical 5) grid 75.2 BPM
+  [11/11] 11 - Subterraneans.flac  34.9 s  energy 3 → 6 (typical 4) grid 71.0 BPM
+       81.75 real       120.27 user         7.19 sys
+          1714241536  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              489331  page reclaims
+                1041  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 792  voluntary context switches
+              242194  involuntary context switches
+       1532353287672  instructions retired
+        418356809104  cycles elapsed
+          3137538976  peak memory footprint

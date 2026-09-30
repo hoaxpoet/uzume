@@ -117,6 +117,12 @@ public final class PANNsMobileNetV1: @unchecked Sendable {
     /// Run the conv stack on a precomputed log-mel ([frames * 64] row-major).
     /// Isolates the network from the front-end for parity testing.
     public func predictFromLogMel(_ logmel: [Float]) throws -> PANNsDiagnostic {
+        // PREP.3 (BUG-177): drain this call's MPSGraph result tensors here — the family sweep
+        // calls it in a long synchronous loop whose outer pool would otherwise hold them all.
+        try autoreleasepool { try predictFromLogMelInPool(logmel) }
+    }
+
+    private func predictFromLogMelInPool(_ logmel: [Float]) throws -> PANNsDiagnostic {
         lock.lock()
         defer { lock.unlock() }
 

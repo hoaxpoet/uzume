@@ -88,6 +88,11 @@ public final class StemModelEngine: @unchecked Sendable {
     /// Internal buffers for each stem's [431, 2, 2049] output.
     private let outputAssembledBuffers: [MTLBuffer]
 
+    /// PREP.3 (BUG-177) — the graph writes each stem straight into `outputAssembledBuffers`
+    /// through these, instead of allocating four fresh ~7 MB result tensors per call and
+    /// copying them out with `readBytes`. Same pattern as `StemFFT+GPU`.
+    private let outputResults: [MPSGraphTensor: MPSGraphTensorData]
+
     // MARK: - Threading
 
     private let lock = NSLock()
@@ -149,6 +154,10 @@ public final class StemModelEngine: @unchecked Sendable {
         }
         self.outputBuffers = outBufs
         self.outputAssembledBuffers = assembledOuts
+        let assembledShape: [NSNumber] = [NSNumber(value: Self.modelFrameCount), 2, NSNumber(value: Self.nBins)]
+        self.outputResults = Dictionary(uniqueKeysWithValues: zip(graphBundle.stemOutputTensors, assembledOuts).map {
+            ($0, MPSGraphTensorData($1, shape: assembledShape, dataType: .float32))
+        })
 
         logger.info("StemModelEngine ready: MPSGraph, \(Self.stemCount) stems, \(Self.modelFrameCount) frames")
     }
@@ -162,7 +171,8 @@ public final class StemModelEngine: @unchecked Sendable {
     ///
     /// After return, read separated magnitudes from `outputBuffers[stem].magL/magR`.
     ///
-    /// - Throws: `StemModelError.predictionFailed` if graph execution fails.
+    /// - Throws: never since PREP.3 (outputs are pre-allocated, so there is no missing result
+    ///   to report); kept `throws` so callers are unchanged.
     public func predict() throws {
         lock.lock()
         defer { lock.unlock() }
@@ -188,32 +198,18 @@ public final class StemModelEngine: @unchecked Sendable {
             graphBundle.inputTensor: inputData
         ]
 
-        let results = SeparationSplit.measure("model_run") {
+        SeparationSplit.measure("model_run") {
             graphBundle.graph.run(
                 with: commandQueue,
                 feeds: feeds,
-                targetTensors: graphBundle.stemOutputTensors,
-                targetOperations: nil
+                targetOperations: nil,
+                resultsDictionary: outputResults
             )
         }
 
-        // Extract outputs
-        try SeparationSplit.measure("readback") {
-            try extractOutputs(results)
-        }
-    }
-
-    /// Copy each stem's graph output into `outputAssembledBuffers` and split it to L/R.
-    private func extractOutputs(_ results: [MPSGraphTensor: MPSGraphTensorData]) throws {
-        for (idx, tensor) in graphBundle.stemOutputTensors.enumerated() {
-            guard let result = results[tensor] else {
-                throw StemModelError.predictionFailed("Missing output for stem \(idx)")
-            }
-            result.mpsndarray().readBytes(
-                outputAssembledBuffers[idx].contents(),
-                strideBytes: nil
-            )
-            disassembleOutput(stemIndex: idx)
+        // Split each stem's [frame, 2, bin] output to L/R.
+        SeparationSplit.measure("readback") {
+            for idx in 0..<Self.stemCount { disassembleOutput(stemIndex: idx) }
         }
     }
 
