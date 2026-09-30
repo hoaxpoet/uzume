@@ -256,7 +256,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.15** | 2 | ✅ merged (#333) — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
 | **BR.16** | 2 | ✅ merged (#334) | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
 | **BR.17** | 2 | ✅ PR open — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
-| **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
+| **BR.18** | 2 | 🔨 PR open — K6c done; K6a kept (Matt, option A); ⏸ Matt's streaming review of the top ten | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
 | **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
@@ -1697,6 +1697,12 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.18 — streaming fidelity for the newest scenes 🔨 (2026-09-30, ⏸ Matt's streaming review)
+
+**Delivered.** K6c: `RenderPipeline.warmedUpLiveStems` + `liveStemWarmup01` — the eight live stem deviation routes (all four stems' `EnergyRel` / `EnergyDev`) ramp in quadratically over each track's first 10 s when no local-file series is installed; the aurora driver skips its own gate on those frames. K6a: **no change**, per Matt (2026-09-30, option A of three: keep the preview level / live energy measure / treat as unknown).
+**Done-when:** ✅ the warm-up caps the track-start overswing on the real BUG-041 series (red arm without it); ✅ only the stem routes are gated, and never on the local-file series (tests); ✅ full engine suite green (2160 + 216). ⏸ **Stop and report:** Matt's streaming review of the top ten scenes decides whether it lands.
+**Not done:** a live energy level for streaming (declined for the beta).
 
 ### Increment BR.17 — output devices as testers have them ✅ (2026-09-30, pending live check)
 

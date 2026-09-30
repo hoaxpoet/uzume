@@ -18,6 +18,7 @@ Thank you for trying Uzume. This page is what we know is rough, so you don't spe
 
 - **Scanning a Spotify playlist from the screen** reads the English Spotify desktop app. It may miscount on other languages, compact view, or very small windows, and hasn't been tried on playlists over 100 songs. The web player isn't supported.
 - **Scene changes are hard cuts** for now.
+- **Fireflies and Kagura respond to a song's quiet and loud parts only with local files.** When streaming, they follow the song's overall energy: the fireflies don't thin out in quiet stretches.
 - **Scene preferences aren't in this build.** The Settings for hiding scene families and choosing quality, and the keys for "more / less like this", aren't in the beta yet. The keys that remain are in the ? overlay.
 - **On M1-family Macs** one scene (Fractal Tree) isn't shown. **M1- and M2-family Macs** draw the visuals at a slightly lower resolution on large displays and let macOS scale them up, so they stay smooth.
 

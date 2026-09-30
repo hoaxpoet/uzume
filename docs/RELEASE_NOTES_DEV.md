@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-171610] BR.18 — streaming scenes ease into each song
+
+- **No lurch at the start of a streamed song.** On Spotify and Apple Music, the instrument-driven motion used to start at nothing and then overshoot for about ten seconds as Uzume learned each song, and only Ferrofluid Ocean was protected. Every scene now eases in over those seconds. Local files are unchanged.
+- **Fireflies and Kagura on streaming** still use one energy level per song, from its preview: the meadow doesn't thin in quiet parts, as it does with local files (Matt's call for the beta).
+- Waiting on Matt's streaming review of the top ten scenes.
+
 ### [dev-2026-09-30-153337] BR.17 — AirPods, and high-sample-rate output
 
 - **Beat accents wait for Bluetooth.** Uzume now reads how late your output device plays and holds the beat-timed accents back to match. With AirPods, Kagura's steps, Fireflies' flashes and Membrane's strikes were landing early. Built-in and wired speakers keep exactly the timing they had.
