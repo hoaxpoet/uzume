@@ -259,6 +259,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.18** | 2 | ✅ merged (#339) — K6c done; K6a kept (Matt, option A); ⏸ Matt's streaming review of the top ten | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ✅ merged (#338) — BUG-152 spot-check (session 2) | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ✅ PR open — BUG-176 felt check (session 1) | Flash check v2: regional + red (I8) |
+| **BR.MEM** | 1 | ✅ PR open — re-run session 1 | Local-file preparation memory: 23 GB → 1.4 GB on a 9-minute song (BUG-177, found in listening session 1) |
 | **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
@@ -1768,6 +1769,12 @@ of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase l
 **Delivered.** K6c: `RenderPipeline.warmedUpLiveStems` + `liveStemWarmup01` — the eight live stem deviation routes (all four stems' `EnergyRel` / `EnergyDev`) ramp in quadratically over each track's first 10 s when no local-file series is installed; the aurora driver skips its own gate on those frames. K6a: **no change**, per Matt (2026-09-30, option A of three: keep the preview level / live energy measure / treat as unknown).
 **Done-when:** ✅ the warm-up caps the track-start overswing on the real BUG-041 series (red arm without it); ✅ only the stem routes are gated, and never on the local-file series (tests); ✅ full engine suite green (2160 + 216). ⏸ **Stop and report:** Matt's streaming review of the top ten scenes decides whether it lands.
 **Not done:** a live energy level for streaming (declined for the beta).
+
+### Increment BR.MEM — local-file preparation stops running the Mac out of memory ✅ (2026-09-30)
+
+**Delivered.** BUG-177 (P1, Matt's listening session 1): `StemSeparator.separate` drains its MPSGraph autoreleased objects per call; the stem-FFT probe's per-call lines drop to info.
+**Evidence.** `PrepTimingRunner` (Release): Dance Yrself Clean 23.3 GB → 1.41 GB peak, 4 long songs 1.50 GB, prepared cache byte-identical, ~10 % faster; the pre-BR code measured 26.3 GB (pre-existing). `StemSeparatorMemoryTests` 2 MB fixed / 646 MB unfixed.
+**Not done:** the live re-run of session 1 (build 10).
 
 ### Increment BR.20 — flash check v2 ✅ (2026-09-30)
 

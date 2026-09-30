@@ -58,6 +58,7 @@ passes, the entry moves to §Resolved (recent).
 
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
+| BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
 | BUG-176 | P1 | renderer / photosensitivity | Membrane and Waveform flashed in a ninth of the screen at fast tempos (4.0 and 5.0 /s against WCAG's 3). Membrane's strike contrast is 0.8; Waveform's bars fall over 0.6 s (BR.20). | Session 1: Membrane on a fast song, and the launch screen with music playing — both still read as before. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
@@ -166,6 +167,17 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
 **Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
 **Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
+
+
+### BUG-177 — local-file preparation ran the Mac out of memory on long songs (2026-09-30)
+
+**Severity:** P1 (hangs the app and the Mac) · **Domain:** `ml.stem` / memory · **Failure class:** `resource-management` · **Status:** Fixed 2026-09-30 (BR.MEM) — pending a re-run of listening session 1 · **Found by:** Matt, listening session 1 (build 9)
+
+**Actual.** Session 1 on `session1_local.m3u`: stutter, sputter, then a hang, and macOS reported the Mac out of application memory while the song kept playing. The freeze watchdog's samples (`~/Library/Logs/Uzume/stall-2026-09-30T21-4*.txt`): footprint **24 GB → 34.4 GB** seven to eleven minutes after launch; the busy thread was local-file preparation (`LocalFilePreparationPipeline.analyzeWholeFile` → `SessionPreparer.analyzeStemSeries` → `StemSeparator.separate`); the main thread was idle between stalls (memory pressure, not a deadlock).
+**Diagnosis (measured, not the output swap).** `PrepTimingRunner` on one song, no playback: Dance Yrself Clean (9 min) **23.3 GB** peak, Superstition (96 kHz) 5.5 GB; the pre-Phase-BR code 26.3 GB — pre-existing. Polling the footprint during the run: flat until `stem_series_sweep`, then linear at ~0.5 GB/s. The sweep separates the song span by span on one background thread; each `separate` leaves ~32 MB of MPSGraph autoreleased objects that the loop's pool never drains until the song is done.
+**Fix.** `StemSeparator.separate` runs inside its own `autoreleasepool`. Dance Yrself Clean **1.41 GB**, and 4 long songs back to back 1.50 GB; the prepared cache is **byte-identical** (6 of 6 files) and preparation ~10 % faster. The per-call stem-FFT probe lines moved from notice to info — 60 000 lines in 15 minutes had flooded the unified log and hidden everything else.
+**Gates.** `StemSeparatorMemoryTests` — 20 separations on one background thread: 2 MB growth fixed, 646 MB unfixed (bound 150 MB).
+**Open.** Whether BR.13's device-change restart behaved in that session is unknown (its log lines were flooded out); it stays in session 1.
 
 ### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
 

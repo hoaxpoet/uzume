@@ -10,6 +10,11 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-221341] BR.MEM — long local songs no longer run the Mac out of memory (BUG-177)
+
+- **Found in Matt's first listening session.** Preparing a long local song used memory in proportion to its length — 23 GB for a 9-minute song — so a playlist of long songs made the app stutter, hang and run the Mac out of memory. It now peaks at about 1.5 GB, however long the songs, and prepares slightly faster. What Uzume learns about each song is exactly the same.
+- The diagnostic log no longer floods during preparation.
+
 ### [dev-2026-09-30-204133] BR.20 — the flash check looks at every part of the screen, and at red (BUG-176)
 
 - **A stricter photosensitivity check.** It used to judge only the whole screen's average brightness. It now also judges every ninth of the screen (WCAG's small-area rule) and saturated-red flashing.
