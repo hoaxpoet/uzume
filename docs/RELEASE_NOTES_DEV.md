@@ -2,7 +2,7 @@
 
 Internal release notes for the `main` branch. Audience: Matt and Claude Code. Each entry covers one session or a logical batch of increments. These notes complement `docs/ENGINEERING_PLAN.md` (authoritative for what's planned) and `docs/QUALITY/KNOWN_ISSUES.md` (authoritative for open defects).
 
-User-visible release notes are not yet in scope (no public build).
+User-visible release notes for the beta build: [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md) (BR.4).
 
 Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
@@ -10,6 +10,14 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-29-231449] BR.4 — the tester build shows only tester things
+
+- **The "Uzume isn't hearing any audio" card no longer tells testers to use Terminal**, and no longer appears while they're still opening Spotify. A frozen audio connection still shows it.
+- **No developer keys in the tester build.** The help overlay lists no bug IDs, and the keys that could pull the visuals off the beat are gone. `+` ("more of this style") now works on US and UK keyboards.
+- **Settings shows words, not string keys,** and a test now catches any missing string.
+- **The Ended screen says how long the session played,** and "1 track" rather than "1 tracks".
+- **No log file in the tester's home folder.**
+- **A one-page note for testers:** [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md).
 ### [dev-2026-09-30-003403] BR.6b — M1/M2-class Macs render at a size they can hold (BUG-168)
 
 - **A ceiling on render size for tier-1 Macs** (M1, M2, M2 Pro by the current detection). The visuals draw at most about 2560×1440 and macOS scales them to the screen. On the M2 Pro, that keeps every measured scene but one under the 60 fps budget; at native 4K, 13 of 23 miss it.

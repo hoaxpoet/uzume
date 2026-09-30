@@ -802,6 +802,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// BR.2 (BUG-162): keeps the display awake from `.ready` through `.playing`.
     @MainActor let displaySleepGuard = DisplaySleepGuard()
 
+    /// BR.4 (I10): how long the last session played — the Ended screen's duration.
+    @MainActor var playbackDuration = PlaybackDurationClock()
+    @MainActor var lastSessionPlaybackSeconds: TimeInterval? { playbackDuration.lastSessionSeconds }
+
     /// Retains the subscription that calls `extendPlan()` as readiness level advances.
     var readinessCancellable: AnyCancellable?
 
@@ -1120,6 +1124,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .sink { [weak self] newState in
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
+                self.playbackDuration.update(state: newState)
                 if newState == .connecting {
                     self.currentSessionPlanSeed = nil
                     // LF.6.fix.1 (BUG-024): wipe stale LF artwork at session

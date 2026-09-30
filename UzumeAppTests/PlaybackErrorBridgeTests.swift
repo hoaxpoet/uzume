@@ -234,7 +234,8 @@ struct PlaybackStallDetectorTests {
         session: SessionState = .playing,
         paused: Bool = false,
         dwell: Int = 3,
-        hasEverDetectedSignal: Bool = false
+        hasEverDetectedSignal: Bool = false,
+        flavor: BuildFlavor = .developer
     ) async -> Fixture {
         let signal = CurrentValueSubject<AudioSignalState, Never>(.active)
         let sessionSubj = CurrentValueSubject<SessionState, Never>(session)
@@ -251,7 +252,8 @@ struct PlaybackStallDetectorTests {
             hasEverDetectedSignalProvider: { hasEverDetectedSignal },
             stallTickPublisher: tick.eraseToAnyPublisher(),
             stallDwellTicks: dwell,
-            onStallChanged: { [events] active in events.value = active }
+            onStallChanged: { [events] active in events.value = active },
+            flavor: flavor
         )
         // Drain the CurrentValueSubject initial deliveries so the gate settles.
         await Task.yield()
@@ -298,6 +300,32 @@ struct PlaybackStallDetectorTests {
         // Device-swap freeze: state stays .active (last buffer), frames frozen.
         await pump(fix, ticks: 3, advanceFrames: false)
         #expect(fix.bridge.audioStallActive == true)
+    }
+
+    // MARK: - BR.4 (I2 / F3): the public build
+
+    @Test("public build: a live but silent tap before any audio never raises the card")
+    func test_public_silentBeforeAnyAudio_doesNotFire() async {
+        let fix = await makeSUT(dwell: 3, hasEverDetectedSignal: false, flavor: .public)
+        fix.signal.send(.silent)
+        await Task.yield()
+        await pump(fix, ticks: 10, advanceFrames: true)
+        #expect(fix.bridge.audioStallActive == false)
+    }
+
+    @Test("public build: a frozen tap (Mode B) still raises the card")
+    func test_public_frozenTap_stillFires() async {
+        let fix = await makeSUT(dwell: 3, flavor: .public)
+        await pump(fix, ticks: 3, advanceFrames: false)
+        #expect(fix.bridge.audioStallActive == true)
+    }
+
+    @Test("the card's steps: Terminal only in the developer build")
+    func test_stallCardSteps_noTerminalInPublic() {
+        #expect(AudioStallOverlayView.steps(for: .public).allSatisfy { $0.1 == nil })
+        let publicText = AudioStallOverlayView.steps(for: .public).map(\.0).joined()
+        #expect(!publicText.contains("Terminal") && !publicText.contains("rebuilt"))
+        #expect(AudioStallOverlayView.steps(for: .developer).contains { $0.1 == "sudo killall coreaudiod" })
     }
 
     // MARK: - Does NOT false-fire (the gate)
