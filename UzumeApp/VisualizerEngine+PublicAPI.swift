@@ -89,6 +89,9 @@ extension VisualizerEngine {
             sessionRecorder?.log("WIRING: startAudio SKIPPED — LF playback active (correct)")
             return
         }
+        // REC.2: engage a pinned scene's hold before audio starts; an unknown pin starts nothing.
+        let scenePin = engageScenePin()
+        if case .unknown = scenePin { return }
         // BUG-091 instrumentation. If this guard is reached with no local-file source while a
         // local-file session is what the user picked, the tap is about to be installed and the
         // LocalFilePlaybackProvider torn down by `start()`'s `stopInternal()` — the failure
@@ -116,10 +119,7 @@ extension VisualizerEngine {
             apiLogger.info("Screen capture denied — grant in System Settings for audio capture")
             pollForScreenCapturePermission()
         }
-        if let current = presetLoader.currentPreset {
-            applyPreset(current)
-            showPresetName(current.descriptor.name)
-        }
+        applyFirstScene(scenePin)
     }
 
     /// Poll until screen capture permission is granted, then start audio capture.

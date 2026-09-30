@@ -160,8 +160,12 @@ struct UzumeApp: App {
             // NOT, fire the same code path IdleView's "Start listening now"
             // button uses. Makes the LF-vs-tap A/B reproducible without a
             // manual UI click. LF env var takes precedence.
+            //
+            // REC.2 — `UZUME_PIN_SCENE=<scene id>` pins the first scene of every session and
+            // holds it. An unknown id is logged with the valid ones and no session starts.
             .task {
                 let env = ProcessInfo.processInfo.environment
+                if case .unknown = engine.engageScenePin() { return }
                 if let raw = env["UZUME_LOCAL_FILE_PLAYBACK"], !raw.isEmpty {
                     let url = URL(fileURLWithPath: raw)
                     guard FileManager.default.isReadableFile(atPath: url.path) else { return }
