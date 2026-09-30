@@ -32,6 +32,7 @@ belongs in the second table, not the first.
 | BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. |
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
+| BUG-175 | P2 | preset.fidelity / Kagura · dsp.beat | Kagura sways for a song's first ~16 s instead of dancing when the intro's beat grid is uneven. It reads as warm-up exercises, out of sync. | Measure how many songs it hits (cached grids), then Matt's call on the fix direction. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
 | BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
@@ -84,6 +85,61 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-175 — Kagura sways through a song's opening instead of dancing when the intro's beat grid is uneven (2026-09-30)
+
+**Severity:** P2 (a certified scene misses its defining behaviour for the opening quarter-minute, which is where a
+listener forms their first read of it) · **Domain:** `preset.fidelity` (Kagura, `KaguraChoreographer` /
+`KaguraSafetyNet`) with a `dsp.beat` cause (the cached grid in a quiet intro) · **Failure class:** `algorithm`
+· **Status:** Open, not fixed · **Found by:** Matt, 2026-09-30, reviewing the PROMO.1 cut (*"kagura should be doing
+the twist instead of warm-up exercises - it does not appear to be synced to the music"*)
+
+**Expected:** from the song's first bar, Kagura dances a beat-locked dance chosen by the song's energy, as it does
+once a song is under way.
+
+**Actual:** on *Sherman's March to the Sea* (The Goddamn Shame, `track.mp3`, local file), Kagura makes **no dance
+pick before 16.47 s**. `session.log` has `KAGURA_SONG … sections=[0:00 level=10 [egyptian, cabbage, twist] …]` at
+load, then the first `KAGURA_PICK` at `beat=35 … playback=16.47s`. The first twist is at 24.31 s. Until then the
+dancer plays the rest sway, which is unwarped and so not on the beat. An earlier Kagura run of the same song
+(`15-43-59Z`) showed the same late start; the grid is cached, so a reshoot reproduces it.
+
+**Evidence (root cause, from artifacts; not yet confirmed by a code-level repro):**
+- Session `2026-09-30T15-45-51Z` (REC.2 take 1, Release build, `UZUME_PIN_SCENE=Kagura`). ⚠ The folder is **gone**:
+  the app's `lastN10` session retention pruned it within the hour, as later app and test launches arrived. The
+  numbers here were read from it before that. Its frame map survives as
+  `~/Documents/uzume_promo/linkedin-2026-10/take_1_kagura_map.csv` (`is_downbeat`, `beat_in_bar` per frame, 0.5–34 s).
+  To re-derive: `UZUME_PIN_SCENE=Kagura` + `UZUME_LOCAL_FILE_PLAYBACK`, and copy the session folder out at once.
+  Beat instants rebuilt from `features.csv` `beat_in_bar` transitions, first 20: 1.39, 1.88, **2.12, 2.38, 2.59**,
+  2.84, 3.33, 3.79, 4.28, 4.52, **5.25**, 5.73 … The grid puts half-beats into the quiet intro (intervals 0.245,
+  0.256, 0.213, 0.245 s against a 0.49 s beat) and misses one near 5 s (a 0.725 s gap).
+- `KaguraSafetyNet` (`KaguraSelection.swift`) sways while the coefficient of variation of the last 16 beat intervals
+  is above `enterCV` 0.08, and rejoins only after 8 consecutive beats under `exitCV` 0.06. On this grid the CV is
+  0.34–0.42 through 2–8 s, 0.18 at 10.6–12 s, and first under 0.06 at 12.99 s (0.041). Eight steady beats later,
+  plus the next bar line, is beat 35 at 16.47 s: exactly the first pick in the log.
+- The engine's steady-state downbeats on this song also run ≈ 90–140 ms ahead of the offline bars and the audible
+  kick (PROMO.1 onset check: kick at 8.700 / 26.290 / 30.230 s against engine 8.62 / 26.15 / 30.07). That is the
+  BUG-065 / BUG-135 family and not this entry's cause, but it matters for "synced" once Kagura does dance.
+
+**Why it matters beyond this song:** any track whose opening defeats the beat grid (a quiet or rubato intro, a
+count-in, sparse percussion) will open on the sway. How many songs that is has **not** been measured.
+
+**Workaround in use:** the PROMO.1 video retimes Kagura's twist 12 bars earlier (`tools/promo/edit.json`,
+`source_offset_s` 23.27). That is an edit, not a fix.
+
+**Fix directions (a look and behaviour decision for Matt; none chosen):**
+1. The grid: stop the prepared grid putting half-beats and gaps into quiet intros (`dsp.beat`; load the
+   `beat-sync-session` skill, BeatBench before/after).
+2. The safety net: judge regularity on the grid's steady tempo rather than a 16-beat window that includes the
+   intro's cold start, or allow the calm dance while the CV settles.
+3. The rest itself: make the sway beat-locked, so the opening at least moves on the beat.
+
+**Verification criteria (written before any fix):**
+- Automated: a Kagura choreographer test fed this song's cached grid (or a synthetic grid with the same intro
+  pattern) makes its first dance pick within the first 2 bars of the first steady bar, and the existing
+  irregular-grid safety-net tests still sway on a genuinely irregular grid.
+- Corpus: count the songs in the local stem cache whose first `KAGURA_PICK` would land after 8 s, before and after.
+- Manual (musical feel): Matt watches Kagura from the start of *Sherman's March to the Sea* and one more song with
+  a quiet intro, at normal volume, and says it dances in time from the opening.
 
 ### BUG-174 — Cytokinesis stops for four seconds before it regrows, and it reads as a freeze (2026-09-30)
 
