@@ -775,7 +775,7 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 
 ## 10. Settings Surface
 
-`SettingsView` is a sheet presented from any top-level view. Organized into four groups.
+`SettingsView` is a sheet from the playback chrome's gear, and a Settings window from every other screen — Uzume › Settings… (⌘,) and the Idle gear (BR.14 / F6). Organized into four groups.
 
 ### 10.1 Audio
 

@@ -436,6 +436,7 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Start and stop twice, and swap output devices: BUG-139 (never live-validated), BUG-070 (pending since 07-12), BUG-058.
    - Pause Spotify for 30 s or more, then end and restart: the tap race, and E2.
    - Move the window between displays after pressing play in Spotify: F4 / D7.
+   - With Spotify started first: ⌘F toggles fullscreen, and Esc in green-button fullscreen leaves fullscreen without asking to end (BR.14, F4 / D7). From the secondary display, "Move to primary display" moves the window (D8). Close the window mid-session: the recording indicator goes off (F14).
    - Judge stem timing at 4K: BUG-106.
    - End the session while AirPods connect, then start a new one: one tap, analysis at normal speed (BR.12, G2/B14).
    - Mid-session, run `sudo killall coreaudiod`: visuals respond again within a few seconds (BR.12, B5).

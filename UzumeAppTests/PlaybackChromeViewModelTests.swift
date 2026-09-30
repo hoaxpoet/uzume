@@ -134,6 +134,27 @@ struct PlaybackChromeViewModelTests {
         #expect(!vm.overlayVisible)
     }
 
+    // MARK: - BR.14 / F19: the pointer hides with the chrome
+
+    @Test func pointerHides_whenTheChromeTimesOut() async {
+        let (vm, _, _, _, _) = makeVM(delay: InstantDelay())
+        var hides = 0
+        vm.hideCursor = { hides += 1 }
+        for await visible in vm.$overlayVisible.values where !visible { break }
+        await drainMainQueue()
+        #expect(hides == 1)
+    }
+
+    @Test func pointerHides_onTheSpaceToggle_andNotWhileTheChromeIsUp() {
+        let (vm, _, _, _, _) = makeVM(delay: NeverDelay())
+        var hides = 0
+        vm.hideCursor = { hides += 1 }
+        vm.onActivity()
+        #expect(hides == 0)
+        vm.toggleOverlay()
+        #expect(hides == 1)
+    }
+
     // MARK: - DS.6 visibility (D-241: gone after inactivity, back on any input)
 
     @Test func spaceToggle_fromVisible_hides_andBack() {

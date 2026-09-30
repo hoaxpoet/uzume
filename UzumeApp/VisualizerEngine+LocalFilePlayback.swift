@@ -645,4 +645,21 @@ extension VisualizerEngine {
         lastStartedLocalFilePlaybackURL = nil
         mirPipeline.elapsedSecondsSource = nil   // BR.11 (B2): no file plays now
     }
+
+    /// BR.14 / F14: closing the window ends a live session. Before, capture, the recording
+    /// indicator and stem separation ran on with no window, and the Dock reopened into it.
+    nonisolated static func windowCloseEndsSession(_ state: SessionState) -> Bool {
+        switch state {
+        case .connecting, .preparing, .ready, .playing: return true
+        case .idle, .ended: return false
+        }
+    }
+
+    /// The window closed: release the display-sleep hold (BR.2) and end a live session.
+    @MainActor func handleWindowClosed() {
+        displaySleepGuard.setWindowOpen(false)
+        if Self.windowCloseEndsSession(sessionManager.state) {
+            sessionManager.endSession()
+        }
+    }
 }

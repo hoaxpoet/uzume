@@ -93,9 +93,9 @@ struct UzumeApp: App {
             .preferredColorScheme(.dark)
             .environmentObject(engine)
             // BR.2 (BUG-162): a closed window releases the display-sleep
-            // assertion even though the session outlives it (F14).
+            // assertion; BR.14 (F14): and ends a live session.
             .onAppear { engine.displaySleepGuard.setWindowOpen(true) }
-            .onDisappear { engine.displaySleepGuard.setWindowOpen(false) }
+            .onDisappear { engine.handleWindowClosed() }
             .environmentObject(permissionMonitor)
             .environmentObject(settingsStore)
             .environmentObject(accessibilityState)
@@ -259,6 +259,15 @@ struct UzumeApp: App {
                     LocalFileMenuCommands.clearLocalFileCache(engine: engine)
                 }
             }
+        }
+
+        // BR.14 / F6: Settings from every screen — Uzume › Settings… and ⌘, (the Idle gear opens
+        // it too). Playback keeps its own sheet from the chrome's gear.
+        Settings {
+            SettingsView(store: settingsStore)
+                .preferredColorScheme(.dark)
+                .environmentObject(engine)
+                .environmentObject(recentsStore)
         }
     }
 

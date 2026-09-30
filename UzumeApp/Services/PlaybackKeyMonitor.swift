@@ -23,6 +23,11 @@ final class PlaybackKeyMonitor {
 
     private var monitor: Any?
 
+    /// The playback window (BR.14 / F9). Keys aimed at any other window — the Settings sheet, a
+    /// panel — pass through, so Esc there closes that window instead of asking to end the session.
+    /// Nil until the view reports its window; then every key is dispatched as before.
+    weak var window: NSWindow?
+
     // MARK: - Install / Uninstall
 
     /// Begin intercepting key-down events and dispatching them via `registry`.
@@ -50,6 +55,7 @@ final class PlaybackKeyMonitor {
     /// original event otherwise (pass through to AppKit default handling).
     @MainActor
     private func handle(event: NSEvent, registry: PlaybackShortcutRegistry) -> NSEvent? {
+        guard Self.targetsPlayback(eventWindow: event.window, playbackWindow: window) else { return event }
         for shortcut in registry.shortcuts {
             guard shortcut.matches(event: event) else { continue }   // one rule (BR.4 / F8)
             shortcut.action()
@@ -57,5 +63,12 @@ final class PlaybackKeyMonitor {
             return nil // Consume — don't pass to AppKit
         }
         return event // Pass through
+    }
+
+    /// A key belongs to playback when it is aimed at the playback window (or the window is not
+    /// known yet). BR.14 / F9.
+    nonisolated static func targetsPlayback(eventWindow: NSWindow?, playbackWindow: NSWindow?) -> Bool {
+        guard let playbackWindow else { return true }
+        return eventWindow === playbackWindow
     }
 }

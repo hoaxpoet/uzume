@@ -16,6 +16,15 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 - **Keys:** − + . ← → and ⌘R are gone from the tester build and its ? overlay. They didn't do what their messages said (− pinned the scene you disliked). ⇧← ⇧→ (cut to another scene) and ⌘Z stay.
 - The developer build keeps all of them, to be wired after the beta.
 - **Adaptation messages are off until you turn them on** (Settings › Visuals, developer build) — before, they showed while the toggle said off.
+### [dev-2026-09-30-142354] BR.14 — the window, keys and Settings behave
+
+- **Fullscreen and Esc work when Spotify was in front.** Uzume used to attach its fullscreen and display handling to whatever window was active when playback began — usually Spotify's — so ⌘F did nothing and Esc in fullscreen asked to end the session.
+- **Esc in Settings or over the shortcut help no longer asks to end the session.** It closes what's in front.
+- **Closing the window ends the session.** Listening, the recording indicator and analysis stop instead of running on with no window.
+- **The pointer hides** along with the playback controls.
+- **Settings from anywhere:** Uzume › Settings… (⌘,) and a gear on the start screen.
+- **"Move to primary display" works from the second display.**
+- Pending live checks in listening session 2.
 
 ### [dev-2026-09-30-015424] BR.13 — local files keep their place
 

@@ -90,6 +90,10 @@ final class PlaybackChromeViewModel: ObservableObject {
     @Published private(set) var overlayVisible: Bool = true
     @Published private(set) var showListeningBadge: Bool = false
     @Published private(set) var reduceMotion: Bool
+
+    /// Hides the pointer when the chrome hides (BR.14 / F19); it returns on the next mouse
+    /// move, which is also activity. Injectable for tests.
+    var hideCursor: @MainActor () -> Void = { NSCursor.setHiddenUntilMouseMoves(true) }
     /// True while background track preparation is still in flight (6.1).
     /// Drives the "still preparing" status beneath `PlaybackControlsCluster`.
     @Published private(set) var isBackgroundPreparationActive: Bool = false
@@ -312,6 +316,7 @@ final class PlaybackChromeViewModel: ObservableObject {
         if overlayVisible {
             hideTask?.cancel()
             overlayVisible = false
+            hideCursor()
         } else {
             onActivity()
         }
@@ -349,6 +354,7 @@ final class PlaybackChromeViewModel: ObservableObject {
             try? await self.delay.sleep(seconds: seconds)
             guard !Task.isCancelled else { return }
             self.overlayVisible = false
+            self.hideCursor()
         }
     }
 

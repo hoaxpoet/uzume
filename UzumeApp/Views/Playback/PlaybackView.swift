@@ -200,6 +200,7 @@ struct PlaybackView: View {
         .onContinuousHover { phase in
             if case .active = phase { chromeVM.onActivity() }
         }
+        .background(HostWindowReader { attachWindow($0) })   // BR.14 / F4, D7
         .onAppear { setup() }
         // CLEAN.1.4 (BUG-033): tell the engine whether the dashboard overlay is
         // shown, so its per-frame snapshot pump can skip all work when hidden
@@ -228,20 +229,6 @@ struct PlaybackView: View {
             toastBridge: toastBridge
         )
         actionRouter = router
-
-        // Fullscreen + display management
-        if let window = NSApp.keyWindow {
-            fullscreenObserver.attach(to: window)
-            let dm = DisplayManager(fullscreenObserver: fullscreenObserver)
-            dm.attach(to: window)
-            displayManager = dm
-            multiDisplayBridge = MultiDisplayToastBridge(toastManager: toastManager, displayManager: dm)
-            // 7.2: resilience coordinator — resets FrameBudgetManager rolling buffer on hot-plug.
-            displayChangeCoordinator = DisplayChangeCoordinator(
-                displayManager: dm,
-                frameBudgetManager: engine.pipeline.frameBudgetManager
-            )
-        }
 
         // §9.4 playback errors — silence at 15s, condition-ID auto-dismiss.
         // Silent-tap detector (BUG-057/055/058): raise the audio-stall card when
@@ -272,6 +259,27 @@ struct PlaybackView: View {
         currentRegistry = registry
         keyMonitor.install(registry: registry)
         chromeVM.observeInput()
+    }
+
+    /// Fullscreen + display management on the window this view is in — reported by
+    /// `HostWindowReader`, never the app-wide key window (BR.14 / F4, D7).
+    private func attachWindow(_ window: NSWindow) {
+        keyMonitor.window = window
+        fullscreenObserver.detach()
+        fullscreenObserver.attach(to: window)
+        if let displayManager {
+            displayManager.attach(to: window)
+            return
+        }
+        let dm = DisplayManager(fullscreenObserver: fullscreenObserver)
+        dm.attach(to: window)
+        displayManager = dm
+        multiDisplayBridge = MultiDisplayToastBridge(toastManager: toastManager, displayManager: dm)
+        // 7.2: resilience coordinator — resets FrameBudgetManager rolling buffer on hot-plug.
+        displayChangeCoordinator = DisplayChangeCoordinator(
+            displayManager: dm,
+            frameBudgetManager: engine.pipeline.frameBudgetManager
+        )
     }
 
     private func teardown() {
@@ -356,7 +364,9 @@ struct PlaybackView: View {
                 }
             },
             onHandleEsc: { [weak fo = self.fullscreenObserver] in
-                if fo?.isFullscreen == true {
+                if showHelp {                       // BR.14 / F9: Esc closes the help overlay first
+                    showHelp = false
+                } else if fo?.isFullscreen == true {
                     fo?.toggleFullscreen()
                 } else {
                     endSessionVM.requestEnd()
