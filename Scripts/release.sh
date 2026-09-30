@@ -64,6 +64,13 @@ xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" > /dev/null \
 
 # --- 2. Weights -----------------------------------------------------------------
 step "2/9 verifying ML weights"
+# fetch_weights.sh follows symlinks, so a worktree whose weights link to the primary
+# checkout verifies — then the app bundle ships the links, not the files, and deep
+# codesign + Gatekeeper reject it only at step 9 (build 0.9.0 (8), CLEAN.2.5c).
+LINKS="$(find UzumeEngine/Sources/ML/Weights -type l)"
+[ -z "$LINKS" ] || die "$(wc -l <<< "$LINKS" | tr -d ' ') weight file(s) are symlinks, which would ship as links, not weights.
+Run the release from the primary checkout, or replace each link with a copy of its target:
+  find UzumeEngine/Sources/ML/Weights -type l -exec sh -c 'cp \"\$1\" \"\$1.tmp\" && mv -f \"\$1.tmp\" \"\$1\"' _ {} \\;"
 Scripts/fetch_weights.sh || die "weights missing or failed verification"
 
 # --- 3. Build number -----------------------------------------------------------
@@ -204,6 +211,12 @@ expect "dSYM matches the shipped binary" "$DSYM_UUID" "^$APP_UUID$"
 FLAVOR="$(plutil -extract UzumeBuildFlavor raw -o - "$APP/Contents/Info.plist" 2>/dev/null || true)"
 echo "--- UzumeBuildFlavor: $FLAVOR"
 expect "public build (no developer-only features)" "$FLAVOR" "^public$"
+
+# ~167 MB of weights; du -sk doesn't follow links, so a bundle of links or a bundle
+# missing its weights reads a few MB.
+ML_KB="$(du -sk "$APP/Contents/Resources/UzumeEngine_ML.bundle" 2>/dev/null | awk '{print $1}')"
+echo "--- UzumeEngine_ML.bundle: ${ML_KB:-missing} KB"
+check "ML bundle holds the weights (>= 150 MB)" test "${ML_KB:-0}" -ge 150000
 
 ARCHS="$(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"; echo "--- lipo -archs: $ARCHS"
 expect "arm64 only" "$ARCHS" "^arm64$"
