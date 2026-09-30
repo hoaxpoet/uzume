@@ -113,3 +113,31 @@ struct TapLifecycleStressTests {
         #expect(!capture.isCapturing)
     }
 }
+
+// MARK: - BR.17 (I4 / B7): the beat-phase offset follows the output device
+
+@Suite("Output latency (BR.17)")
+struct OutputLatencyTests {
+
+    @Test func builtInAndWired_keepTheTunedBaseline_bluetoothRaisesIt() {
+        #expect(OutputLatency.compensationMs(deviceMs: 12, enabled: true) == 50, "fast device: calibrated 50 ms")
+        #expect(OutputLatency.compensationMs(deviceMs: 180, enabled: true) == 180, "Bluetooth: its own latency")
+        #expect(OutputLatency.compensationMs(deviceMs: nil, enabled: true) == 50, "unreadable: baseline")
+        #expect(OutputLatency.compensationMs(deviceMs: 180, enabled: false) == 50, "UZUME_DEVICE_LATENCY=0 arm")
+    }
+
+    @Test func framesToMilliseconds() {
+        // 8820 frames at 44.1 kHz = 200 ms (a typical AirPods report).
+        #expect(OutputLatency.milliseconds(deviceFrames: 8_000, safetyFrames: 500, streamFrames: 320,
+                                           sampleRate: 44_100) == 200)
+        #expect(OutputLatency.milliseconds(deviceFrames: 1, safetyFrames: 0, streamFrames: 0, sampleRate: 0) == nil)
+    }
+
+    /// Reads this Mac's real default output device — a readable, sane number (or none at all on
+    /// a headless runner). Recorded, not pinned: the device differs per machine.
+    @Test func theCurrentDeviceReadsSanely() {
+        let device = DefaultOutputDeviceMonitor().currentDefaultOutputDeviceID()
+        guard device != 0, let ms = OutputLatency.milliseconds(of: device) else { return }
+        #expect(ms >= 0 && ms < 1_000, "\(ms) ms")
+    }
+}
