@@ -198,6 +198,8 @@ extension VisualizerEngine {
                 // line for this new track. Pairs with the latch set in
                 // `runOrchestratorLiveUpdate(mir:)`.
                 self.orchestratorWireLoggedThisTrack = false
+                // BR.10: a real song change means now-playing works (permission granted later).
+                self.nowPlayingUnavailable = false
                 // LFPLAN.3: new track → plan resumes (clear the manual hold) and the
                 // first planned segment applies (clear the last-applied marker).
                 self.manualPresetOverrideThisTrack = false
@@ -241,6 +243,7 @@ extension VisualizerEngine {
                     // async fetch then lands the real bytes on a later tick.
                     // The stale pre-fetched profile drops with it — the new
                     // track's kickoffPreFetch repopulates.
+                    self.nowPlayingDeniedApp = nil   // BR.10: paired with nowPlayingUnavailable above
                     self.nowPlaying.publishTrack(
                         event.current, index: resolvedPlanIndex, artwork: .some(nil))
                     self.streamingArtworkPublisher?.update(for: identity)

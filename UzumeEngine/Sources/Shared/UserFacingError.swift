@@ -117,6 +117,11 @@ public enum UserFacingError: Sendable, Hashable {
     /// previously log-only: the user was stranded on a silent PlaybackView.)
     case localFilePlaybackFailed(fileName: String)
 
+    /// BR.10 (audit E1): macOS denied Automation for the streaming app (−1743), so Uzume can't
+    /// see which song is playing. The session falls back to reactive mode; the toast says why
+    /// and where to allow it. `appName` is "Spotify" or "Music".
+    case nowPlayingPermissionDenied(appName: String)
+
     /// Frame budget exceeded and governor activated — log-only by default.
     case frameBudgetExceeded
 
@@ -188,6 +193,7 @@ extension UserFacingError: CaseIterable {
             .drawableSizeMismatch,
             .negativeNudgeTwice,
             .rePlanSucceeded,
+            .nowPlayingPermissionDenied(appName: "Spotify"),
         ]
     }
 }

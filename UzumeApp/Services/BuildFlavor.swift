@@ -34,4 +34,10 @@ enum BuildFlavor: Sendable {
     /// scenes", and the watched user-preset folder (hot reload, trusts a sidecar's own
     /// `certified`). Off in the public build (BR.1: K3 / E13 / F15 / A13).
     var exposesUncheckedScenes: Bool { self == .developer }
+
+    /// Whether developer-facing diagnostics are shown: the Terminal step on the no-audio card
+    /// and the no-audio card before any audio was heard, the calibration keys and their help
+    /// rows, the Ended screen's sessions-folder link, `~/uzume_diag.log`. Off in the public
+    /// build (BR.4).
+    var showsDeveloperDiagnostics: Bool { self == .developer }
 }

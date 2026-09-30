@@ -110,6 +110,15 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// the MainActor.
     let userFacingErrorSubject = PassthroughSubject<UserFacingError, Never>()
 
+    /// BR.10 (E1): the streaming app whose Automation access macOS denied ("Spotify" / "Music"),
+    /// or nil. Published (not one-shot) because the denial usually lands at Ready, before the
+    /// playback view's error bridge exists; the bridge reads it on appear. Cleared at every
+    /// session boundary and on a real track change.
+    @Published var nowPlayingDeniedApp: String?
+
+    /// The streaming Now Playing poller (BR.10: told which app to ask, and reports denial).
+    var streamingMetadata: StreamingMetadata?
+
     /// Raw album-artwork bytes for the live track (PNG / JPEG, depending on
     /// container). LF.6: populated alongside `currentTrack` for local-file
     /// sessions from the LF.5 persistent cache's `artwork.bin` sibling.
@@ -802,6 +811,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// BR.2 (BUG-162): keeps the display awake from `.ready` through `.playing`.
     @MainActor let displaySleepGuard = DisplaySleepGuard()
 
+    /// BR.4 (I10): how long the last session played — the Ended screen's duration.
+    @MainActor var playbackDuration = PlaybackDurationClock()
+    @MainActor var lastSessionPlaybackSeconds: TimeInterval? { playbackDuration.lastSessionSeconds }
+
     /// Retains the subscription that calls `extendPlan()` as readiness level advances.
     var readinessCancellable: AnyCancellable?
 
@@ -845,6 +858,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// BR.11 (E7): the playing song is known and matches no plan entry. Under `orchestratorLock`;
     /// set by every streaming track change, cleared at session boundaries.
     var liveTrackIsOffPlan = false
+
+    /// BR.10 (E1): no now-playing can ever arrive (Automation denied), so a planned session runs
+    /// reactive instead of freezing on its first scene. Under `orchestratorLock`.
+    var nowPlayingUnavailable = false
 
     /// Once-per-track diagnostic latch for `runOrchestratorLiveUpdate(mir:)`
     /// (BUG-015 follow-up). When `false`, the next wire tick that actually
@@ -1024,12 +1041,11 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         // playlist, runtime hits the same cache on track-change so the
         // network request from the runtime side is a no-op.
         let metadataFetcher = MetadataPreFetcher(fetchers: Self.buildFetcherList())
-        // SessionManager is always created — uses the same component instances as the engine.
+        // SessionManager is always created. Its preparer has its own stem analyzer and mood
+        // classifier (BR.9); only the separator is shared (it is call-isolated, CLEAN.1.2).
         // Ad-hoc mode never invokes the preparer; session mode uses it for pre-analysis.
         self.sessionManager = Self.makeSessionManager(
             sep: sep,
-            analyzer: analyzer,
-            classifier: classifier,
             device: ctx.device,
             sessionRecorder: self.sessionRecorder,
             metadataFetcher: metadataFetcher
@@ -1134,7 +1150,11 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
                 self.displaySleepGuard.update(state: newState)
                 if newState == .connecting || newState == .preparing {
                     self.orchestratorLock.withLock { self.liveTrackIsOffPlan = false }   // BR.11
+                    // BR.10: a new session starts with now-playing assumed available.
+                    self.orchestratorLock.withLock { self.nowPlayingUnavailable = false }
+                    self.nowPlayingDeniedApp = nil
                 }
+                self.playbackDuration.update(state: newState)
                 if newState == .connecting {
                     self.currentSessionPlanSeed = nil
                     // LF.6.fix.1 (BUG-024): wipe stale LF artwork at session

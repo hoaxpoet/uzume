@@ -353,14 +353,16 @@ extension VisualizerEngine {
     func runOrchestratorLiveUpdate(mir: MIRPipeline) {
         guard analysisFrameCount % Self.orchestratorWireFrameDivisor == 0 else { return }
 
-        let (snapshot, offPlan) = orchestratorLock.withLock {
+        let (snapshot, offPlan, nowPlayingGone) = orchestratorLock.withLock {
             (OrchestratorWireSnapshot(hasPlan: livePlan != nil, trackIndex: liveTrackPlanIndex),
-             liveTrackIsOffPlan)
+             liveTrackIsOffPlan, nowPlayingUnavailable)
         }
 
         // BR.11 (audit E7): a song that isn't in the plan (autoplay after the playlist, an ad,
         // a podcast) runs reactive instead of holding the last planned scene for as long as it plays.
-        if snapshot.hasPlan, snapshot.trackIndex == nil, offPlan {
+        // BR.10 (E1): so does a plan with no now-playing, ever (Automation denied) — rather than
+        // freeze on the first scene with track 1's grid for the whole playlist.
+        if snapshot.hasPlan, snapshot.trackIndex == nil, offPlan || nowPlayingGone {
             applyReactiveUpdate(boundary: mir.latestStructuralPrediction)
             return
         }

@@ -179,6 +179,11 @@ struct UzumeApp: App {
             // (recursive walk), `.m3u` playlists (parsed via M3UParser), and
             // any combination thereof. Mixed drops are flattened in drop
             // order.
+            // BR.7 (C10): missing ML weights say so, once per launch, instead of every track
+            // silently preparing as "partial".
+            .task {
+                if engine.analysisUnavailable { MissingAnalysisNotice.show() }
+            }
             // BR.5: offer the report after a run that didn't quit cleanly. Public build only:
             // developer builds are stopped from Xcode and killed by scripts all day.
             .task {
@@ -340,5 +345,20 @@ extension EnvironmentValues {
     var spotifyOAuthProvider: SpotifyOAuthTokenProvider? {
         get { self[SpotifyOAuthProviderKey.self] }
         set { self[SpotifyOAuthProviderKey.self] = newValue }
+    }
+}
+
+// MARK: - MissingAnalysisNotice
+
+/// BR.7 (C10): shown once at launch when the stem separator couldn't load its weights.
+@MainActor
+enum MissingAnalysisNotice {
+    static func show() {
+        // Lands in the unified log, so Help › Report a Problem carries it too.
+        lfLogger.error("ANALYSIS_UNAVAILABLE: stem separator failed to load (ML weights missing or damaged)")
+        let alert = NSAlert()
+        alert.messageText = String(localized: "analysis_unavailable.title")
+        alert.informativeText = String(localized: "analysis_unavailable.body")
+        alert.runModal()
     }
 }

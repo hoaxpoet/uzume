@@ -46,6 +46,18 @@ extension VisualizerEngine {
         stemAnalyzer.reset()
     }
 
+    /// Fresh analysis instances for background preparation — never the live pipeline's
+    /// (BR.9 / audit C3, G3). Shared, every track landing behind playback pushed ~430 frames of
+    /// another song through the live AGC and ~1,300 through the live mood; neither has weights.
+    static func makePreparerAnalysis() -> (stemAnalyzer: StemAnalyzer, moodClassifier: MoodClassifier) {
+        (StemAnalyzer(sampleRate: StemSeparator.modelSampleRate), MoodClassifier())
+    }
+
+    /// BR.7 (audit C10): the stem separator could not load — its ML weights are missing or
+    /// corrupt. Preparation then marks every track partial and nothing is analysed; the app
+    /// says so once at launch instead of degrading silently.
+    var analysisUnavailable: Bool { stemSeparator == nil }
+
     /// Start the background stem separation timer at `stemSeparationPeriodSeconds`.
     func startStemPipeline() {
         guard stemSeparator != nil else {

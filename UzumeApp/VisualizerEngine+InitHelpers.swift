@@ -274,17 +274,15 @@ extension VisualizerEngine {
 
     /// Build a `SessionManager` wired to the engine's ML components.
     ///
-    /// Uses a static factory so it can be called during phase-1 init before
-    /// `self` is fully available. Shares `analyzer` and `classifier` instances
-    /// with the engine's live pipeline to avoid double-loading the ML weights.
+    /// A static factory, callable during phase-1 init. BR.9 (C3/G3): the preparer has its OWN
+    /// stem analyzer + mood classifier (`makePreparerAnalysis`); sharing the live ones corrupted
+    /// live AGC and mood.
     ///
     /// `NullStemSeparator` is substituted when the Open-Unmix weights are absent —
     /// ad-hoc mode never invokes the preparer, so it never throws.
     @MainActor
     static func makeSessionManager(
         sep: StemSeparator?,
-        analyzer: StemAnalyzer,
-        classifier: MoodClassifier?,
         device: MTLDevice,
         sessionRecorder: SessionRecorder? = nil,
         metadataFetcher: MetadataPreFetcher? = nil
@@ -306,12 +304,13 @@ extension VisualizerEngine {
             }
             return analyzer
         }()
+        let analysis = makePreparerAnalysis()
         let preparer = SessionPreparer(
             resolver: PreviewResolver(),
             downloader: PreviewDownloader(),
             stemSeparator: resolvedSep,
-            stemAnalyzer: analyzer,
-            moodClassifier: classifier ?? MoodClassifier(),
+            stemAnalyzer: analysis.stemAnalyzer,
+            moodClassifier: analysis.moodClassifier,
             beatGridAnalyzer: beatGridAnalyzer,
             familyAnalyzer: familyAnalyzer,
             metadataFetcher: metadataFetcher,

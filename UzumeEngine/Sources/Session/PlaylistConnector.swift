@@ -27,6 +27,14 @@ public enum PlaylistSource: Sendable {
     case spotifyScan(playlistName: String?)
 }
 
+// MARK: - AppleScriptErrorCode
+
+/// AppleScript error numbers Uzume acts on.
+public enum AppleScriptErrorCode {
+    /// "Not authorized to send Apple events" — the user denied Automation access.
+    public static let automationDenied = -1743
+}
+
 // MARK: - PlaylistConnectorError
 
 /// Errors surfaced by `PlaylistConnector` and `SpotifyWebAPIConnector`.
@@ -50,6 +58,9 @@ public enum PlaylistConnectorError: Error, Sendable, Equatable {
     case networkFailure(String)
     /// The API response could not be parsed.
     case parseFailure(String)
+    /// macOS denied Uzume Automation access to the music app (AppleScript −1743). BR.10 / C6:
+    /// it used to read as "no current playlist" and retry every 2 s forever.
+    case automationPermissionDenied
 }
 
 // MARK: - PlaylistConnecting
@@ -115,7 +126,7 @@ public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
     // MARK: - Dependencies
 
     /// Override in tests to return canned AppleScript output.
-    var appleScriptReader: (@Sendable (String) async -> String?)?
+    var appleScriptReader: (@Sendable (String) async throws -> String?)?
 
     private let spotifyConnector: any SpotifyWebAPIConnecting
 
@@ -181,7 +192,7 @@ public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
         end tell
         """
 
-        let output = await executeAppleScript(script)
+        let output = try await executeAppleScript(script)
         guard let output, !output.isEmpty else {
             logger.debug("Apple Music playlist: no tracks returned")
             return []
@@ -236,16 +247,21 @@ public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
         NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
     }
 
-    private func executeAppleScript(_ source: String) async -> String? {
+    /// Throws `.automationPermissionDenied` on −1743; every other AppleScript error → nil.
+    private func executeAppleScript(_ source: String) async throws -> String? {
         if let reader = appleScriptReader {
-            return await reader(source)
+            return try await reader(source)
         }
-        return await Task.detached(priority: .userInitiated) {
+        return try await Task.detached(priority: .userInitiated) {
             guard let script = NSAppleScript(source: source) else { return nil }
             var errorDict: NSDictionary?
             let result = script.executeAndReturnError(&errorDict)
             if let errorDict {
                 let code = errorDict[NSAppleScript.errorNumber] as? Int ?? 0
+                if code == AppleScriptErrorCode.automationDenied {
+                    logger.error("AppleScript: Automation access to Music denied (-1743)")
+                    throw PlaylistConnectorError.automationPermissionDenied
+                }
                 // -600 = app not running, -1728 = no current track — both expected.
                 if code != -600 && code != -1728 {
                     let msg = errorDict[NSAppleScript.errorMessage] as? String ?? "unknown"

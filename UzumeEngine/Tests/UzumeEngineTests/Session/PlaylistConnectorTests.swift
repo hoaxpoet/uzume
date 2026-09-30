@@ -86,6 +86,16 @@ struct PlaylistConnectorTests {
         #expect(tracks[2].title == "Time")
     }
 
+    /// BR.10 (C6): Automation denied surfaces as its own error, not an empty playlist.
+    @Test func appleMusicPlaylist_automationDenied_throwsPermissionDenied() async throws {
+        let connector = makeConnector()
+        connector.appleScriptReader = { _ in throw PlaylistConnectorError.automationPermissionDenied }
+        await #expect(throws: PlaylistConnectorError.automationPermissionDenied) {
+            _ = try await connector.connect(source: .appleMusicCurrentPlaylist)
+        }
+        #expect(AppleScriptErrorCode.automationDenied == -1743)
+    }
+
     @Test func appleMusicPlaylist_includesDuration() async throws {
         let connector = makeConnector()
         connector.appleScriptReader = { _ in

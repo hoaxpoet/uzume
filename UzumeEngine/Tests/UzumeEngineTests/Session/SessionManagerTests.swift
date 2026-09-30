@@ -231,11 +231,12 @@ struct SessionManagerTests {
 
     // MARK: - Degradation
 
-    @Test func preparationFailure_transitionsToReady_withPartialData() async throws {
+    @Test func preparationFailure_everyTrackFailed_holdsTheRecoveryScreen() async throws {
         let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
         let sep = try InstantStemSeparator(device: device)
 
-        // Two tracks, no previews → both fail individually; session still reaches .ready.
+        // Two tracks, no previews → both fail. BR.7 (F10 / C11): the session holds `.preparing`
+        // (the §9.3 recovery screen) instead of a "Ready" with nothing prepared.
         let manager = makeManager(
             connector: StubConnector(),
             resolver: NoPreviewResolver(),
@@ -245,7 +246,8 @@ struct SessionManagerTests {
         await manager.startSession(source: .appleMusicCurrentPlaylist)
         await waitForReady(manager)
 
-        #expect(manager.state == .ready)
+        #expect(manager.state == .preparing)
+        #expect(manager.progressiveReadinessLevel == .reactiveFallback)
         // Plan exists but cache is empty (all tracks failed to pre-analyze).
         #expect(manager.currentPlan != nil)
         #expect(manager.cache.count == 0)
@@ -263,15 +265,16 @@ struct SessionManagerTests {
         #expect(manager.currentPlan == nil)
     }
 
-    @Test func connectionFailure_transitionsToReady_withEmptyPlan() async throws {
+    @Test func connectionFailure_showsTheRecoveryScreen_withEmptyPlan() async throws {
         let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
         let sep = try InstantStemSeparator(device: device)
         let manager = makeManager(connector: FailingConnector(), separator: sep)
 
         await manager.startSession(source: .appleMusicCurrentPlaylist)
 
-        // Connection failed → ready with empty plan; engine falls back to reactive mode.
-        #expect(manager.state == .ready)
+        // BR.7 (F10): connection failed → `.preparing` with no tracks (the recovery screen:
+        // pick another playlist / start reactive mode), not "Ready".
+        #expect(manager.state == .preparing)
         #expect(manager.currentPlan?.tracks.isEmpty == true)
     }
 

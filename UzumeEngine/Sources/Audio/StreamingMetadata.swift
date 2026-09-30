@@ -35,6 +35,15 @@ public struct NowPlayingInfo: Sendable {
     }
 }
 
+// MARK: - NowPlayingQuery
+
+/// One poll's result (BR.10): a playing track, nothing playing, or Automation denied (−1743).
+public enum NowPlayingQuery: Sendable {
+    case playing(NowPlayingInfo)
+    case nothing
+    case automationDenied(MetadataSource)
+}
+
 // MARK: - AppleScript Bridge
 
 /// Queries running music apps via AppleScript for Now Playing info.
@@ -45,7 +54,7 @@ public struct NowPlayingInfo: Sendable {
 private enum AppleScriptBridge {
 
     /// Query Apple Music for the current track.
-    static func queryAppleMusic() -> NowPlayingInfo? {
+    static func queryAppleMusic() -> NowPlayingQuery {
         let script = """
         tell application "Music"
             if player state is playing then
@@ -61,7 +70,7 @@ private enum AppleScriptBridge {
     }
 
     /// Query Spotify for the current track.
-    static func querySpotify() -> NowPlayingInfo? {
+    static func querySpotify() -> NowPlayingQuery {
         let script = """
         tell application "Spotify"
             if player state is playing then
@@ -86,52 +95,51 @@ private enum AppleScriptBridge {
         _ source: String,
         appName: String,
         source metadataSource: MetadataSource
-    ) -> NowPlayingInfo? {
-        guard let script = NSAppleScript(source: source) else { return nil }
+    ) -> NowPlayingQuery {
+        guard let script = NSAppleScript(source: source) else { return .nothing }
 
         var error: NSDictionary?
         let result = script.executeAndReturnError(&error)
 
         if let error {
             let code = error[NSAppleScript.errorNumber] as? Int ?? 0
+            // BR.10 (E1): −1743 = Automation denied. Surfaced, not swallowed at .debug.
+            if code == -1743 { return .automationDenied(metadataSource) }
             // -600 = app not running, -1728 = no current track — both expected.
             if code != -600 && code != -1728 {
                 let message = error[NSAppleScript.errorMessage] as? String ?? "unknown"
                 logger.debug("AppleScript error for \(appName): \(message)")
             }
-            return nil
+            return .nothing
         }
 
-        guard let output = result.stringValue else { return nil }
+        guard let output = result.stringValue else { return .nothing }
         let parts = output.components(separatedBy: "||")
-        guard parts.count >= 4 else { return nil }
+        guard parts.count >= 4 else { return .nothing }
 
-        return NowPlayingInfo(
+        return .playing(NowPlayingInfo(
             title: parts[0].isEmpty ? nil : parts[0],
             artist: parts[1].isEmpty ? nil : parts[1],
             album: parts[2].isEmpty ? nil : parts[2],
             duration: Double(parts[3]),
             source: metadataSource
-        )
+        ))
     }
 
-    /// Query all supported music apps, returning the first hit.
-    static func queryNowPlaying() -> NowPlayingInfo? {
-        // Check Apple Music first (most common on macOS).
-        if isAppRunning("com.apple.Music") {
-            if let info = queryAppleMusic() {
-                return info
-            }
+    /// Query the allowed music apps, returning the first playing track. A denial is returned
+    /// when nothing was playing in an allowed app that answered (BR.10).
+    static func queryNowPlaying(allowed: Set<MetadataSource>) -> NowPlayingQuery {
+        var denied: NowPlayingQuery?
+        let apps = StreamingMetadata.appsToQuery(
+            allowed: allowed,
+            appleMusicRunning: isAppRunning("com.apple.Music"),
+            spotifyRunning: isAppRunning("com.spotify.client"))
+        for app in apps {
+            let result = app == .appleMusic ? queryAppleMusic() : querySpotify()
+            if case .playing = result { return result }
+            if case .automationDenied = result { denied = result }
         }
-
-        // Then Spotify.
-        if isAppRunning("com.spotify.client") {
-            if let info = querySpotify() {
-                return info
-            }
-        }
-
-        return nil
+        return denied ?? .nothing
     }
 }
 
@@ -165,6 +173,21 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
     /// Override this closure in tests to inject canned Now Playing info.
     /// Defaults to querying music apps via AppleScript.
     var nowPlayingReader: (@Sendable () async -> NowPlayingInfo?)?
+
+    /// Override in tests to inject a full poll result, denial included (BR.10). Wins over
+    /// `nowPlayingReader`.
+    var queryReader: (@Sendable () async -> NowPlayingQuery)?
+
+    /// Which apps to ask (BR.10 / E14). The session's own source; both for an ad-hoc session.
+    public var allowedSources: Set<MetadataSource> {
+        get { lock.withLock { _allowedSources } }
+        set { lock.withLock { _allowedSources = newValue } }
+    }
+    private var _allowedSources: Set<MetadataSource> = [.appleMusic, .spotify]
+
+    /// Fired once per `startObserving()` when macOS denies Automation for an allowed app (BR.10 / E1).
+    public var onAutomationDenied: ((_ source: MetadataSource) -> Void)?
+    private var deniedReported = false
 
     // MARK: - Init
 
@@ -211,6 +234,7 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
             _currentTrack = nil
             lastTrackIdentity = nil
             lastTrack = nil
+            deniedReported = false
         }
         logger.info("Stopped observing Now Playing metadata")
     }
@@ -220,15 +244,33 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
     /// A poll whose `generation` is stale (stop ran while `reader()` was
     /// suspended) discards its result instead of firing across the boundary.
     private func pollNowPlaying(generation gen: Int) async {
-        let info: NowPlayingInfo?
-        if let reader = nowPlayingReader {
-            info = await reader()
+        let query: NowPlayingQuery
+        if let reader = queryReader {
+            query = await reader()
+        } else if let reader = nowPlayingReader {
+            query = await reader().map { .playing($0) } ?? .nothing
         } else {
             // AppleScript is synchronous — run off the cooperative pool.
-            info = await Task.detached {
-                AppleScriptBridge.queryNowPlaying()
+            let allowed = allowedSources
+            query = await Task.detached {
+                AppleScriptBridge.queryNowPlaying(allowed: allowed)
             }.value
         }
+
+        if case .automationDenied(let source) = query {
+            let report = lock.withLock { () -> Bool in
+                guard generation == gen, !deniedReported else { return false }
+                deniedReported = true
+                return true
+            }
+            if report {
+                logger.error("Now Playing: Automation denied for \(source.rawValue) (-1743)")
+                onAutomationDenied?(source)
+            }
+        }
+
+        let info: NowPlayingInfo?
+        if case .playing(let playing) = query { info = playing } else { info = nil }
 
         guard let info else {
             // BR.11 (audit E2): nothing playing is a PAUSE (the scripts only answer while playing)
@@ -272,6 +314,19 @@ public final class StreamingMetadata: MetadataProviding, @unchecked Sendable {
             let event = TrackChangeEvent(previous: previous, current: track)
             onTrackChange?(event)
         }
+    }
+
+    // MARK: - Which apps to ask (BR.10 / E14)
+
+    /// Apple Music first (most common on macOS), then Spotify — each only if the session uses it
+    /// AND it is running (asking a closed app launches it; asking an unused one prompts for it).
+    static func appsToQuery(
+        allowed: Set<MetadataSource>, appleMusicRunning: Bool, spotifyRunning: Bool
+    ) -> [MetadataSource] {
+        var apps: [MetadataSource] = []
+        if allowed.contains(.appleMusic), appleMusicRunning { apps.append(.appleMusic) }
+        if allowed.contains(.spotify), spotifyRunning { apps.append(.spotify) }
+        return apps
     }
 
     // MARK: - Identity

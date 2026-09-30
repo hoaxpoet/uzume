@@ -176,6 +176,36 @@ The app has run on one machine (macOS 26, M2 Pro, a 1080p display at 1×).
     - Apply the conservative cap (about 1440p-equivalent, compositor-upscaled) and exclude Alfvén on tier-1 Macs, which can't be measured without an M1.
     - Use the M4 and 4K numbers to decide whether a cap is also needed above tier 1.
     - The M4 is tier 2 by the name match, so it says nothing about base-M1 frame rates. Scale from it with care.
+- **Measured so far (BR.6b, 2026-09-29).** Configuration: **Release** (`swift test -c release --enable-testable-imports`, `PresetFrameBudgetTests.presetFrameCost`, `FRAME_BUDGET_RES=…`). Hardware: **Mac mini M2 Pro (tier 1 by the name match), macOS 26.5.1**. Harness ms per frame (minimum of the timing passes, 24 timed frames after 6 settle frames, with readback), **not** live `frame_gpu_ms`. Bold is over the 16.6 ms 60 fps budget. The harness does not cover Aurora Veil, Ferrofluid Ocean, Membrane, Murmuration or Nimbus (Alfvén is not in its list either).
+
+| Scene | 1920×1080 | 2560×1440 (tier-1 cap) | 3840×2160 |
+|---|---|---|---|
+| Volumetric Lithograph | 12.23 | **20.09** | **42.64** |
+| Cytokinesis | 7.75 | 13.20 | **29.16** |
+| Gossamer | 7.95 | 12.80 | **26.70** |
+| Fireflies | 7.82 | 12.58 | **26.29** |
+| Lumen Mosaic | 7.02 | 11.93 | **24.61** |
+| Skein | 6.36 | 9.72 | **19.63** |
+| Dragon Bloom | 5.75 | 9.12 | **19.31** |
+| Filigree | 5.77 | 8.96 | **18.27** |
+| Cymatic Resonance | 5.45 | 8.55 | **17.75** |
+| Waveform | 5.86 | 8.82 | 16.59 |
+| Nacre | 5.43 | 8.67 | 16.42 |
+| Ricercar | 5.33 | 8.38 | 15.77 |
+| Nebula | 5.35 | 7.94 | 15.64 |
+| Fata Morgana | 5.29 | 7.70 | 14.34 |
+| Witchlight | 4.63 | 6.99 | 13.67 |
+| Stave | 4.23 | 6.64 | 12.92 |
+| Floret | 4.28 | 6.43 | 12.82 |
+| Glaze | 4.46 | 6.42 | 11.98 |
+| Meniscus | 4.01 | 6.15 | 11.63 |
+| Spectral Cartograph | 3.87 | 5.18 | 8.66 |
+| Kagura | 2.59 | 3.57 | 6.81 |
+| Fractal Tree | 3.32 | 4.30 | 6.50 |
+| Mitosis | 2.54 | 3.42 | 5.71 |
+
+  - **Reading.** At native 4K, 13 of 23 measured scenes miss 60 fps on this GPU. At the tier-1 cap (2560×1440) only Volumetric Lithograph does, and it is already excluded by its own complexity cost (decision 2). So the cap does what decision 4 intended on this class of GPU.
+  - **Still owed (Matt's sessions, decision 4):** the M4 MacBook Pro's Retina display on battery with Low Power Mode off and on, and the 4K display, reading `RENDER_TARGET` and `frame_gpu_ms`; `FRAME_BUDGET_RES=2880x1864` and `3840x2160` on the M4; the cold first launch after a fresh install. Those numbers decide whether any cap applies above tier 1.
 - **Cold first launch (D6).** Measured about 4.2 s of main-thread shader compilation on the installed 0.9.0 build before any window appears, plus 5.6 s unattributed before the first log. That happens again after every app or OS update, and is likely 8–10 s on an M1. If the M1 run confirms it, show the window first and compile off the main thread (or ship a precompiled library).
 
 ---
@@ -406,8 +436,9 @@ These are the live checks owed by already-landed fixes (from lane J), grouped so
    - Pause Spotify for 30 s or more, then end and restart: the tap race, and E2.
    - Move the window between displays after pressing play in Spotify: F4 / D7.
    - Judge stem timing at 4K: BUG-106.
+   - Start a long Spotify playlist early (Start now) and watch the first minutes while preparation continues behind playback: no energy / stem twitch each time a song finishes preparing (BR.9).
    - On the M4 MacBook Pro on battery, leave a session untouched past the display-off interval and run `pmset -g assertions` mid-session: BUG-162 (BR.2).
-3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM. Then force-quit Uzume and reopen it: it offers a problem report; create one and check the zip opens in Finder and the GitHub issue page opens (BUG-166, BR.5).
+3. **Fresh-account session:** install the DMG, grant permissions, stream, install an update build, stream again: BUG-055, BUG-157 (Documents prompt gone), DIST-LIM. On the first Spotify session, click **Don't Allow** on "control Spotify": a toast explains it and the scenes still change with the music; on Apple Music, Don't Allow shows the permission screen (BUG-172, BR.10). Then force-quit Uzume and reopen it: it offers a problem report; create one and check the zip opens in Finder and the GitHub issue page opens (BUG-166, BR.5).
 
 ---
 

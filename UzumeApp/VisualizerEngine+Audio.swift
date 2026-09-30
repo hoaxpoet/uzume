@@ -23,6 +23,8 @@ extension VisualizerEngine {
         fftProcessor fft: FFTProcessor
     ) -> AudioInputRouter {
         let metadata = StreamingMetadata()
+        streamingMetadata = metadata
+        metadata.onAutomationDenied = { [weak self] source in self?.handleNowPlayingDenied(source) }
         let audioRouter = AudioInputRouter(metadata: metadata)
         // CLEAN.3.5: close any prior handle before reopening so a re-setup can't leak
         // an FD (the file is truncated + reopened each call). Also closed in deinit.
@@ -72,10 +74,28 @@ extension VisualizerEngine {
         return audioRouter
     }
 
+    // MARK: - Now Playing denied (BR.10 / E1)
+
+    /// macOS denied Automation for the streaming app: no song change will ever arrive. Run the
+    /// session reactive (not frozen on its first scene), drop the track-1 grid / stems the plan
+    /// pre-fired, and say why (the toast is condition-bound, so it shows once).
+    func handleNowPlayingDenied(_ source: MetadataSource) {
+        orchestratorLock.withLock { nowPlayingUnavailable = true }
+        let appName = source == .appleMusic ? "Music" : "Spotify"
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.resetStemPipeline(for: nil, caller: .other)
+            self.nowPlayingDeniedApp = appName
+        }
+    }
+
     // MARK: - Routing Helpers
 
-    /// Open the analysis diagnostic log file in the user's home directory.
-    static func openDiagnosticLog() -> FileHandle? {
+    /// Open the analysis diagnostic log file in the user's home directory. Nil (no file) in the
+    /// public build (BR.4 / H11): it wrote into every tester's home folder, and `FileHandle.write`
+    /// raises an uncatchable exception on a full disk.
+    static func openDiagnosticLog(flavor: BuildFlavor = .current) -> FileHandle? {
+        guard flavor.showsDeveloperDiagnostics else { return nil }
         let path = NSHomeDirectory() + "/uzume_diag.log"
         FileManager.default.createFile(atPath: path, contents: nil)
         return FileHandle(forWritingAtPath: path)

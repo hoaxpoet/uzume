@@ -229,8 +229,9 @@ public final class AudioInputRouter: @unchecked Sendable {
                 "[LF.1] Router started: local-file playback (\(url.lastPathComponent))")
         }
 
-        // Wire metadata observation if a provider is configured.
-        if let provider = metadataProvider {
+        // Metadata for capture modes only: polling Music / Spotify in a local-file session raised
+        // Automation prompts and let a streaming app override the local track (BR.10 / E12).
+        if let provider = metadataProvider, mode.isCapture {
             provider.onTrackChange = { [weak self] event in
                 self?.onTrackChange?(event)
             }
