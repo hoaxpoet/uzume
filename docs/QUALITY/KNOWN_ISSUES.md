@@ -71,7 +71,6 @@ passes, the entry moves to §Resolved (recent).
 | BUG-148 | P2 | orchestrator | Scene choice now follows measured energy instead of the mood model (D-259, NRG.1–4). | Session 1: do the scenes suit the songs? |
 | BUG-133 | P2 | orchestrator | The same few scenes cycled. The entry's measurement predates NRG.3. | Session 1: count distinct scenes on the current scorer, plus the felt check. |
 | BUG-144 | P2 | dsp.mir | A song's stored mood was its fade-out. Scoring no longer reads mood (NRG.3); only Kagura does. | Session 1, or close on Matt's call. |
-| OBS-DS4-1 | P3 | app.ui | The detailed preparation view looked uniform. BPM and mood are fixed; only key (BUG-149) remains. | Session 1: read the preparation view. |
 | BUG-139 | P2 | audio.capture | Tap teardown could deadlock against its own IO callback. | Session 2: start and stop twice, then three to five output swaps. |
 | BUG-070 | P2 | audio.capture | A failed tap reinstall left the capture state untruthful. The residual race (ending a session during silence) is fixed too: BR.12 G2, TSan-clean. | Session 2: output swaps; pause 30 s, then end and restart. |
 | BUG-173 | P1 | audio / session | Pausing Spotify or Music for more than ~2 s counted as a new song and reset the scene (BR.11). | Session 2: pause 30 s or more, then resume. |
@@ -1000,33 +999,6 @@ it.
 **Artifacts:** `~/Documents/uzume_sessions/2026-09-03T20-04-45Z/` (`session.log`, `features.csv`, `stems.csv`, `raw_tap.wav`, `chain_health.json`). Ferrofluid Ocean was the first real scene of the session (`preset → Ferrofluid Ocean` at 20:06:05Z, on "Billie Jean"). The `DRAWABLE_LIFECYCLE` heartbeats through its run report every frame presented, `failures=0`, `unpresented=0` — so the screen was black because the scene rendered black, not because frames stopped. The tap saw a near-silent window right after the scene began (RMS 0.145 at +5 s, then 0.0008–0.0012 for +6 s to +8 s, back to 0.032 at +9 s; `chain_health.json` verdict `degraded`, reason `tap_reinstalls(2)`).
 
 **What this is and is not:** an observation. Ferrofluid Ocean is driven from continuous energy, so a black frame during three seconds of near-silence could be the scene's honest response to no energy, a wrong-phase cold start, or a genuine render defect; nothing here distinguishes them. Not chased in DS.6 (chrome only). Next step, if it recurs: the moment it happened, so `features.csv` can be read at that row against `raw_tap.wav`, and a `PresetSessionReplay` of the capture through Ferrofluid Ocean.
-
-### OBS-DS4-1 — The detailed preparation view shows a suspiciously uniform readout on a real playlist (2026-09-02, DS.4 live run)
-
-**Status: observed, recorded not fixed.** Found during DS.4's task 10 timing runs. **P3.**
-
-**What was seen.** On Tunes Club TC 29 (40 tracks — ambient, techno, downtempo), the detailed
-view's first ten heard tracks read **132–138 BPM** and **nine of ten read "bright"** (the happy
-quadrant). A genuine spread across that playlist would show it. Evidence:
-`docs/reviews/DS.4/after/live-mid-detailed.png`, `live-early-detailed.png`.
-
-**What it is not.** Not a DS.4 rendering defect: `PreparationTrackRow` prints `TrackProfile.bpm`
-and `TrackProfile.mood.quadrant` verbatim, and those come from `SessionPreparer+Analysis` — the
-same 30 s-preview MIR the Orchestrator has always planned from. DS.4 made it legible for the first
-time; that is the whole finding.
-
-**No root cause asserted** (BUG-061 rule). Two candidates worth *measuring*, not assuming: the mood
-scaler's valence behaviour after DYN.6.2 (BUG-066 records the flux residual; DYN.6.2 narrowed
-valence spread), and the preview-window tempo instability BUG-076 documents. A third possibility is
-that the playlist really is this uniform at the preview excerpt — which is why this is an
-observation, not a bug.
-
-**Why it matters for DS.4.** The detailed view's proposition is *"what Uzume heard."* If what it
-heard is mostly one word and one tempo, the readout stops being interesting, and the mysterious
-view's `PreparationCharacter` (mood spread, rate) has less to work with than the design assumed.
-Worth its own increment before the detailed view reaches beta listeners.
-
----
 
 ### A11Y-001 — The local-source tiles do not expose their own accessibility identifiers (2026-09-01, DS.2 M7)
 
@@ -2271,6 +2243,35 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 
 ## Resolved (recent)
 
+### OBS-DS4-1 — The detailed preparation view shows a suspiciously uniform readout on a real playlist (2026-09-02, DS.4 live run)
+
+**Resolved 2026-09-30 — Matt's live check (listening session 1, build 9): "As expected."** BPM and energy vary song to song; key reads mostly F♯ minor, which is BUG-149 (open, display-only).
+
+**Status: observed, recorded not fixed.** Found during DS.4's task 10 timing runs. **P3.**
+
+**What was seen.** On Tunes Club TC 29 (40 tracks — ambient, techno, downtempo), the detailed
+view's first ten heard tracks read **132–138 BPM** and **nine of ten read "bright"** (the happy
+quadrant). A genuine spread across that playlist would show it. Evidence:
+`docs/reviews/DS.4/after/live-mid-detailed.png`, `live-early-detailed.png`.
+
+**What it is not.** Not a DS.4 rendering defect: `PreparationTrackRow` prints `TrackProfile.bpm`
+and `TrackProfile.mood.quadrant` verbatim, and those come from `SessionPreparer+Analysis` — the
+same 30 s-preview MIR the Orchestrator has always planned from. DS.4 made it legible for the first
+time; that is the whole finding.
+
+**No root cause asserted** (BUG-061 rule). Two candidates worth *measuring*, not assuming: the mood
+scaler's valence behaviour after DYN.6.2 (BUG-066 records the flux residual; DYN.6.2 narrowed
+valence spread), and the preview-window tempo instability BUG-076 documents. A third possibility is
+that the playlist really is this uniform at the preview excerpt — which is why this is an
+observation, not a bug.
+
+**Why it matters for DS.4.** The detailed view's proposition is *"what Uzume heard."* If what it
+heard is mostly one word and one tempo, the readout stops being interesting, and the mysterious
+view's `PreparationCharacter` (mood spread, rate) has less to work with than the design assumed.
+Worth its own increment before the detailed view reaches beta listeners.
+
+---
+
 ### BUG-157 — the StemSeparator concurrency test waited on a thread pool the suite keeps busy (2026-09-29)
 
 **Severity:** P3 · **Domain:** `test-infra` (UzumeEngineTests, `ml.stem`) · **Failure class:** `concurrency` (a wall-clock wait on pooled work) · **Status:** Fixed (BUG157.1, `f0078ebb`) · **Related:** BUG-156 (same mechanism; its KNOWN_ISSUES entry named this test as a sibling), BUG-031 (what the test guards)
@@ -2617,26 +2618,4 @@ The 96 kHz Superstition file sits highest (143) because its 10.7 ms frames reach
 4. ✅ Beta playlist on the final code: the nine 44.1 kHz songs are unchanged to three decimals; the BPM gate still passes; the BUG-144 ρ **rises 0.855 → 0.927** because Superstition now matches the production chain (0.494 vs 0.51).
 
 ---
-
-### BUG-147 — a planner seed does not reproduce its plan across processes (2026-09-25)
-
-**Severity:** P3 · **Domain:** `orchestrator` · **Failure class:** `algorithm` · **Status:** Fixed (BUG147.1, `05f5331b`), merged #286 (`c6369035`) · **Numbering:** filed as BUG-146, renumbered to 147 because #285 takes 144–146. The older commits `fae0b0b7` / `63a8aac4` / `1908a561` that say BUG147.x are a different defect, now BUG-143, so `git log --grep BUG147` returns both · **Related:** D-047 (seeded Regenerate), BUG-133 (near-tie sampling), BUG-144 (the measurement that surfaced it)
-
-**Expected:** `plan(tracks:catalog:deviceTier:seed:)` with the same inputs and the same nonzero seed returns the same plan in any process, as its doc comment states.
-**Actual:** `seededNoise` XORed `presetID.hashValue` into its LCG. Swift seeds `String.hashValue` randomly per process, so the ±0.02 noise, and with it the plan, changed on every launch. Found while measuring BUG-144: an env-gated planner test on the 10 beta-playlist profiles (tier2, catalog sorted by name), run in two `swift test` processes, gave different plans for seeds 1–9 (e.g. 85 vs 89 of 100 openers changed against a fixed arm). Seed 0 was byte-identical, since it never calls the noise.
-
-**Reproduction.** `NearTieSamplingTests.pinnedAcrossProcesses` plans seeds 1–12 over three tracks and compares with a fingerprint pinned in source. On the unfixed code two consecutive `swift test` runs printed two different fingerprints (tracks 0, 4, 5, 9, 11 and 12 differed), so it fails every run.
-
-**Near-tie sampling (BUG-133).** `nearTiePick` is clean on its own: it hashes `(seed, trackIndex, clock)` and orders contenders by sorted id, with no `hashValue`. It inherited the defect only because band membership is computed from the noisy totals. A second, smaller per-process source was in the scorer: `stemAffinitySubScore` summed the declared stems in `Set` order, and float addition is order-sensitive, so the total could differ in the last bit between processes (seed 0 included). Not observed to change a pick; fixed with the same change.
-
-**Production impact.** None visible. The app draws `UInt64.random` for every `buildPlan()` and every Regenerate (`VisualizerEngine+Orchestrator.swift`), and `extendPlan()` reuses the seed within the same process, which always worked. So Regenerate still gives a new alternative every time you press it; this fix does not make it repeat. What was broken: the seed logged at `plan regenerated (seed=…)` could not reproduce that plan offline, and any seeded measurement across runs was noise. The fix changes every nonzero-seed plan once, which matters only to tests or tools that pinned one (none did).
-
-**Fix.** The preset id is hashed with FNV-1a over its UTF-8 bytes. The scorer sums sorted stem names.
-
-**Verification.**
-1. ✅ Automated: `pinnedAcrossProcesses` gave different fingerprints in two processes before the fix and the same one in three processes after it. Full engine suite green (2040 tests); SwiftLint strict clean.
-2. Manual: none required (no felt surface; Regenerate's behaviour is unchanged for users).
-
----
-
 
