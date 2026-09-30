@@ -255,10 +255,10 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.14** | 2 | ✅ merged (#330) — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
 | **BR.15** | 2 | ✅ merged (#333) — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
 | **BR.16** | 2 | ✅ merged (#334) | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
-| **BR.17** | 2 | ✅ PR open — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
-| **BR.18** | 2 | 🔨 PR open — K6c done; K6a kept (Matt, option A); ⏸ Matt's streaming review of the top ten | Streaming fidelity for the newest scenes (K6) |
+| **BR.17** | 2 | ✅ merged (#335) — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
+| **BR.18** | 2 | ✅ merged (#339) — K6c done; K6a kept (Matt, option A); ⏸ Matt's streaming review of the top ten | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ✅ merged (#338) — BUG-152 spot-check (session 2) | The right song, reliably (BUG-152, C7, C8/A10) |
-| **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
+| **BR.20** | 2 | ✅ PR open — BUG-176 felt check (session 1) | Flash check v2: regional + red (I8) |
 | **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
@@ -1768,6 +1768,13 @@ of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase l
 **Delivered.** K6c: `RenderPipeline.warmedUpLiveStems` + `liveStemWarmup01` — the eight live stem deviation routes (all four stems' `EnergyRel` / `EnergyDev`) ramp in quadratically over each track's first 10 s when no local-file series is installed; the aurora driver skips its own gate on those frames. K6a: **no change**, per Matt (2026-09-30, option A of three: keep the preview level / live energy measure / treat as unknown).
 **Done-when:** ✅ the warm-up caps the track-start overswing on the real BUG-041 series (red arm without it); ✅ only the stem routes are gated, and never on the local-file series (tests); ✅ full engine suite green (2160 + 216). ⏸ **Stop and report:** Matt's streaming review of the top ten scenes decides whether it lands.
 **Not done:** a live energy level for streaming (declined for the beta).
+
+### Increment BR.20 — flash check v2 ✅ (2026-09-30)
+
+**Delivered.** Audit I8: regional (13 regions, each a ninth of the frame) and saturated-red flash analysis in `FlashAnalyzer`, negative-controlled, asserted by both flash harnesses for every measured scene. The roster run found two scenes over the limit → **BUG-176**, fixed on Matt's calls: Membrane's strike contrast 0.8 (A2, approved from a before/after), Waveform's bars held — instant rise, 0.6 s fall (A′, `WaveformState`).
+**Done-when:** ✅ regional and red detection, each negative-controlled; ✅ run across the roster, results recorded (below); ✅ both harness suites green (38 tests).
+**Roster (worst-case 270 BPM train; peak flashes/s, limit 3):** regional — Fata Morgana 2.5, Dragon Bloom 2.0, Floret 2.0, Fireflies 1.5, Nacre 1.5, Glaze 1.0, Cytokinesis 0.5, Ferrofluid Ocean 0.5, **Membrane 4.0 → 3.0**, **Waveform 5.0 → 0.0**, every other scene 0.0 (Alfvén, Aurora Veil, Cymatic Resonance, Filigree, Fractal Tree, Gossamer, Kagura ×3, Lumen Mosaic, Meniscus, Mitosis, Murmuration, Nebula, Nimbus, Ricercar, Skein, Stave, Volumetric Lithograph, Witchlight). Red — Fata Morgana 3.0 (at the limit), Dragon Bloom 1.0, Floret 0.5, all others 0.0.
+**Not done:** feedback accumulation in the single-pass gate (unchanged, documented limit); a per-scene tempo-aware worst case (the gate uses 270 BPM for all).
 
 ### Increment BR.19 — the right song, reliably ✅ (2026-09-30)
 

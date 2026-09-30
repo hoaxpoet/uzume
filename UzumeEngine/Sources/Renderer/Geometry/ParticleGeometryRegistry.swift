@@ -61,6 +61,7 @@ public enum ParticleGeometryRegistry {
 public enum StatefulRuntimeRegistry {
     public static let knownPresetNames: Set<String> = [
         "Gossamer",
+        "Waveform",   // BR.20: held bars at slot 6 (WaveformState)
         "Skein",
         "Aurora Veil",
         "Nimbus",

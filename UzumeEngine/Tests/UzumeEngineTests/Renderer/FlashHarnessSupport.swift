@@ -169,6 +169,20 @@ enum FlashHarnessSupport {
         return out
     }
 
+    // MARK: - Flash sample (BR.20)
+
+    /// One frame's flash evidence: the whole-frame mean relative luminance (v1) and the per-region
+    /// linear RGB means the regional and saturated-red checks read (v2, `FlashAnalyzer.regionRects`).
+    struct FlashSample {
+        let luma: Double
+        let regions: [FlashRegionSample]
+    }
+
+    static func sample(_ bgra: [UInt8], width: Int, height: Int) -> FlashSample {
+        FlashSample(luma: meanRelativeLuminance(bgra),
+                    regions: FlashAnalyzer.regions(bgra: bgra, width: width, height: height))
+    }
+
     // MARK: - WCAG relative luminance
 
     /// Mean WCAG relative luminance (linear-light, Rec. 709) of a BGRA8 buffer.
@@ -209,7 +223,8 @@ enum FlashHarnessSupport {
         preset.rayMarchPipelineState.map { $0 === state } ?? false
     }
 
-    static func assertFlashSafe(name: String, luma: [Double]) {
+    static func assertFlashSafe(name: String, samples: [FlashSample]) {
+        let luma = samples.map(\.luma)
         let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: fps)
         let lo = luma.min() ?? 0, hi = luma.max() ?? 0
         let range = hi - lo
@@ -236,5 +251,21 @@ enum FlashHarnessSupport {
             \(String(format: "%.1f", accentHz)) Hz worst-case beat train — exceeds Harding/WCAG 2.3.1. \
             P1 safety finding: bring to Matt, do NOT tune away (the certified motion was hand-built safe, D-157/D-158).
             """)
+        assertRegionalAndRedSafe(name: name, samples: samples)
+    }
+
+    /// BR.20 / I8: the same rule per ninth of the frame, and the saturated-red channel.
+    static func assertRegionalAndRedSafe(name: String, samples: [FlashSample]) {
+        let regions = samples.map(\.regions)
+        let regional = FlashAnalyzer.analyzeRegional(regions, fps: fps)
+        let red = FlashAnalyzer.analyzeRed(regions, fps: fps)
+        print(String(
+            format: "[flash-safety v2] %@: regional peak %.2f flashes/s — %@ | red peak %.2f flashes/s — %@",
+            name, regional.peakFlashesPerSecond, regional.isSafe ? "SAFE" : "UNSAFE",
+            red.peakFlashesPerSecond, red.isSafe ? "SAFE" : "UNSAFE"))
+        #expect(regional.isSafe,
+                "'\(name)' flashes \(regional.peakFlashesPerSecond)/s in one ninth of the frame (limit 3) — P1, bring to Matt")
+        #expect(red.isSafe,
+                "'\(name)' makes \(red.peakFlashesPerSecond) saturated-red flashes/s (limit 3) — P1, bring to Matt")
     }
 }

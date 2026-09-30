@@ -1360,6 +1360,11 @@ struct MultiPassRenderHarness {
         if presetName == "Nebula" && nebula == nil {
             throw HarnessError.setupFailed("NebulaState allocation")
         }
+        // BR.20 — Waveform's held bars, ticked from the same spectrum, exactly as production does.
+        let waveform: WaveformState? = presetName == "Waveform" ? WaveformState(device: ctx.device) : nil
+        if presetName == "Waveform" && waveform == nil {
+            throw HarnessError.setupFailed("WaveformState allocation")
+        }
 
         let history = SpectralHistoryBuffer(device: ctx.device)
         // The real generated textures, not placeholders — see the note above.
@@ -1379,6 +1384,7 @@ struct MultiPassRenderHarness {
             // After the spectrum is in place, never before — the peak-hold must see THIS
             // frame's bins.
             nebula?.tick(deltaTime: 1.0 / 60.0, magnitudes: fftPtr, binCount: 512)
+            waveform?.tick(deltaTime: 1.0 / 60.0, magnitudes: fftPtr, binCount: 512)
             var features = drive[frame]
             var stem = stems[frame]
             enc.setRenderPipelineState(preset.pipelineState)
@@ -1388,6 +1394,7 @@ struct MultiPassRenderHarness {
             enc.setFragmentBytes(&stem, length: MemoryLayout<StemFeatures>.size, index: 3)
             enc.setFragmentBuffer(history.gpuBuffer, offset: 0, index: 5)
             if let nebula { enc.setFragmentBuffer(nebula.bandBuffer, offset: 0, index: 6) }
+            if let waveform { enc.setFragmentBuffer(waveform.barBuffer, offset: 0, index: 6) }
             textures.bindTextures(to: enc)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             enc.endEncoding()

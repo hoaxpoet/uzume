@@ -176,6 +176,7 @@ extension VisualizerEngine {
         pipeline.setMVWarpCanvasGround(nil)   // Skein.5.3b: drop the per-track ground override (only Skein sets it)
         gossamerState = nil
         nebulaState = nil
+        waveformState = nil
         nimbusState = nil
         skeinState = nil
         lumenPatternEngine = nil
@@ -574,6 +575,7 @@ extension VisualizerEngine {
         switch desc.name {
         case "Gossamer":    bindGossamerRuntime(desc)
         case "Nebula":      bindNebulaRuntime(desc)
+        case "Waveform":    bindWaveformRuntime(desc)
         case "Skein":       bindSkeinRuntime(desc)
         case "Nimbus":      bindNimbusRuntime(desc)
         case "Lumen Mosaic": bindLumenMosaicRuntime(desc)
@@ -760,6 +762,23 @@ extension VisualizerEngine {
             state.tick(deltaTime: features.deltaTime,
                        magnitudes: base,
                        binCount: FFTProcessor.binCount)
+        }
+    }
+
+    private func bindWaveformRuntime(_ desc: PresetDescriptor) {
+        // BR.20 / I8 — Waveform's bars, held (instant rise, ~0.15 s fall) so a kick cannot flash
+        // a patch of screen on and off within a beat. The Nebula pattern: the tick captures the
+        // FFT processor for the spectrum.
+        guard let state = WaveformState(device: context.device) else {
+            logger.error("WaveformState: failed to allocate bar buffer for preset '\(desc.name)'")
+            return
+        }
+        waveformState = state
+        pipeline.setDirectPresetFragmentBuffer(state.barBuffer)
+        let fft = fftProcessor
+        pipeline.setMeshPresetTick { [weak state] features, _ in
+            guard let state, let base = fft.magnitudeBuffer.pointer.baseAddress else { return }
+            state.tick(deltaTime: features.deltaTime, magnitudes: base, binCount: FFTProcessor.binCount)
         }
     }
 
