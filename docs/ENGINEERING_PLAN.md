@@ -1685,6 +1685,66 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment PROMO.1 — the LinkedIn launch cut from the REC.2 takes ✅ (2026-09-30)
+
+**Delivered.** `tools/promo/cut_promo.py` + `edit.json` rebuild
+`~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4` in one command: 32.167 s, 1080×1080, 30 fps
+CFR, H.264 High CRF 16 (7.2 Mbps), AAC-LC 48 kHz 256 kbps, true peak −1.1 dBTP. Matt's order, hard cuts on
+offline bars: Kagura 0–8.71, Ferrofluid Ocean –14.56, Cymatic Resonance –20.39, Fractal Tree –26.28, Fireflies
+–32.16. End tag "Uzume / uzume.io" from 30.21, picture to black over the last 0.5 s, audio out over 1.0 s.
+**Kagura is retimed, not live (Matt, 2026-09-30).** In the first cut Kagura only swayed over 0–8.71 ("warm-up
+exercises … not synced"). Kagura makes no dance pick before 16.47 s of this song. The engine's beat grid for the
+quiet intro is uneven (half-beats at 1.9–2.6 s, a missed beat near 5 s; 16-beat interval CV > 0.08 until ≈ 13 s),
+so `KaguraSafetyNet` holds the rest sway until it has 8 steady beats. A reshoot gives the same result. Matt kept
+Kagura as the opener: `source_offset_s` 23.27 moves its twist (engine bar 24.22, `KAGURA_PICK` beat 51) onto the
+intro's first audible bar at 0.95, and its next engine bars land exactly on 4.85 and 6.80. That gives the twist at
+0.95–4.85 and the cabbage patch at 4.85–8.71, which also cancels the engine's ≈ 0.09 s early lead there. The dance
+keeps the louder section's arm reach. Frame 0 now shows Kagura, not black. **Fractal Tree is zoomed out**
+(`crop_width_px` 2240, offset −36): its grown crown (source x 254–2234) is wider than a 1440 square, so the slice is
+scaled to 1080 wide and padded with the scene's own black (pad Y = 16 = background). **Open lead:** live, Kagura
+cannot dance through an intro whose beat grid is uneven. That is beat-sync territory, not filed. Also written: `contact_sheet.png`, `cover_1..3.png`. `--self-test` checks the frame rule on a
+synthetic map with a drop and a cut between frames; it fails with the pre-fix `[from, to)` rule.
+**Matt's calls (2026-09-30), from stop conditions in the prompt.** (1) **Offline bars, not the engine's
+downbeats:** the engine ran 23–123 ms early, and a low-band onset check of the song put the kick on the offline
+bars (8.700, 26.290, 30.230 s). The engine counts 3 bars between consecutive cuts, all `beat_in_bar` 1; both sets
+are recorded in `edit.json`. (2) **Black where no take covers the song:** the takes start at ≈ 0.51–0.57 s (REC.2), so frames the chosen
+take can't cover are black. With Kagura retimed, none are. (3) **End tag
+by CoreText:** Homebrew's ffmpeg 8.1 / 9.0.2 is built without freetype, so there is no `drawtext`; `render_text.swift`
+draws a PNG that ffmpeg overlays. The face is **Alumni Sans SemiBold** (uzume-site `--font-display`, BRAND.md
+wordmark), not UX_SPEC's Clash Display: the site wins.
+**Findings.** The takes are 2560×1440, not 1920×1080, so each frame is a full-height 1440² crop scaled to 1080;
+all crop offsets 0. The song's true peak was +0.3 dBTP; one −1.4 dB step (0.1 dB margin) took it to −1.1.
+CRF 16–18 gave 7.0 / 5.9 / 5.0 Mbps, all under the ≈ 12 Mbps target, so CRF 16 (the nearest) was kept.
+**Done-when:** ✅ every verification command; ✅ duration 32.167 vs end 32.16 (+6.7 ms); ✅ A/V within one frame;
+✅ each segment's first frame within ½ frame of its cut (−13.3 … +10.0 ms); ✅ last frame Y = 16 (black); ✅ tag
+legible at 360 px.
+
+### Increment REC.2 — pinned-scene capture for promo footage ✅ (2026-09-30)
+
+**Delivered.** `UZUME_PIN_SCENE=<scene id>` (RUNBOOK §Diagnostic Session Captures): `engageScenePin()` engages
+`diagnosticPresetLocked` before audio starts, and `applyFirstScene` applies the pin through `applyPresetByID` in the
+same main-thread step, on both first-scene sites (`handleLocalFileReady`, `startAudio`). An unknown id logs the valid
+scenes and starts no session; the launch `.task` checks it before preparation begins. The reactive (ad-hoc) apply now
+honours the same hold. It had ignored it, so the `L` key never held a system-audio session without a plan. Tests:
+`OrchestratorWiringRegressionTests.test_scenePin_resolution` (pinned / unknown / unset) and `test_scenePin_wiring`.
+**Capture.** Five takes of `track.mp3` (Sherman's March to the Sea), Release build, fullscreen on the LG. Each
+`session.log` has exactly one `preset →` (its pinned scene), capture dropped 0 and render 59.79–59.93 fps:
+`15-45-51Z` Kagura, `15-48-37Z` Ferrofluid Ocean, `15-49-26Z` Cymatic Resonance, `15-50-14Z` Fractal Tree,
+`15-51-02Z` Fireflies. The trimmed H.264 mp4s, frame maps and `ALIGNMENT.md` are in
+`~/Documents/uzume_promo/linkedin-2026-10/`. The first Kagura run (`15-43-59Z`) finished its countdown before the
+window went fullscreen and relocked mid-take; it is kept as a record, not used.
+**Done-when:** ✅ pin applies the named scene first and sets the hold; ✅ unknown applies nothing and logs; ✅ unset
+unchanged; ✅ one scene per take, no switches; ✅ five mp4s + maps, one map row per frame. ⚠ **Clip start moved:**
+capture begins after the writer's 30 stable frames (REC.1, not changed), so no take has track time 0–0.51 s. Matt
+chose to start each clip at its first real frame (≈ 0.51–0.57 s → 34.000 s), not to hold a frame or change REC.1.
+**Measurement learnings (durable).** (1) Fullscreen on the LG 4K ("looks like" 1920×1080) the drawable is
+**2560×1440**, not 1080p: REC.1's "1920×1080" was the display setting. (2) Video frame *k* is `features.csv` row
+29 + *k* when capture drops are 0. Three things agree on that: the lock rule, the row/frame counts, and interval
+walking. (3) `playback_time_s` **steps** against wallclock during start-up (≈ +10 ms near 1 s, ≈ +15 ms near
+6–7 s), so a single linear clock fit leaves 34 ms residuals. Use a rolling median of the offset. (4) Recorder
+wallclock stamps jitter by milliseconds. Resampling to CFR on those raw stamps made spurious repeat/skip pairs (66
+of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase leaves only real late renders.
+
 ### Increment CLEAN.2.5c — release.sh refuses symlinked weights ✅ (2026-09-30)
 
 **Delivered.** Build 0.9.0 (8) was archived from a worktree whose ML weights were symlinks into the primary checkout (`link_fixtures.sh`). `fetch_weights.sh` follows links, so step 2 passed; the app bundle got the links, the DMG was 9 MB, and deep `codesign` + Gatekeeper rejected it at step 9, after archive, export and notarization (~10 min, one burned build number). Step 2 of `Scripts/release.sh` now dies on any symlink under `UzumeEngine/Sources/ML/Weights`, before the build-number bump, and names both fixes (release from the primary checkout, or a copy-over-link one-liner). Step 9 adds a check that `UzumeEngine_ML.bundle` is ≥ 150 MB (`du -sk`, which doesn't follow links), which also catches a bundle that is validly signed but missing its weights. RUNBOOK §Release build updated.

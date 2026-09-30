@@ -26,6 +26,7 @@
 
 import Foundation
 import Testing
+@testable import UzumeApp
 
 @Suite("OrchestratorWiringRegression")
 struct OrchestratorWiringRegressionTests {
@@ -167,5 +168,40 @@ struct OrchestratorWiringRegressionTests {
         VisualizerEngine+Orchestrator.swift). The live-adaptation pipeline is \
         dead in production. See docs/QUALITY/KNOWN_ISSUES.md §BUG-015.
         """)
+    }
+
+    // MARK: - REC.2 Scene pin
+
+    /// REC.2 (a)(b)(c): the pure resolution of `UZUME_PIN_SCENE`.
+    @Test("UZUME_PIN_SCENE resolves: known id pins, unknown id refuses, unset is unchanged")
+    func test_scenePin_resolution() {
+        let ids = ["Kagura", "Fireflies"]
+        #expect(VisualizerEngine.resolveScenePin("Kagura", available: ids) == .pinned("Kagura"))
+        #expect(VisualizerEngine.resolveScenePin("Kagra", available: ids) == .unknown("Kagra"))
+        #expect(VisualizerEngine.resolveScenePin(nil, available: ids) == VisualizerEngine.ScenePin.none)
+        #expect(VisualizerEngine.resolveScenePin("", available: ids) == VisualizerEngine.ScenePin.none)
+    }
+
+    /// REC.2: both first-scene sites engage the pin before audio starts, stop on an unknown pin,
+    /// and route the first scene through `applyFirstScene`; the pinned branch sets the hold.
+    @Test("Both session starts engage the scene pin before audio and apply the first scene through it")
+    func test_scenePin_wiring() throws {
+        let root = repoRoot().appendingPathComponent("UzumeApp")
+        let sites = [
+            ("VisualizerEngine+LocalFilePlayback.swift", "startLocalFileRouter(audioRouter"),
+            ("VisualizerEngine+PublicAPI.swift", "audioRouter.startMetadataOnly()")
+        ]
+        for (file, audioStart) in sites {
+            let src = stripComments(try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8))
+            let engage = try #require(src.range(of: "let scenePin = engageScenePin()"), "\(file): no pin engage")
+            let start = try #require(src.range(of: audioStart), "\(file): audio start not found")
+            #expect(engage.upperBound < start.lowerBound, "\(file): pin must engage before audio starts")
+            #expect(src.contains("if case .unknown = scenePin { return }"), "\(file): unknown pin must stop")
+            #expect(src.contains("applyFirstScene(scenePin)"), "\(file): first scene bypasses the pin")
+        }
+        let orch = stripComments(try String(
+            contentsOf: root.appendingPathComponent("VisualizerEngine+Orchestrator.swift"), encoding: .utf8))
+        #expect(orch.contains("case .pinned:\n            diagnosticPresetLocked = true"))
+        #expect(orch.contains("case .pinned(let id):\n            applyPresetByID(id)"))
     }
 }
