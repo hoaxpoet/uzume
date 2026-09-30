@@ -10,7 +10,7 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
-### [dev-2026-09-30-204133] BR.20 — the flash check looks at every part of the screen, and at red (BUG-175)
+### [dev-2026-09-30-204133] BR.20 — the flash check looks at every part of the screen, and at red (BUG-176)
 
 - **A stricter photosensitivity check.** It used to judge only the whole screen's average brightness. It now also judges every ninth of the screen (WCAG's small-area rule) and saturated-red flashing.
 - **Two scenes were over the limit at fast tempos, and are fixed.** Membrane's strike ripple is about 20 % softer (same colours, same ripple). Waveform's bars now fall back over half a second instead of snapping down, a peak-meter look. Both on Matt's call.

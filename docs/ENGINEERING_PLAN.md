@@ -258,7 +258,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.17** | 2 | ✅ merged (#335) — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | ✅ merged (#339) — K6c done; K6a kept (Matt, option A); ⏸ Matt's streaming review of the top ten | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ✅ merged (#338) — BUG-152 spot-check (session 2) | The right song, reliably (BUG-152, C7, C8/A10) |
-| **BR.20** | 2 | ✅ PR open — BUG-175 felt check (session 1) | Flash check v2: regional + red (I8) |
+| **BR.20** | 2 | ✅ PR open — BUG-176 felt check (session 1) | Flash check v2: regional + red (I8) |
 | **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
@@ -1771,7 +1771,7 @@ of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase l
 
 ### Increment BR.20 — flash check v2 ✅ (2026-09-30)
 
-**Delivered.** Audit I8: regional (13 regions, each a ninth of the frame) and saturated-red flash analysis in `FlashAnalyzer`, negative-controlled, asserted by both flash harnesses for every measured scene. The roster run found two scenes over the limit → **BUG-175**, fixed on Matt's calls: Membrane's strike contrast 0.8 (A2, approved from a before/after), Waveform's bars held — instant rise, 0.6 s fall (A′, `WaveformState`).
+**Delivered.** Audit I8: regional (13 regions, each a ninth of the frame) and saturated-red flash analysis in `FlashAnalyzer`, negative-controlled, asserted by both flash harnesses for every measured scene. The roster run found two scenes over the limit → **BUG-176**, fixed on Matt's calls: Membrane's strike contrast 0.8 (A2, approved from a before/after), Waveform's bars held — instant rise, 0.6 s fall (A′, `WaveformState`).
 **Done-when:** ✅ regional and red detection, each negative-controlled; ✅ run across the roster, results recorded (below); ✅ both harness suites green (38 tests).
 **Roster (worst-case 270 BPM train; peak flashes/s, limit 3):** regional — Fata Morgana 2.5, Dragon Bloom 2.0, Floret 2.0, Fireflies 1.5, Nacre 1.5, Glaze 1.0, Cytokinesis 0.5, Ferrofluid Ocean 0.5, **Membrane 4.0 → 3.0**, **Waveform 5.0 → 0.0**, every other scene 0.0 (Alfvén, Aurora Veil, Cymatic Resonance, Filigree, Fractal Tree, Gossamer, Kagura ×3, Lumen Mosaic, Meniscus, Mitosis, Murmuration, Nebula, Nimbus, Ricercar, Skein, Stave, Volumetric Lithograph, Witchlight). Red — Fata Morgana 3.0 (at the limit), Dragon Bloom 1.0, Floret 0.5, all others 0.0.
 **Not done:** feedback accumulation in the single-pass gate (unchanged, documented limit); a per-scene tempo-aware worst case (the gate uses 270 BPM for all).
