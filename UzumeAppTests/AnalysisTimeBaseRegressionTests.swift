@@ -122,3 +122,24 @@ struct AnalysisTimeBaseRegressionTests {
                 "slices summed to \(summed)s against a \(whole)s buffer")
     }
 }
+
+// MARK: - BR.17 (G4): the live stem buffer holds every window at every output rate
+
+@Suite("Live stem buffer fits high output rates (BR.17)")
+struct LiveStemBufferRateTests {
+
+    /// 12 s written at the tap rate; the 10 s stem chunk and the 12 s recalibration window
+    /// both come back whole. At 96 kHz the old 44.1 kHz × 15 s sizing returned 6.9 s, the
+    /// warm-up guard never passed, and live stems never ran.
+    @Test(arguments: [44_100.0, 48_000.0, 88_200.0, 96_000.0, 192_000.0])
+    func everyWindowFits(rate: Double) {
+        let buffer = VisualizerEngine.makeStemSampleBuffer()
+        let chunk = [Float](repeating: 0.25, count: Int(rate) * 2)   // 1 s stereo
+        chunk.withUnsafeBufferPointer { ptr in
+            guard let base = ptr.baseAddress else { return }
+            for _ in 0..<12 { buffer.write(samples: base, count: ptr.count) }
+        }
+        #expect(buffer.snapshotLatest(seconds: 10, sampleRate: rate).count == Int(rate * 10) * 2)
+        #expect(buffer.snapshotLatest(seconds: 12, sampleRate: rate).count == Int(rate * 12) * 2)
+    }
+}

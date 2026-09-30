@@ -40,4 +40,10 @@ enum BuildFlavor: Sendable {
     /// rows, the Ended screen's sessions-folder link, `~/uzume_diag.log`. Off in the public
     /// build (BR.4).
     var showsDeveloperDiagnostics: Bool { self == .developer }
+
+    /// Whether controls that don't yet do what they say are shown: Settings' "Hidden scene
+    /// families", "Quality ceiling", "Device tier" and the adaptation-toast toggle, and the
+    /// live-adaptation keys `+` `-` `.` `←` `→` `⌘R`. Off in the public build (BR.15, decision 6:
+    /// hidden for the beta, wired after).
+    var exposesUnwiredControls: Bool { self == .developer }
 }

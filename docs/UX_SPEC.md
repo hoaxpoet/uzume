@@ -117,7 +117,7 @@ One screen. No wizard.
 
 **Body (three short sentences, not a wall of text):**
 
-> To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn't record your screen, your microphone, or anything else. Nothing ever leaves your Mac.
+> To follow along with your music, Uzume listens to the audio coming out of your speakers — the same way a screen recorder would. It doesn't record your screen, your microphone, or anything else. Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz.
 
 **Primary CTA:** "Allow Access" — calls `CGRequestScreenCaptureAccess()`, which shows the OS permission dialog **and registers the app in Privacy & Security → Screen & System Audio Recording**. macOS only lists an app there once it has requested access, so the Settings deep link cannot be the primary action: on a first run the pane is empty and the card is the only reachable UI (BUG-111, D-226).
 
@@ -148,7 +148,7 @@ Observed on a fresh standard account ("Uzume Test", Mac mini) plus a machine-wid
 3. **§3.3 photosensitivity notice** ("Heads up") — in-app, not a permission.
 4. **"'Uzume' wants access to control 'Spotify'"** (Apple Events, `NSAppleEventsUsageDescription`) — the first time the now-playing bridge or a scan reaches Spotify. Per account.
 5. **"'Uzume' is requesting to bypass the system private window picker and directly access your screen and audio"** (ScreenCaptureKit, macOS 15+) — when a Spotify scan starts its window capture (§4.4). macOS wording; it can reappear periodically by OS policy.
-6. **"'Uzume' would like access to record your system audio"** (`NSAudioCaptureUsageDescription`: *"Uzume listens to the music playing on your Mac to create its visuals. Nothing is recorded or sent anywhere."*) — the first time the tap starts, which is **Ready** (§6.3), before any visuals. Per account. Matt's call (2026-09-29): it stays on Ready, next to "press play", rather than moving into onboarding.
+6. **"'Uzume' would like access to record your system audio"** (`NSAudioCaptureUsageDescription`: *"Uzume listens to the music playing on your Mac to create its visuals. Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz."*) — the first time the tap starts, which is **Ready** (§6.3), before any visuals. Per account. Matt's call (2026-09-29): it stays on Ready, next to "press play", rather than moving into onboarding.
 7. **Apple Music access** (`NSAppleMusicUsageDescription`) — when connecting an Apple Music playlist (expected; not separately captured).
 
 No Documents-folder question in the public build (BUG-158: it keeps no session records).
@@ -216,7 +216,7 @@ UI response per case:
 - Primary button: **Start scan**.
 - Secondary, a drop target: "Or drop screenshots of the playlist here." (also offered while Spotify isn't running).
 
-**Permission (only if not already granted).** Checked with `CGPreflightScreenCaptureAccess()` **at scan start**, not only at onboarding. "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere." with an **Allow Access** button (`CGRequestScreenCaptureAccess()`) and "Already allowed it? Open System Settings". Same mechanics and return detection as §3.2.
+**Permission (only if not already granted).** Checked with `CGPreflightScreenCaptureAccess()` **at scan start**, not only at onboarding. "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing from your screen is saved or sent; Uzume looks up song details on Apple's iTunes and MusicBrainz." with an **Allow Access** button (`CGRequestScreenCaptureAccess()`) and "Already allowed it? Open System Settings". Same mechanics and return detection as §3.2.
 
 **Scan panel** — a small floating, non-activating panel beside Spotify's window; Spotify comes to the front and stays the active app so the user can scroll it. Capture is **Spotify's window only**, in memory, only while the panel is open.
 - Instruction: "Scroll through your playlist from top to bottom."
@@ -691,7 +691,7 @@ This is the canonical mapping from internal error states to user-facing language
 | Cause | User copy | Primary CTA | Secondary |
 |---|---|---|---|
 | `CGPreflightScreenCaptureAccess() == false` | "Uzume needs permission to hear music playing on your Mac." | "Open System Settings" | "Why?" (reveals explainer) |
-| Screen permission missing at scan start (SCAN) | "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing is saved or sent anywhere." | "Allow Access" | "Already allowed it? Open System Settings" |
+| Screen permission missing at scan start (SCAN) | "To scan, Uzume reads the track names in your Spotify window while you scroll. Nothing from your screen is saved or sent; Uzume looks up song details on Apple's iTunes and MusicBrainz." | "Allow Access" | "Already allowed it? Open System Settings" |
 | AppleScript permission denied | "Uzume needs permission to talk to Apple Music. You can grant this in System Settings → Privacy & Security → Automation." | "Open System Settings" | "Skip to Spotify" |
 | Sandbox preventing capture | (should not occur — app sandbox is disabled per RUNBOOK) | Dev-facing log only | — |
 
@@ -785,6 +785,8 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 - **Audio output notice** — "Uzume listens to your Mac's audio but does not play audio. Use your music app's speaker settings for speakers, HomePods, or AirPlay." (per §7.9)
 
 ### 10.2 Visuals
+
+*Beta (BR.15, decision 6): Device tier, Quality ceiling, the scene-family blocklist and the adaptation-toast toggle are developer-build only until they are wired.*
 
 - **Device tier** — Auto (default) / Force M1/M2 (Tier 1) / Force M3+ (Tier 2). Override for testing or deliberate quality trade-off.
 - **Quality ceiling** — Auto / Performance (disables SSGI, reduces mesh density) / Balanced (default) / Ultra (ignores frame-budget governor; for recording/capture)

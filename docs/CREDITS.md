@@ -145,6 +145,7 @@ Where no hash was taken at authoring, `sha256` is omitted rather than invented.
 | `Floret` | `suksma - Rovastar - Sunflower Passion (Enlightment Mix)_Phat_edit + flexi und martin shaders - circumflex in character classes in regular expression` | suksma, Rovastar, Flexi, Martin | butterchurn built-in JSON (no hash taken) | ✅ |
 | `Meniscus` | `Martin - QBikal - Surface Turbulence IIb` | Martin, QBikal | butterchurn built-in JSON (hashed) | ✅ |
 | `Witchlight` | `martin - witchcraft reloaded` | Martin | butterchurn built-in JSON (hashed) | ✅ |
+| `Stave` | `Martin - charisma` | Martin | butterchurn built-in JSON (hashed; from `butterchurn-presets`, not the Cream of the Crop pack) | ✅ |
 
 **Reference-image attribution (`docs/VISUAL_REFERENCES/`).** The Witchlight
 reference set (WL.1) is eleven license-verified images from Wikimedia
@@ -376,6 +377,9 @@ If you ship a derivative of Uzume, you must:
 2. Make this `CREDITS.md` (or an equivalent compilation of the
    notices) reachable from a user-visible surface — e.g. an "About"
    panel — alongside license text or hyperlinks.
+   Uzume does this in **Settings › About › Acknowledgements** (BR.16):
+   one row per obligation above, each linking to its source, plus a link
+   to this file. Add a row there whenever a section is added here.
 3. Note any modifications you make to the bundled weights.
 
 Open an issue if you spot a missing attribution.

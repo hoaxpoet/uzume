@@ -242,20 +242,20 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.1** | 1 | ✅ merged (#317) — pending live checks (BUG-163, BUG-164; session 1) | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
 | **BR.2** | 1 | ✅ merged (#316) — pending Matt's live `pmset` check (BUG-162) | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ✅ merged (#318) — TSan-clean (BUG-165) | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
-| **BR.4** | 1 | ✅ fixed, PR open (P2 lines under AUDIT-2026-09-29) | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
+| **BR.4** | 1 | ✅ merged (#321) (P2 lines under AUDIT-2026-09-29) | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
 | **BR.5** | 1 | ✅ merged (#319) — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
 | **BR.6** | 1 | 🔨 BR.6a ✅ merged (#320, BUG-167); BR.6b cap + Alfvén exclusion ✅ merged (#325, BUG-168) — M4 / 4K measurement is Matt's | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
-| **BR.7** | 2 | ✅ fixed, PR open (BUG-169 + P2 lines) | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
-| **BR.8** | 2 | ✅ fixed, PR open (BUG-170) | Long playlists keep their preparation (C1) |
-| **BR.9** | 2 | ✅ fixed, PR open (BUG-171) | Background preparation gets its own analyzers (C3/G3) |
-| **BR.10** | 2 | ✅ fixed, PR open (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
-| **BR.11** | 2 | ✅ fixed, PR open (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
-| **BR.12** | 2 | ✅ PR open — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
-| **BR.13** | 2 | ✅ PR open — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
-| **BR.14** | 2 | ✅ PR open — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
-| **BR.15** | 2 | ready | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
-| **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
-| **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
+| **BR.7** | 2 | ✅ merged (#322) (BUG-169 + P2 lines) | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
+| **BR.8** | 2 | ✅ merged (#323) (BUG-170) | Long playlists keep their preparation (C1) |
+| **BR.9** | 2 | ✅ merged (#324) (BUG-171) | Background preparation gets its own analyzers (C3/G3) |
+| **BR.10** | 2 | ✅ merged (#326) (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
+| **BR.11** | 2 | ✅ merged (#327) (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
+| **BR.12** | 2 | ✅ merged (#328) — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
+| **BR.13** | 2 | ✅ merged (#329) — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
+| **BR.14** | 2 | ✅ merged (#330) — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
+| **BR.15** | 2 | ✅ merged (#333) — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
+| **BR.16** | 2 | ✅ merged (#334) | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
+| **BR.17** | 2 | ✅ PR open — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
@@ -1697,6 +1697,36 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.17 — output devices as testers have them ✅ (2026-09-30, pending live check)
+
+**Delivered.** Audit I4/B7, G4, B9 as P2 lines under AUDIT-2026-09-29. `OutputLatency` (in `DefaultOutputDeviceMonitor.swift`) + `VisualizerEngine.applyOutputLatency()` on an `outputLatencyMonitor`; `VisualizerEngine.makeStemSampleBuffer()` (192 kHz × 13 s); `HighRateDecimator` + `FFTProcessor.processMono` (in `FFTProcessor.swift`).
+**Done-when:** ✅ offset = max(50 ms, device latency), trim kept, `UZUME_DEVICE_LATENCY=0` arm (tests); ✅ every stem / beat / recalibration window fits at 44.1–192 kHz (test, negative-controlled); ✅ high-rate tones land in the 48 kHz bin (test, negative-controlled). ⏳ AirPods: visual accents on the beat, with `UZUME_DEVICE_LATENCY=0` as the before — listening session 2.
+**BeatBench (offline-grid, all five suites):** identical before (`main`) and after (`br-17`) — the prep-time grid is untouched; both changes are on the live path, which BeatBench's session-replay mode (not built) would be needed to score.
+
+| suite | track | F | Cemgil | AMLt | downbeat F |
+|---|---|---|---|---|---|
+| 1 | billie_jean | 0.97 | 0.96 | 0.97 | 0.90 |
+| 2 | pyramid_song / solsbury_hill / take_five / yyz | 0.52 / 0.97 / 0.99 / 0.58 | 0.37 / 0.95 / 0.91 / 0.43 | 0.75 / 1.00 / 1.00 / 0.21 | — / 0.15 / 0.26 / 0.15 |
+| 3 | bohemian_rhapsody / money | 0.47 / 0.44 | 0.32 / 0.31 | 0.48 / 0.43 | 0.25 / 0.21 |
+| 4 | bleed | 0.99 | 0.96 | 1.00 | 0.08 |
+| 5 | clair_de_lune | 0.16 | 0.09 | 0.01 | 0.00 |
+
+**Not done:** a real anti-alias filter for the decimation; the latency read has not seen a Bluetooth device.
+
+### Increment BR.16 — honest copy and credits ✅ (2026-09-30)
+
+**Delivered.** Audit A7, C13, K7/H9 and part of F16, as P2 lines under AUDIT-2026-09-29. Decision 9's privacy line on every permission surface; `RateGate` (in `MusicBrainzFetcher.swift`) holds MusicBrainz to 1 request/s process-wide; `AboutSettingsSection.acknowledgements` + strings; the licence line corrected; CREDITS.md gains Stave and names the in-app surface.
+**Done-when:** ✅ no "nothing leaves / nothing sent" copy left in the app, Info.plist or UX_SPEC; ✅ a burst of five lookups takes ≥ 4 intervals (test); ✅ every acknowledgement resolves and links, and the named credits are present (test); ✅ CREDITS.md lists all eight Milkdrop-inspired scenes.
+**Also:** F16 — `LICENSE` and the About box both name Plait & Pattern (Matt, 2026-09-30).
+**Not done:** the Acknowledgements page was checked by test, not by eye.
+
+### Increment BR.15 — controls that do nothing, hidden for the beta ✅ (2026-09-30)
+
+**Delivered.** Audit F5/E5, E4, E14 as P2 lines under AUDIT-2026-09-29, per decision 6 (hide for the beta, wire after). `BuildFlavor.exposesUnwiredControls` (developer only) gates Settings' tier / quality ceiling and family blocklist / toast toggle, and `PlaybackShortcutRegistry.unwiredIDs` (`+` `-` `.` `←` `→` `⌘R`). Tester notes updated.
+**Done-when:** ✅ public registry lacks the six keys, developer keeps them, ⇧← ⇧→ ⌘Z remain (test); ✅ the four Settings controls sit behind the flag (source test).
+**Also:** adaptation toasts off until turned on (Matt 2026-09-30; reverses U.6b) — bridge and Settings toggle now agree (test, negative-controlled).
+**Not done:** the wiring (after the beta); a public-flavor build was not run (by test).
 
 ### Increment BR.14 — window, keys, cursor, Settings ✅ (2026-09-30, pending live checks)
 

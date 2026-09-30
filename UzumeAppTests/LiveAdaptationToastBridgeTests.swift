@@ -18,6 +18,18 @@ struct LiveAdaptationToastBridgeTests {
         #expect(tm.visibleToasts.isEmpty, "Flag off — no toast should appear")
     }
 
+    /// BR.15 (Matt 2026-09-30): no stored choice means off — the same default the Settings
+    /// toggle shows (`SettingsStoreTests` pins that side). The timing test above passed under default-on too.
+    @Test func noStoredChoice_isOff_storedChoiceKept() {
+        let bridge = LiveAdaptationToastBridge(toastManager: ToastManager())
+        let key = LiveAdaptationToastBridge.userDefaultsKey
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        UserDefaults.standard.removeObject(forKey: key)
+        #expect(!bridge.isEnabled)
+        UserDefaults.standard.set(true, forKey: key)
+        #expect(bridge.isEnabled)
+    }
+
     @Test func flagOn_emitAck_createsInfoToast() async throws {
         let tm = ToastManager()
         let bridge = LiveAdaptationToastBridge(toastManager: tm)

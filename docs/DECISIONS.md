@@ -6208,7 +6208,8 @@ the block.
    sequence is UX_SPEC §3.3a.
 6. **About box: "Copyright © 2026 Plait & Pattern."** (DECISION-NEEDED 3, default A), matching the
    signing certificate's name. `LICENSE` (MIT, Matt Deming) is unchanged; aligning the two is Matt's
-   separate call.
+   separate call. **Amended 2026-09-30 (BR.16, Matt):** the copyright holder is Plait & Pattern everywhere —
+   `LICENSE` now reads "Copyright (c) 2026 Plait & Pattern".
 7. **Version 0.9.0.** The build number lives in `UzumeApp/Version.xcconfig`; the release script
    increments and commits it on every run, so no number is reused.
 8. **Developer vs public build** (Matt, 2026-09-29: *"We need to start distinguishing between the
