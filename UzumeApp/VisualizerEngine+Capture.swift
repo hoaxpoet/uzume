@@ -273,9 +273,16 @@ extension VisualizerEngine {
 
     /// Run the metadata pre-fetcher for a new track and apply BPM/key on the main actor.
     func kickoffPreFetch(for track: TrackMetadata, fetcher: MetadataPreFetcher) {
+        let generation = currentTrackGeneration()   // BR.11 (G7): the song this lookup is for
         Task {
             let profile = await fetcher.prefetch(for: track)
             await MainActor.run {
+                // BR.11 (G7): a lookup that returns after the next song started is the last
+                // song's BPM / key / meter — drop it rather than dress the new song with it.
+                guard self.currentTrackGeneration() == generation else {
+                    captureLogger.info("Pre-fetch dropped — the song changed during the lookup")
+                    return
+                }
                 self.nowPlaying.setProfile(profile)
                 if let bpm = profile?.bpm {
                     self.estimatedTempo = bpm

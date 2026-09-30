@@ -167,6 +167,46 @@ struct ListeningHabitsPlanTests {
         #expect(secondLoop?.preset.id == second.preset.id, "the second loop reaches scene 2 again")
     }
 
+    /// E3: queue [A, B (failed), C, D] plans only [A, C, D]; C must get C's entry, not D's.
+    @Test func aFailedLocalFile_doesNotShiftTheRest() throws {
+        let catalog = try (1...4).map { i -> PresetDescriptor in
+            let json = """
+            {"name":"P\(i)","family":"particles","visual_density":0.5,"motion_intensity":0.5,
+             "color_temperature_range":[0.3,0.7],"fatigue_risk":"medium",
+             "complexity_cost":{"tier1":1.0,"tier2":1.0},"transition_affordances":["crossfade"],"certified":true}
+            """
+            return try JSONDecoder().decode(PresetDescriptor.self, from: Data(json.utf8))
+        }
+        let fileA = TrackIdentity(title: "A", artist: "X"), fileB = TrackIdentity(title: "B", artist: "X")
+        let fileC = TrackIdentity(title: "C", artist: "X"), fileD = TrackIdentity(title: "D", artist: "X")
+        let plan = try DefaultSessionPlanner().plan(
+            tracks: [fileA, fileC, fileD].map { ($0, TrackProfile.empty) }, catalog: catalog, deviceTier: .tier1)
+        #expect(VisualizerEngine.planIndex(of: fileA, in: plan) == 0)
+        #expect(VisualizerEngine.planIndex(of: fileB, in: plan) == nil, "the failed file is off-plan (reactive)")
+        #expect(VisualizerEngine.planIndex(of: fileC, in: plan) == 1, "queue position 2, plan entry 1")
+        #expect(VisualizerEngine.planIndex(of: fileD, in: plan) == 2)
+        #expect(VisualizerEngine.planIndex(of: fileA, in: nil) == nil)
+    }
+
+    /// E6 / G7 source shape: the session clear runs at .idle and covers the orchestration state;
+    /// slow results are dropped on a generation mismatch.
+    @Test func idleClearsTheSession_andLateResultsAreDropped() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        func src(_ path: String) throws -> String {
+            try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+        }
+        let engine = try src("UzumeApp/VisualizerEngine.swift")
+        #expect(engine.contains("if newState == .idle {"))
+        #expect(engine.contains("lastReactiveSwitchTime = -.infinity"))
+        #expect(engine.contains("lastAppliedPlannedPresetID = nil"))
+        let stems = try src("UzumeApp/VisualizerEngine+Stems.swift")
+        #expect(stems.contains("orchestratorLock.withLock { trackGeneration &+= 1 }"))
+        #expect(stems.contains("        beginNewTrackAnalysis()\n"))
+        #expect(stems.contains("guard self.currentTrackGeneration() == generation else {"))
+        #expect(try src("UzumeApp/VisualizerEngine+Capture.swift")
+            .contains("guard self.currentTrackGeneration() == generation else {"))
+    }
+
     /// Source shape: a known song with no plan entry sets the flag, the wire runs reactive for
     /// it, and the flag is cleared at session boundaries.
     @Test func offPlanSong_runsReactive() throws {

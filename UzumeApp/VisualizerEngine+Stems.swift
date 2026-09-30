@@ -39,6 +39,13 @@ extension VisualizerEngine {
         }
     }
 
+    /// A new song: bump the track generation (BR.11 / G7 — late async results for the previous
+    /// song are dropped against it) and reset the stem analyzer.
+    func beginNewTrackAnalysis() {
+        orchestratorLock.withLock { trackGeneration &+= 1 }
+        stemAnalyzer.reset()
+    }
+
     /// Start the background stem separation timer at `stemSeparationPeriodSeconds`.
     func startStemPipeline() {
         guard stemSeparator != nil else {
@@ -513,6 +520,7 @@ extension VisualizerEngine {
 
         let bufferStartTime = elapsed - Self.liveBeatMinSeconds
         let attemptNum = liveBeatAnalysisAttempts   // capture before async
+        let generation = currentTrackGeneration()      // BR.11 (G7): whose audio this is
         let elapsedStr = String(format: "%.1f", elapsed)
         let rateStr = String(format: "%.0f", actualRate)
         let sampleCountStr = "\(mono.count)"
@@ -526,7 +534,8 @@ extension VisualizerEngine {
                 mono: mono,
                 sampleRate: actualRate,
                 bufferStartTime: bufferStartTime,
-                attemptNum: attemptNum
+                attemptNum: attemptNum,
+                generation: generation
             )
         }
     }
@@ -537,7 +546,7 @@ extension VisualizerEngine {
     /// the 60-line SwiftLint gate. Always called on `stemQueue`.
     private func performLiveBeatInference(
         mono: [Float], sampleRate: Double,
-        bufferStartTime: Double, attemptNum: Int
+        bufferStartTime: Double, attemptNum: Int, generation: UInt64
     ) {
         // Lazy-load the analyzer on first use (weight loading is heavy).
         if liveBeatGridAnalyzer == nil {
@@ -580,6 +589,11 @@ extension VisualizerEngine {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // BR.11 (G7): the song changed while Beat This! ran — this grid is the last song's.
+            guard self.currentTrackGeneration() == generation else {
+                self.logger_liveBeat("LiveBeat: grid dropped — the song changed during inference")
+                return
+            }
             let replacedExisting = self.mirPipeline.liveDriftTracker.hasGrid
             let trackTitle = self.currentTrack?.title ?? "unknown"
             self.installBeatGrid(grid)
@@ -618,7 +632,7 @@ extension VisualizerEngine {
     ) {
         logWiringResetStemPipelineEnter(title: identity?.title ?? "<nil>", caller: caller)   // BUG-006.1
 
-        stemAnalyzer.reset()
+        beginNewTrackAnalysis()
 
         // DYN.7 — a 7 s mood window must not carry the previous track's material into the
         // new one's first seconds, which is exactly when preparation and the planner read

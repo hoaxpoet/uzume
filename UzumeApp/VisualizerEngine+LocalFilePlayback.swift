@@ -32,6 +32,7 @@ import Audio
 import Combine
 import DSP
 import Foundation
+import Orchestrator
 import ML
 import Session
 import Shared
@@ -192,7 +193,7 @@ extension VisualizerEngine: LocalFilePreparing {
         // surface publish (closes Gap A — pre-LF.6 every LF session rendered
         // "—" for title because `currentTrack` was never written from the LF
         // path). See `applyLocalFileTrackState(...)` for the unified write.
-        applyLocalFileTrackState(identity: identity, planIndex: 0)
+        applyLocalFileTrackState(identity: identity)
 
         // LF.5: wire the EOF callback BEFORE starting the audio router so we
         // can't miss an end-of-stream event for a very short fixture. Per
@@ -398,7 +399,7 @@ extension VisualizerEngine: LocalFilePreparing {
             // LF.5.fix D-LF5-1 + LF.6: orchestrator plan-mode wire + chrome
             // surface publish via the shared helper. See
             // `applyLocalFileTrackState(...)`.
-            applyLocalFileTrackState(identity: nextIdentity, planIndex: nextIdx)
+            applyLocalFileTrackState(identity: nextIdentity)
             sessionRecorder?.log("WIRING: advanceLocalFileQueue orchestratorLock COMPLETE")
             // BUG-044: mirror the streaming callback's per-track PRESET resets (Nimbus settle +
             // Skein §1.5 canvas wipe/reseed). Before this call existed, a local-file next/prev/EOF
@@ -549,10 +550,15 @@ extension VisualizerEngine: LocalFilePreparing {
     /// the two call sites stay under SwiftLint's function-body-length cap and
     /// can't drift out of sync.
     @MainActor
-    private func applyLocalFileTrackState(identity: TrackIdentity, planIndex: Int) {
+    private func applyLocalFileTrackState(identity: TrackIdentity) {
         lastResolvedTrackIdentity = identity
         orchestratorLock.withLock {
+            // BR.11 (audit E3): the plan holds only PREPARED files, so its index is not the queue
+            // position — one failed file used to put every later file on the next file's scenes.
+            // Look the file up by identity; a failed file has no entry and runs reactive (E7).
+            let planIndex = Self.planIndex(of: identity, in: livePlan)
             liveTrackPlanIndex = planIndex
+            liveTrackIsOffPlan = livePlan != nil && planIndex == nil
             orchestratorWireLoggedThisTrack = false
             // LFPLAN.3: new track → plan resumes (clear manual hold) + first planned
             // segment applies (clear the last-applied marker).
@@ -562,6 +568,12 @@ extension VisualizerEngine: LocalFilePreparing {
             lastPlannedApplyTrackTime = 0
         }
         publishLocalFileTrackSurface(identity: identity)
+    }
+
+    /// The plan entry for `identity` (BR.11 / E3), or nil when it isn't planned (preparation
+    /// failed) or there is no plan.
+    static func planIndex(of identity: TrackIdentity, in plan: PlannedSession?) -> Int? {
+        plan?.tracks.firstIndex { $0.track == identity }
     }
 
     /// Publish the `TrackMetadata` + artwork bytes that drive `TrackInfoCardView`.
