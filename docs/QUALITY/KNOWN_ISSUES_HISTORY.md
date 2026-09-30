@@ -4,6 +4,1952 @@ Resolved entries rotated out of [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §Resolved 
 
 ---
 
+### BUG-140 — the D-154 beat-irregularity gate flags steady songs; its drums-grid BPM is an octave average (2026-09-24)
+
+**Severity:** P2 · **Domain:** `dsp.beat` / `orchestrator` · **Failure class:** `algorithm` (primary) + `sample-rate` (local-file path) · **Status:** Resolved (BUG140.2, live check passed 2026-09-25) · **Related:** D-154, BUG-134 (same `computeBPM` fault, other consumer), PR.26 (Membrane declares `requires_regular_beat`), BC.1 / D-257 (the same flag reaches every shader as `StemFeatures.beat_clarity01`; Fireflies FF.1 is its first reader, so false flags reach it too), KAG.0h
+
+#### Expected / actual
+
+**Expected:** `assessBeatIrregularity` returns `true` only for songs without a steady beat (Pyramid Song, jazz tempo flux), so `requires_regular_beat` presets (Membrane; Kagura planned) are kept off those and nothing else.
+**Actual:** Superstition (Talking Book FLAC) is flagged in the CENSUS run — grid 98.53, drums 138.25, fold 0.403 — though KAG.0h's production captures show a full-mix grid of 100–103 BPM with beat-interval CV 0.018–0.026, same as clearly regular songs. The MP3 copy of the same recording reads drums 97.40, fold 0.015, unflagged. Penny Lane (stereo FLAC) is flagged; the mono FLAC (111.34) and MP3 (227.85, clean octave) are not.
+
+#### Root cause 1 — `computeBPM` averages across octaves (all paths)
+
+`BeatGridResolver.computeBPM` returns the mean of every IOI inside `[0.5×, 2×]` the median — a full octave wide. When Beat This! on the separated drums stem reads part of the window at the eighth-note level and part at the quarter, the mean lands between them: a BPM describing neither. This is BUG-134's fault 1; BUG134.1/.2 corrected the full-mix grid's *beats* but `computeBPM` itself still averages, and the D-154 gate reads `drumsBeatGrid.bpm` straight from it.
+
+Beat dumps (`CENSUS_DUMP_BEATS`, this increment):
+
+```
+Superstition FLAC  drums IOIs  0.30 0.32 0.32 0.30 0.28 0.34 | 0.62 0.62 0.60 0.64   -> mean 0.434 s = 138.25
+Superstition MP3   drums IOIs  0.62 x15 (all quarter)                                 -> 97.40
+Penny Lane stereo  drums IOIs  ~0.27 x16 | ~0.54 x9                                   -> 162.69
+```
+
+So 138/98.5 = 1.40 is **not a metrical ratio** — it is a weighted average of 1× and 2×. The corpus agrees: folded ratios of flagged tracks smear uniformly across 1.1–1.9, with **no excess at 4:3 or 3:2** (±2 % bands: 543 at 4:3 vs 528 at a control band 1.413; 483 at 3:2 vs 435 at 1.58). An octave average can produce any ratio in (1, 2), which is exactly that flat smear.
+
+#### Root cause 2 — local files: the drums grid is analysed at the wrong sample rate
+
+`SessionPreparer.computeBeatGrids` runs the drums grid with `sampleRate: preview.sampleRate`, but `StemSeparator` resamples to 44.1 kHz before separating, so `stemWaveforms` are always 44.1 kHz. Local-file previews keep the file's native rate, so the drums BPM is scaled by `nativeRate / 44100`. Measured through the shipping `LocalFilePreparationPipeline` (PrepTimingRunner, scratch cache):
+
+| file | rate | production grid / drums | fold | note |
+|---|---|---|---|---|
+| !!! — There's No Fucking Rules, Dude | 48 k | 92.20 / **97.45** | 0.057 | census drums 89.55; 97.45/89.55 = **1.088 = 48000/44100** |
+| Superstition FLAC | 96 k | 101.41 / **413.17** | 0.019 | drums beats end at 4.58 s of a 10 s stem; unflagged **by luck** |
+| Superstition MP3 | 44.1 k | 101.71 / 97.40 | 0.044 | correct |
+| Penny Lane stereo FLAC | 44.1 k | 113.31 / 162.69 | 0.436 | flagged — root cause 1 |
+
+Every 48 kHz local file (~11 % of the corpus) therefore starts with an unearned 8.8 % disagreement against a 10 % threshold. Streaming previews are unaffected if they arrive at 44.1 kHz (not verified here). The CENSUS harness passes the model rate correctly but has its own quirk: it truncates to `requiredMonoSamples` at the **native** rate before separating, so 96 kHz files get a 4.6 s drums window instead of 10 s — which is why the census Superstition row differs from production.
+
+#### Corpus prevalence
+
+- CENSUS full run (July, 24,350 tracks with both grids): **34 %** flagged; fold > 0.10 accounts for 8,001, bar-confidence < 0.2 alone for 297.
+- **Duplicate-recording test:** 1,309 same-artist/same-title pairs whose full-mix grids agree within 1.5 %; 449 flagged in at least one copy; **189 (42 %) flagged in only one copy.** A gate measuring the song would agree across copies.
+- Pyramid Song — D-154's canonical catch — is **not** flagged in the census (FLAC fold 0.099, MP3 0.072, bar 0.31).
+- The flag also drifts with unrelated code: re-running today reproduced only 529/602 of July's flags (BUG134.2's audio-octave correction now also runs on the drums grid).
+
+#### Candidate fixes, measured (602-track stratified sample re-run with beat dumps, today's code; corpus-weighted)
+
+| variant | corpus-est flag rate | flags whose full-mix grid is steady (CV < 0.05) | Pyramid | D-154 catches |
+|---|---|---|---|---|
+| current (mean of inliers) | 27.7 % | 26 % | unflagged | pinned rows hold |
+| **median IOI for both grids** | **17.1 %** | 17 % | unflagged | not testable from pinned BPMs (needs beats) |
+| + fold 3:2 and 4:3 (on BPM pairs) | 15.1 % (census) | — | pinned D-154 row stays flagged | **Mingus un-flagged** (1.489 ≈ 3:2) |
+
+Median un-flags 143/327 of today's flagged sample, newly flags 7/275 regular ones. Ratio folding has no metrical basis in the data (no peak) and loses a calibration catch; **rejected.** Full-mix grid IOI CV alone is not a clean replacement either (flags an estimated 34 %: BUG-134 bimodal grids and dropped beats inflate it).
+
+#### Verification criteria (for the fix increment, written before it)
+
+1. Unit: `computeBPM` on the Superstition-FLAC IOI sequence above returns the quarter or the eighth level (97–100 or 194–200), not 138; the drums grid path gets 44.1 kHz regardless of `preview.sampleRate` (48 k and 96 k fixtures).
+2. `BeatRegularityExclusionTests` catalog rows still hold (they pin BPMs, so root-cause-2 and estimator changes must not silently move them).
+3. Re-run the 602-track sample: flag rate and duplicate-pair disagreement both fall; list every newly flagged track.
+4. **BeatBench before/after, all five suites** — `computeBPM` feeds `grid.bpm`, the halving gate, and meter fallbacks, so changing it is a behavioural beat-sync change.
+5. Manual: Membrane on Superstition (local FLAC + MP3) is eligible and reads as locked; Pyramid Song stays excluded if Matt still wants it excluded.
+
+#### Fix — BUG140.2 (2026-09-25, Matt's option A: fix the measurement, keep the 10 % rule)
+
+- **Gate tempos:** `assessBeatIrregularity(grid:drums:)` compares `octaveFoldedMedianBPM` of each grid's beats: every inter-beat interval folded by 2× onto the median's octave, then the median. `BeatGrid.bpm` / `computeBPM` are **untouched**, so nothing beat-sync reads changes. The plain median measured at BUG140.1 was **not** enough: on the real dumps it left Superstition-FLAC at 0.182 and Penny-Lane-stereo at 0.313 (a 6/4 split of short/long gaps puts the median on the boundary). Folding first gives 0.065 and 0.000.
+- **Sample rate:** `computeBeatGrids` analyses the drums stem at the separator's output rate (`separator.outputSampleRate`, 44.1 kHz in production; the same contract BUG-141 uses). `PersistentStemCache` schema **v15** (BUG-141 took v14 on `main` first; entries written by a v14 `main` build still hold the file-rate drums grid), so cached local files re-analyse instead of replaying a time-scaled drums grid.
+- **CENSUS:** the gate columns use the production gate; the harness separates the whole window (the separator resamples, then truncates), so 96 kHz files get production's 10 s of drums instead of 4.6 s. That quirk, plus the averaging, is why the July census flagged Superstition-FLAC. Under the harness fix alone, the old gate already passes it.
+
+**Verification (criteria above):**
+
+1. ✅ `BeatIrregularityTempoTests`: Superstition-FLAC and Penny-Lane-stereo real beat lists read regular; `computeBPM` still reproduces the 138.25 defect value; non-octave, low-bar-confidence and missing-evidence controls still hold. The wiring test fails on the old line (`[48000, 48000]`) and passes on the fix (`[48000, 44100]`).
+2. ✅ `BeatRegularityExclusionTests` catalog rows unchanged and green.
+3. ✅ Re-run of the 601-track stratified sample + 150 duplicate pairs, before/after on the same run (corpus-weighted):
+
+| | before | after |
+|---|---|---|
+| corpus-estimated flag rate | 25.2 % | **12.0 %** |
+| duplicate pairs flagged in ≥ 1 copy | 102 / 150 | 42 / 150 |
+| duplicate pairs whose copies disagree | 34 / 150 | **6 / 150** |
+
+   180 sampled tracks cleared, **12 newly flagged**. Most of the new flags are plausibly beat-irregular: Sarah Vaughan "The Nearness of You", J Dilla "The Twister", the Tannhäuser "O du mein holder Abendstern", Nancarrow "Study No. 40a", Trout Mask Replica "Veteran's Day Poppy", volcano! "Apple or a Gun", Satriani "Woodstock Jam", Afghan Whigs "Brother Woodrow / Closing Prayer", Hüsker Dü "Pride". Three look like new false flags: Weezer "Pink Triangle", Rolling Stones "Dear Doctor", araabMUZIK "Make It Happen".
+4. ✅ **No behavioural change to beat sync.** `computeBPM`, `BeatGrid.bpm` and the full-mix grid are unchanged. The drums grid's only readers are this gate and the `WIRING`/3-way-mismatch log lines. BeatBench scores the full-mix grid, so it is unaffected by construction and was not re-run.
+5. ✅ **Manual — PASSED 2026-09-25.** Matt, session `2026-09-25T14-29-08Z`, both local copies of Superstition: *"Membrane is locked on Superstition … looks great!"* Build confirmed from the artifacts: both cache entries written fresh at schema v14 (this branch's number before BUG-141 took v14; now v15); `stems.csv` `beatClarity01` = 1.00 on all 5,659 frames (the gate's verdict: steady).
+
+Production path (PrepTimingRunner → shipping `LocalFilePreparationPipeline`, cache v14):
+
+| track | drums grid | gate |
+|---|---|---|
+| Superstition FLAC (96 k) | 97.0 BPM, beats to 9.38 s (was 413, ending 4.58 s) | regular |
+| Superstition MP3 | 97.4 | regular |
+| Penny Lane stereo | — | regular (was flagged) |
+| !!! — 48 k | 89.4 (was 97.45) | regular |
+| Pyramid Song FLAC | — | **flagged** (whole-track grid, bar 0.26) — the canonical catch holds |
+
+#### Artifacts
+
+Not committed (regenerable, ~40 min for the sample). Beat dumps: `CENSUS_DUMP_BEATS=<dir> CorpusCensusRunner …`. Production grids: PrepTimingRunner into a scratch `--cache`, read `metadata.json` `beatGrid` / `drumsBeatGrid`.
+
+---
+
+### BUG-138 — sidecar and architecture prose assert audio routing the engine retired (2026-09-22)
+
+**Severity:** P2 · **Domain:** `docs` · **Failure class:** `documentation-drift` · **Related:** D-153, D-154, QG.1, `docs/AUDIO_CONTRACT.md`
+
+#### Resolution status
+
+| Part | State |
+|---|---|
+| **(a)** `FerrofluidOcean.json` description | ✅ **RESOLVED (BUG138.1)** — describes the look, defers to `audio_routes` + the shader header. Carried **three** retired mechanisms, not one: the D-153 bass route, the BUG-047 `accumulated_audio_time × arousal` drift product, and the D-158 raw `vocals_pitch_hz` palette read. |
+| **(b)** the `48 floats / 192 bytes` claim | ✅ **RESOLVED (BUG138.2)** — it was in **eight** places, not two. Fixed in `Common.metal`, `AnalyzedFrame.swift`, `AudioFeatures+Analyzed.swift` (which said `52 / 208`), `SpectralCartograph.metal`, and four lines of `ARCHITECTURE.md`. |
+| **(c)** `VolumetricLithograph.json` description | ✅ **RESOLVED (BUG138.2)** — found while building the gate; see the correction below. |
+| **Gate 1** — prose size claims | ✅ **BUILT (BUG138.2)** — `CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout`. |
+| **Gate 2** — sidecar description read-set | ✅ **BUILT (BUG138.2)** — `SidecarDescriptionDriftTests`. |
+
+#### ⚠ Correction to this entry's first version
+
+It recorded that `VolumetricLithograph.json` had the *opposite* drift — prose correct, `audio_routes`
+incomplete — on the strength of a `grep` that found `stems.drums_beat` and
+`stems.drums_attack_ratio` in its shader. **That grep did not strip comments, and every one of those
+eight occurrences is a comment.** VL reads neither field in any executable line; its peaks ride
+`pulse_beat_index + pulse_phase01` with the four `*_onset_rate` stem fields doing the polish. So VL
+had the *same* drift as FFO, and its description was rewritten the same way.
+
+The lesson is the gate's design rule: **"references found" is no more evidence than "no references
+found"** unless comments are stripped first. Gate 2 strips them, and its negative control asserts
+that a commented-out read does not count — because that exact mistake survived the first pass of
+this investigation.
+
+VL's routes were *also* under-declared — it read `bass_onset_rate`, `drums_onset_rate`,
+`other_onset_rate`, `vocals_onset_rate`, `mid_att_rel`, `mid_dev`, `pulse_beat_index` and `valence`
+without declaring any of them. ✅ **RESOLVED 2026-09-23 (BUG138.3)**: all eight declared, and
+`RouteCoverageTests` proves each one fires (236 → 243 routes, 0 red). The same pass removed the
+**dead** `camera_dolly_speed ← bass` route: VL reads no `f.bass` anywhere and has no audio-driven
+dolly, so that was a named behaviour the shader does not have — over-declaration, the mirror image of
+the rest of this defect. `bass` had been declared for three months and `RouteCoverageTests` never
+objected, because it proves a declared primitive has *activity in the session*, not that the shader
+*reads* it.
+
+**Why the obvious gate was not the one built.** The first-stated criterion — *a primitive named in a
+description must be declared in `audio_routes`* — would have failed VolumetricLithograph for its
+route under-declaration rather than for its drift, and a gate that fails for the wrong reason gets
+exempted instead of fixed. The rule built instead: **a field named in a `description` must be
+declared in that scene's `audio_routes` OR read by its own `.metal` with comments stripped.** Only
+three of 27 sidecars name a field in prose at all, so the surface is small, and both shipped defects
+fail it.
+
+**Scope of Gate 2, recorded so it is not mistaken for a hole later.** Only identifier-shaped
+mentions are checked (snake_case with an underscore, or camelCase). Single-word fields — `bass`,
+`mid`, `treble`, `arousal`, `valence` — are ordinary English, and matching them would make a
+description unwritable. All eight stale claims used multi-word identifiers. Scenes that route on the
+CPU (`NimbusState`, `SkeinState`, `RenderPipeline+Nacre`, the FFO aurora drivers) have reads the
+`.metal` scan cannot see; all of them declare those fields today and pass on the first branch.
+
+**Why P2 and not P3.** This is not tidiness. Instance (a) is the most plausible origin of a
+**live claim on uzume.io** — *"Bass raises the spikes"* — which `docs/AUDIO_CONTRACT.md` §4.1
+adjudicates as false. A stale sentence inside a scene's own sidecar is where anyone writing
+about that scene would look first.
+
+#### Expected
+
+A scene sidecar's `description` and its `audio_routes` block describe the same shader. A
+document stating a GPU struct's size states the current size.
+
+#### Actual
+
+**(a) `UzumeEngine/Sources/Presets/Shaders/FerrofluidOcean.json`** — the `description` field reads:
+
+> "Audio routing per round 65 (V.9 Session 4.5c): bass_energy_dev → spike height; arousal →
+> swell amplitude; vocals_pitch_hz → aurora palette; drums_energy_dev_smoothed → aurora
+> intensity; accumulated_audio_time × arousal → aurora drift."
+
+Three of those four are still true. `bass_energy_dev → spike height` is not. `fo_spike_strength`
+([FerrofluidOcean.metal:169–259](../../UzumeEngine/Sources/Presets/Shaders/FerrofluidOcean.metal#L169))
+reads `cached_bass_proportion`, `pulse_phase01`, `pulse_amp01`, `pulse_beat_index`,
+`pulse_regional_blend01` and `total_energy_smoothed` — and no bass field. The shader's own
+comment records the replacement: the pulse *"REPLACES the CSP.3.2/3.3 `0.8 × clamp(f.bass)`
+term"*, whose diagnosis was that AGC-levelled bass *"barely moved"* (motion std 0.09 — Matt's
+"frozen"). The same file's `audio_routes` array — the one `AudioRouteSchemaTests` and
+`RouteCoverageTests` check — correctly declares no bass primitive.
+
+**(b) `docs/ARCHITECTURE.md` §Buffer Binding Layout** (`buffer(0) = FeatureVector (192 bytes, 48
+floats)`) and **`UzumeEngine/Sources/Renderer/Shaders/Common.metal:11`** (`Matches Swift
+FeatureVector layout (48 floats = 192 bytes, MV-1/MV-3b)`). Parsing the struct gives **56 floats
+= 224 bytes**; the last four are `spectral_level_rise`, `track_hue_anchor01`, `transient_rise`,
+`near_silent01`. The drift is eight floats of fields added since MV-3b, each of which updated the
+struct and the Swift mirror — which `CommonLayoutTest` gates — without updating the prose beside
+them, which nothing gates.
+
+#### Reproduction
+
+```bash
+# (a) the two halves of one sidecar, side by side
+python3 -c "import json;d=json.load(open('UzumeEngine/Sources/Presets/Shaders/FerrofluidOcean.json'));print(d['description']);print([r['primitive'] for r in d['audio_routes']])"
+grep -n 'bass' UzumeEngine/Sources/Presets/Shaders/FerrofluidOcean.metal | grep -i spike
+
+# (b) the real size
+python3 - <<'EOS'
+import re
+src = open('UzumeEngine/Sources/Renderer/Shaders/Common.metal').read()
+body = re.sub(r'//[^\n]*', '', re.search(r'struct FeatureVector \{(.*?)\n\};', src, re.S).group(1))
+n = sum(len(m.group(1).split(',')) for m in re.finditer(r'\bfloat\s+([^;]+);', body))
+print(n, 'floats =', n * 4, 'bytes')
+EOS
+```
+
+#### Suspected failure class
+
+`documentation-drift`. Neither instance is a code defect; the engine is correct in both cases and
+the machine-checked surfaces (`audio_routes`, `CommonLayoutTest`) are correct too. What drifted is
+the prose sitting beside them, which no gate reads.
+
+#### Verification criteria (written before any fix)
+
+1. **Automated.** A test asserting that every sidecar `description` mentioning a `*_energy_dev`
+   / `*_dev` / `beat_*` primitive by name also declares it in that sidecar's `audio_routes`. This
+   is the mechanization the D-161 ratchet asks for on a rule violated twice — and it has now been
+   violated twice in one file. Without it, (a) simply recurs the next time a route is retired.
+2. **Automated.** Extend `CommonLayoutTest` to also parse the float/byte count out of the comment
+   above each struct and assert it against `MemoryLayout`, so (b) cannot recur silently.
+3. **Manual.** None required — nothing here affects musical feel or visual fidelity. Ferrofluid
+   Ocean's behaviour is unchanged and remains certified; only the sentence describing it is wrong.
+
+#### Why (a) was not fixed at AUDIO.1
+
+AUDIO.1 was scoped read-only by its prompt (*"Do not change engine behaviour, shader code, or
+sidecars"*), and instance (a) is a sidecar. Both are recorded here and in
+[`docs/AUDIO_CONTRACT.md`](../AUDIO_CONTRACT.md) §6 rather than patched, so the fix lands with its
+gate rather than as a one-line edit that the next retired route undoes.
+
+---
+
+### BUG-137 — the capture-mode recorder test fails intermittently under load (2026-09-16)
+
+**Severity:** P3 · **Domain:** `diagnostics` · **Failure class:** `resource-management` (diagnosed 2026-09-16) · **Related:** BUG-136, REC.1, BUG-039
+
+#### Expected
+
+`SessionRecorderTests.test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels` passes
+deterministically, whatever else the machine is doing. It feeds 100 frames paced at 60 Hz; the
+first 30 go to the writer's size-stability lock, and at least 60 of the remaining 70 must be written.
+
+#### Actual
+
+Intermittent. Two observations, both at or near REC.1:
+
+1. **2026-09-16, `682175ad`, Matt's M2 Pro.** `swift test --package-path UzumeEngine --filter
+   SessionRecorder`, run immediately after an `xcodebuild -scheme UzumeApp` build: 38 tests,
+   1 failure.
+
+   ```
+   SessionRecorderTests.swift:1026: error: -[UzumeEngineTests.SessionRecorderTests
+   test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels] : XCTAssertGreaterThanOrEqual
+   failed: ("48") is less than ("60") - capture keeps every 60 Hz frame after lock
+   ```
+
+   Only the **count** assertion failed. The strict-increase assertion on grey levels passed, so
+   no written frame carried another frame's pixels — REC.1's integrity fix held. The same test
+   then **passed 5 of 5** runs on its own.
+
+2. **REC.1 closeout.** One run of the recorder tests failed while `swiftlint` ran concurrently,
+   was not reproduced in six further runs, and did not record which test failed. Very likely
+   this one.
+
+**Not seen outside the test.** Three live `UZUME_RECORD_VIDEO=capture` sessions at `682175ad`
+on an idle Mac (the W.3a website masters, 2026-09-16) wrote every frame after the lock:
+`SessionRecorder finished` reports 6,645 frames / 6,616 appended, 9,507 / 9,477 and
+10,916 / 10,886 — rendered minus the ~30 lock frames each time. The one-frame-late gaps in those
+videos match late frames in `features.csv` (`wallclock_s` intervals > 25 ms: 8, 14 and 5), so
+they are the renderer's, not the recorder's.
+
+#### Reproduction
+
+Run the filtered suite under CPU contention, repeatedly:
+
+```
+for i in $(seq 1 20); do
+  swift test --package-path UzumeEngine \
+    --filter "SessionRecorderTests/test_captureMode_writesProResMov_eachFrameCarriesItsOwnPixels" \
+    2>&1 | grep -E "Executed 1 test|is less than"
+done
+```
+
+with a concurrent CPU load — an `xcodebuild` of `UzumeApp`, `swiftlint lint`, or one busy
+process per core. Alone, it passes.
+
+**Minimum reproducer:** not yet established; that is the first diagnosis step.
+
+#### Suspected cause
+
+Two readings fit, and they point to different fixes:
+
+- **The test is timing-dependent (`test-isolation`).** It paces frames with
+  `Thread.sleep(forTimeInterval: 1.0 / 60.0)` against the wall clock and waits on real Metal
+  command-buffer completion handlers. Under contention those arrive late or bunched, and the
+  assertion encodes a real-time expectation the harness cannot guarantee.
+- **The recorder drops frames under load (`concurrency` / `resource-management`).** Capture mode
+  writes ProRes through an `AVAssetWriterInput` with `expectsMediaDataInRealTime`; if the input is
+  not ready when a frame arrives, that frame may be skipped. That would be a real limit of capture
+  mode on a busy Mac, not a test artifact — and it would matter to anyone recording while the
+  machine is working.
+
+The live evidence above rules out neither: those captures ran on an idle machine.
+
+#### Diagnosis (2026-09-16) — the recorder, not the test
+
+The test's failure message now names the path that lost each frame, from the recorder's own
+counters (`videoFramesAppended`, `videoNotReadyCount`, `videoAppendFailCount`,
+`videoPoolFailCount`, and frames `makeVideoFrame` returned no buffer for). Run 20 times with one
+busy process per core (10 on the M2 Pro):
+
+| | Result |
+|---|---|
+| Runs | **14 fail / 6 pass** (alone: 6 of 6 pass) |
+| Frames lost per failing run | 13–38 of 70 after the lock |
+| **Writer not ready** | **every lost frame** |
+| Append failed / pool failed / no buffer | 0 / 0 / 0 |
+| Frames read back from the `.mov` | equal to frames appended, every run |
+
+Every frame the writer took is in the file with the right pixels; the ones it refused are gone.
+`AVAssetWriterInput.isReadyForMoreMediaData` goes false while the ProRes encoder is behind, and
+`healthyVideoAdaptor` discards the frame — logging only every 120th, so a burst of 20–30 drops
+leaves at most one line in `session.log`. That is the second reading above, confirmed: capture mode
+is lossy on a busy Mac. It is not a flaw in the test, which is doing its job.
+
+Consequence beyond the test: a `UZUME_RECORD_VIDEO=capture` recording made while anything
+CPU-heavy runs — a build, an export, another app — silently loses frames, and nothing in the
+session artifacts says so. The W.3a masters were recorded on an idle Mac and lost none.
+
+**Reproduction under load.** Start the load, run the loop from §Reproduction, then clear it:
+
+```
+for c in $(seq 1 $(sysctl -n hw.ncpu)); do yes > /dev/null & done
+# … the test loop …
+pkill -x yes
+```
+
+Clear it with `pkill` — killing the recorded PIDs left all ten processes running once.
+
+#### Verification criteria (written before any fix)
+
+- **Diagnosis first:** when a run writes fewer than 60 frames, establish which reading holds —
+  whether each missing frame was rejected by the writer (not ready / append failed; the BUG-039
+  log paths) or never reached `recordFrame` in time.
+- Automated: the test passes **20 of 20** runs under a concurrent CPU load, using the loop above.
+- If the recorder is the cause: capture mode logs every frame it fails to write, with the reason,
+  so a live capture can be audited from `session.log` alone.
+- Live: a `UZUME_RECORD_VIDEO=capture` session recorded **while the machine is under load** writes
+  every frame after the lock (appended = rendered − lock frames).
+
+#### Resolution — `8a896e4a` + `c2b047ea` (2026-09-16)
+
+Capture mode only; diagnostic mode keeps its drop-and-throttled-log behaviour.
+
+- **Wait instead of drop.** `captureAdaptorWhenReady` polls `isReadyForMoreMediaData` every 2 ms for
+  up to 1 s, stopping early if the writer leaves `.writing`.
+- **Bounded.** `recordFrame` admits each frame against a 512 MB backlog budget on the render thread
+  (≈ 1 s of 1080p60; a lone frame is always admitted) and releases it once the queue is done, so a
+  stalled encoder cannot hold frames without limit.
+- **Audited.** Every lost capture frame is logged with its reason — backlog full, writer not ready
+  after the wait, append failed, pixel-buffer or pool failure — and the session summary carries
+  `capture dropped N`.
+- Pacing code (this and BUG-136's keep decision) moved to `SessionRecorder+VideoPacing.swift`;
+  `SessionRecorder+Video.swift` had been exactly at `file_length`'s 400.
+
+**Verification criteria:**
+
+- [x] Diagnosis first — every lost frame was a writer-not-ready rejection (`11bc5908`).
+- [x] Under load (one busy process per core, M2 Pro): **6/20 before; after, 20/20** — then, on the
+  final refactored code, **19/20 and 30/30**. The single failure did not print the frame-count
+  assertion and its output was not kept; its cause is **unknown**, and it is not counted as a pass.
+- [x] Every lost frame logged with its reason — `test_captureMode_backlogFull_dropIsCountedAndLogged`.
+  Pure gates: `test_captureBacklogAdmits_withinBudget_andAlwaysOneFrame`,
+  `test_waitUntil_returnsOnReady_andGivesUpAtTimeout`. `SessionRecorder` filter: 41 tests, 0 failures.
+- [x] **Live under load, `2026-09-16T21-40-11Z`** — Debug build of the branch, LG 1920×1080, local file
+  (*Delinquent Frequencies*), planner running, **10 busy processes from writer lock to quit**:
+
+  | | |
+  |---|---|
+  | `SessionRecorder finished` | 12,642 frames; **12,613 appended; capture dropped 0** |
+  | Written after lock | 12,642 − 29 lock frames = **12,613 — every frame** |
+  | Render after lock | 59.97 fps, 2 intervals > 25 ms |
+  | Packet intervals (sixtieths) | {1: 12,610, 2: 1, 6: 1} — the two odd ones are those two late renders |
+  | `check_capture.py` (site repo) | ACCEPT; ProRes 422, 1.41 GB/min |
+
+**Open observation, not this bug.** The loaded capture holds 38 identical consecutive frames, at
+one-frame intervals: ten singles during Waveform (49.5–68.5 s, at half-second marks) and a 28-frame
+run at 190.54–190.99 s while Mitosis was on screen. The recorder cannot produce them — each frame is
+blitted into its own buffer before it is queued, the wait only delays the write, and the capture
+test's pixel-integrity assertion held in every loaded run — so they are the renderer's output. Not
+investigated.
+
+---
+
+### BUG-136 — the diagnostic video recorder delivers ≈ 23 fps, not 30 (2026-09-16)
+
+**Severity:** P3 · **Domain:** `diagnostics` · **Failure class:** `algorithm` · **Related:** BUG-050 (why video is opt-in)
+
+#### Expected
+
+With `UZUME_RECORD_VIDEO=1` and the renderer holding 60 fps, `video.mp4` carries every second
+rendered frame: ≈ 30 fps, every packet interval two sixtieths of a second.
+
+#### Actual
+
+Session `2026-09-16T14-27-56Z` (Matt's M2 Pro, local file, Cymatic Resonance). `features.csv`:
+59.97 fps, 3 late frames in 67 s. `video.mp4`: 1579 packets, **23.38 fps**. Packet-interval histogram
+in sixtieths of a second:
+
+| interval | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| count | 1 | 684 | 892 | 1 |
+
+#### Reproduction
+
+Record any session with `UZUME_RECORD_VIDEO=1`, then:
+`ffprobe -v error -select_streams v:0 -show_entries packet=pts_time -of csv=p=0 video.mp4 | sort -g | awk 'NR>1{h[int(($1-p)*60+0.5)]++}{p=$1}END{for(k in h)print k" frames: "h[k]}'`
+
+#### Cause
+
+`SessionRecorder.recordFrame` skipped a frame when `(now − lastVideoFrameTime) < 1.0 / 30.0`. At 60 Hz
+a two-frame gap is ≈ 33.4 ms, straddling the 33.3 ms threshold; completion-handler jitter pushes
+roughly half of them under it, and the gap becomes three frames. The throttle has no tolerance for
+render jitter.
+
+#### Verification criteria (written before the fix)
+
+- Automated: a pure keep-decision function; 60 Hz frames with ±2 ms jitter at target 30 keep exactly
+  every second frame, at target 60 keep every frame, and a late frame is kept on arrival. The tests
+  fail against the old comparison.
+- Live: a short `UZUME_RECORD_VIDEO=1` session whose interval histogram is all two-frame, ≈ 30 fps.
+
+#### Resolution — REC.1, `7919e9f6` (2026-09-16)
+
+`SessionRecorder.shouldKeepVideoFrame` keeps a frame arriving no more than half a render frame
+before it is due. The tests failed against the old comparison (target 30 kept frames 0, 3, 5, 8…;
+target 60 kept 150 of 240) and pass on the new one.
+
+Live `2026-09-16T15-09-56Z` (diagnostic, 150.3 s): **4,509 frames = 30.00 fps**, histogram
+**{1: 3, 2: 4,503, 3: 2}**, 0 duplicate consecutive frames. The odd intervals sit at the renderer's
+own late and catch-up frames.
+
+---
+
+### BUG-132 — a plan rebuild installs the wrong track's BeatGrid over the playing track (2026-09-14)
+
+**Severity:** P1 · **Domain tag:** `orchestrator` / `pipeline-wiring` · **Failure class:** `pipeline-wiring`
+**Found:** in PREP.2's live validation session, by reading the log — **not** visible to the listener who ran it.
+
+#### Expected
+
+While a track plays, the installed `BeatGrid` is that track's grid. A plan rebuild behind a playing
+session changes what will play NEXT; it does not touch the live pipeline.
+
+#### Actual
+
+Every `_buildPlan` rebuild ends `aboutToPreFire=true` and pre-fires **the plan's first track** —
+`resetStemPipeline caller=preFire` → `StemCache.loadForPlayback` → `BeatGrid installed` — regardless
+of what is playing. Session `2026-09-14T13-49-57Z` (13 local FLACs, early start):
+
+| rebuild | grid installed | actually playing | |
+|---|---|---|---|
+| 13:52:34 / :48, 13:55:12, 13:56:47 | 01 Monkey (164.4) | 01 Monkey | ok |
+| 13:58:40 | 01 Monkey (164.4) | **02 California (118.6)** | ⚠ |
+| 14:00:30, 14:02:15 | 01 Monkey (164.4) | **03 Everybody's Song (175.0)** | ⚠ |
+| 14:04:43, 14:08:10 | 01 Monkey (164.4) | **04 Silver Rider (108.0, meter 3/X)** | ⚠ |
+
+**5 of 9 pre-fires installed the wrong grid**, and the primary observable agrees — `grid_bpm` in
+`features.csv` reverts to 164.421 and *stays there until the next track change*: **13,190 frames**
+inside track 3 and **13,928 frames** inside track 4, i.e. essentially the whole of both. Track 4 is
+in 3, driven on a 4/X grid at 164 BPM against its true 108.
+
+The stem series is clobbered with it — the same pre-fire logs
+`STEM_SOURCE: series frames=11192 covers=259.9s` for Monkey while California plays.
+
+#### Why nobody saw it
+
+Matt reviewed this session for the PREP.2 criteria — playback starts, no stutter — and reported
+*"no noticeable disruption to the music or visuals"*, which was true of everything he was asked to
+watch. A wrong tempo grid does not stutter; it puts beat-locked motion on the wrong clock, and most
+of the scenes this session selected are continuous-energy driven (D-004), where it barely shows.
+**A felt review cannot be expected to catch a defect nobody asked it to look for.**
+
+#### Relationship to PREP.2
+
+Not created by PREP.2 — the pre-fire-on-rebuild behaviour predates it — but **PREP.2 turned it from
+rare into routine**: the plan now rebuilds once per prepared track (its item ④), so a 13-track walk
+behind a playing session fires it nine times. PREP.2 anticipated exactly this shape on the
+neighbouring path — *"a walk finishing behind a playing session must not drag it back to `.ready`"* —
+and guarded readiness. The plan-rebuild path has no such guard.
+
+#### Suspected fix, not yet attempted
+
+The pre-fire is correct when the plan is built for a session that has not started. It is wrong when
+a track is already playing: the rebuild should pre-fire nothing, or pre-fire the CURRENT track.
+Evidence for the shape of the guard is in the log — `Orchestrator: wire active (planIdx=N)` tracks
+the playing index correctly throughout, so the information needed is present at the call site.
+
+#### Verification criteria (written before any fix)
+
+- Automated: a plan rebuild while a session is playing leaves the installed grid untouched — a
+  regression test in the `LocalFileEarlyStartTests` family, which already has the harness.
+- Automated: `grid_bpm` in a replayed multi-track local session changes only at track boundaries.
+- Manual: one local-folder session with an early start on tracks of visibly different tempo, watching
+  a beat-locked scene — the felt check the automated ones cannot make.
+
+#### Fix (BUG132.1)
+
+`_buildPlan` pre-fires only when nothing is playing:
+`VisualizerEngine.shouldPreFirePlan(sessionState:)` is `sessionState != .playing`, and the pre-fire
+call site consults it. Every non-playing state still pre-fires, because the DSP.3.2 priming this
+call exists for is a pre-playback concern; only `.playing` suppresses it.
+
+⚠ **Criterion 1 could not be met where it was written.** `LocalFileEarlyStartTests` is in the ENGINE
+and `_buildPlan` is `@MainActor` on `VisualizerEngine` in the APP, needing a Metal device, a session
+manager and a scene loader to reach — the criterion was written without checking where the code
+lived. Met in substance instead, in two halves: the policy is a pure function of `SessionState`,
+unit-tested over **every** case, and the wire is a source-presence assertion in
+`PlanPreFireRegressionTests` (app target). Criterion 2's replay gate is **not** built — see below.
+
+★ **The wire test passed against the reverted guard on its first attempt.** It searched for
+`shouldPreFirePlan(sessionState:`, which the `static func` declaration satisfies by itself — a
+green gate over dead code, which is BUG-015's shape exactly. Caught only by reverting the fix and
+re-running. It now matches the CALL (`Self.shouldPreFirePlan(`) over comment-stripped source, and
+the A/B is recorded: **red on the exact pre-fix code, green on the fix.**
+
+**Not yet done, and named rather than quietly dropped:** criterion 2 (a replayed multi-track local
+session asserting `grid_bpm` changes only at track boundaries) needs a harness that replays a plan
+rebuild against a playing session; none exists. The live re-check below is what covers it today.
+
+**Live re-check PASSED** on `2026-09-14T14-34-41Z` (16 local MP3s, early start, Release from
+`5e6a109b`). Eleven plan rebuilds, **ten of them while playing, every one logging
+`aboutToPreFire=false`** — the guard fired under exactly the condition that produced the defect.
+`grid_bpm` changed **7 times for 7 tracks**, each at a track boundary (117.9 → 154.3 → 122.7 → 82.9
+→ 161.7 → 128.2 → 93.4) and never reverted. The prior session reverted to 164.421 four times, twice
+for ~13,000 frames. ⚠ The `pre-fire skipped` breadcrumb goes to `os.log`, not `session.log`, so
+`aboutToPreFire=false` is the recorded evidence — worth knowing before grepping a session dir for
+the skip line and concluding the guard never ran.
+
+---
+
+### BUG-131 — a clock tick racing teardown killed the process (2026-09-11)
+
+**Severity:** P1 — process death, on the path all development runs on. **Introduced and fixed in the
+same session; it reached `main` in between.**
+
+#### How it surfaced
+
+Two consecutive full engine-suite runs died with no completion line, during the
+`LocalFilePlaybackProvider` churn tests — the suite built for exactly this class (BUG-021 / BUG-059 /
+BUG-078). The stack names the culprit without ambiguity:
+
+```
+PlayheadAnalysisClock.tick → the position closure from make(url:player:deliver:)
+  → AVAudioNode.lastRenderTime → AVAE_CheckNodeHasEngine
+  → 'required condition is false: _engine != nil'
+```
+
+#### Root cause
+
+`stop()` was written as *"idempotent, non-blocking"* — and the comment even claimed that was a virtue,
+that it *"never waits on the clock queue the way a teardown that blocked would."* That reasoning was
+backwards. `cancel()` stops future handlers; a handler already running continues, and it holds a weak
+reference to a player whose engine `teardownAVFoundation` is about to release.
+
+#### Fix
+
+`queue.sync { }` after `cancel()`. The clock queue is serial, so an empty block running on it proves
+the in-flight handler has returned. It does **not** reintroduce BUG-021's ABBA: the clock queue never
+takes the provider's lock and never calls into AVFoundation teardown, so nothing it does can block on
+the thread calling `stop()`. The wait is bounded by one tick — a memcpy, or at worst one 1-second
+block decode.
+
+`deinit` keeps the bare `cancel()` deliberately: it can be reached on any thread including the clock
+queue, where `queue.sync` would deadlock.
+
+#### ★ Why the tests did not catch it before it shipped
+
+Three full-suite runs were green across BUG087.4, BUG087.5 and PR.24. It is a race, and the window is
+one tick against a teardown. **The lesson is not "run the suite more" — it is that a new
+real-time-ish loop touching AVFoundation objects owned by another lifecycle needs a teardown-ordering
+argument written down at review time, not a green suite.** The provider already had three such
+arguments (BUG-021, BUG-059, BUG-078); the clock was added without one, and the comment asserting
+non-blocking teardown was safe is where that gap is visible in hindsight.
+
+#### Verification criteria
+
+- Automated: the churn suites (`SessionLifecycleChurn`, `LocalFilePlaybackStartRace`,
+  `PlayheadAnalysisClock`) run repeatedly without the exception. Measured 5/5 clean after the fix,
+  against 2/2 full-suite deaths before it.
+- Automated: the full engine suite completes and prints a run line at all — the crash produced no
+  verdict, which is itself the signature.
+
+---
+
+### BUG-129 — `chain_health.json` reports `peakDBFS` exactly 0, and the verdict stays `clean` (2026-09-11)
+
+**Severity:** P3. Found while checking a session's chain health before quoting its verdict in an M7
+closeout — not reported by a user.
+
+#### Expected behavior
+
+`peakDBFS` reports the capture's true peak in dBFS, and a peak at or near 0 (full scale) either
+reflects real clipping or trips a chain-health reason.
+
+#### Actual behavior
+
+| session | `peakDBFS` | verdict |
+|---|---|---|
+| `2026-09-11T19-12-34Z` | −6.03 | clean |
+| `2026-09-11T19-58-15Z` | **0** | clean |
+| `2026-09-11T20-19-03Z` | **0** | clean |
+
+`reasons` and `notes` are empty on all three, and `raw_tap.wav` is present in every session
+directory. So either the peak is not being measured and falls back to 0, or it is measured as full
+scale and the clipping check does not fire on it. Both readings are defects; they need different
+fixes.
+
+#### Why it matters beyond tidiness
+
+The scene-session rule is that a fidelity/M7 closeout **must cite the session's chain-health
+verdict**, and D-184 makes a `clean` verdict the precondition for judging fidelity at all — *"a
+fidelity judgment made on degraded audio measures the wrong thing."* A peak field that silently
+reads 0 weakens every such citation. **Two M7s closed on 2026-09-11 cite `clean` over a 0 peak —
+VL.2 and WL.11** — and both carry the caveat in their plan entries rather than quietly relying on
+it.
+
+#### Suspected failure class
+
+`measurement` / `documentation-drift` at the boundary — a diagnostic that reports a value nobody
+checks against reality. Start at `ChainAnalyzer`'s peak path and whether `raw_tap.wav` is read at
+all when the verdict is computed; `Scripts/analyze_session_chain.sh <dir>` regrades a directory in
+place, which makes an A/B against the −6.03 session cheap.
+
+#### Verification criteria (written before any fix)
+
+- Automated: regrade all three sessions above; the two reading 0 must either report a plausible peak
+  or produce a non-`clean` verdict with a reason naming why.
+- Automated: a session whose `raw_tap.wav` is genuinely full-scale must NOT grade `clean`.
+- No manual check required — this is a measurement defect, not a felt one.
+
+#### Diagnosis — ★ the filed hypothesis was wrong, and the measurement was right all along
+
+Both candidate causes in this entry said the peak was untrustworthy. Measured independently of the
+app, by reading the float WAVs directly:
+
+| session | true peak | samples at full scale | 2nd-highest sample |
+|---|---|---|---|
+| `2026-09-11T19-12-34Z` | 0.49935913 (−6.03 dBFS) | 0 | — |
+| `2026-09-11T19-58-15Z` | **1.00000000 (0.00 dBFS)** | **1 of 2,880,000** | −0.24 dBFS |
+| `2026-09-11T20-19-03Z` | **1.00000000** | **1 of 2,880,000** | −0.24 dBFS |
+| `2026-09-12T20-19-59Z` | **1.00000000** | **1 of 2,880,000** | −0.24 dBFS |
+
+`ChainAnalyzer.peakDBFS` reads `raw_tap.wav`, takes `max(abs(sample))` and converts —
+`dbfs(peak: 1.0)` is exactly 0. **`peakDBFS: 0` was the truth**: a single sample sitting at
+`-1.00000000`, in context among neighbours of −0.74/−0.79/−0.93, with the whole programme's
+second-highest sample at −0.24 dBFS. That is an ordinary heavily-limited master, not a broken
+capture and not an unmeasured default.
+
+**Why it appeared exactly when it did.** The three earlier sessions read ≈ −6 dBFS because they were
+*tap* captures. BUG087.5 (same day, 2026-09-11) retired the tap on the local-file path, so from
+`19:58:15Z` onward `raw_tap.wav` is the DECODED FILE at unity gain — the master's own level, which
+for modern music touches full scale. Nothing broke; the capture stopped being attenuated.
+
+#### The actual defect, and the one criterion I had to reinterpret
+
+`analyze` checked `critical_peak` (too low) and `low_peak` (too low) and **nothing at the top end** —
+so no capture could ever be graded on being too hot, which is what made a 0 dBFS reading look like a
+silent failure rather than a fact.
+
+★ **Taken literally, criterion 2 would flag every loud track.** "A session whose `raw_tap.wav` is
+genuinely full-scale must NOT grade `clean`" was written believing full scale implied clipping. The
+evidence says otherwise: these captures ARE genuinely full-scale and are healthy. Gating on the peak
+would mark ordinary limited masters `degraded` and hollow out the verdict exactly where D-184 needs
+it to carry weight. So the guard is gated on **flat-topping** — `clippingRunSamples = 4` consecutive
+samples pinned at the rail, which a clipped chain produces and a limiter's output does not — plus a
+separate `over_full_scale` reason, since a float capture above 1.0 cannot be a mastering choice.
+Criterion 2 is met in substance: a genuinely clipped capture does not grade `clean`.
+
+#### Fix (BUG129.1)
+
+- `peakScan` replaces the peak-only loop: one pass yields the peak, the full-scale sample count, and
+  the longest run of consecutive full-scale samples (counted per channel, so concatenation cannot
+  invent a run across the seam).
+- New reasons `clipped(run=N,samples=M)` and `over_full_scale(…)`.
+- **New reported field `maxFullScaleRun`, present on every capture including when it is 0 or 1.**
+  This is the part that closes the original complaint: `peakDBFS: 0` is indistinguishable from an
+  unset default *by eye*, and a companion field that says "one sample at the rail" makes it
+  self-evidencing. The three sessions now read `peakDBFS 0, maxFullScaleRun 1`.
+
+**Regraded** (`Scripts/analyze_session_chain.sh`): `19-12-34Z` → peak −6.03, run 0, `clean`;
+`19-58-15Z` / `20-19-03Z` / `2026-09-12T20-19-59Z` → peak 0, **run 1**, `clean`. All four verdicts
+are unchanged and now defensible — the loud ones say why they are loud.
+
+**Gate.** Four tests in `ChainAnalyzerTests`: a limited master at full scale stays `clean` and
+reports run 1; a flat-topped capture grades `degraded` with a `clipped(` reason; an above-full-scale
+capture is flagged; a quiet capture reports run 0.
+
+**The M7 citations this bug undermined are sound.** VL.2 and WL.11 cited `clean` over a 0 peak; that
+verdict was correct, and the captures were loud rather than broken. The caveats in their plan
+entries can be read as resolved.
+
+---
+
+### BUG-130 — Local-file stop/pause freezes the feature vector instead of decaying to silence (2026-09-11)
+
+**Severity:** P1 · **Domain tag:** `audio.pipeline` · **Failure class:** `pipeline-wiring`
+**Status:** **RESOLVED — live M7 PASSED 2026-09-12** (Matt: *"silence pauses correctly now"*)
+**Resolved:** BUG130.1
+
+**Reported by Matt**, correcting my misreading of his M7: *"Audio did not play continuously
+throughout - I stopped and started playback of a local file a couple times during the session and had
+silence for more than 20 seconds."*
+
+**Expected.** Stopping playback produces silence: band energies decay toward zero and
+silence-dependent behaviour (D-037 relaxed states, `nearSilent01`, any silence gate) fires.
+
+**Actual.** The last analysed frame is retained and re-published every render frame. Measured on
+`2026-09-11T21-00-42Z` (chain_health **clean**, peak 0 dBFS):
+
+| evidence | |
+|---|---|
+| frozen run | frames 3041–4658 — **1617 frames / 26.9 s**, `bass/mid/treble` byte-identical |
+| frozen values | `bass 0.27158  mid 0.02265  treble 0.00522  bassRel 0.10214` — all non-zero |
+| `playback_time_s` | 50.7200 → 50.7307 across those 27 s — **playback genuinely stopped** |
+| `time` / `wallclock_s` / `deltaTime` | advancing normally — the render loop is healthy |
+| `SIGNAL_HEALTH` | a matching **28 s gap** (21:01:44 → 21:02:12): no analysis frames produced |
+| `near_silent01` | 0 across all 6088 frames — it cannot fire on frozen loud values |
+
+**Cause.** `LocalFilePlaybackProvider.pause()` pauses the player node only; nothing clears the
+published features. With the tap retired for local files (BUG087.5 — the clock is the only analysis
+source), a stopped clock produces no new frames and the last one persists indefinitely. This is the
+stale-publisher class CLAUDE.md §What NOT To Do names: *a publisher retains its last value
+indefinitely; a feature written on one path must be cleared on the complementary path.*
+
+**Blast radius: every scene**, not just Alfvén. With local-file playback stopped, all of them see a
+steady non-zero signal and keep animating as though music were playing. Anything silence-dependent is
+dead on the local-file path.
+
+**Why three M7 rounds missed it.** It makes stopped playback *indistinguishable* from playing — which
+is exactly the symptom Matt reported three times ("silence state looks the same as active state") and
+which I misdiagnosed twice: first as a dead tap, then as "the engine never saw silence / audio played
+continuously". `SIGNAL_HEALTH` showed no silence because analysis had **stopped**, not because audio
+was playing. Matt's correction located it; I had the evidence and drew the wrong conclusion from it.
+
+**Did NOT block ALFVEN.CERT.** Alfvén's own gates were green and its silence gate correct in the
+harness from both a fresh seed and an energised field (ALFVEN.3h/.3i); it simply could not be
+exercised live on the local-file path until this was fixed. ✅ **Now validated live** — see the M7
+below; the "unvalidated" record this paragraph created is closed.
+
+**Suggested fix.** Clear or decay the published `FeatureVector` on the stop/pause path, the
+complementary write CLAUDE.md prescribes. Worth checking the streaming path for the same gap.
+
+**Independently diagnosed in parallel.** The BUG-131 session reached the same mechanism and the
+same prescription from the other side of it — *"a nil position means SILENCE, not 'no update'"* —
+and recorded it on this row as diagnosis only rather than editing another session's bug
+(`acd2572e`). Two sessions, one conclusion.
+
+**Fix (BUG130.1).** `PlayheadAnalysisClock.tick()` now delivers a tick's worth of **zeros** when the
+playhead is not moving — both when the player reports no render time (paused) and when the smoothed
+position stops advancing (stopped). The stale publisher is never touched: silence goes in at the top
+of the funnel and the existing chain decays through it exactly as it does for real musical silence,
+so `nearSilent01`, D-037 relaxed states and every band energy behave the same as they do on the
+streaming path. Two consequences of doing it there:
+
+- A stall also **resets `PlaybackClockSmoother` and re-seeds the cursor**. The smoother is entitled
+  to dead reckon `maxDeadReckonSeconds` (0.25 s) past the last distinct clock value; left alone it
+  would sit ahead of the pause point and a resume would read as a further quarter-second of silence
+  while the playhead caught up.
+- The **cursor-seeding tick delivers silence too** (it previously returned). No audio has passed the
+  playhead at a seed, and it keeps the cadence flat while a stall alternates seed → stall.
+
+A backward seek larger than the smoother's band is fixed by the same re-seed: before, the cursor
+stayed at the old position and nothing was delivered until playback caught back up to it.
+
+**Bounded, and here is the ceiling.** The silence lasts `stallFlushSeconds` (1.5 s — well past the
+FFT window and the band smoothers' τ ≤ 116 ms), after which the stall goes quiet and the vector
+stays frozen **at silence**, which is the correct value. The reason for the bound is
+`MIRPipeline.elapsedSeconds`: it accumulates each analysis frame's `dt`, so silence frames advance
+it, and the live drift tracker indexes the cached `BeatGrid` by it. Unbounded silence would advance
+the grid by the whole pause (27 s in the reported session); bounded, a pause costs ≤ 1.5 s of grid
+phase, recovered by the drift tracker on resume. Driving it to exactly zero needs the analysis
+callback to carry "this frame has no playhead" — a change to the four-argument contract this path
+shares with `SystemAudioCapture`, which is the named upgrade path in the code.
+
+**Gate.** `PlayheadAnalysisClockTests."A stalled or paused playhead delivers silence, not the last
+frame forever"` — drives `tick()` directly (playing → stopped → paused → resumed) and asserts
+every stalled tick delivers an all-zero buffer at full cadence, that the flush budget stops it, and
+that resume returns real audio.
+
+**Streaming path checked, and it does not have this gap.** Its process tap keeps delivering buffers
+whatever the transport is doing, so stopped streaming audio arrives as actual zeros already.
+
+**Live M7 — PASSED 2026-09-12.** Matt, on the canonical build from `a376f875`: *"silence pauses
+correctly now."* Session `2026-09-12T20-19-59Z`, scene Alfvén, one 34.1 s stop (frames 3458–5503):
+
+| measured | |
+|---|---|
+| decay | `bass` 0.0558 → 0.0022 in **0.25 s**, → 0.00001 by 0.65 s — the band smoothers' own curve |
+| `near_silent01` | fires at +0.25 s and holds **1.0 for all 2046 frames** of the stop (it was 0 across all 6088 frames of the defect capture) |
+| floor | 1646 frames deep in the stop at exactly **0.000000** on all three bands, one distinct value |
+| elapsed clock | advanced **1.11 s**, then flat at 59.0095 for the remaining 33 s — the 1.5 s flush budget, **inside** its documented ceiling |
+| resume | `bass` back to 0.035 within **one frame** (0.03 s), `near_silent01` → 0 immediately — no dead quarter-second |
+
+★ **The frozen run is still there, and that is the fix working.** 1646 identical frames during the
+stop — the same shape as the defect's 1617, at the opposite value. Frozen at `0.000000` is the
+correct reading of stopped playback; frozen at `0.27158` was the bug. Anything scanning this capture
+for constant runs will find one; the value is what distinguishes them.
+
+`chain_health` reads `clean` over `peakDBFS: 0` — that is BUG-129, so the verdict is weakly
+supported here, per its own entry.
+
+**Alfvén's silence state: validated, and it COASTS rather than freezes.** Matt, seeing it live:
+*"motion is continuous despite pausing, but the visual gets less complex when the sound is paused"* —
+then, on what that should be: *"coasting is right."* Alfvén is a driven MHD simulation; `alf_force`
+scales entirely by `p.drive`, so at zero energy the stirring force stops injecting structure while
+the field it already holds keeps advecting and diffusing. Losing complexity while staying in motion
+is that scene's honest response to losing its drive, and a hard freeze on a fluid sim would read as
+a dropped frame rather than as quiet. **Silence is not one look** — Matt: *"silence will read as
+different things depending on the scene's design."* See `docs/PRESET_SESSION_CHECKLIST.md` §Silence.
+
+---
+
+### BUG-128 — Root Choir substituted generic warped feedback for the selected Liquid Script subject (2026-09-11)
+
+**Severity:** P2
+**Domain tag:** preset.fidelity
+**Status:** Resolved by scene retirement
+**Introduced:** ROOTCHOIR.3 / PR #222
+**Resolved:** ROOTCHOIR-RETIRE.1 / D-249
+
+**Expected behavior.** The live scene should be recognizably related to the selected
+`Martin - liquid arrows` motion oracle without explanation: discrete pointed luminous heads
+actively draw long, fine S-curves that braid and dissolve through persistent negative space.
+The moving gesture, rather than the feedback canvas, must remain the primary visual subject.
+
+**Actual behavior.** On the merged PR #222 live build, Matt reported that Root Choir is
+reminiscent of Ricercar with warp added and looks nothing like the animated Martin reference.
+This is consistent and concept-level, after the earlier Newton version and two Liquid Script
+corrections also failed live review. The generic accumulator and warp dominate the frame; the
+reference's readable arrow heads and authored drawing action do not survive as the subject.
+
+**Reproduction steps.** Build merged commit `dc4892d3`, enable uncertified scenes, play music,
+and select Root Choir. Compare the live motion directly with the then-selected
+`Martin - liquid arrows` animated motion oracle. The scene-local reference copy was removed with
+the retired scene. Minimum reproducer: the dedicated merged review build at
+`/private/tmp/uzume-root-choir-review-dd/Build/Products/Debug/Uzume.app`.
+
+**Session artifacts.** The earlier clean sessions and production replays are recorded under
+BUG-125 and ROOTCHOIR.3. They establish that the pipeline renders, stays visible, and moves, but
+do not establish fidelity. The decisive artifact is Matt's M7 comparison of the merged live
+build against the named animated oracle: the two do not share a recognizable moving subject.
+
+**Suspected failure class:** `algorithm`.
+
+**Evidence for this class.** ROOTCHOIR.3 reduced the oracle to compact seed shapes plus generic
+`mv_warp` persistence. That combination produces a broad warped feedback field in Uzume's existing
+visual vocabulary; it does not implement the oracle's defining head-led drawing behavior. The
+design and closeout then described metric compliance as if it demonstrated visual fidelity,
+creating a secondary documentation-drift defect.
+
+**Verification criteria (written before retirement).**
+
+- [x] Automated: the production scene count drops by one and the loader returns no descriptor
+  named `Root Choir`.
+- [x] Automated: no app/runtime catalog, acceptance, rubric, or visual-review test names Root Choir.
+- [x] Repository: the Root Choir shader, sidecar, dedicated tests, visual references, and design
+  document are removed; generic `feedback_pixel_format` implementation and regression coverage stay.
+- [x] Manual-equivalent loader proof: a fresh app test host initializes with 31 scenes and no
+  Root Choir descriptor; final clean-build picker inspection remains the release smoke check.
+
+**Manual validation required:** Yes — inspect the scene picker after a clean build.
+
+**Fix scope.** Complete scene retirement (`ROOTCHOIR-RETIRE.1`), not another tuning pass. Preserve
+the generic sidecar-owned `mv_warp` feedback-format capability because it has other current and
+future consumers and is independently regression-tested.
+
+---
+
+### BUG-124 — vocal pitch was thrown away, not absent: YIN's step-4 fallback was missing (2026-09-09)
+
+**Severity:** P2. Two increments wrote `vocalsPitchConfidence` off as unusable on the strength of its output; a scene (Gossamer) keyed its signature visual — hue from vocal pitch — to a primitive that could not deliver.
+**Domain tag:** `dsp.analysis` · failure class **`algorithm-incomplete`**.
+**Status:** **Fixed 2026-09-09.**
+**Found:** Matt pushed back on a ceiling claim — *"there HAS to be a way to improve vocal signal"* — after being told the failure looked like a limit. He was right.
+
+**The defect.** `PitchTracker` documents itself as implementing YIN (de Cheveigne & Kawahara 2002) and implements step 4 halfway. The paper: *set an absolute threshold and choose the smallest tau that gives a minimum of d' deeper than that threshold; if none is found, the global minimum is chosen instead.* `findMinimum` returned -1 on a miss and the frame was discarded.
+
+**Why that hid itself.** Confidence is `1 - d'[tau]`, and tau was only returned when `d' < 0.15`, so confidence was **either 0 or > 0.85** - bimodal by construction. On 1290 real frames, **0.0 %** landed strictly between. A consumer cannot gate on a signal with no middle: Gossamer's `> 0.35` emission gate could never fire on anything the 0.85 branch did not already give it, and the tracker's own `confidenceThreshold = 0.6` was unreachable.
+
+**Why it failed on good material.** On realistic separation noise the global CMNDF minimum sits at **0.159-0.167** - just above the 0.15 gate, so the detector ran on a knife-edge. Seven Nation Army - about as prominent a vocal as exists - gave confidence on 23.3 % of frames and **24.5 % on its loudest vocal quartile**: no better when the vocal was loudest, which is what pointed at the algorithm rather than the material.
+
+**Hypothesis measured and dropped.** Window size is not the lever: 2048 -> 4096 moves the minimum 0.159 -> 0.165 and changes no detection rate, at 100 / 150 / 220 Hz.
+
+**Fix + measurement (production capture chain, Seven Nation Army, 1290 frames).**
+
+| | before | after |
+|---|---:|---:|
+| confidence > 0.35 | 23.3 % | **79.9 %** |
+| median confidence | 0.000 | **0.610** |
+| frames with 0 < c < 0.85 | 0.0 % | **71.5 %** |
+| pitch reported | 23.3 % | **51.0 %** |
+| loud-vs-quiet discrimination | +8.7 pts | **+25.1 pts** |
+| reported pitch, median | 76 Hz | **130 Hz** |
+| pinned below 85 Hz (range edge) | **73.0 %** | 25.5 % |
+
+**The old output was mostly junk, not scarce signal.** 73 % of pre-fix pitches sat at the bottom of the search range - some below the tracker's own 80 Hz floor via the EMA - the signature of a boundary minimum rather than a detected period. After the fix the distribution is a male vocal register.
+
+**Residual, not chased:** 25.5 % still floor-pinned, most likely the bass riff bleeding into the separated vocal stem.
+
+**Caveat found 2026-09-09, same day: the fix recovers PERIODICITY, not VOCALS.** Measured through the
+capture chain, *Weeping Wall* — a purely instrumental Bowie piece — scores a **94.8 %** pitch-confidence
+duty cycle, **above** Seven Nation Army's 79.9 % and Combat Baby's 85.6 %. Its separated "vocals" stem
+carries median energy **0.301** and reads as pitched at **132 Hz**, against Seven Nation Army's 0.339
+and 130 Hz — statistically indistinguishable. The stem is full of periodic bleed on instrumentals.
+So `vocalsPitchConfidence` is a *pitched-content* signal, not a vocal-presence signal, and must not be
+used as one: it cannot gate "is someone singing", and Gossamer's emission gate now opens on 94.8 % of
+an instrumental's frames. This does not diminish the fix — the primitive went from unusable to usable —
+but it bounds what it can be used for.
+
+**What this invalidates.** This file recorded `vocalsPitchHz`/`vocalsPitchConfidence` as SPARSE at 0.1 % nonzero and called the pair "garnish"; WL.1 measured 4.5 % and called it garnish there too. Both were measuring this defect. Whether the primitive is a usable hero driver is an open question again, not a settled one.
+
+**Verification.**
+1. Before/after through the production capture chain on the same file, same instrument.
+2. Recovered frames discriminate loud from quiet vocal 3x better than before - signal, not noise.
+3. Recovered pitch lands in a plausible vocal register; boundary-pinning falls 73 % -> 25.5 %.
+4. Engine suite 1915 tests pass; PitchTrackerTests 7/7 (its sine-wave cases are unaffected).
+5. ✅ **Seen live 2026-09-09** (session `19-09-58Z`, Matt on Gossamer: *"looks pretty good"*). Independent
+   generalisation, not a repeat: **different track, different singer, different register, and the LIVE tap
+   path** rather than the offline capture chain — Metric, *Combat Baby*, a female vocal, 5367 frames.
+   conf > 0.35 **17.1 % → 85.6 %**; median **0.000 → 0.614**; frames with 0 < c < 0.85 **0.0 % → 83.0 %**;
+   pitch reported **17.1 % → 51.8 %**; median pitch **76 → 142 Hz**; floor-pinning **73.0 % → 5.9 %**.
+   The floor-pinning being far lower here than Seven Nation Army's 25.5 % supports the residual there being
+   bass bleed in the separated stem rather than a tracker fault.
+
+---
+
+### BUG-125 — Root Choir's radial orbit trap and uncalibrated tonal routes defeat its visual and musical premise (2026-09-09)
+
+**Severity:** P1
+**Domain tag:** preset.fidelity / renderer
+**Status:** Resolved by ROOTCHOIR-RETIRE.1; generic format fix retained
+**Introduced:** ROOTCHOIR.1  
+**Resolved:** ROOTCHOIR-RETIRE.1 / D-249
+
+**Expected behavior.** Root Choir reads immediately as the selected Liquid Script motion oracle: luminous arrow/leaf heads pull long fine S-curves and curled tendrils through a visible charcoal field, with enamel-hot cores, coloured rims, and persistent negative space. Bass activity changes the advection continuously and beat onsets strengthen only newly written local gestures. There is no global spin, radial particle field, white bloom, or fixed central knot.
+
+**Actual behavior.** Matt's first live review found white particles arranged in circular rings, a muddled flower centre, an odd/disorienting spin, no understandable connection to the music, and no convincing psychedelic character. The first replacement removed those defects but failed the selected concept: Matt's 2026-09-10 review found it **VERY dark**, impossible to read, and unlike the Liquid Script reference. ROOTCHOIR.3.1 corrected that authored output, but the next live review (`2026-09-10T16-39-01Z`) was completely black: no charcoal ground or gestures were visible at any point.
+
+**Reproduction steps.** Build ROOTCHOIR.3.1, play Metric's “Combat Baby,” cycle to Root Choir in the live 900×600 app, and observe a black drawable while playback remains healthy. Minimum live reproducer: `~/Documents/uzume_sessions/2026-09-10T16-39-01Z/`. Earlier authored-darkness reproducer: `~/Documents/uzume_sessions/2026-09-10T14-09-13Z/`. Original Newton reproducer: `~/Documents/uzume_sessions/2026-09-09T20-25-49Z/` plus `~/Desktop/Screenshot 2026-09-09 at 3.27.33 PM.png`.
+
+**Session artifacts.** All three review captures have `clean` chain health. The black live capture presents 2,406/2,406 drawable frames with zero recorded command failures, peaks at **−0.13 dBFS**, and contains 2,901 valid feature rows; route replay reports `bassDev` firing on **53.43%** and `beatComposite` on **99.97%**. The shipped app bundle's Root Choir shader and sidecar hashes are byte-identical to the source tree. Yet replaying 900 rows from that exact capture through the headless production chain renders normally at **0.202 mean luma** (trajectory **0.18…0.21**, zero clipping/near-white). Code inspection supplies the discriminator: `PresetLoader` compiles Root Choir's warp/compose pipelines for declared linear `.bgra8Unorm`, and `MultiPassRenderHarness` allocates matching linear textures, while live `VisualizerEngine.applyPreset` falls through a display-name switch to `MetalContext.pixelFormat` (`.bgra8Unorm_srgb`).
+
+**Current failure class:** `pipeline-wiring`. Earlier visual failures were `algorithm` / `calibration`.
+
+**Evidence for this class.** Root Choir declares `feedback_pixel_format: bgra8Unorm`; the loader compiles all feedback-target pipelines for that exact format. The live app ignores the declaration and allocates `.bgra8Unorm_srgb` textures, while the replay honors it and renders the same session visibly. This one live/replay configuration divergence explains black live output without changing shader math or audio input.
+
+**Verification criteria (written before the fix).**
+
+- [x] Automated live-path configuration gate: every supported `feedback_pixel_format` maps to the same `MTLPixelFormat` in app setup as in `PresetLoader` and `MultiPassRenderHarness`; Root Choir resolves to `.bgra8Unorm`, not `.bgra8Unorm_srgb`.
+- [x] Regression gate: app tests fail if mv-warp live setup ignores the sidecar's linear or HDR override; nil retains the drawable format.
+- [x] Exact-session render artifact: `2026-09-10T16-39-01Z` remains visible at mean luma **0.202** (trajectory **0.18…0.21**) with no clipping or near-white output; inspected frames contain no rings, central knot, or global spin.
+- [x] Automated: focused Root Choir tests pin the `direct+mv_warp` contract and a bounded, moving 96-frame production feedback loop.
+- [x] Render artifact: the final real-session sequence contains no white particles, circular rings, radial field, or flower centre.
+- [x] Motion artifact: `Scripts/motion_gate.sh` over 430 contiguous attached-session frames reports 0 spike transitions; 70/429 low-motion transitions are concentrated in the deliberately sparse opening.
+- [x] Automated visibility: the attached-session production replay holds mean frame luma in **0.18…0.38**, with clipped share below 1% and near-white share below 2%.
+- [x] Reference fidelity artifact: the comparison sheet visibly carries pointed luminous heads, fine S-curves, paired tendrils, hot cores, coloured rims, and persistent negative space. Matt's fidelity verdict remains the manual gate.
+- [x] Superseded by retirement: Root Choir has no live path or M7 certification candidate.
+
+**Manual validation required:** Yes — musical causality, psychedelic character, and comfort in motion are perceptual criteria.
+
+**Fix scope.** One live app format resolver plus an app regression test; no shader, audio route, `FeatureVector`, or renderer pass change. The sidecar already owns this value and the loader/replay already honor it. Exact black-session replay frames: `/tmp/root-choir-163901-frames/`.
+
+---
+
+### BUG-119 — the beat pulse held one average BPM for a whole track (2026-09-08)
+
+> **Reconciled 2026-09-30 (BR.KI ledger pass).** Resolved 2026-09-11, live-confirmed by Matt: *"no visible grain observed, spike punches land with the music"*. The ⏳ criterion below predates that check.
+
+**Severity:** P1. It reaches every scene driven by the pulse primitives, on every track.
+**Domain tag:** `dsp.beat` / `preset.routing` · failure class **`algorithm`**.
+**Status:** **Fixed 2026-09-08 — pending Matt's live confirmation.**
+**Introduced:** FBS Stage 1 (D-153) — the pulse has always been seeded this way; PR.12 made it visible by changing which average got installed.
+**Resolved:** 2026-09-08, branch `claude/bug118-tiled-grid-regression`.
+
+**Reported.** Matt, 2026-09-07: *"Ferrofluid Ocean is pixelated / grainy - doesn't look like it used to look."* Then, after the reverts: *"Yes, FFO's grain is back to normal"* — which is what identified the cause, because only the beat-grid changes could reach FFO.
+
+**Expected.** The pulse's period tracks the music.
+
+**Actual.** `MIRPipeline.setBeatGrid` called `beatPulseClock.setTempo(bpm: grid?.bpm)` once per track. `setTempo` computes `periodS = (60 / bpm) * 4` and nothing revisits it for the rest of the song. A single median BPM therefore governed the pulse for an entire track — and when PR.12 changed which median was computed, the pulse moved with it: bleed 115.0 → 123.6 BPM, money 116.2 → 129.3, bohemian 78.2 → 94.2. Ferrofluid Ocean's `spike_punch_region` accents then fire 7–20 % off the beat, which reads as spatial incoherence rather than a pulse.
+
+**Fix.** `BeatPulseClock.trackLocalBeatPeriod(_:at:)` follows `BeatGrid.localTiming`'s LOCAL seconds-per-beat, published each frame by `LiveBeatDriftTracker.lastLocalBeatPeriod` (read from the tracker, not the grid, because the tracker owns the mapping from the live clock onto track time). Two properties it has to have, both tested:
+
+- **No phase jump.** Phase is `(time − anchor) / period`, so changing the period without re-anchoring rewrites history. The anchor is rewritten to preserve elapsed **beats**, which keeps `phase01` and `beatIndex` continuous through a rate change.
+- **No wobble.** A raw beat-to-beat period is noisy, so it is smoothed (α = 0.02/frame) and the anchor is only rewritten past a 0.5 % relative change. One stray beat does not move the pulse; a sustained change is followed.
+
+**This is the instruction that was still being ignored.** Matt, 2026-09-04: *"you should not be averaging BPM / tempo, you should be recording it over the duration of the track so that visuals are better synced."* PR.12 widened the analysis window and then collapsed the result back into one number at track change, so the averaging survived the fix that was supposed to remove it.
+
+**Verification criteria.**
+1. ✅ Automated: phase continuity through a 10 % tempo change; a single outlier period does not move the pulse while a sustained one does.
+2. ⏳ Manual: Matt watches Ferrofluid Ocean on a local file and the grain does not return when whole-track grids are re-enabled. **Outstanding — this is the gate for turning BUG-118's default back on.**
+
+---
+
+### BUG-120 — Witchlight's pulse tier rode bar position instead of the beat grid (2026-09-08)
+
+**Severity:** P1. On any track without a detected meter the scene lost both of its tiers and went silent.
+**Domain tag:** `preset.routing` · failure class **`algorithm`**.
+**Status:** **Fixed 2026-09-08 — live-confirmed by Matt the same day.**
+**Introduced:** WL.9.
+**Resolved:** 2026-09-08.
+
+**Reported.** *"Witchlight does not appear to be working. FFO is working fine."* Session `2026-09-08T14-09-48Z`: `beatsPerBar == 1` on 57 % of frames, bar phase correctly 0 on every one of them.
+
+**Expected.** Two tiers, per WL.9's own comment: every beat pulses, the downbeat harder. Matt's expectation matched it exactly — *"Witchlight… adds a large pulse at every downbeat."*
+
+**Actual.** The pulse tier derived beat edges as `slot = Int(barPhase01 * beatsPerBar)`, so it rode bar position too. With `beatsPerBar == 1` there is a single slot, the slot never changes, `beatEdgeNow` never fires, and the per-beat pulse is dead — leaving only the bass-excursion fallback.
+
+**Why it surfaced only now.** A meterless grid used to ramp `barPhase01` at BEAT rate (BUG-117), so `barDownbeatNow` fired on every beat: Witchlight had accents, just wrong ones, and read as over-eager rather than dead. Fixing BUG-117 correctly silenced the accent and took the pulse with it, because both were reading the same input.
+
+**Fix.** `detectBeatEdge` reads `beatPhase01` and detects its wrap. Beat phase is published whenever a grid exists, meter or not, so the pulse survives a meterless track while the bar ACCENT is withheld — which is the two-tier design as written: the strong signal carries the pulse, the weak one only the emphasis.
+
+**A test encoded the old coupling.** The BUG-097 heavy-frame regression drove `barPhase01` and never `beatPhase01`, which a real grid always publishes together. Invisible while the pulse was derived from the bar; a false failure the moment it was not. The helper now supplies both, and its assertions are unchanged.
+
+---
+
+### BUG-121 — one quiet window condemned the session and nudged the listener (2026-09-08)
+
+**Severity:** P2. User-visible: a toast telling Matt his audio chain is bad during ordinary listening, and every affected session graded `degraded`, which the closeout protocol requires be flagged before any fidelity judgement.
+**Domain tag:** `audio.capture` / calibration · failure class **`calibration`**.
+**Status:** **Fixed 2026-09-08.**
+**Introduced:** ASH.2 (the toast) and D-197 (the verdict latch).
+**Resolved:** 2026-09-08.
+
+**Reported.** *"In the last few sessions, I was seeing notifications that the signal source was low… this has been a problem historically, and I would like to resolve it once and for all."*
+
+**Expected.** The nudge means the capture chain is misrouted or the source is too quiet to drive the visuals.
+
+**Actual.** It fired on a single 5-second window. Across every session on disk:
+
+| session | verdict | healthy | low | critical |
+|---|---:|---:|---:|---:|
+| 2026-09-06T00-17-00Z | **degraded** | 67 | 0 | **1** |
+| 2026-09-08T13-58-15Z | **degraded** | 19 | 0 | **1** |
+| 2026-09-08T14-09-48Z | **degraded** | 33 | 0 | **1** |
+| four others | clean | 9–31 | 0 | 0 |
+
+Every degraded verdict is exactly one window. `band=low` has **never** fired in his history — the trigger was always a lone `band=critical` at −18.6 to −24.5 dBFS, landing mid-session (sample 59 of 68, 10 of 20, 21 of 34), which is a fade, a gap between tracks or a soft passage.
+
+**Why the previous fix did not hold.** D-197's follow-up already addressed this once, as "degraded only after loud": a low window counts only if a healthy one preceded it. That removes the quiet OPENING and nothing else, so the same false positive simply moved into the middle of the song, where every track has one.
+
+**Fix.** Both the live toast (`PlaybackErrorBridge`) and the offline verdict (`ChainAnalyzer`) now require **3 consecutive** low/critical windows, from one shared constant so the toast the listener sees and the verdict a closeout cites cannot disagree. At the ~5 s cadence that is ~15 s during which the peak never once crossed −15 dBFS. Music does not do that while playing; a misrouted chain does it permanently. A healthy window resets the run, so two separate dips in one song stay two dips.
+
+**Verification.**
+1. ✅ Re-grading his real sessions with the corrected rule flips every false positive to `clean`, and the sessions that were already clean stay clean.
+2. ✅ Negative control: a chain quiet in **every** window still grades `degraded` — the check keeps working.
+3. ✅ Boundary asserted: a run of 2 does not flag, a run of 3 does, so the threshold cannot be loosened silently.
+4. ✅ Toast: a lone quiet window raises nothing; a healthy window resets the run.
+
+---
+
+### BUG-122 — Dragon Bloom's field drained where the strands were not, and inverted to white (2026-09-08)
+
+**Severity:** P2. User-visible: Matt, on the 21:12 session — *"better with respect to color, although there is still a sizable presence of blinding white."*
+**Domain tag:** `preset.render` / feedback dynamics · failure class **`fidelity`**.
+**Status:** **Fixed 2026-09-08 (PR.5.4).**
+**Introduced:** PR.5.2 (removed the outward push); made worse by PR.5.3 (signed breathing — the inward half drains).
+**Resolved:** 2026-09-08.
+
+**Reported.** Blinding white remained after PR.5.1–5.3. Measured per frame on his session, `nearWhite` reached **0.448** at frame 1050 (the pre-chorus drop, 16.9–18.9 s), with the field's top half at luma 0.2–0.4 — dim, not black — which invert + gamma render as white.
+
+**What the filing got wrong.** The row was filed as *"a vertical split the reference does not have."* The oracle's "flat" profile came from a single 120-frame sample. Measured properly — `render({audioLevels, elapsedTime})` driven offline from the decoded track at 60 fps, because the Browser pane is hidden and rAF/timers do not run — the reference's field swings **0.30–2.59** top/bottom on this track, harder than ours, and its display shows `nearWhite` **0.000** through the drop. The reference tolerates an unfed half because its field never drains.
+
+**Partition.** Warp loop alone (strand alpha 0, uniform ground): symmetric, 1.08. Strand landing positions 52/48, segment-length coverage 52.7/47.3, injected colour uniform across eight bands. Per-frame ink share is bimodal (p10 0.002 / p90 0.948, mean 0.500) — a tumbling one-sided ribbon — so at any instant one half is unfed. That is faithful; the source's ribbon does the same.
+
+**Cause.** The source keeps the field fed with `zoom *= min(1.05, max(1, max(bass, treb)))`: outward only, capped at +5 %. Measured on the oracle with real audio: at the cap on **60 %** of frames, floor on 35 %, mean **+3.15 %**, median still 1.05 at the drop. Our primitives are deviations (≈0 at the running average), so PR.5.2's music-only outward term was silent exactly during quiet passages, and PR.5.3's signed form pulled inward there — sampling from further out every frame collapses the field toward the centre and the periphery starves.
+
+**Fix.** `z *= 1 + 0.03 + 0.02·tanh(max(0, bass_att_rel)/0.06)` — an always-on +3 % outward baseline (the oracle's mean) with the music to the source's 5 % cap. On the 21:12 session: `nearWhite` **0.000 on every sampled frame**, saturation 0.52, clip 0.062; field ratio 0.60–1.66 (like the reference's), with no white because nothing drains.
+
+**Falsified, recorded so they are not retried.** Strand-alpha floors 0.15/0.30 (0.454/0.458 — no change); 8-bit feedback emulation (0.316); `max(bass, treb)` on our deviation primitives (identical to bass-only — `treb_att_rel` is +0.002 at the drop); a post-invert soft ceiling (cannot brighten an empty field, 0.423); a vertically mirrored second strand set (with the outward-only music term: 0.078 — fixes the symptom by feeding both halves, but the reference does neither and needs neither once the field stays fed).
+
+**Verification.**
+1. ✅ Offline oracle at the drop: nearWhite 0.000, saturation 0.84–0.98 — the control the fix is measured against.
+2. ✅ Ours, same session, same frames: 0.448 → 0.000; the vertical swing is unchanged and harmless.
+3. ⏳ Live: Matt has not seen PR.5.4. Every number is offline replay of his own capture.
+
+---
+
+### BUG-118 — the tiled whole-track grid is worse than the 30 s clamp it replaced (2026-09-07)
+
+> **Reconciled 2026-09-30 (BR.KI ledger pass).** The RESOLVED blockquote above is current. The **Status: Open** field below is the superseded 2026-09-07 revert: whole-track grids are on by default (`usesWholeTrackGrid` returns true unless `UZUME_WHOLETRACK_GRID=0`). The doc comment above that function still says "opts back in"; that comment is stale.
+
+> ⚠ **CORRECTION, same day.** The table below scored each arm over ITS OWN span — a 30 s grid
+> graded on 30 s against a whole-track grid graded on six minutes. That is the artifact this
+> repo already knew about (PR.12 identified it in FT.4.1's numbers) and it invalidates the
+> comparison. **Re-run span-matched, the whole-track grid is equal or better on every track:**
+> bleed's headline "0.99 → 0.76" is **0.98 → 0.98** with CMLt 1.00 either way; yyz improves
+> 0.57 → 0.63; money's CMLt improves 0.43 → 0.47. Nothing regresses.
+>
+> **What IS real, and is not a span artifact:** billie_jean's beats are uniformly good across
+> the whole track (|IOI − median| flat at 8–9 ms in every tenth) while its downbeat F falls
+> **0.90 over the first 30 s → 0.37 across the full track**, against the same full-track
+> reference. Whole-track BEATS extend correctly; the model's downbeat head does not.
+>
+> The lasting fix is the instrument: `BeatBench --span-seconds N` now trims estimate and
+> reference to the same window, and every run states which mode it used. This artifact has
+> produced two wrong conclusions here — FT.4.1's and this entry's — and should not produce a
+> third.
+>
+> **RESOLVED 2026-09-08 — whole-track grids are ON again** (Matt: *"turn it on"*). Every
+> objection to them was a measurement artifact, and Matt caught both. The second one: the
+> claim that whole-track analysis degrades DOWNBEATS rested on billie_jean's dbF 0.90 → 0.37,
+> and its downbeat reference stops at **69 s of a 286 s track** (librosa extended the beats
+> and emits no downbeats), so every correct downbeat past 69 s counted as a false positive —
+> precision 34/139. Scored inside the reference's real coverage the same comparison is
+> **0.90 → 0.97**, and whole-track wins on 6 of 7 fixtures. `DownbeatScore` now trims to the
+> downbeat reference's own extent.
+>
+> On 17 plain-4/4 tracks (Matt's Bowie album plus the suite-1 rock/disco fixtures) coverage
+> goes **18.2 % → 97.8 %** with meter unchanged at 13/17; Giorgio by Moroder covers **0 %**
+> clamped because its opening 30 s are spoken word. His session `2026-09-08T14-34-06Z` shows
+> why coverage is what he feels: drift is flat inside the first 30 s (15 ms) and ramps past it
+> (67 ms at 50–60 s) — the grid's edge.
+>
+> The two things that made it HURT are fixed separately and verified in that same session:
+> BUG-119 (the pulse held one average BPM — FFO's grain) and BUG-117 (a meterless grid faked
+> bar position — the roster breakage). Cache schema v13 forces re-analysis, because a clamped
+> grid is data and turning the analysis back on does not reach it.
+
+**Severity:** P1. It is the default for every local file, and it degrades the signal every beat-driven scene consumes.
+**Domain tag:** `dsp.beat` · failure class **`algorithm`**.
+**Status:** **Open.** Default reverted to the clamped grid; the tiler is unfixed.
+**Introduced:** PR.12 (2026-09-04, PR #197).
+**Resolved:** —
+
+**Reported.** Matt, 2026-09-07, after the BUG-117 revert did not restore the scenes: *"There are still issues with FFO due to changes you introduced. You haven't reverted enough if scenes are still broken."* Then, on scope: *"we need whole-track grids and counted meters. But perhaps they were not implemented correctly."* He was right on both.
+
+**Expected.** Analysing the whole track instead of its first 30 s gives a grid at least as good as the clamp, over the whole track.
+
+**Actual.** Five-suite BeatBench, clamped arm vs whole-track arm:
+
+| suite | track | truth BPM | clamped | tiled | F clamped | F tiled | CMLt clamped | CMLt tiled |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | billie_jean | 117.44 | 116.88 | 117.13 | 0.97 | 0.99 | 0.97 | 0.97 |
+| 2 | pyramid_song | 66.60 | **65.08** | 82.47 | 0.52 | **0.22** | 0.75 | **0.21** |
+| 2 | solsbury_hill | 102.44 | 102.68 | 104.80 | 0.97 | 0.98 | 1.00 | 0.94 |
+| 2 | take_five | 167.07 | 169.24 | 171.44 | 0.99 | 1.00 | 1.00 | 1.00 |
+| 2 | yyz | 272.27 | **233.61** | 145.85 | 0.58 | **0.41** | 0.21 | **0.05** |
+| 3 | bohemian_rhapsody | 71.10 | **78.18** | 94.23 | 0.47 | 0.52 | 0.48 | 0.36 |
+| 3 | money | 121.06 | **116.19** | 129.32 | 0.44 | **0.24** | 0.43 | **0.17** |
+| 4 | bleed | 114.67 | **115.00** | 123.62 | 0.99 | **0.76** | 1.00 | **0.56** |
+| 5 | clair_de_lune | 49.91 | 128.63 | 96.44 | 0.14 | 0.06 | 0.00 | 0.01 |
+
+**The BPM column is span-independent** — a tempo estimate is not affected by how much of the reference a scorer trims — and it is worse on 5 of the 6 tracks where the two differ. billie_jean's downbeat F also falls **0.90 → 0.37**.
+
+**How it shipped.** PR.12's closeout claimed "beat F equal or better on 8 of 9 fixtures". That measurement trimmed both arms to a common span to remove a real scoring artifact, which was correct as far as it went — and then it was treated as sufficient. The program requires a **five-suite BeatBench table for any behavioural change to a beat signal**, and that table was never produced for the shipping configuration, through PR.12, PR.17, and two closeouts that cited beat numbers.
+
+**Prime suspect, not yet confirmed.** `BeatThisTiledInference` averages overlapping windows with uniform weight, so frames at a window's EDGE — where the model has little context — are averaged in at the same weight as frames from another window's well-conditioned middle. The standard remedy for overlap-add inference is a tapered cross-fade. A first probe looking for periodic IOI irregularity at the 15 s seam found only 1.11× pooled, which is too weak to call; tempo accuracy rather than IOI regularity is the better place to look next.
+
+---
+
+### BUG-115 — Dragon Bloom's bass breathing is an absolute threshold on AGC-normalised bass (FA #31) (2026-09-05)
+
+> **Reconciled 2026-09-30 (BR.KI ledger pass).** Fixed at PR.5.2 (`4d5f75ff`); the Status and Resolved fields below were never updated. The route is `bass_att_rel` through a tanh knee (`DragonBloom.metal`, `kBreathKnee`), verified in the tree by the 2026-09-29 audit (lane J).
+
+**Severity:** P3. Visible impact is entangled with the white-out PR.5 addressed separately, and the obvious fix makes the render worse — see Status.
+**Domain tag:** `preset.routing` (deviation primitives / D-026).
+**Status:** **Open — root cause understood, fix NOT obvious.** Found and measured at PR.5 (2026-09-05).
+**Introduced:** D-137 (2026-06-02), present at certification.
+**Resolved:** —
+
+**Expected.** D-026 and FA #31: a scene drives from deviation primitives (`bass_rel`, `bass_dev`), never from an absolute threshold on AGC-normalised energy. The AGC's running-average denominator moves with mix density, so the same kick reads different values across tracks.
+
+**Actual.** `mvWarpPerVertex` in `DragonBloom.metal` breathes the bloom with `clamp(1.0 + 0.06 * (f.bass * 6.0 - 1.0), 0.97, 1.07)`. The term is neutral only at `f.bass == 1/6`; everywhere else it is a standing zoom bias whose size depends on the AGC's state rather than on the music. Measured on a real Bowie *Low* capture through the production analysis chain: median `f.bass` 0.236, so the term sits at **1.024 median, 1.070 at p90** — a 2.4–7 % outward warp applied every frame, against the source scene's 0.99951 baseline whose own code comment says it *"prevents the field draining off-edge / white-collapse."*
+
+**Why it is not simply fixed.** Converting the route to the signed deviation primitive `bass_rel` — the textbook remedy — was measured through the production `direct + mv_warp` dispatch on the same capture and made the render **worse**: clipped 0.836 → 0.868, saturation 0.265 → 0.099. The outward push is not draining the field; it is the conveyor that carries strand colour out from the centre before the warp transfer's B-fade extinguishes it. Slow it and the colour dies closer in, so coverage falls. The change was reverted.
+
+**What a real fix needs.** The routing and the fill dynamics together: a `bass_rel`-driven breath plus whatever restores coverage at a near-neutral baseline (faster hue-zoom spread, or a slower B-fade). That is scene-design work, not a constant swap.
+
+**Evidence.** `docs/diagnostics/PR5_DRAGON_BLOOM_FIX_2026-09-05.md` §3 (the falsified arm, with both arms' numbers). Repro: `UZUME_GEN_SESSION_AUDIO=<a Low track> swift test --filter FixtureSessionCaptureGenerator`, then `REPLAY_MULTIPASS=1 REPLAY_PRESET="Dragon Bloom" ... swift test --filter SessionDrivenMultiPassReplay`.
+
+---
+
+### BUG-116 — the pre-analysed stem series is dead ~0.4 s in every 2 s on non-44.1 kHz local files (2026-09-05)
+
+> **Reconciled 2026-09-30 (BR.KI ledger pass).** Resolved 2026-09-11, live-confirmed by Matt: *"no periodic darkening, visuals are steady"*; 0 of 10,789 frames all-stems-zero on a 48 kHz session. The ⏳ criterion below predates that check.
+
+**Severity:** P1. Every local-file session at 48 kHz — which is what the tap reports on this machine — runs with all four stems at zero for roughly 15 % of playback, in a strict 2-second rhythm. Stem-driven scenes visibly pulse dark; stem-driven *routing* silently reads zero.
+**Domain tag:** `dsp.stem` · failure class **`sample-rate`**.
+**Status:** **Fixed 2026-09-05 — pending Matt's live confirmation on a 48 kHz album.**
+**Introduced:** LFSTEM.1 (the pre-analysed series). NOT the 2026-09-05 merges — `SessionPreparer+StemSeries.swift` was last touched at RN.2, a rename.
+**Resolved:** 2026-09-05, branch `claude/bug116-stem-series-holes`.
+
+**Reported.** *"Now there are issues with Ferrofluid Ocean — screen goes dark every few seconds."* Session `2026-09-05T18-17-12Z`, Broken Social Scene MP3s, local files, `CHAIN_HEALTH: verdict=clean`.
+
+**Expected.** `StemFeatureSeries` carries a continuous per-frame stem reading for the whole track. A scene driven by stem energy sees the music, and nothing else.
+
+**Actual.** All four stems (`drums`, `bass`, `vocals`, `other`) decay smoothly to **exactly 0.000** and snap back, **68 times**, spaced **2.00 s ± 0.03** apart, each lasting **~0.37 s**. The renderer is innocent: `DRAWABLE_LIFECYCLE` reports zero failures and zero unpresented frames throughout, and `stem_series_pos_s` advances smoothly — the clock is right and the data is empty. The holes are baked into `stem_series.bin` in the persistent cache, so this is an offline artifact, not a playback race.
+
+**Root cause.** `StemSeparator.separate(audio:channelCount:sampleRate:)` resamples any input to its own `modelSampleRate` (44,100) and then pads-or-truncates to exactly `requiredMonoSamples` (440,320). Its output is therefore ALWAYS in the model's time base. `SessionPreparer.analyzeStemSeries` slices that output with offsets computed in the **input's** sample rate:
+
+```swift
+let offset = absolute - windowStart          // input-rate samples
+let slice = stems.map { Array($0[offset..<(offset + hop)]) }   // model-rate samples
+```
+
+At 48 kHz, a 440,320-sample input window is 9.17 s of audio; resampled to 44.1 kHz it fills 404,544 samples, and the remaining **35,776 samples are zero padding**. The function deliberately places each kept 2 s span at the very END of the window (one analysis frame of room), so the span lands squarely in that padding — the last ~0.7 s of every span reads silence, of which the ~0.4 s below the 0.01 threshold is what shows up as a hole.
+
+**Reproduction (one variable).** `UZUME_STEM_SERIES_PROBE=1 UZUME_STEM_SERIES_RATE=<44100|48000> UZUME_STEM_TAIL_AUDIO=<file> swift test --package-path UzumeEngine --filter StemWindowTailProbe`
+
+| input rate | near-zero frames | holes |
+|---|---|---|
+| 44,100 | **0 of 1722** | none |
+| 48,000 | **279 of 1875 (14.9 %)** | 9.62–10.01 s, 11.63–12.01 s, 13.65–14.02 s, … |
+
+The 48 kHz frame indices reproduce the cached series that fed Matt's session exactly (451–469, 545–563, 639–657, 734–750, 826–844, 921–938).
+
+**Falsified on the way.** The separator's own window tail was the first suspect and is innocent: measured per-100 ms RMS across a full window, tail/mid is 0.63–0.78 for every stem, tracking the input's own envelope. The model does not fade at its edges; the padding is the whole story.
+
+**⚠ Cached entries are poisoned.** The holes are in `stem_series.bin` on disk. A code fix alone leaves every already-analysed track broken — the fix must invalidate or version the persistent stem cache.
+
+**Why it appeared on 2026-09-05 and not earlier.** Two separate answers. The code broke at **LFSTEM.1a (2026-08-26, `dea021d8`)**, which switched local files from live separation — whose slicing is correct — to the pre-analysed series. It became *visible* tonight because of the album: *Low* is 44,100 Hz, the one rate at which input and model rate agree and the defect cannot occur, and Broken Social Scene is 48,000 Hz on all thirteen tracks. The sibling live path had the rule right all along, under a comment citing D-079: *"Stem waveforms are at the model rate, not the tap rate."*
+
+**Verification criteria (written before the fix), and their outcomes.**
+1. ✅ Automated: `analyzeStemSeries` at 48 kHz produces zero near-zero frames, and the frame grid no longer depends on the input rate. Parameterised over **44.1 / 48 / 96 kHz** — 44.1 kHz alone cannot see this, which is how it shipped. **Both new tests were run against the un-fixed code and fail there** (48 kHz arm reads silence; grid 258 vs 281 frames).
+2. ✅ Automated: schema v10 → v11 means every poisoned entry is a miss and re-analyses.
+3. ⏳ Manual: Matt watches Ferrofluid Ocean on a 48 kHz local file and the periodic darkening is gone. **Outstanding.**
+
+---
+
+### COPY-001 — The source picker promises Uzume never controls playback, above a tile where it does (2026-09-01, DS.2 M7)
+
+**Status: RESOLVED 2026-09-01, on Matt's explicit go.** Footer rescoped to
+*"With Apple Music or Spotify, you press play and Uzume listens. Local files it plays for you."*
+Guarded by `UzumeAppTests/ConnectorPickerFooterTests.swift`, which was proven able to fail against
+the old string before being trusted. Verified live: `docs/reviews/COPY-001/picker_footer_after.png`
+shows the sentence true for each of the three tiles. **P2** — it was a false product claim on a
+screen the user reads while deciding, not a cosmetic defect.
+
+**The string.** `UzumeApp/en.lproj/Localizable.strings:133`
+
+```
+"connector.picker.footer" = "Uzume reads what’s playing. It doesn’t control playback.";
+```
+
+Rendered at `UzumeApp/Views/ConnectorPickerView.swift:124`, centered under all three source tiles.
+
+**Why it is wrong for one of them.** `UzumeApp/Views/Playback/LocalFileTransportBar.swift`
+(`uzume.playback.lfTransport`) ships stop, previous, play/pause and next. On the local-file path
+Uzume decodes and drives the audio itself — it is the player. The footer's claim holds only for
+Apple Music and Spotify, where Uzume listens to another app's output and the user starts playback
+themselves.
+
+`uzume-site`'s `EXPERIENCE_MODEL.md` already states the correct rule and the app's own footer
+contradicts it: *"Local playback owns transport; streaming handoff listens for external audio and
+must not promise transport control."* `COMPONENTS.md` repeats it for `LocalPlaybackTransport`:
+*"available only when Uzume owns local playback."*
+
+**Failure class:** `documentation-drift` — shipped copy asserts a product behaviour the shipped
+code contradicts. No algorithm, no state machine; the string and the transport bar simply disagree.
+
+**Reproduction:** open Uzume → "Choose music" → read the footer under the three tiles. It is
+unconditional. Then pick Local files, choose any audio file, and watch `LocalFileTransportBar`
+appear during playback with working stop / previous / play-pause / next. Captured on the DS.2 M7
+page (`docs/reviews/DS.2/after/connector_local.png` shows the footer under the Local files tile).
+
+**Verification criteria (written before the fix, per the defect protocol):**
+
+1. **Automated** — a test asserting the picker footer does not contain the unqualified sentence
+   `"It doesn't control playback"`, and that it names the sources the listen-only behaviour
+   applies to. This is the regression guard: it fails if the blanket claim returns.
+2. **Automated** — `Scripts/check_user_strings.sh` stays green (the replacement is still
+   externalized, not inlined), and the app suite passes.
+3. **Manual** — re-capture the picker and read the footer against all three tiles: the sentence
+   must be true for each one. UX-flow validation per the protocol, since this is a
+   session-lifecycle surface.
+
+**Fix when picked up — a product call, not a mechanical one.** Options: scope the sentence to
+streaming ("For Apple Music and Spotify, Uzume reads what's playing — it doesn't control
+playback."); move it off the shared footer and onto the two streaming tiles; or drop it from this
+screen and state each source's capability on the source's own screen, which is what
+`EXPERIENCE_MODEL.md` §Add music implies (*"Each source names its actual capabilities; a source
+never promises what it cannot honour"*). Belongs with DS.5 (`StreamingHandoff`) or RN.4's
+public-copy wording pass.
+
+---
+
+### DEAD-002 — The preparation banner's dismiss button has never rendered (2026-09-01, DS.3) — RESOLVED at DS.4
+
+**Status: resolved 2026-09-02 (DS.4) — the affordance is deleted.** Found during DS.3's
+status-placement consolidation and deliberately left in place there. **P3.**
+
+**The decision (DS.4, D-238).** Wiring it would have required an answer to "what does
+dismissing a still-true condition mean?", and the three banner errors give the same answer:
+nothing good. `previewRateLimited` clears itself when the throttle lifts; `preparationSlowOnFirstTrack`
+and `preparationTotalTimeout` are the only place the reactive-mode escape is offered, and the
+condition they describe stays true until preparation catches up — a dismissed banner would
+simply hide the one line that tells the listener what they can do. In the mysterious view the
+banner is also the only status text on screen. So: **delete**. `NoticeBanner` loses `onDismiss`,
+`dismissID` and the button; `a11y.preparation.topBanner.dismiss.label` leaves
+`Localizable.strings`; `StatusPlacementIdentifierTests.bannerDismiss_isRetired` replaces the
+pin. The banner leaves when `PreparationErrorViewModel` says the condition has, exactly as before.
+
+**The original record follows, unchanged.**
+
+**The affordance.** The banner component renders its dismiss button only when a non-nil
+`onDismiss` closure is supplied — before DS.3 in `TopBannerView`, after DS.3 in
+`UzumeApp/Views/Components/NoticeBanner.swift:50`:
+
+```swift
+if onDismiss != nil {
+    Button { onDismiss?() } label: { Image(systemName: "xmark") … }
+        .accessibilityIdentifier(Self.dismissID)
+        .accessibilityLabel(Text(String(localized: "a11y.preparation.topBanner.dismiss.label")))
+}
+```
+
+**The proof it never fires.** The component has exactly one construction site, and it
+passes no closure — `UzumeApp/Views/Preparation/PreparationProgressView.swift:171`:
+
+```swift
+private var bannerSlot: some View {
+    if case .banner(let error) = errorViewModel.presentationState {
+        NoticeBanner(error: error)
+    }
+}
+```
+
+`onDismiss` defaults to `nil`, so the `if` is never entered. Verified as the only site:
+`grep -rn "NoticeBanner(" UzumeApp` returns that line alone. Unchanged across DS.3 —
+`TopBannerView(error: error)` at the same line before the rename.
+
+**What is therefore unreachable.** The button; its identifier `uzume.preparation.topBanner.dismiss`;
+and the localized string `a11y.preparation.topBanner.dismiss.label` = `"Dismiss warning"`,
+which no user has ever heard.
+
+**Why DS.3 did not fix it.** Two directions, both out of scope. Wiring the closure is a
+**behaviour change**: the banner currently persists until `PreparationErrorViewModel` changes
+state, and making it user-dismissible means deciding what happens when the user dismisses a
+condition that is still true. Deleting the identifier **breaks a contract** DS.3 pinned in the
+same increment (`StatusPlacementIdentifierTests`). The open question is a product one — should
+a preparation banner be dismissible? — and it belongs with DS.4's preparation-stage rebuild,
+which owns this screen.
+
+**Related:** DS.3 task 8; `StatusPlacementIdentifierTests.bannerDismiss_hasExpectedID`, which
+pins the identifier and carries a comment pointing here.
+
+---
+
+### DEAD-003 — `FullScreenErrorView` shipped for months with no consumer (2026-09-01, DS.3)
+
+**Status: recorded, and the code deleted.** Not open work — the file is gone. Kept as history
+because the census listed it as an active duplicate, and the correction is worth having on
+record. **P3.**
+
+**The claim, and the evidence.** `UzumeApp/Views/FullScreenErrorView.swift` declared
+`struct FullScreenErrorView: View` (line 18) with a documented construction example in its own
+header (line 7) — and nothing ever constructed it. At the DS.3 branch point,
+`grep -rn "FullScreenErrorView" UzumeApp UzumeAppTests` returned exactly five hits:
+
+| Hit | What it was |
+|---|---|
+| `UzumeApp/Views/FullScreenErrorView.swift:1, 7, 14, 18` | its own header comment, usage example, `MARK`, and declaration |
+| `UzumeAppTests/DynamicTypeRegressionTests.swift:35` | its **path**, as a string in the fixed-font ratchet list |
+
+No call site, in any view, view model, or test.
+
+**What it cost.** It duplicated `PreparationFailureView` almost verbatim: identical `body`,
+`icon`, `textBlock`, `actions` and `headline`, and byte-identical `severityIcon` and
+`severityColor` switches — including both copies of the `degradation → .yellow` mapping that
+was half of DS.3's conflict 1. Two copies of a blocking-failure layout, one of them shipped.
+Because the ratchet at line 35 named it, the file was also being *maintained* — kept free of
+fixed fonts — for a screen no user could reach.
+
+**Why it was safe to delete.** A view with no construction site has no behaviour to preserve.
+This is the reason DS.3's `RecoveryScreen` consolidation carried zero behavioural risk on that
+half: the surviving layout is `PreparationFailureView`'s, reached through the same
+`PreparationProgressView` `.fullScreen` branch, with the same three accessibility identifiers.
+
+**The census was wrong about this.** `PHOSPHENE-COMPONENT-CENSUS.md` lists both full-screen
+views as sources for `RecoveryScreen` without distinguishing the live one from the dead one,
+and `APP_VIEWS.md:440` marks `FullScreenErrorView.swift` **`production-active`**. Recorded in
+`docs/reviews/DS.3/UPSTREAM-FINDINGS.md`.
+
+**Related:** DS.3 task 4 and task 8; [D-234].
+
+---
+
+### BUG-103 — Parallel engine suite dies on an uncaught NSException from `AVAudioPlayerNode.play()`: 'player did not see an IO cycle' (2026-08-25)
+
+**Severity:** P2 · **Domain tag:** audio.playback / test-infrastructure · **Status:** **RESOLVED 2026-09-23 (BUG103.1, `30e39b83`)** — the uncatchable raise is now a Swift error. The *trigger* remains unreproduced by design (see §Fix); the *mechanism* that turned it into process death is closed and gated.
+**Introduced:** Pre-existing — reproduces at merge `8cbf936a` with no other changes, verified twice independently on 2026-08-25: the RECON.14 baseline check, and a first-hand full-suite run in a clean worktree at that exact commit while filing this entry (crash at 17:00, `.ips` `…-170015`). First *filed* here; the class was previously visible only as BUG-078's SIGTRAP sibling.
+
+P2 by BUG-078's rationale: only ever observed killing the *test* process, but the throw site is the shipped local-file start path — `LocalFilePlaybackProvider._startLocked()` — so the app-facing form would be a hard crash during local-file playback start. Process impact is real even at P2: it takes down the whole parallel suite run (the regression gate) intermittently, presenting as a suite-level abort with **no failing test line**.
+
+#### Expected behavior
+
+`swift test --package-path UzumeEngine` completes; a provider `start()` that cannot begin playback surfaces as a thrown Swift error (which the racing tests already tolerate via `try?`), never as process death.
+
+#### Actual behavior
+
+The test process dies with SIGABRT (`abort() called`) from an uncaught Objective-C NSException. Console output at the kill shows `com.apple.coreaudio.avfaudio: 'player did not see an IO cycle'`. Intermittent, but frequent under full-suite parallelism on 2026-08-25: **fourteen `.ips` reports in one day** (11:19–17:05), across repeated RECON.14 closeout runs, two baseline checks, and the BUG103.0 evidence run. Passes in isolation (`swift test --filter SessionLifecycleChurn` — clean). **Both manifestations can occur in one run:** the BUG103.0 evidence run (17:02–17:05) failed `completionCallbackVsStop_abbaShape` on its 5 s watchdog at a `provider.start` step AND then died — its swift-testing helper (procLaunch 17:03:31) aborted at 17:05:15 with the same `StartImpl` stack, thrower `rescheduleRacingTeardown…` (`.ips` `…-170525`, the fourteenth). RECON.14's "crashed **or failed**" phrasing covers both faces of the same stall; the evidence script's extracted summary line came from the XCTest half and shows how the kill hides behind a passing-looking count (the BUG-078 exit-code-without-failure lesson again).
+
+#### The mechanism, read from the stack (established)
+
+All twelve reports carry the **identical** `lastExceptionBacktrace`:
+
+```
++[NSException exceptionWithName:reason:userInfo:]
+AVAudioPlayerNodeImpl::StartImpl(AVAudioTime*)
+-[AVAudioPlayerNode play]
+LocalFilePlaybackProvider._startLocked()          ← LocalFilePlaybackProvider.swift:327
+closure #1 in LocalFilePlaybackProvider.start()   (inside lock.withLock)
+LocalFilePlaybackProvider.start()
+closure … in <racing-start test>
+__NSThread__block_start__                          ← raw detached thread
+```
+
+Three facts compose into the process kill:
+
+1. `_startLocked()` runs `try engine.start()` then `player.play()`. `engine.start()` failures are Swift-catchable; **`play()` reports failure as an ObjC NSException** — AVFAudio's `StartImpl` guard for a player asked to start when the engine has not completed an IO cycle.
+2. The crashing tests drive `provider.start()` from **raw `Thread.detachNewThread` threads** with `try?` — which catches Swift errors only. No frame on a raw thread can catch an NSException.
+3. An NSException unwinding off a pthread with no handler terminates the process. Hence SIGABRT with zero test failures recorded — the BUG-078 presentation (exit-code-without-failure), different signal.
+
+**Which test the runner names is not load-bearing.** The 11/2/1 split (`rescheduleRacingTeardown_neverArmsACommandOnAReleasedNode` / `concurrentDoubleStart_serializesWithoutDeadlock` / `completionCallbackVsStop_abbaShape`) reflects which racing-start test's thread threw; RECON.14's console tails additionally attributed crashes to `transportChurn_…`, `completionCallbackVsStop_…`, and `onFileEnded_…` while they were in flight in the parallel set. The authoritative attribution is the `.ips` exception backtrace, and it is `_startLocked()` in all fourteen retained reports — the churn tests included: the 17:00 report's thrower is `completionCallbackVsStop_abbaShape`'s watchdogged thread.
+
+**The first-hand reproduction adds a sequencing observation (one run — treat as observed-once, not the mechanism).** In the 17:00 crash, `completionCallbackVsStop_abbaShape` first FAILED its 5 s watchdog on `provider.start cycle 4` ("main-thread-hang class … stuck thread is leaked"), the suite moved on (`onFileEnded_queueAdvanceChurn` had started, per the console), and THEN the process died with the exception thrown from that test's watchdogged `provider.start` thread. So in this instance the sequence was: `start()` stalls > 5 s under load → the watchdog abandons and leaks the thread → the leaked thread eventually reaches `player.play()` on an engine that never began cycling → uncaught NSException. The stall-then-throw shape favors candidate (a) below (IO-thread starvation), and means the watchdog's deliberate thread-leak policy — correct for reporting hangs — leaves a live thread positioned to kill the process minutes later.
+
+#### What is NOT established
+
+- **Why the engine has not seen an IO cycle at `play()` time.** Two candidate shapes, not separated: (a) under a CPU-saturated parallel run, `engine.start()` returns while the HAL IO thread is starved and has not yet rendered a cycle; (b) the engine is stopped out from under the provider between `engine.start()` and `play()` (device contention / config change from the many concurrent AVAudioEngine instances other suites create). Isolation-pass vs parallel-fail is consistent with both.
+- **Whether `resume()` (`LocalFilePlaybackProvider.swift:251`) ever fires this.** It is the only other `play()` site and `transportChurn` hammers it from detached threads, but no retained report shows it. Same class; unproven.
+- **Provenance of the individual `.ips`:** report paths are anonymized (`/Users/USER/Documents/*/UzumeEnginePackageTests`), so the reports cannot distinguish which checkout ran. The RECON.14 session's runs and its baseline check at `8cbf936a` are the provenance.
+
+#### Reproduction
+
+1. `swift test --package-path UzumeEngine` (full parallel suite; tempo fixtures present — in a worktree run `Scripts/link_fixtures.sh` first).
+2. Intermittent; on 2026-08-25 it fired in most closeout attempts. On a kill, `~/Library/Logs/DiagnosticReports/swiftpm-testing-helper-*.ips` gains a report whose `lastExceptionBacktrace` names `StartImpl`.
+3. Control: `swift test --filter SessionLifecycleChurn` passes clean.
+
+**Minimum reproducer:** none deterministic yet — needs full-suite load (the BUG-078 lesson repeats: the churn/race tests enter the window; parallel load springs it).
+
+#### Session artifacts
+
+`~/Library/Logs/DiagnosticReports/swiftpm-testing-helper-2026-08-25-{111953,114756,115256,151059,155635,160241,160558,160917,161743,162300,162849,164635,170015}.ips` — all SIGABRT, all the `StartImpl` exception backtrace. The `170015` report is the first-hand baseline reproduction (worktree at `8cbf936a`, fixtures linked); its console carried the full first-throw stack and the reason string verbatim: `*** Terminating app due to uncaught exception 'com.apple.coreaudio.avfaudio', reason: 'player did not see an IO cycle.'` (n/a for features.csv etc. — no session surface.)
+
+#### Suspected failure class
+
+`api-contract` — a shipped code path calls an AVFoundation API whose failure mode is an ObjC exception Swift cannot catch, from contexts (raw test threads; in-app, the MainActor) where an escape is fatal. The *trigger* is parallel-test load (`test-isolation`-shaped), but serializing tests would only hide the contract gap; the class that fits the defect is the contract.
+
+#### Verification criteria (written before any fix)
+
+- [ ] Automated: full parallel engine suite, 5 consecutive runs, exit 0, `~/Library/Logs/DiagnosticReports` gains no `swiftpm-testing-helper` `.ips`. (Same lottery caveat as BUG-078: the streak is supporting evidence, not the load-bearing signal.)
+- [ ] Automated: a deterministic gate proving the start path cannot abort the process when the engine is not cycling at `play()` time — e.g. a test that forces the engine-not-running state at the `play()` call and asserts `start()` throws a Swift error (or recovers) rather than dying. Per the deterministic-over-budget-widening rule, the fix must not be "retry with sleeps."
+- [ ] Manual: none required for the test-process defect. If the fix touches the shipped start path, one app-level local-file session with start / Next-churn / quit (the BUG-078 manual shape).
+
+#### Fix scope
+
+Contained to `LocalFilePlaybackProvider`'s start path, but the design needs care: any guard must respect the BUG-021 lock constraints (no AVFoundation teardown under the provider lock) and must not reintroduce the BUG-078 windows. Candidate directions, undesigned: check `engine.isRunning` after `engine.start()` and surface a Swift error; or bridge the `play()` call through an ObjC exception catcher so the failure is reportable. Test-side serialization of audio-hardware suites is a mitigation, not a fix — the contract gap ships.
+
+#### Fix (BUG103.1, 2026-09-23, `30e39b83`)
+
+**★ The filed candidate fix was measured and falsified.** The entry offered two undesigned
+directions; candidate (a) was "check `engine.isRunning` after `engine.start()` and surface a Swift
+error". Nine engine states were probed directly against AVFoundation before any code was written —
+never-started, started, started-then-stopped, reset-after-start, pause-after-start, stop+reset,
+prepare-only, play-twice, detached. **Every `isRunning == false` state returned from `play()`
+normally.** An `isRunning` guard would therefore have guarded a condition that never raises: it
+would have looked like a fix, passed review, and left the contract gap shipping. Recorded here
+because the same instinct will recur the next time an AVFoundation call raises.
+
+Only the **detached-player** state raises deterministically (`'required condition is false:
+_engine != nil'`). The production trigger — `'player did not see an IO cycle'` — is a race against
+the HAL IO thread and still cannot be forced synchronously; that is why the gate pins the mechanism
+rather than the trigger.
+
+**What landed.** Candidate (b): `Sources/ObjCShim/UZExceptionCatch.{h,m}`, the repo's only
+Objective-C target, wrapping a call in `@try/@catch` and converting a raise into an `NSError` that
+carries the exception's name, reason and call stack. There is no pure-Swift equivalent — that is the
+target's entire justification. Both `play()` sites route through it:
+
+- `_startLocked()` — a raise now throws. The engine is **running** and `self.engine` is unassigned at
+  that point, so a plain throw would leak a running engine (BUG-078's trap). The partial refs ride
+  out on a private `StartAborted` error and `start()` tears them down **after** unlocking, honouring
+  BUG-021's no-AVFoundation-teardown-under-the-lock constraint.
+- `resume()` — non-throwing public API, so a raise is logged and swallowed. A failed resume is a bad
+  transport, not a reason to kill the app.
+
+**Verification criteria, as written before the fix:**
+
+- [x] Deterministic gate: `PlayerNodeExceptionContractTests` (3 tests) — a raising `play()` becomes a
+      Swift error carrying the reason; a non-raising `play()` passes through and the node really
+      starts; the catcher survives repetition (a one-shot `@try` would only fail on track 2).
+      Negative control: the same **unwrapped** `play()` aborts the process. No sleeps, no retries.
+- [~] Full parallel engine suite, 5 consecutive runs: **4 of 5 exit 0**, and **0 new
+      `swiftpm-testing-helper` `.ips` across all five** — which is the half of this criterion that
+      actually speaks to BUG-103, and it is clean. The one red run (run 3) was
+      `PostProcessChainTests.test_fullChain_under2ms_at1080p`: a GPU wall-clock budget, 10.57 ms
+      against a 5 ms assert, which runs 1/2/4/5 passed and which this fix cannot reach (the diff
+      contains no renderer or Metal file). It also failed earlier the same day while an unrelated
+      Release app was holding the GPU. Recorded as **not met as written** rather than waved through;
+      the deterministic gate above is the load-bearing signal, per BUG-078's lottery caveat.
+      ⚠ Two asides for whoever touches that test: it is named `under2ms` but asserts `< 5.0`, and
+      being an XCTest it fails *while the swift-testing summary line still reads "passed"* — the
+      exact two-halves presentation this entry warns about above.
+      BUG-139's hang did **not** recur in these five runs.
+- [x] Manual: not required. The shipped start path changed, so one app-level local-file session
+      (start / Next-churn / quit) is recorded in the closeout.
+
+**What is still open, honestly.** Why AVFAudio considers the engine not to have seen an IO cycle is
+*still* unestablished — candidates (a) IO-thread starvation and (b) the engine being stopped from
+under the provider remain unseparated. This fix does not answer that question; it removes the
+question's ability to kill the process. If the raise is now observed in the wild it will arrive as a
+logged Swift error with a call stack, which is the instrument that was missing.
+
+#### Related
+
+- BUG-078 (same family — AVAudioPlayerNode lifecycle under parallel scheduler load; different throw site, different signal, resolved 2026-08-10)
+- BUG-021 / BUG-059 (the lock-ordering constraints any fix must preserve)
+- `SessionLifecycleChurnTests`, `LocalFilePlaybackStartRaceTests` (the racing-start tests that enter the window)
+- RECON.14 (found while running its closeout evidence; not introduced by it)
+
+---
+
+### BUG-087 — Local-file playback analyses at 10 Hz where streaming analyses at 51 Hz (AVAudioEngine ignores the tap `bufferSize`) (2026-08-11)
+
+Found while chasing a `beatPhase01` discrepancy across captures. **Diagnosis increment
+only — no fix code.**
+
+#### Expected behavior
+
+The MIR chain analyses at a comparable rate whichever way audio arrives.
+`LocalFilePlaybackProvider` requests `installTap(onBus: 0, bufferSize: 1024, …)`, which at
+44.1–48 kHz is ≈43–47 Hz.
+
+#### Actual behavior
+
+**Local-file playback analyses at 10.0 Hz. Streaming analyses at 51.1 Hz.** A 5.1× rate
+loss, on the session type used for essentially all development and all scene work.
+
+#### Reproduction steps
+
+Any local-file session vs any streaming session. Measured across the whole capture corpus
+(10 local-file captures, 1 streaming).
+
+#### Session artifacts
+
+`beatPhase01` advance rate × the CSV's own frame rate gives the analysis rate directly:
+
+| capture | path | audio Hz | analysis Hz | implied buffer |
+|---|---|---|---|---|
+| `2026-08-11T01-07-17Z` | local | 44 100 | 9.99 | **4414 frames** |
+| `2026-08-11T23-52-49Z` | local | 48 000 | 9.98 | **4808 frames** |
+| `2026-08-11T23-44-40Z` | local | 48 000 | 9.98 | **4810 frames** |
+| `beat-match-test-session` | streaming | 48 000 | **51.11** | **939 frames** |
+
+All ten local-file captures read 15.2–16.8 % (16.7 % on eight of ten). The streaming capture
+reads 85.4 %.
+
+**The discriminator that makes this a diagnosis and not a correlation:** if the tap delivered
+a fixed *frame count*, the analysis rate would differ between the 44.1 kHz and 48 kHz
+captures. It does not — 4414 frames at 44.1 kHz and 4808 at 48 kHz are both **exactly 0.1 s**.
+The buffer is duration-based, so the `bufferSize: 1024` request is being ignored, not merely
+rounded. The streaming path's 939 frames ≈ the 1024 the system tap actually honours.
+
+⚠ **Path and date are perfectly confounded in the corpus** (the sole streaming capture is
+2026-07-27; every local-file capture is 2026-08-07 or later), so the *captures alone* cannot
+separate "local-file path" from "something regressed in August". The code and the
+rate-independence discriminator are what settle it, plus the streaming capture's
+`TAP: startCapture: ENTER → createProcessTap` lines, which no local-file capture has — they
+are genuinely different audio sources, not the same source at two dates.
+
+#### Suspected failure class
+
+`calibration` — intent (1024 frames) versus reality (~4800), unverified at the boundary.
+`api-contract` secondarily: AVFoundation treats `installTap`'s `bufferSize` as a hint, and
+nothing here checks what was actually delivered.
+
+#### Root cause (read from source)
+
+- `UzumeEngine/Sources/Audio/LocalFilePlaybackProvider.swift:292` —
+  `player.installTap(onBus: 0, bufferSize: 1024, format: tapFormat)`. AVAudioEngine honours
+  this loosely and delivers ~0.1 s buffers on macOS.
+- `UzumeApp/VisualizerEngine+Audio.swift` `processAnalysisFrame` — invoked once per audio
+  callback via `analysisQueue.async`, with **no time-based gate**, and it derives
+  `effectiveFps = 1 / dt` from the callback interval. So the callback rate *is* the analysis
+  rate, and `dt` correctly reports 0.1 s; nothing is lying, the rate is simply low.
+- `handleTapBuffer` is **not** at fault: it resizes `interleavedScratch` when a buffer exceeds
+  the 1024-frame allocation, so no samples are dropped. Checked, because a scratch sized 1024
+  against a 4800-frame buffer would have been the more serious bug.
+
+#### Impact
+
+Every `FeatureVector` consumer on the local-file path sees 10 Hz: bands, the D-026 deviation
+primitives, `beatPhase01`, centroid, flux, and the mood classifier's inputs. This is the same
+10 Hz the FTR program discovered from the scene side and carried as a scene-authoring fact;
+it is a pipeline property, and it is path-specific.
+
+**For a beat-ruled scrolling scene (Stave / the CHR series) it is a design input**, not a
+footnote: gridlines and trace samples would arrive in 100 ms steps on the path that scene
+would mostly run on.
+
+**A lead was recorded here and is now REFUTED (2026-08-12).** It read: this may also explain
+BUG-086's local-file stem/band correlation of r 0.19–0.46 against streaming's 0.70–0.94, since
+stems and bands would be sampled on different clocks. Both halves failed. Stems and bands are
+on the **same** clock within a path (streaming `beatPhase01` 85.4 % / stems 97.1 %; local
+16.7 % / 14.6–16.0 %), so the proposed mechanism does not exist. And step-holding the streaming
+capture's series down to 10 Hz — injecting this defect into strong-r data — barely changes the
+result (r 0.788→0.783 … 0.937→0.938, 5.4 s lag intact). **10 Hz does not explain BUG-086's weak
+correlation**, and this fix should not be expected to improve it. Kept as a record so the lead
+is not re-run; detail in BUG-086's refuted-hypothesis list.
+
+#### Verification criteria (written before any fix)
+
+- Automated: assert the delivered buffer's `frameLength` against what was requested at the
+  `installTap` boundary, so an ignored hint fails loudly instead of silently costing 5× rate.
+- Automated: an analysis-rate floor measured from a real capture, the same shape as
+  `Scripts/measure_stem_latency.py` — `beatPhase01` advance × CSV fps ≥ target.
+- Manual: any fix raises the update rate of every deviation primitive on the local-file path,
+  which is felt on every scene. M7-class observation required; a 5× change in feature update
+  rate is not a silent change.
+
+#### Fix attempted — PARTIAL, and the remedy was wrong (BUG087.2/.3, 2026-08-13)
+
+**Measured on capture `2026-08-13T13-15-36Z`: 10.0 Hz → 16.4 Hz. The ≥ 40 Hz done-when is
+NOT met**, and not for a tuning reason.
+
+**What landed and works.** `BUG087.2` moved the analysis time base off wall-clock onto the
+audio each callback carried (`frames / rate`) — behaviour-neutral, verified by the full suite
+moving **zero** existing expectations, and a prerequisite for producing several analysis
+frames per callback. `BUG087.3` slices each delivered buffer into 1024-frame pieces.
+
+**Why it falls short.** Slicing raised the *computation* rate to ~47 Hz but not the rate a
+scene observes. All five slices of a buffer complete within microseconds — they process
+already-buffered audio, not audio arriving in real time — so the render loop samples ~1.6 of
+them as distinct values and supersedes the rest. The gap distribution is bimodal and
+unambiguous: **39 % of value changes are 1 render frame apart, 55 % are 5–6 frames
+(84–101 ms) apart.** A burst against a 100 ms arrival period.
+
+> **The binding constraint is how often audio ARRIVES, not how finely it is sliced.** A scene
+> cannot observe more distinct values per second than buffers are delivered, when every slice
+> of a buffer lands at the same instant.
+
+**Kept anyway (Matt's call):** effective rate 10 → 16.4 Hz (+64 %), and fresher values — the
+last slice reflects the newest 1024 samples rather than a position inside a 4410-frame buffer,
+a latency gain even where the rate did not move. Cost: ~5× the per-callback allocation on the
+audio thread, landing at ~47/s — the rate the system-tap path has always run at.
+
+#### Instrumentation — one remaining route ELIMINATED, and a fresh live measurement (2026-09-10)
+
+`TapDeliveryRateTests` measures what each node actually delivers and, crucially, **how far apart
+the deliveries land** — two buffers arriving in the same instant are worth one update to a scene
+however small they are. Real music (a session `raw_tap.wav`), `BUG087_AUDIO=<wav>`:
+
+| tap node | requested | delivered | rate | arrival gap |
+|---|---|---|---|---|
+| player | 1024 | 4410 | 10.0 Hz | mean 99.8 ms |
+| player | 4096 | 4410 | 10.0 Hz | mean 99.8 ms |
+| mixer  | 1024 | **4800** | **10.0 Hz** | mean 99.8 ms |
+| mixer  | 4096 | **4800** | **10.0 Hz** | mean 99.8 ms |
+| output | any | **nothing** | — | — |
+
+**"Tap a different node" is DEAD as a route.** The mixer delivers on the identical 0.1 s cadence —
+4800 frames at 48 kHz against the player's 4410 at 44.1 kHz, i.e. the same fixed *duration*, the
+same discriminator BUG087.1 used. `outputNode` delivers no buffers at all. The 0.1 s tap cadence is
+AVAudioEngine's, not the node's, and it ignores the requested size at both 1024 and 4096.
+
+**`AVAudioSinkNode` is INCONCLUSIVE, not eliminated.** It is a render-callback node rather than a
+tap, so it is not subject to the tap cadence — the right shape for this problem. But wiring it
+alongside live playback did not work here: a plain second `connect` from `mainMixerNode` (which
+already feeds `outputNode`) **aborts with signal 6 rather than throwing**, and the supported
+`AVAudioConnectionPoint` fan-out produced **zero callbacks**. Two configurations tried, both
+recorded; neither shows it working and neither proves it cannot. Stopped there per the two-strikes
+rule rather than permuting wiring.
+
+**Live rate confirmed independently, from Matt's own sessions** — the analysis rate measured as
+"how often does a `FeatureVector` field actually CHANGE across render rows":
+
+| session | type | bass | beatComposite | arousal | render |
+|---|---|---|---|---|---|
+| `2026-09-10T18-01-30Z` | local file | 10.2 Hz | 9.0 Hz | 9.6 Hz | 59.8 fps |
+| `2026-09-10T17-13-10Z` | local file | 10.3 Hz | — | — | ~60 fps |
+| `beat-match-test-session` | **streaming** | **58.8 Hz** | — | — | ~60 fps |
+
+So the row's "10 Hz local vs 51 Hz streaming" holds, and streaming now measures **58.8 Hz** —
+essentially render rate. **The 16.4 Hz from BUG087.2/.3 is not what a local session shows today;
+10 Hz is.** ⚠ **Product consequence worth stating plainly: the roster review was conducted on local
+FLAC**, and "sync is weak / loose / tenuous" appears against Membrane, Meniscus, Mitosis, Plasma and
+Nebula in it. A driver bus running ~5.8× slower than the renderer is a plausible common factor
+behind part of that cluster, and no per-scene tuning touches it.
+
+#### The residual is OFFSET, not rate — measured at ~145 ms transport (2026-09-10)
+
+Matt on a streaming build: *"audio sync is still a little loose, not perfectly synced."* On that
+path the rate ceiling is **gone** — bass 60.0 Hz, beatComposite 58.9, spectral_level_rise 59.3
+against a 59.9 fps render (`2026-09-10T19-45-58Z`). So whatever remains is not quantisation.
+
+`VisualAudioOffsetTests` turns it into a number. **The alignment is exact, not estimated:**
+`session.log` records `raw tap capture started ... wallclock=<t0>` and every `features.csv` row
+carries the same `wallclock_s`, so a sample index in `raw_tap.wav` and a feature row sit on ONE
+timeline — no CS.1-style onset pairing needed. Offline broadband onset strength (log-energy first
+difference, 5 ms grid) is cross-correlated against the recorded columns over the 21.3 s overlap:
+
+| column | best lag | r | r at zero lag |
+|---|---|---|---|
+| `bass` | **+145 ms** | 0.219 | −0.031 |
+| `treble` | **+175 ms** | 0.142 | 0.095 |
+| `spectral_level_rise` | **+275 ms** | 0.195 | 0.026 |
+| `beatComposite` | −280 ms | **0.060** | 0.016 |
+
+**★ SEVERAL COLUMNS ON PURPOSE — one column cannot tell transport delay from feature shape.**
+`bass` is a band energy that tracks the envelope directly and lags **+145 ms**: that is transport.
+`spectral_level_rise` lags **+275 ms**, and the extra ~130 ms is its OWN design — it compares level
+against a 0.15 s trailing floor, so it peaks after a transient by construction. Reading the 275 ms
+as pipeline latency would have over-stated the engine's share by nearly half.
+
+**Actionable consequence for scenes, not just the engine:** an event layer keyed to
+`spectral_level_rise` (Nebula's, PR.21) is keyed to the *laggiest* available primitive. Roughly
+130 ms is recoverable scene-side by driving the accent from a faster one or compensating, without
+touching the audio path.
+
+**And `beatComposite` is independently confirmed as not event-aligned** — r = 0.060 at a *negative*
+lag, i.e. essentially uncorrelated with audible onsets. That matches the 42.6 %-above-0.9 duty
+cycle measured from the scene side, and the FeatureVector's own comment that the `beat_*` fields
+score below chance against real events.
+
+⚠ **Bounds.** Correlations are weak in absolute terms (0.14–0.22) because broadband onset strength
+and AGC-normalised band energy are different quantities; the corroboration is that `bass` and
+`treble` agree (+145/+175 ms) and that every peak is sharp rather than flat. And this measures tap
+capture → feature in a rendered row: it **excludes** output-device buffering between the tap point
+and the speaker, and display presentation. The true eye-vs-ear gap is ≥ these figures.
+
+#### The feature-shape half is FIXED (PR.22); the ~145 ms transport half is what remains
+
+The +275 ms measured on `spectral_level_rise` decomposed into ~145 ms transport and ~130 ms of the
+field's own fixed-lag design. **PR.22 recovers the second half** with `transientRise` — the same
+statistic at 15 ms pre-smooth / 40 ms lag, band re-calibrated to 4–10 dB so its fire rate still
+matches the parent's. Measured against offline onset strength: **+30 ms against the parent's
++150 ms**, on both a streaming and a local session.
+
+**So BUG-087's remaining scope is the ~145 ms transport term only.** A scene keyed to
+`transientRise` should now sit ~145 ms behind the audio rather than ~275 ms.
+
+#### The remaining term decomposes AGAIN, and the fix route is chosen (2026-09-10)
+
+Measured per primitive on a streaming session (offline onset strength, shared wallclock):
+
+| primitive | lag | r |
+|---|---|---|
+| `transientRise` (PR.22) | **+30…+45 ms** | 0.18–0.33 |
+| `bassDev` | +135 ms | 0.202 |
+| `bass` / `mid_dev` | +145 ms | 0.219 / **0.250** |
+| `bassAttRel` | +145 ms | 0.159 |
+| `mid_att_rel` | +170 ms | 0.142 |
+| `bass_att` | **+365 ms** | 0.143 |
+
+**Every continuous primitive sits at ~135–170 ms, and most of that is deliberate band smoothing** —
+`BandEnergyProcessor.instantSmoothers` run `rate30: 0.65/0.75/0.75`, i.e. **τ ≈ 77 ms (bass) and
+116 ms (mid, treble)**. Real transport is therefore only ~40–60 ms of it.
+
+⚠ **A correction worth keeping:** the raw attenuated band `bass_att` (τ ≈ 650 ms) lags +365 ms, and
+extrapolating from that to its `_rel` sibling is wrong — `bassAttRel` measures **+145 ms**, the same
+as the instant family. **The deviation transform removes almost all of the attenuation lag**, which
+makes D-026's "drive from deviation" a latency rule as well as an AGC-independence rule.
+
+**Matt's call on which lever** (2026-09-10): not the smoothing constants — *"i don't like that the
+smoothing constants will change the feel of every scene - too risky"* — but true transport. Scoped
+as **BUG087.4** in ENGINEERING_PLAN: drive the analysis clock from the decoded file at the smoothed
+playhead instead of from tap arrival, on the local-file path only. Honest ceiling: ~40–50 ms of the
+~145 ms, plus removal of the 100 ms staircase. ⚠ And the defect there is **cadence, not staleness** —
+`FFTProcessor` already analyses the NEWEST samples of each buffer, so a design premised on stale
+audio would aim at the wrong thing.
+
+**The remaining route is smaller buffers from AVAudioEngine** — manual rendering mode, an
+`AUAudioUnit` render block with a smaller `maximumFramesPerSlice`, or tapping a different
+node. BUG087.1 measured that a plain `installTap(bufferSize:)` request is ignored. **Filed as
+its own increment, not a follow-on commit. BUG-087 stays OPEN.**
+
+⚠ A regression test here asserted `hz >= 40` from slice count and **passed**, while the live
+capture measured 16.4 Hz — it was measuring the computation rate and calling it the delivered
+rate. Renamed and re-scoped, because a green tick against a refuted claim is worse than no
+test.
+
+#### Fix landed behind a flag — BUG087.4, the analysis clock decoupled from tap arrival (2026-09-10)
+
+`UZUME_LF_ANALYSIS_CLOCK=1` replaces tap arrival with a **playhead-driven clock** on the
+`.localFilePlayback` path: `PlayheadAnalysisClock` ticks at 80 Hz on its own queue, reads the span
+the smoothed playhead has just passed out of `LoopingFileReader` (bounded read-ahead over the
+already-decoded `AVAudioFile`), and calls the same `onAudioSamples` funnel. Streaming is untouched.
+
+**Measured through the real provider, against a 59.8 fps render:**
+
+| arm | produced | **OBSERVED** | delivery gap | bunched (<2 ms) |
+|---|---|---|---|---|
+| tap (today, `2026-09-10T22-07-34Z`) | ~47 Hz sliced | **10.01 Hz** | mean 99.8 ms | all slices |
+| playhead clock | 80.6 Hz | **59.2 Hz** | median 12.1 ms, p95 17.1 ms | **0 of 237** |
+
+**Observed, not produced — and that distinction is the whole increment.** BUG087.3's gate asserted
+`hz >= 40` from *slice count* and passed while the live rate was 16.4 Hz. Both new gates measure the
+observed quantity: `sessionRateGate` counts how often a column CHANGES between rendered rows of a
+real `features.csv` (it **fails at 10.01 Hz** on the pre-fix reference capture, as a real gate must),
+and `deliveryRateGate` buckets deliveries into 1/60 s render windows rather than counting them.
+
+**★ Why 80 Hz and not 60.** The gate is how many distinct values a ~59.8 fps sampler can tell apart.
+A 60 Hz clock against a 59.8 fps render is two near-equal rates beating against each other, leaving
+a share of render frames with no new value. A 12.5 ms period fits inside a 16.7 ms frame with 4.2 ms
+of jitter margin, so the observed rate becomes the render rate.
+
+**★ And no app-layer change was needed, which was not obvious.** The FFT does not run on the
+callback's samples: `makeAudioSampleCallback` writes them into the `AudioBuffer` ring
+(`UzumeApp/VisualizerEngine+Audio.swift:113`) and reads the newest 1024 frames back OUT of it
+(`:152`). The analysis WINDOW and the callback's HOP were already decoupled. So delivering hop-sized
+spans keeps a full window *and* makes BUG087.2's audio-derived `dt` exactly right — `frames / rate`
+is the playhead advance, which is what every seconds-based follower needs.
+
+**Position source gated before anything was built on it** (BUG087.4's own risk section: a drifting
+read position desynchronises analysis, which is worse than being uniformly late). Driving
+`AVAudioPlayerNode.playerTime` through `PlaybackClockSmoother` across **3.32 laps of a 1.2 s file**:
+`backwards=0, behind-player=0, beyond-band=0, max lead 10.7 ms`. The player's `sampleTime` keeps
+counting across a `scheduleFile` loop re-arm, so the position is monotone across the boundary and the
+smoother never reads the wrap as a seek; `LoopingFileReader` takes the wrap, where it is a modulo.
+
+**Tap consumers — checked, not assumed (the BUG-070 shape).** Every consumer sits downstream of the
+same funnel and is still fed, because what changed is the funnel's SOURCE, not the funnel:
+`silenceDetector.update` (`AudioInputRouter.swift:301`), `recordRawTapSamples`
+(`VisualizerEngine+Audio.swift:119`), `inputLevelMonitor.submitSamples` (`:130`),
+`signalHealthMonitor.ingest` (`:134`), `updateTapSampleRate` (`:143`), `stemSampleBuffer.write`
+(`:146`), the `AudioBuffer` ring (`:113`). `SilenceDetector` and `SignalHealthMonitor` are both
+time-windowed rather than call-counted, so an 8× rate change does not move their thresholds.
+
+⚠ **One consumer's constants ARE per-call:** `InputLevelMonitor.submitSamples`
+(`UzumeEngine/Sources/Audio/InputLevelMonitor.swift:199-201`) runs `peakEnvelope * 0.9995` and an RMS
+EMA at `0.95/0.05` per invocation, so its decay time constants shorten with the rate. It drives the
+diagnostic level meter, not any scene. Not changed here, and not a new regime: the streaming path has
+always fed it at ~47–59 Hz.
+
+**The tap is RETIRED (BUG087.5, 2026-09-11, Matt's call once the fix had landed).** The player node
+now carries no tap at all — `PlayheadAnalysisClock` is the only analysis source on this path.
+`TapBufferSlicing` went with it (its only consumer was the slicing loop), as did
+`UZUME_LF_ANALYSIS_CLOCK`: with no tap to return to, `=0` could only produce silence. A clock that
+cannot be built is now a thrown start error rather than a silent downgrade.
+
+**Honest ceiling, unchanged from the design:** this recovers the cadence term (~50 ms average, plus
+the 100 ms staircase) out of the ~145 ms on continuous primitives. The remaining τ 77–116 ms is
+`BandEnergyProcessor` band smoothing, which Matt declined to change (*"i don't like that the
+smoothing constants will change the feel of every scene - too risky"*). Not quietly reduced.
+
+#### RESOLVED — M7 PASSED and the clock is default-on (2026-09-11)
+
+**Matt, watching session `2026-09-11T01-22-10Z` live:** *"I like it. It's punchy. Not exact, but
+close."* Measured on that capture, `session.log` line 24 confirming `ANALYSIS_CLOCK: playhead-driven,
+80 Hz, file rate 44100` before any number was read off it:
+
+| column | before (`2026-09-10T22-07-34Z`, tap) | after (`2026-09-11T01-22-10Z`, clock) |
+|---|---|---|
+| `bass` | 10.01 Hz | **59.77 Hz** |
+| `mid` | 10.01 Hz | **59.61 Hz** |
+| `treble` | 10.01 Hz | **59.20 Hz** |
+| `spectralCentroid` | 10.01 Hz | **59.66 Hz** |
+| `spectralFlux` | 10.01 Hz | **59.34 Hz** |
+| render | 59.77 fps | 59.83 fps |
+
+**5.97×, and the slowest column now changes on 99 % of rendered frames.** The local path matches
+streaming's 58.8 Hz. `isEnabled` inverted to default-on; `UZUME_LF_ANALYSIS_CLOCK=0` forces the tap
+back, kept because this replaces the audio source of the whole MIR chain on the path all development
+runs on.
+
+**Goldens did not move.** The option-A question (regenerate before or after Matt watches) turned out
+to be moot: `PresetRegressionTests` renders from fixtures through the harness, which never constructs
+`LocalFilePlaybackProvider`, so the clock is not in the golden path at all. Verified by running the
+full suite with the clock default-on — no golden regenerated, none needed.
+
+⚠ **The VisualAudioOffset table does NOT demonstrate this win, and cannot — the metric's own
+reference moved under the fix.** `recordRawTapSamples` sits inside the funnel
+(`VisualizerEngine+Audio.swift:119`), so with the clock driving, `raw_tap.wav` is the CLOCK'S OWN
+INPUT rather than the tap's output. The test measures "what `raw_tap.wav` recorded → the feature in a
+rendered row", which on this path is now analysis→row, not capture→row. On top of that every band
+column reads below the correlation floor on BOTH sessions (`bass` r 0.036, `mid_dev` r 0.049 after;
+r −0.058 / 0.042 before), and the one readable column moved `transient_rise` +45 → +50 ms, i.e. inside
+the noise of a 20 ms lag grid on different material. **Anyone quoting VisualAudioOffset as a transport
+number on the local path must re-derive what its reference now is first.** The rate is what carries
+this fix; the ear is what confirmed it.
+
+**Still open, and named so it is not mistaken for this defect:** *"not exact, but close"* is the
+band-smoothing term — `BandEnergyProcessor.instantSmoothers` at τ 77 ms bass / 116 ms mid-treble,
+which Matt declined to change at the design stage (*"too risky"*) and which this increment did not
+touch. That is the next lever on local-path sync, and it is a D-004 trade, not a defect. Scene-side,
+`transientRise` (PR.22) already sits ~120 ms ahead of `spectral_level_rise` for event accents.
+
+#### Related
+
+**⇄ BUG-086** — same subsystem boundary, independent cause. The lead that this entry might
+explain BUG-086's weak local-file correlation is **refuted** (see Impact). A fix here should
+still re-run `Scripts/measure_stem_latency.py` on a local-file capture before and after — not
+because the correlation is expected to improve, but so the claim is checked rather than assumed.
+
+---
+
+### BUG-054 — Key detection has never been accurate enough to use in playback (chroma algorithm is fundamentally resolution-limited) (2026-06-16)
+
+> **Reconciled 2026-09-30 (BR.KI ledger pass).** Closed as a duplicate of **BUG-149**, which carries the current measurement (35 % of the 993-track census pilot reads F♯ minor). Key-detection work continues there.
+
+**Severity:** P3 (non-load-bearing *today* — `estimatedKey` is a debug/UI display value + a fallback; nothing in orchestration or any scene consumes key, and scenes drive from energy/deviation, not key. No fps/crash/playback-correctness impact. Sev would rise to P2 if/when a feature is built to *use* key. Matt may rerank). Filed 2026-06-16 after the BUG-053 work surfaced it (Matt: "key has never been correct for as long as Phosphene has tracked it"). Investigation + fix design done this session; **filed for later, not scheduled.**
+**Domain tag:** dsp.key (MIR chroma / key estimation)
+**Suspected failure class:** `algorithm` (the chroma front-end is resolution-limited by construction) + `calibration` (full-mix input, no harmonic weighting).
+**Status:** Open — design complete, **not scheduled** (Matt's call: track for later). Distinct from BUG-053 (that was the live MIR ignoring the *tap rate*; this is the chroma/key *algorithm* being inaccurate even at the correct rate).
+**Resolved:** —
+
+**Expected:** the detected musical key matches the track's actual key on clear tonal material (with a confidence gate so it surfaces only when trustworthy). Realistic ceiling: ~70–85 % exact + ~90 %+ within a fifth/relative — never 100 %.
+**Actual:** key is reliably wrong. Black Hole Sun (G major) read **F** in session `2026-06-16T16-52-09Z`. Root causes (`ChromaExtractor.swift`, `SessionPreparer+Analysis.analyzeMIR`):
+1. **1024-point FFT → ~43 Hz/bin.** A semitone near middle C is ~15 Hz — *under half a bin* — so C/C♯/D below ~1 kHz fall in the same bins; the analyzer can't resolve which semitone owns the energy in the register where the key lives. The `minFrequency = 500 Hz` floor (`ChromaExtractor.swift:63`) sidesteps the worst of it but then reads key off harmonics ≥ 500 Hz, which smear across pitch classes (overtones land on octave/fifth/major-third).
+2. **Linear FFT bins → log pitch is the wrong transform** — the field uses a constant-Q transform (uniform log-frequency resolution).
+3. **Full-mix chroma** — drums/percussion (broadband) pollute it; no harmonic/percussive split, even though Uzume already computes stems.
+4. **No harmonic summation / spectral whitening.**
+Krumhansl-Schmuckler template matching at the end is fine; the chroma front-end is the bottleneck. The offline per-track pass (`analyzeMIR`) uses the *same* 1024-pt full-mix `ChromaExtractor`, so the cached key is equally wrong. No metadata fallback in normal use: only `SoundchartsFetcher` returns a key (env-gated, off by default); iTunes/MusicBrainz don't carry key; Spotify's audio-features (key) endpoint is deprecated for new apps.
+
+**Reproduction steps:** play any track with a known key (e.g. Black Hole Sun = G); read the `key=` line in `~/uzume_diag.log` (the MIR's own estimate, not metadata-overridden). It is reliably off, independent of sample rate.
+**Session artifacts:** `2026-06-16T16-52-09Z` (Black Hole Sun, true G, read F). A labeled validation set is a prerequisite for the fix (see below).
+**Verification criteria (for the eventual fix):**
+- [ ] A **labeled ground-truth set** (~15–20 tracks, known keys) added as a test fixture; report **exact-match %** + **within-a-fifth/relative %** before and after.
+- [ ] Post-fix exact-match clears an agreed bar (target ~70 %+ exact, ~90 %+ tolerant) on that set.
+- [ ] Display/use is **confidence-gated** — a low-confidence estimate shows nothing rather than a wrong key.
+
+**Fix approaches (design from this session; key is a per-track value → spend compute once, offline; exploit Uzume's stems + offline budget):**
+1. **Tier 1 (cheap, partial):** in the offline key pass, feed the **drums-removed / harmonic stem** signal (stems already exist → free HPSS), bump to an **8192-pt FFT** (or add harmonic summation), aggregate over the whole clip; keep Krumhansl. Likely "never right" → right on clear tonal tracks.
+2. **Tier 2 (proper):** **constant-Q transform** → harmonic-weighted pitch-class profile (HPCP) + spectral whitening → refined templates (Temperley / Albrecht-Shanahan) over the whole track — the librosa-`chroma_cqt` / essentia-`KeyExtractor` design, built in Accelerate (no Swift MIR lib; on-device constraint). The real fix.
+Recommended sequencing: Tier 1 measured against the labeled set first; escalate to Tier 2 only if it doesn't clear the bar. Confidence-gate either way.
+
+---
+
+### BUG-028 — Beat-grid live phase imperfect on ~half of tracks (felt "behind the beat / wrong downbeat") (2026-06-05)
+
+> **Reconciled 2026-09-30 (BR.KI ledger pass).** Closed as superseded by **BUG-065** (live phase drift) and the whole-track grid work (BUG-118, BUG-119, BUG-134).
+
+**Severity:** P2 (musical-feel ceiling across every beat-coupled scene; not a crash. Bounds Nimbus's beat axis — see M7 r1 below).
+**Domain tag:** dsp.beat (grid phase)
+**Status:** Open — diagnosed; elevated to its own project per Matt (**D-145**). Scoping note: `docs/diagnostics/BEAT_GRID_LIVE_PHASE_PROJECT_2026-06-05.md`. **Not to be fixed by per-scene tuning, and not by another short-window live-tap iteration (FA #69 — premise retired).**
+**Introduced:** structural — the cached `BeatGrid` is built from the 30 s preview and its phase is cross-capture-unstable on live audio (BSAudit.2; CLAUDE.md §Cold-Start Phase Contract).
+**Resolved:** —
+
+**Expected:** beat-coupled visuals land on the audible downbeat across the catalog.
+**Actual (Nimbus M7 r1, session `2026-06-05T18-26-37Z`):** grids **lock** (`lock_state`=2 ~84 %) with the **right tempo** (grid-vs-drums BPM < 1 % on most tracks), but live **phase** is imperfect — `drift_ms` ~10–35 ms (mixed sign) and meter assumed simple (Money 7/4 logged `beatsPerBar`=2). Reads as "behind the beat / wrong downbeat" on roughly half the tracks; locks well when phase happens to align (Superstition verse).
+**Suspected failure class:** `algorithm` (cached-grid phase derivation) — a *new premise* is required (human-tap reference / full-track local analysis / per-track manual calibration), chosen with Matt in the D-145 design session before any increment.
+**Verification criteria:** deferred to the D-145 project.
+
+---
+
+
 ### BUG-126 — RESOLVED (ALFVEN.3f): the strobing seam bloom is removed, not bounded (2026-09-10)
 
 ALFVEN.3d bounded this defect (`bloomMaxAmount` 0.85 + `bloomSlewPerSecond` 6.0/s), taking max
