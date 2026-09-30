@@ -188,14 +188,23 @@ public final class StemModelEngine: @unchecked Sendable {
             graphBundle.inputTensor: inputData
         ]
 
-        let results = graphBundle.graph.run(
-            with: commandQueue,
-            feeds: feeds,
-            targetTensors: graphBundle.stemOutputTensors,
-            targetOperations: nil
-        )
+        let results = SeparationSplit.measure("model_run") {
+            graphBundle.graph.run(
+                with: commandQueue,
+                feeds: feeds,
+                targetTensors: graphBundle.stemOutputTensors,
+                targetOperations: nil
+            )
+        }
 
         // Extract outputs
+        try SeparationSplit.measure("readback") {
+            try extractOutputs(results)
+        }
+    }
+
+    /// Copy each stem's graph output into `outputAssembledBuffers` and split it to L/R.
+    private func extractOutputs(_ results: [MPSGraphTensor: MPSGraphTensorData]) throws {
         for (idx, tensor) in graphBundle.stemOutputTensors.enumerated() {
             guard let result = results[tensor] else {
                 throw StemModelError.predictionFailed("Missing output for stem \(idx)")

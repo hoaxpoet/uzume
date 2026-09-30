@@ -171,8 +171,8 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
         // CLEAN.4.2: mono input deinterleaves to (audio, audio) → left == right, so the
         // right STFT is identical to the left; compute it once and reuse. Stereo (>= 2 ch)
         // still runs the real right channel.
-        let (magL, phaseL) = stft(mono: left)
-        let (magR, phaseR) = channelCount >= 2 ? stft(mono: right) : (magL, phaseL)
+        let (magL, phaseL) = SeparationSplit.measure("stft") { stft(mono: left) }
+        let (magR, phaseR) = channelCount >= 2 ? SeparationSplit.measure("stft") { stft(mono: right) } : (magL, phaseL)
 
         let nbFrames = magL.count / Self.nBins
 
@@ -204,19 +204,18 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
             }
             ConcurrencyAuditProbe.checkInputOwnership(id: raceID, stage: "post-predict")
 
-            return Self.readStemMagnitudes(
-                outputBuffers: stemModel.outputBuffers, elemCount: elemCount
-            )
+            return SeparationSplit.measure("readback") {
+                Self.readStemMagnitudes(outputBuffers: stemModel.outputBuffers, elemCount: elemCount) }
         }
 
         let outputFrames = nbFrames
-        let stemWaveforms = reconstructStemWaveforms(
+        let stemWaveforms = SeparationSplit.measure("istft") { reconstructStemWaveforms(
             allStemMagL: allStemMagL,
             allStemMagR: allStemMagR,
             phaseL: phaseL,
             phaseR: phaseR,
             nbFrames: outputFrames
-        )
+        ) }
 
         // Step 7: keep `stemBuffers` populated for tests / FixtureSessionCaptureGenerator
         // (CLEAN.1.2: production reads `result.stemWaveforms` by value). writeToBuffers

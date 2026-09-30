@@ -229,7 +229,8 @@ public enum LocalFilePreparationPipeline {
                 // bins to Hz at that rate — at the file's rate every band edge and the vocal
                 // pitch were scaled by 48000/44100 on a 48 kHz file.
                 analyzer: StemAnalyzer(
-                    sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate))
+                    sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate)),
+                probe: probe
             )) ?? .empty
         }
         let elapsed = Date().timeIntervalSince(start)

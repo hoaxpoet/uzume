@@ -1,0 +1,3 @@
+02 - Breaking Glass: series BIT-IDENTICAL · all fields within tolerance · window stems BIT-IDENTICAL (max |Δ| 0 of peak 0.713)
+02 Hammerhead: series BIT-IDENTICAL · all fields within tolerance · window stems BIT-IDENTICAL (max |Δ| 0 of peak 0.959)
+08 - Warszawa: series BIT-IDENTICAL · all fields within tolerance · window stems BIT-IDENTICAL (max |Δ| 0 of peak 0.137)

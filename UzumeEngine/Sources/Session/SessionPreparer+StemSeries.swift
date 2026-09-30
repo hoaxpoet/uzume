@@ -57,13 +57,15 @@ extension SessionPreparer {
     ///   - hopSeconds: Playback seconds each separation contributes. 2.0 matches the live
     ///     separation period, so the offline sweep does the same amount of model work per second
     ///     of audio that live playback would.
+    ///   - probe: PREP.3 — records `sweep_separate` / `sweep_analyze` sub-stages when enabled.
     /// - Returns: The series, or `.empty` when there is too little audio to analyse.
     nonisolated public static func analyzeStemSeries(
         samples: [Float],
         sampleRate: Int,
         separator: any StemSeparating,
         analyzer: any StemAnalyzing,
-        hopSeconds: Double = 2.0
+        hopSeconds: Double = 2.0,
+        probe: PrepStageProbe = .disabled
     ) throws -> StemFeatureSeries {
         let hop = Self.seriesAnalysisHop
         guard sampleRate > 0, hopSeconds > 0 else { return .empty }
@@ -107,6 +109,8 @@ extension SessionPreparer {
 
         var windowSamples = 0
         var spanStart = 0
+        var subStages = SweepSubStages(probe: probe)
+        defer { subStages.record() }
 
         while spanStart < sampleCount {
             // Place the kept span at the window's end where the audio allows it — but leave
@@ -124,8 +128,9 @@ extension SessionPreparer {
 
             // The separator pads-or-truncates to its own window, so the result's length IS the
             // window length — read it rather than hard-coding a constant from another module.
-            let result = try separator.separate(
-                audio: window, channelCount: 1, sampleRate: Float(sampleRate))
+            let result = try subStages.time(\.separate) {
+                try separator.separate(audio: window, channelCount: 1, sampleRate: Float(sampleRate))
+            }
             let stems = result.stemWaveforms
             guard let stemLength = stems.first?.count, stemLength >= hop else { return .empty }
             if windowSamples == 0 { windowSamples = stemLength }
@@ -142,7 +147,7 @@ extension SessionPreparer {
                 let offset = absolute - windowStart
                 guard offset >= 0, offset + hop <= stemLength else { break }
                 let slice = stems.map { Array($0[offset..<(offset + hop)]) }
-                frames.append(analyzer.analyze(stemWaveforms: slice, fps: fps))
+                frames.append(subStages.time(\.analyze) { analyzer.analyze(stemWaveforms: slice, fps: fps) })
                 frameIndex += 1
             }
 
@@ -151,5 +156,34 @@ extension SessionPreparer {
 
         guard !frames.isEmpty else { return .empty }
         return StemFeatureSeries(frames: frames, hopSeconds: Double(hop) / Double(sampleRate))
+    }
+}
+
+// MARK: - Sweep sub-stage timing (PREP.3)
+
+/// Wall + CPU totals for the sweep's two halves, recorded once per track. Per-call rows would
+/// be ~100 per track; the report needs only the split.
+struct SweepSubStages {
+    struct Total { var wallMs = 0.0; var cpuMs = 0.0 }
+
+    let probe: PrepStageProbe
+    var separate = Total()
+    var analyze = Total()
+
+    mutating func time<T>(_ part: WritableKeyPath<SweepSubStages, Total>, _ body: () throws -> T) rethrows -> T {
+        guard probe.isEnabled else { return try body() }
+        let wall0 = Date()
+        let cpu0 = PrepStageSink.cpuSeconds()
+        defer {
+            self[keyPath: part].wallMs += Date().timeIntervalSince(wall0) * 1000
+            self[keyPath: part].cpuMs += (PrepStageSink.cpuSeconds() - cpu0) * 1000
+        }
+        return try body()
+    }
+
+    func record() {
+        guard probe.isEnabled else { return }
+        probe.record(PrepStage.sweepSeparate, wallMs: separate.wallMs, cpuMs: separate.cpuMs)
+        probe.record(PrepStage.sweepAnalyze, wallMs: analyze.wallMs, cpuMs: analyze.cpuMs)
     }
 }

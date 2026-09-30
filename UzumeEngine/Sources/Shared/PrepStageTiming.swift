@@ -71,6 +71,10 @@ public enum PrepStage {
     public static let gridOnsetCalibration = "grid_onset_calibration"
     public static let instrumentFamily = "instrument_family"
     public static let stemSeries = "stem_series_sweep"
+    /// PREP.3 sub-stages of `stemSeries` — separation calls, and the analyzer over kept
+    /// spans. Inside the sweep's wall clock, so never summed with the top-level stages.
+    public static let sweepSeparate = "sweep_separate"
+    public static let sweepAnalyze = "sweep_analyze"
     public static let cacheWrite = "cache_write"
     /// Whole-track wall clock, for the sum-to-within-a-few-percent check.
     public static let trackTotal = "TRACK_TOTAL"
@@ -252,5 +256,57 @@ public final class PrepStageSink: @unchecked Sendable {
         guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
         return Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1e6
             + Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1e6
+    }
+}
+
+// MARK: - Per-separation split (PREP.3)
+
+/// PREP.3 — where one `StemSeparator.separate` call spends its time: STFT, model graph run,
+/// readback, inverse STFT. Process-wide totals, gated on the same `UZUME_PREP_TIMING=1` as
+/// `PrepStageSink`; with the gate closed `measure` is one branch on a `static let`.
+///
+/// Process-wide rather than per-track because the split is a property of the separator, not
+/// of the song, and `separate` has no probe to thread one through.
+public enum SeparationSplit {
+
+    /// Read once — `ProcessInfo.environment` is a dictionary build per call.
+    public static let isEnabled = PrepStageSink.isEnabled
+
+    private static let store = Store()
+
+    private final class Store: @unchecked Sendable {
+        let lock = NSLock()
+        var totals: [String: (ms: Double, count: Int)] = [:]
+        var order: [String] = []
+    }
+
+    /// Run `body`, add its wall clock to `part`'s total.
+    @inline(__always)
+    public static func measure<T>(_ part: String, _ body: () throws -> T) rethrows -> T {
+        guard isEnabled else { return try body() }
+        let start = DispatchTime.now().uptimeNanoseconds
+        defer {
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
+            store.lock.withLock {
+                if store.totals[part] == nil { store.order.append(part) }
+                let old = store.totals[part] ?? (0, 0)
+                store.totals[part] = (old.ms + ms, old.count + 1)
+            }
+        }
+        return try body()
+    }
+
+    /// One part's accumulated wall clock.
+    public struct Part: Sendable {
+        public let part: String
+        public let ms: Double
+        public let count: Int
+    }
+
+    /// Every part, in first-seen order.
+    public static var snapshot: [Part] {
+        store.lock.withLock {
+            store.order.map { Part(part: $0, ms: store.totals[$0]?.ms ?? 0, count: store.totals[$0]?.count ?? 0) }
+        }
     }
 }

@@ -61,6 +61,7 @@ skills-lock.json
 
 # Local audio fixtures for DSP.1 tempo capture (preview clips are licensed).
 UzumeEngine/Tests/Fixtures/tempo/
+UzumeEngine/Tests/Fixtures/prep3_goldens/
 
 # Vendored third-party repos (tracked by pinned commit hash in docs).
 # Beat This! reference impl for DSP.2 S8 layer-diff:
