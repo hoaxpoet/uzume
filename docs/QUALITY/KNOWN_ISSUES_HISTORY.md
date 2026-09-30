@@ -4,6 +4,27 @@ Resolved entries rotated out of [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §Resolved 
 
 ---
 
+### BUG-147 — a planner seed does not reproduce its plan across processes (2026-09-25)
+
+**Severity:** P3 · **Domain:** `orchestrator` · **Failure class:** `algorithm` · **Status:** Fixed (BUG147.1, `05f5331b`), merged #286 (`c6369035`) · **Numbering:** filed as BUG-146, renumbered to 147 because #285 takes 144–146. The older commits `fae0b0b7` / `63a8aac4` / `1908a561` that say BUG147.x are a different defect, now BUG-143, so `git log --grep BUG147` returns both · **Related:** D-047 (seeded Regenerate), BUG-133 (near-tie sampling), BUG-144 (the measurement that surfaced it)
+
+**Expected:** `plan(tracks:catalog:deviceTier:seed:)` with the same inputs and the same nonzero seed returns the same plan in any process, as its doc comment states.
+**Actual:** `seededNoise` XORed `presetID.hashValue` into its LCG. Swift seeds `String.hashValue` randomly per process, so the ±0.02 noise, and with it the plan, changed on every launch. Found while measuring BUG-144: an env-gated planner test on the 10 beta-playlist profiles (tier2, catalog sorted by name), run in two `swift test` processes, gave different plans for seeds 1–9 (e.g. 85 vs 89 of 100 openers changed against a fixed arm). Seed 0 was byte-identical, since it never calls the noise.
+
+**Reproduction.** `NearTieSamplingTests.pinnedAcrossProcesses` plans seeds 1–12 over three tracks and compares with a fingerprint pinned in source. On the unfixed code two consecutive `swift test` runs printed two different fingerprints (tracks 0, 4, 5, 9, 11 and 12 differed), so it fails every run.
+
+**Near-tie sampling (BUG-133).** `nearTiePick` is clean on its own: it hashes `(seed, trackIndex, clock)` and orders contenders by sorted id, with no `hashValue`. It inherited the defect only because band membership is computed from the noisy totals. A second, smaller per-process source was in the scorer: `stemAffinitySubScore` summed the declared stems in `Set` order, and float addition is order-sensitive, so the total could differ in the last bit between processes (seed 0 included). Not observed to change a pick; fixed with the same change.
+
+**Production impact.** None visible. The app draws `UInt64.random` for every `buildPlan()` and every Regenerate (`VisualizerEngine+Orchestrator.swift`), and `extendPlan()` reuses the seed within the same process, which always worked. So Regenerate still gives a new alternative every time you press it; this fix does not make it repeat. What was broken: the seed logged at `plan regenerated (seed=…)` could not reproduce that plan offline, and any seeded measurement across runs was noise. The fix changes every nonzero-seed plan once, which matters only to tests or tools that pinned one (none did).
+
+**Fix.** The preset id is hashed with FNV-1a over its UTF-8 bytes. The scorer sums sorted stem names.
+
+**Verification.**
+1. ✅ Automated: `pinnedAcrossProcesses` gave different fingerprints in two processes before the fix and the same one in three processes after it. Full engine suite green (2040 tests); SwiftLint strict clean.
+2. Manual: none required (no felt surface; Regenerate's behaviour is unchanged for users).
+
+---
+
 ### BUG-140 — the D-154 beat-irregularity gate flags steady songs; its drums-grid BPM is an octave average (2026-09-24)
 
 **Severity:** P2 · **Domain:** `dsp.beat` / `orchestrator` · **Failure class:** `algorithm` (primary) + `sample-rate` (local-file path) · **Status:** Resolved (BUG140.2, live check passed 2026-09-25) · **Related:** D-154, BUG-134 (same `computeBPM` fault, other consumer), PR.26 (Membrane declares `requires_regular_beat`), BC.1 / D-257 (the same flag reaches every shader as `StemFeatures.beat_clarity01`; Fireflies FF.1 is its first reader, so false flags reach it too), KAG.0h
