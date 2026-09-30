@@ -206,8 +206,8 @@ public final class PreviewResolver: PreviewResolving, @unchecked Sendable {
         return nil   // still failing after the retries: transient, uncached (PUB.2)
     }
 
-    /// Backoff between attempts of one lookup (BR.19 / C7). Tests shorten it.
-    var retryDelays: [Duration] = [.seconds(2), .seconds(6)]
+    /// Backoff between attempts of one lookup (BR.19 / C7). Tests and ScanBench shorten or clear it.
+    public var retryDelays: [Duration] = [.seconds(2), .seconds(6)]
 
     static func isJSON(_ data: Data) -> Bool {
         (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
