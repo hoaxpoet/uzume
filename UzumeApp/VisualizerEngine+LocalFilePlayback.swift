@@ -595,3 +595,31 @@ extension VisualizerEngine: LocalFilePreparing {
         return entry.artworkData
     }
 }
+
+// MARK: - Session-boundary audio stop (BR.13 / B4)
+
+extension VisualizerEngine {
+
+    /// The states that end the previous session's audio: a new session starting, Idle, End.
+    nonisolated static func stopsSessionAudio(_ state: SessionState) -> Bool {
+        switch state {
+        case .connecting, .preparing, .idle, .ended: return true
+        case .ready, .playing: return false
+        }
+    }
+
+    /// Stop the stem analyzer, then the audio router, and clear the local-file transport state.
+    func stopSessionAudio() {
+        // LF.5.fix.2-FU2: halt the stem analyzer timer BEFORE stopping the audio router. It fires
+        // every 5 s and kept separating stale / silence frames for 60–120 s after Stop.
+        stopStemPipeline()
+        // LF.5.fix D-LF5-2: Uzume IS the player for local-file sessions, so this must stop audio.
+        // For streaming it tears down the process tap; the streaming app keeps playing. Idempotent.
+        if let audioRouter = router as? AudioInputRouter {
+            audioRouter.stop()
+        }
+        // LF.5.fix D-LF5-3 / LF.5.fix.3-C: no stale paused flag or URL marker in the next session.
+        isLocalFilePaused = false
+        lastStartedLocalFilePlaybackURL = nil
+    }
+}

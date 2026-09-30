@@ -30,7 +30,9 @@
 // the full stem pipeline — out of scope for a unit-test suite.
 
 import Foundation
+import Session
 import Testing
+@testable import UzumeApp
 
 @Suite("HandleLocalFileReadyIdempotencyRegression")
 // swiftlint:disable:next type_name
@@ -151,13 +153,27 @@ struct HandleLocalFileReadyIdempotencyRegressionTests {
         playback (the marker would still match the new URL).
         """)
 
-        let endedClear = src.contains(".ended")
-            && src.contains("lastStartedLocalFilePlaybackURL = nil")
+        // BR.13 / B4: the teardown clear moved into `stopSessionAudio()`, which the state
+        // observer runs on every session boundary, `.ended` included.
+        let lfURL = repoRoot().appendingPathComponent("UzumeApp/VisualizerEngine+LocalFilePlayback.swift")
+        let lfSrc = stripComments(try String(contentsOf: lfURL, encoding: .utf8))
+        let endedClear = src.contains("stopSessionAudio()")
+            && lfSrc.contains("lastStartedLocalFilePlaybackURL = nil")
+            && VisualizerEngine.stopsSessionAudio(.ended)
         #expect(endedClear, """
-        LF.5.fix.3-C regression: VisualizerEngine.swift's state observer no \
-        longer clears `lastStartedLocalFilePlaybackURL = nil` on .ended. \
-        The marker must release on session teardown so it doesn't survive \
-        across `endSession()`.
+        LF.5.fix.3-C regression: `lastStartedLocalFilePlaybackURL = nil` no \
+        longer runs on .ended. The marker must release on session teardown \
+        so it doesn't survive across `endSession()`.
         """)
+    }
+
+    @Test("BR.13 / B4: every session boundary stops the previous session's audio; Ready and Playing don't")
+    func test_sessionBoundariesStopAudio() {
+        for state in [SessionState.connecting, .preparing, .idle, .ended] {
+            #expect(VisualizerEngine.stopsSessionAudio(state), "\(state) left the old audio running")
+        }
+        for state in [SessionState.ready, .playing] {
+            #expect(!VisualizerEngine.stopsSessionAudio(state), "\(state) would stop the session's own audio")
+        }
     }
 }
