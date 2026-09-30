@@ -79,6 +79,9 @@ struct PrepTimingRunner: AsyncParsableCommand {
         help: "PREP.3: re-run the sweep for every golden in this directory and compare (parity.* in --out).")
     var goldenCompare: String?
 
+    @Option(name: .long, help: "PREP.3: time N single separate() calls (stereo + mono) on the first input file.")
+    var benchSeparate: Int?
+
     @Flag(name: .long, help: "Write the summary to disk only; no progress on stderr.")
     var quiet: Bool = false
 
@@ -111,6 +114,10 @@ struct PrepTimingRunner: AsyncParsableCommand {
         }
         if let goldenCapture {
             try GoldenMode.capture(urls: urls, into: URL(fileURLWithPath: goldenCapture), device: device)
+            return
+        }
+        if let benchSeparate, let first = urls.first {
+            try SeparateBench.run(url: first, iterations: benchSeparate, device: device, out: outDir)
             return
         }
         if let goldenCompare {

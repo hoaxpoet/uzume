@@ -89,7 +89,7 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     /// GPU-accelerated STFT/iSTFT engine (Increment 3.1a). Replaces the
     /// original CPU-based Accelerate path. The engine keeps a CPU vDSP
     /// fallback behind `forceCPUFallback` for cross-validation testing.
-    private let fftEngine: StemFFTEngine
+    let fftEngine: StemFFTEngine
 
     /// Lock for thread safety.
     private let lock = NSLock()
@@ -215,13 +215,10 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
         }
 
         let outputFrames = nbFrames
-        let stemWaveforms = SeparationSplit.measure("istft") { reconstructStemWaveforms(
-            allStemMagL: allStemMagL,
-            allStemMagR: allStemMagR,
-            phaseL: phaseL,
-            phaseR: phaseR,
-            nbFrames: outputFrames
-        ) }
+        let spectra = StemSpectra(magL: allStemMagL, magR: allStemMagR, phaseL: phaseL, phaseR: phaseR)
+        let stemWaveforms = SeparationSplit.measure("istft") {
+            reconstructStemWaveforms(spectra, nbFrames: outputFrames, mono: channelCount < 2)
+        }
 
         // Step 7: keep `stemBuffers` populated for tests / FixtureSessionCaptureGenerator
         // (CLEAN.1.2: production reads `result.stemWaveforms` by value). writeToBuffers
