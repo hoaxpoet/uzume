@@ -28,30 +28,41 @@ struct StemSeparatorMemoryTests {
 
     /// Twenty separations on one background thread, as preparation runs them. Unfixed, each call
     /// leaves ~32 MB behind (646 MB here); fixed, the footprint barely moves (2 MB).
+    ///
+    /// The footprint is process-wide, so suites allocating concurrently in a parallel run add
+    /// noise (170 MB and 327 MB observed). That noise is transient; the leak repeats on every
+    /// batch. So the gate takes the minimum growth over up to three batches, stopping at the
+    /// first clean one — a real leak fails all three.
     @Test func aLoopOfSeparations_doesNotAccumulate() throws {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         let separator = try StemSeparator(device: device)
         let tone = (0..<StemSeparator.requiredMonoSamples).map { Float(sin(Double($0) * 0.05)) * 0.3 }
         _ = try separator.separate(audio: tone, channelCount: 1, sampleRate: StemSeparator.modelSampleRate)
 
+        let bound: UInt64 = 150_000_000
         let done = DispatchSemaphore(value: 0)
-        var growth: UInt64 = 0
+        var growths: [UInt64] = []
         var failure: Error?
         let thread = Thread {
-            let before = Self.footprintBytes()
             do {
-                for _ in 0..<20 {
-                    _ = try separator.separate(audio: tone, channelCount: 1, sampleRate: StemSeparator.modelSampleRate)
+                for _ in 0..<3 {
+                    let before = Self.footprintBytes()
+                    for _ in 0..<20 {
+                        _ = try separator.separate(audio: tone, channelCount: 1, sampleRate: StemSeparator.modelSampleRate)
+                    }
+                    let after = Self.footprintBytes()
+                    let growth = after > before ? after - before : 0
+                    growths.append(growth)
+                    if growth < bound { break }
                 }
             } catch { failure = error }
-            let after = Self.footprintBytes()
-            growth = after > before ? after - before : 0
             done.signal()
         }
         thread.start()
         done.wait()
         if let failure { throw failure }
         // Measured: fixed 2 MB; unfixed 646 MB (~32 MB a call — hundreds of calls for a long song).
-        #expect(growth < 150_000_000, "20 separations grew the footprint by \(growth / 1_000_000) MB")
+        let mb = growths.map { $0 / 1_000_000 }
+        #expect((growths.min() ?? .max) < bound, "every batch of 20 separations grew the footprint: \(mb) MB")
     }
 }

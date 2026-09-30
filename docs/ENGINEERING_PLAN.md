@@ -1774,6 +1774,7 @@ of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase l
 
 **Delivered.** BUG-177 (P1, Matt's listening session 1): `StemSeparator.separate` drains its MPSGraph autoreleased objects per call; the stem-FFT probe's per-call lines drop to info.
 **Evidence.** `PrepTimingRunner` (Release): Dance Yrself Clean 23.3 GB → 1.41 GB peak, 4 long songs 1.50 GB, prepared cache byte-identical, ~10 % faster; the pre-BR code measured 26.3 GB (pre-existing). `StemSeparatorMemoryTests` 2 MB fixed / 646 MB unfixed.
+**Follow-up (gate determinism).** The gate read process-wide footprint, so concurrent suites in a filtered parallel run pushed it to 170 MB (1 of 2 runs failed on unmodified `main`). It now takes the minimum over up to 3 batches of 20; the bound is unchanged. Pool removed: [642, 639, 708] MB, fails; filtered parallel run 5/5 green.
 **Not done:** the live re-run of session 1 (build 10).
 
 ### Increment BR.20 — flash check v2 ✅ (2026-09-30)
