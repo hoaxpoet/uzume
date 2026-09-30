@@ -202,6 +202,19 @@ float membrane_metric_accent(float barPhase01, float beatsPerBar) {
     return 0.22;                                      // off-beats — a light tick
 }
 
+// ── Strike contrast (BR.20 / I8) ─────────────────────────────────
+//
+// The regional flash check (a ninth of the frame, WCAG's small-area rule) measured the certified
+// Membrane at 4.0 flashes/s under the 270 BPM worst-case train: each ring's bright crest and dark
+// trough sweeping across a patch of skin. Capping the strike RATE made it worse (5.0: a longer-lived
+// ring crosses more of the frame) and fixing the bass weight did not help (5.0) — the flash is the
+// crest/trough CONTRAST. Measured sweep (regional flashes/s): 1.0 → 4.0 · 0.9 → 4.0 · 0.8 → 3.0 ·
+// 0.7 / 0.6 / 0.4 / 0.25 → 3.0. 0.8 is the gentlest setting inside the limit; the light/dark pair —
+// the mandatory trait from `02_meso_single_strike_anatomy.jpg` — stays, about 20 % softer.
+// Matt, 2026-09-30: approved from the before/after (option A2). Scales the ring's lighting only
+// (crest gain, trough loss, glint); the displacement and the palette are untouched.
+constant float kMembraneStrikeContrast = 0.8;
+
 // ── Total displacement ──────────────────────────────────────────
 
 float membrane_D(float2 uv, float2 asp, float t,
@@ -406,12 +419,12 @@ fragment float4 membrane_fragment(
     float strikeRing = ring;
     float trough = membrane_ring(asp, impactAsp, features.beat_phase01,
                                  strength, 0.70 + 0.85 * accent, 0.105) - ring;
-    color *= 1.0 + strikeRing * 1.25 - saturate(trough) * 0.55;
+    color *= 1.0 + (strikeRing * 1.25 - saturate(trough) * 0.55) * kMembraneStrikeContrast;
 
     // A thin specular glint riding the crest — a highlight on the wet skin,
     // not a light source. Scaled by bass so a soft beat glints softly.
     color += float3(1.0, 0.94, 0.88) * pow(saturate(strikeRing), 2.5)
-           * (0.25 + 0.75 * bassWeight) * 0.55;
+           * (0.25 + 0.75 * bassWeight) * 0.55 * kMembraneStrikeContrast;
 
     // Soft vignette at the drumskin frame.
     float vig = 1.0 - smoothstep(0.55, 1.15, length(asp));

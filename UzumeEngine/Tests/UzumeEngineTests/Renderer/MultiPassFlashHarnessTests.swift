@@ -46,27 +46,27 @@ struct MultiPassFlashHarnessTests {
 
     @Test("Lumen Mosaic is flash-safe (rayMarch + follower, real headless render)")
     func lumenMosaicIsFlashSafe() async throws {
-        assertFlashSafe(name: "Lumen Mosaic", luma: try await flashLuma("Lumen Mosaic"))
+        assertFlashSafe(name: "Lumen Mosaic", samples: try await flashLuma("Lumen Mosaic"))
     }
 
     @Test("Dragon Bloom is flash-safe (mv_warp feedback, real headless render)")
     func dragonBloomIsFlashSafe() async throws {
-        assertFlashSafe(name: "Dragon Bloom", luma: try await flashLuma("Dragon Bloom"))
+        assertFlashSafe(name: "Dragon Bloom", samples: try await flashLuma("Dragon Bloom"))
     }
 
     @Test("Fata Morgana is flash-safe (mv_warp bespoke, real headless render)")
     func fataMorganaIsFlashSafe() async throws {
-        assertFlashSafe(name: "Fata Morgana", luma: try await flashLuma("Fata Morgana"))
+        assertFlashSafe(name: "Fata Morgana", samples: try await flashLuma("Fata Morgana"))
     }
 
     @Test("Skein is flash-safe (mv_warp canvas-hold + follower, real headless render)")
     func skeinIsFlashSafe() async throws {
-        assertFlashSafe(name: "Skein", luma: try await flashLuma("Skein"))
+        assertFlashSafe(name: "Skein", samples: try await flashLuma("Skein"))
     }
 
     @Test("Nacre is flash-safe (mv_warp feedback, downbeat camera push, real headless render)")
     func nacreIsFlashSafe() async throws {
-        assertFlashSafe(name: "Nacre", luma: try await flashLuma("Nacre"))
+        assertFlashSafe(name: "Nacre", samples: try await flashLuma("Nacre"))
     }
 
     @Test("Volumetric Lithograph is flash-safe (ray_march kaleidoscope, steady-luminance rotation, real headless render)")
@@ -75,34 +75,34 @@ struct MultiPassFlashHarnessTests {
         // now drives a monotonic ROTATION ratchet (geometry, not luminance), so the
         // frame's global brightness should hold steady under the worst-case beat
         // train. Measured, not assumed — this is the cert gate proving it.
-        assertFlashSafe(name: "Volumetric Lithograph", luma: try await flashLuma("Volumetric Lithograph"))
+        assertFlashSafe(name: "Volumetric Lithograph", samples: try await flashLuma("Volumetric Lithograph"))
     }
 
     @Test("Floret is flash-safe (mv_warp feedback, bass-kick ripple + swirl + downbeat push, real headless render)")
     func floretIsFlashSafe() async throws {
-        assertFlashSafe(name: "Floret", luma: try await flashLuma("Floret"))
+        assertFlashSafe(name: "Floret", samples: try await flashLuma("Floret"))
     }
 
     @Test("Glaze is flash-safe (mv_warp feedback + GLAZE.6 glossy bloom, real headless render)")
     func glazeIsFlashSafe() async throws {
-        assertFlashSafe(name: "Glaze", luma: try await flashLuma("Glaze"))
+        assertFlashSafe(name: "Glaze", samples: try await flashLuma("Glaze"))
     }
 
     @Test("Filigree is flash-safe (particle physarum trail, real headless render)")
     func filigreeIsFlashSafe() async throws {
         // Settle the trail (150 frames) so we measure the steady accent, not the grow-in.
-        assertFlashSafe(name: "Filigree", luma: try await flashLuma("Filigree", settle: 150))
+        assertFlashSafe(name: "Filigree", samples: try await flashLuma("Filigree", settle: 150))
     }
 
     @Test("Mitosis is flash-safe (reaction–diffusion cell colony, real headless render)")
     func mitosisIsFlashSafe() async throws {
         // ~25 s — the growth-to-crowded + dissolve are the largest luma swings; measure across them.
-        assertFlashSafe(name: "Mitosis", luma: try await flashLuma("Mitosis", frames: 1500))
+        assertFlashSafe(name: "Mitosis", samples: try await flashLuma("Mitosis", frames: 1500))
     }
 
     @Test("Cytokinesis is flash-safe (explicit-cell division, real headless render)")
     func cytokinesisIsFlashSafe() async throws {
-        assertFlashSafe(name: "Cytokinesis", luma: try await flashLuma("Cytokinesis", frames: 1500))
+        assertFlashSafe(name: "Cytokinesis", samples: try await flashLuma("Cytokinesis", frames: 1500))
     }
 
     @Test("Cymatic Resonance is flash-safe (vibrating-sand Chladni, real headless render)")
@@ -110,7 +110,7 @@ struct MultiPassFlashHarnessTests {
         // Settle the sand into a figure (150 frames), then measure the steady beat response.
         // Total sand is conserved (grains move, never appear/disappear) → global luminance
         // is expected steady even on the worst-case beat train; this MEASURES that (CR.2 / D-199).
-        assertFlashSafe(name: "Cymatic Resonance", luma: try await flashLuma("Cymatic Resonance", settle: 150))
+        assertFlashSafe(name: "Cymatic Resonance", samples: try await flashLuma("Cymatic Resonance", settle: 150))
     }
 
     @Test("Witchlight is flash-safe (harmonic stroke + bounded head flare, real headless render)")
@@ -133,7 +133,7 @@ struct MultiPassFlashHarnessTests {
         // `harmonicMotion` is required on top: the shared train leaves tonal_phase_fifths at
         // zero, and Witchlight's pen is steered by nothing else.
         assertFlashSafe(name: "Witchlight",
-                        luma: try await flashLuma("Witchlight", frames: 1800, harmonicMotion: true))
+                        samples: try await flashLuma("Witchlight", frames: 1800, harmonicMotion: true))
     }
 
     @Test("Ricercar is flash-safe (worst-case onset rate, real headless render)")
@@ -149,7 +149,7 @@ struct MultiPassFlashHarnessTests {
         // gate needs to find, which is why `frames` is generous — long enough to sample many
         // refractory cycles at whatever rate the detector actually settles into.
         assertFlashSafe(name: "Ricercar",
-                        luma: try await flashLuma("Ricercar", settle: 60, frames: 1800))
+                        samples: try await flashLuma("Ricercar", settle: 60, frames: 1800))
     }
 
     @Test("Kagura is flash-safe (the dancing figure on a steady grid, real headless render)")
@@ -198,12 +198,12 @@ struct MultiPassFlashHarnessTests {
         var previous: [UInt8]?
         let frames = try await harness.renderOffMain(
             preset: "Kagura", features: tile(train, 1800), stems: tile(stems, 1800), settle: 60
-        ) { bgra -> (luma: Double, moved: Bool) in
+        ) { bgra -> (sample: FlashHarnessSupport.FlashSample, moved: Bool) in
             defer { previous = bgra }
             let moved = previous.map { $0 != bgra } ?? true
-            return (FlashHarnessSupport.meanRelativeLuminance(bgra), moved)
+            return (FlashHarnessSupport.sample(bgra, width: 320, height: 180), moved)
         }
-        let luma = frames.map(\.luma)
+        let luma = frames.map(\.sample.luma)
         let still = frames.filter { !$0.moved }.count
         let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: FlashHarnessSupport.fps)
         print(String(
@@ -213,6 +213,7 @@ struct MultiPassFlashHarnessTests {
             report.isSafe ? "SAFE" : "UNSAFE", luma.min() ?? 0, luma.max() ?? 0, luma.reduce(0, +) / Double(max(luma.count, 1))))
         #expect(still == 0, "\(label) froze on \(still) frames — the harness is not reaching the dance; INVALID")
         #expect(report.isSafe, "\(label) peaks at \(report.peakFlashesPerSecond) flashes/s (limit 3) — P1, bring to Matt")
+        FlashHarnessSupport.assertRegionalAndRedSafe(name: label, samples: frames.map(\.sample))
     }
 
     @Test("Stave is flash-safe (spectral dispersion of the waveform, real headless render)")
@@ -226,7 +227,7 @@ struct MultiPassFlashHarnessTests {
         // swing the preset can make — the bands sum toward white and the fan opens together.
         // Real music never does this; a safe result here is a wide margin, not a near miss.
         assertFlashSafe(name: "Stave",
-                        luma: try await flashLuma("Stave", settle: 420, frames: 900))
+                        samples: try await flashLuma("Stave", settle: 420, frames: 900))
     }
 
     @Test("Nebula is flash-safe (direct pass + slot-6 band state, real headless render)")
@@ -238,7 +239,7 @@ struct MultiPassFlashHarnessTests {
         // That is not "safe", it is unmeasured, and the single-pass gate failing loud on it is the
         // CLEAN.0 vacuous-pass rule working. `MultiPassRenderHarness` allocates a real `NebulaState`
         // and binds it at fragment index 6, so this is the preset's actual response.
-        assertFlashSafe(name: "Nebula", luma: try await flashLuma("Nebula"))
+        assertFlashSafe(name: "Nebula", samples: try await flashLuma("Nebula"))
     }
 
     @Test("Alfvén is flash-safe (worst-case beat train, real headless solver render)")
@@ -255,7 +256,7 @@ struct MultiPassFlashHarnessTests {
         // over — when `trebRel` drove a whole-frame additive bloom (ALFVEN.3b). ALFVEN.3d bounded
         // it and ALFVEN.3f removed the route entirely on Matt's M7, so the seam glow is a
         // constant again. A worst-case beat train is the input that would resurrect that class.
-        assertFlashSafe(name: "Alfvén", luma: try await flashLuma("Alfvén"))
+        assertFlashSafe(name: "Alfvén", samples: try await flashLuma("Alfvén"))
     }
 
     @Test("Meniscus is flash-safe (continuous band drive + a drop on every beat, real headless render)")
@@ -274,7 +275,7 @@ struct MultiPassFlashHarnessTests {
         // Whole-frame mean is a fair proxy here — unlike Witchlight's small bright subject,
         // the sheet occupies a large share of the frame — so the settled window is honest
         // and no tiling is needed.
-        assertFlashSafe(name: "Meniscus", luma: try await flashLuma("Meniscus", settle: 120))
+        assertFlashSafe(name: "Meniscus", samples: try await flashLuma("Meniscus", settle: 120))
     }
 
     @Test("Fireflies is flash-safe (locked patches on the worst-case grid, real headless render)")
@@ -305,8 +306,8 @@ struct MultiPassFlashHarnessTests {
         gridded.firefliesGridBPM = [Float(FlashHarnessSupport.accentHz * 60)]
         let luma = try await gridded.renderOffMain(
             preset: "Fireflies", features: FlashHarnessSupport.worstCaseBeatTrain(seconds: 50), stems: stems
-        ) { FlashHarnessSupport.meanRelativeLuminance($0) }
-        assertFlashSafe(name: "Fireflies", luma: Array(luma.dropFirst(1200)))
+        ) { FlashHarnessSupport.sample($0, width: 320, height: 180) }
+        assertFlashSafe(name: "Fireflies", samples: Array(luma.dropFirst(1200)))
     }
 
     // MARK: - BR.1 / K4 — the holes in "every certified scene is flash-measured"
@@ -337,16 +338,16 @@ struct MultiPassFlashHarnessTests {
                 let start = (row * 320 + 80) * 4
                 crop.append(contentsOf: bgra[start..<(start + 160 * 4)])
             }
-            return FlashHarnessSupport.meanRelativeLuminance(crop)
+            return FlashHarnessSupport.sample(crop, width: 160, height: 100)
         }
-        assertFlashSafe(name: "Fractal Tree", luma: luma)
+        assertFlashSafe(name: "Fractal Tree", samples: luma)
     }
 
     @Test("Ferrofluid Ocean is flash-safe (lit output: aurora, specular spikes, bloom)")
     func ferrofluidOceanIsFlashSafe() async throws {
         // The single-pass gate drew Ferrofluid's G-buffer state (gbuf0 = depth, matID). This is
         // the lit frame production shows — the scene behind BUG-041's track-start flashing.
-        assertFlashSafe(name: "Ferrofluid Ocean", luma: try await flashLuma("Ferrofluid Ocean"))
+        assertFlashSafe(name: "Ferrofluid Ocean", samples: try await flashLuma("Ferrofluid Ocean"))
     }
 
     @Test("Waveform is flash-safe (launch default; spectrum pulsing with the beat train)")
@@ -369,8 +370,8 @@ struct MultiPassFlashHarnessTests {
         }
         let luma = try await pulsing.renderOffMain(
             preset: "Waveform", features: drive, stems: FlashHarnessSupport.worstCaseStemTrain()
-        ) { FlashHarnessSupport.meanRelativeLuminance($0) }
-        assertFlashSafe(name: "Waveform", luma: luma)
+        ) { FlashHarnessSupport.sample($0, width: 320, height: 180) }
+        assertFlashSafe(name: "Waveform", samples: luma)
     }
 
     // MARK: - Flash-specific drive + reducer
@@ -380,7 +381,7 @@ struct MultiPassFlashHarnessTests {
     /// tiles the 3 s train to a longer window for the slow-cycle particle presets.
     private func flashLuma(
         _ name: String, settle: Int = 0, frames: Int? = nil, harmonicMotion: Bool = false
-    ) async throws -> [Double] {
+    ) async throws -> [FlashHarnessSupport.FlashSample] {
         // `harmonicMotion` layers the TONAL block onto the shared train — see
         // `FlashHarnessSupport.withHarmonicMotion`. Only for presets steered by it; the
         // shared train stays byte-identical for everyone else.
@@ -391,7 +392,7 @@ struct MultiPassFlashHarnessTests {
         let f = frames.map { tile(beat, $0) } ?? beat
         let s = frames.map { tile(stem, $0) } ?? stem
         return try await harness.renderOffMain(preset: name, features: f, stems: s, settle: settle) {
-            FlashHarnessSupport.meanRelativeLuminance($0)
+            FlashHarnessSupport.sample($0, width: 320, height: 180)
         }
     }
 
@@ -400,7 +401,7 @@ struct MultiPassFlashHarnessTests {
     // MARK: - Assertion (shared)
 
     /// `FlashHarnessSupport.assertFlashSafe`: the evidence line, and a LOUD failure on a static render.
-    private func assertFlashSafe(name: String, luma: [Double]) {
-        FlashHarnessSupport.assertFlashSafe(name: name, luma: luma)
+    private func assertFlashSafe(name: String, samples: [FlashHarnessSupport.FlashSample]) {
+        FlashHarnessSupport.assertFlashSafe(name: name, samples: samples)
     }
 }

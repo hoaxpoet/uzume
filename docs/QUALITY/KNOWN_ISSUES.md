@@ -58,6 +58,7 @@ passes, the entry moves to §Resolved (recent).
 
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
+| BUG-176 | P1 | renderer / photosensitivity | Membrane and Waveform flashed in a ninth of the screen at fast tempos (4.0 and 5.0 /s against WCAG's 3). Membrane's strike contrast is 0.8; Waveform's bars fall over 0.6 s (BR.20). | Session 1: Membrane on a fast song, and the launch screen with music playing — both still read as before. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
 | BUG-151 | P2 | audio.localfile | The local queue cut the last second off every song. | Session 1: listen to four or five song endings. |
@@ -152,6 +153,19 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Evidence:** the code path above; PR.4 found no frame stall in any recorded session (max frame gap 199 ms). This is the designed hold, not a renderer hang. That reading is **PLAUSIBLE**; Matt hasn't confirmed it's the moment he saw.
 
 **Fix direction (audit K8):** keep the cells breathing through the hold (a slow phase drift or membrane motion), or shorten it. The choice is a look decision for Matt.
+
+
+### BUG-176 — Membrane and Waveform flashed in part of the screen at fast tempos (2026-09-30)
+
+*(Numbering: filed as BUG-175 on `br-20`; renumbered to BUG-176 when #342 merged first with its own BUG-175.)*
+
+**Severity:** P1 (photosensitivity) · **Domain:** renderer / photosensitivity · **Failure class:** `render-state` · **Status:** Fixed 2026-09-30 (BR.20) — pending the felt check in listening session 1 · **Found by:** the flash check v2 (BR.20 / audit I8)
+
+**Expected.** No region of the frame the size of WCAG's small-safe area (a ninth of the screen) flashes more than three times a second, under the 270 BPM worst-case beat train the gate uses.
+**Actual.** The whole-frame check (v1) passed both; the new regional check did not. **Membrane** (certified) — 4.0 regional flashes/s: each strike ring's bright crest and dark trough sweeping across a patch of skin. **Waveform** (uncertified, but the launch screen and the fallback) — 5.0: its 64 bars read the raw spectrum, so a kick's bars jumped to full and dropped straight back.
+**Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
+**Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
+**Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
 
 ### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
 
@@ -1691,6 +1705,7 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.20 (2026-09-30), flash check v2 (I8; P2, tracked here):** `FlashAnalyzer.analyzeRegional` (13 regions: a 3×3 grid + a half-shifted 2×2, each a ninth of the frame — WCAG's small-safe area) and `analyzeRed` (R/(R+G+B) ≥ 0.8, (R−G−B)×320 swing > 20), each negative-controlled (a flashing ninth v1 misses; a dim red pulse the luminance checks miss). Both flash harnesses assert them for every measured scene. Roster run: two scenes over → **BUG-176** (fixed); everything else ≤ 2.5 regional, ≤ 3.0 red (Fata Morgana, at the limit). Fixed.
 - **BR.18 (2026-09-30), streaming fidelity for the newest scenes (P2, tracked here):**
   - **K6c** — every live stem deviation route now warms up over a track's first 10 s (the BUG-041 quadratic gate, on the render snapshot, live separation only; Ferrofluid's aurora no longer gates twice). Fixed (tests on the real BUG-041 session series; red arm: ungated, the same data breaks the bound). ⏳ Matt's streaming review of the top ten scenes (listening session 2).
   - **K6a** — **kept as is for the beta (Matt, 2026-09-30, option A).** On streaming, Fireflies and Kagura see the preview's one typical energy level for the whole song (the meadow doesn't thin in quiet stretches; Kagura's dance is chosen from one level). A live energy measure was declined for the beta: no grounded way to keep it independent of the app's volume. Stated in the tester notes.

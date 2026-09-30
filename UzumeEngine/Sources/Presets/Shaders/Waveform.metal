@@ -5,7 +5,8 @@
 fragment float4 preset_fragment(VertexOut in [[stage_in]],
                                 constant FeatureVector& features [[buffer(0)]],
                                 constant float* fftMagnitudes [[buffer(1)]],
-                                constant float* waveformData [[buffer(2)]]) {
+                                constant float* waveformData [[buffer(2)]],
+                                constant float* heldBars [[buffer(6)]]) {
     float2 uv = in.uv;
     float3 color = float3(0.0);
 
@@ -25,12 +26,19 @@ fragment float4 preset_fragment(VertexOut in [[stage_in]],
     float barFrac = fract(barIndexF);
     float barMask = smoothstep(0.0, 0.1, barFrac) * smoothstep(1.0, 0.9, barFrac);
 
+    // BR.20 / I8: held bars (instant rise, 0.6 s fall — `WaveformState`) so a kick cannot flash
+    // a bar fully on and off within a beat. heldBars[64] is the bound flag; an unticked (zeroed)
+    // slot 6 falls back to the raw spectrum, unchanged.
     float barMag = 0.0;
-    int startBin = bar * BINS_PER_BAR;
-    for (int i = 0; i < BINS_PER_BAR; i++) {
-        barMag = max(barMag, fftMagnitudes[startBin + i]);
+    if (heldBars[NUM_BARS] > 0.5) {
+        barMag = heldBars[bar];
+    } else {
+        int startBin = bar * BINS_PER_BAR;
+        for (int i = 0; i < BINS_PER_BAR; i++) {
+            barMag = max(barMag, fftMagnitudes[startBin + i]);
+        }
+        barMag = saturate(barMag * 10.0);
     }
-    barMag = saturate(barMag * 10.0);
 
     float barHeight = barMag * 0.55;
 
