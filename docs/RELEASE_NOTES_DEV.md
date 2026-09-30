@@ -10,6 +10,15 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-013733] BR.12 — audio capture stays in one piece through device swaps and Core Audio restarts
+
+- **Starting, stopping and re-creating the audio tap happen one at a time.** Ending a session while AirPods connect could leave a stray tap feeding the analysis, so the analysis could run twice as fast and beat sync go wrong. Each step now waits for the one before it, and a re-create that was queued before the session ended does nothing.
+- **A failed recovery no longer gives up for good.** If re-creating the tap after a device change failed, Uzume stopped watching for device changes. It now keeps watching and tries again on the next one.
+- **Restarting Core Audio no longer leaves Uzume silent.** Uzume notices the restart and re-creates its tap.
+- **Ready no longer re-creates a working tap while you get the music going.** A Retry on the Ready screen re-creates it on demand instead.
+- **A tap that reports an impossible sample rate is refused** instead of crashing the level meter.
+- Pending live checks in listening session 2 (AirPods swap while ending, `killall coreaudiod` mid-session).
+
 ### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
 
 - **A broken shader can no longer reach a tester unnoticed.** Every pull request now compiles every shader the app compiles at launch, the same way the app does. It also builds the Release configuration that ships. Before, a shader error first showed up on a tester's Mac, as a crash on every launch or a scene silently missing.
