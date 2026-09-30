@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-170203] PROMO.1 — the LinkedIn launch video
+
+- **A 32-second square video is ready to post:** Kagura doing the twist, Ferrofluid Ocean, Cymatic Resonance, Fractal Tree (zoomed out so the whole tree shows) and Fireflies, cut on the song's bars, scored with the first 32 s of *Sherman's March to the Sea*, ending on "Uzume / uzume.io". It's at `~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4`, with three cover stills to pick a thumbnail from.
+- **One command rebuilds it** (`tools/promo/cut_promo.py --edit tools/promo/edit.json`), so a reshot scene or a moved cut doesn't need another session.
+- **Kagura's opening is an edit:** live, Kagura only sways through this song's intro, so its twist from later in the same song is moved 12 bars earlier and stays on the beat.
+
 ### [dev-2026-09-30-162430] REC.2 — record one scene for a whole song
 
 - **`UZUME_PIN_SCENE=<scene>` keeps Uzume on one scene.** The session opens on the named scene and stays there. The plan, live switching and scene-completion events leave it alone. A misspelt name is logged with the valid names and nothing starts, so a take never records the wrong scene by accident. Dev launch switch only; no UI.
