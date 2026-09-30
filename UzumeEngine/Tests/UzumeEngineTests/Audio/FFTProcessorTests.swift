@@ -204,3 +204,51 @@ import Metal
 enum FFTProcessorTestError: Error {
     case noMetalDevice
 }
+
+// MARK: - BR.17 (B9): high-rate input keeps 44.1 / 48 kHz resolution
+
+/// Interleaved stereo sine, `frames` long.
+private func stereoTone(hz: Float, rate: Float, frames: Int) -> [Float] {
+    (0..<frames).flatMap { i -> [Float] in
+        let value = 0.5 * sin(2 * .pi * hz * Float(i) / rate)
+        return [value, value]
+    }
+}
+
+/// A tone through the high-rate path at 96 and 192 kHz peaks in the same bin as the same tone
+/// at 48 kHz through the normal path — including a 60 Hz bass note, which at 96 kHz undecimated
+/// fell in bin 0 alongside DC.
+@Test(arguments: [60.0 as Float, 250, 1_000, 4_000])
+func highRateTone_peaksInTheSameBinAs48kHz(hz: Float) throws {
+    guard let device = MTLCreateSystemDefaultDevice() else { throw FFTProcessorTestError.noMetalDevice }
+    let fft = try FFTProcessor(device: device)
+    let reference = stereoTone(hz: hz, rate: 48_000, frames: FFTProcessor.fftSize)
+    let expected = reference.withUnsafeBufferPointer { fft.processStereo(interleaved: $0, sampleRate: 48_000) }
+
+    for rate: Float in [96_000, 192_000] {
+        let factor = HighRateDecimator.factor(forRate: rate)
+        #expect(HighRateDecimator.analysisRate(forTapRate: rate) == 48_000)
+        var decimator = HighRateDecimator()
+        let input = stereoTone(hz: hz, rate: rate, frames: FFTProcessor.fftSize * factor)
+        input.withUnsafeBufferPointer { ptr in
+            guard let base = ptr.baseAddress else { return }
+            decimator.append(interleavedStereo: base, count: ptr.count, factor: factor)
+        }
+        var mono = [Float](repeating: 0, count: FFTProcessor.fftSize)
+        let held = mono.withUnsafeMutableBufferPointer { decimator.copyLatest(into: $0) }
+        #expect(held == FFTProcessor.fftSize)
+        let result = mono.withUnsafeBufferPointer {
+            fft.processMono(UnsafeBufferPointer(rebasing: $0[0..<held]), sampleRate: rate / Float(factor))
+        }
+        #expect(result.binResolution == expected.binResolution, "\(rate) Hz")
+        #expect(abs(result.dominantFrequency - expected.dominantFrequency) <= expected.binResolution,
+                "\(hz) Hz at \(rate): \(result.dominantFrequency) vs \(expected.dominantFrequency)")
+    }
+}
+
+@Test func standardRates_areNotDecimated() {
+    #expect(HighRateDecimator.factor(forRate: 44_100) == 1)
+    #expect(HighRateDecimator.factor(forRate: 48_000) == 1)
+    #expect(HighRateDecimator.factor(forRate: 88_200) == 2)
+    #expect(HighRateDecimator.factor(forRate: 176_400) == 4)
+}
