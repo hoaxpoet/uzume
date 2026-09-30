@@ -64,3 +64,19 @@ public final class ITunesRateLimiter: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - ITunesStorefront (BR.19 / C8, A10)
+
+/// The iTunes store every lookup asks (decision: the Mac's region, US fallback). No `country`
+/// was ever sent, so a tester outside the US was matched against the US catalog — previews and
+/// genres of the wrong regional release, or none.
+public enum ITunesStorefront {
+
+    /// Two-letter region of the Mac (`Locale.current`), or "US" when unknown / not a country.
+    public static var country: String { country(for: Locale.current.region?.identifier) }
+
+    static func country(for region: String?) -> String {
+        guard let region, region.count == 2, region.allSatisfy(\.isLetter) else { return "US" }
+        return region.uppercased()
+    }
+}

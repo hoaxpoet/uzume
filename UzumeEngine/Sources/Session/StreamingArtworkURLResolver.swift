@@ -104,7 +104,8 @@ public final class StreamingArtworkURLResolver: StreamingArtworkURLResolving, @u
             URLQueryItem(name: "term", value: term),
             URLQueryItem(name: "media", value: "music"),
             URLQueryItem(name: "entity", value: "song"),
-            URLQueryItem(name: "limit", value: "1")
+            URLQueryItem(name: "limit", value: "1"),
+            URLQueryItem(name: "country", value: ITunesStorefront.country)   // BR.19 / C8
         ]
         guard let url = components.url else { return nil }
         return URLRequest(url: url, timeoutInterval: 10)

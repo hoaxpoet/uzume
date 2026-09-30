@@ -13,6 +13,7 @@
 
 import XCTest
 @testable import Renderer
+import Shared
 
 final class AuroraTrackStartWarmupTests: XCTestCase {
 
@@ -122,4 +123,46 @@ final class AuroraTrackStartWarmupTests: XCTestCase {
                            "steady state must be byte-identical to the pre-fix driver")
         }
     }
+
+    // MARK: - BR.18 / K6c: every live stem route gets the same warm-up
+
+    /// The raw `drumsEnergyDev` a scene reads, through `warmedUpLiveStems` with the ramp the
+    /// render loop advances. Same bound as BUG-041: no early excursion beyond the track's own
+    /// steady-state peak (or 1). Red arm: ungated, the same data breaks it on the two
+    /// unambiguous tracks — which is what eleven scenes were reading.
+    func test_liveStemWarmup_capsTheTrackStartOverswing_onRealData() throws {
+        for name in ["so_what", "there_there", "lotus_flower"] {
+            let frames = try loadFixture(name)
+            var warmup: Float = 0
+            var gated: [(te: Float, out: Float)] = []
+            var raw: [(te: Float, out: Float)] = []
+            for f in frames {
+                warmup = min(1, warmup + f.dt / RenderPipeline.liveStemWarmupSeconds)
+                var stems = StemFeatures.zero
+                stems.drumsEnergyDev = f.dev
+                gated.append((f.te, RenderPipeline.warmedUpLiveStems(stems, warmup01: warmup).drumsEnergyDev))
+                raw.append((f.te, f.dev))
+            }
+            let bound = max(1.0, peak(raw, 10, 20))
+            XCTAssertLessThanOrEqual(peak(gated, 0, 10), bound, "\(name): warmed-up early peak")
+            if name != "so_what" {
+                XCTAssertGreaterThan(peak(raw, 0, 10), bound, "\(name): the fixture no longer carries the overswing")
+            }
+        }
+    }
+
+    /// Only the eight live-separated routes are gated; the gate at 1 changes nothing.
+    func test_liveStemWarmup_gatesTheStemRoutesOnly() {
+        var stems = StemFeatures.zero
+        stems.vocalsEnergyDev = 2; stems.bassEnergyRel = 2; stems.otherEnergyDev = 2
+        stems.stringsActivityDev = 2; stems.energyLevel = 7
+        let half = RenderPipeline.warmedUpLiveStems(stems, warmup01: 0.5)
+        XCTAssertEqual(half.vocalsEnergyDev, 0.5, accuracy: 1e-6)
+        XCTAssertEqual(half.bassEnergyRel, 0.5, accuracy: 1e-6)
+        XCTAssertEqual(half.otherEnergyDev, 0.5, accuracy: 1e-6)
+        XCTAssertEqual(half.stringsActivityDev, 2, "preview-derived instrument activity is not gated")
+        XCTAssertEqual(half.energyLevel, 7)
+        XCTAssertEqual(RenderPipeline.warmedUpLiveStems(stems, warmup01: 1).vocalsEnergyDev, 2)
+    }
 }
+

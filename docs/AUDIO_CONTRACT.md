@@ -127,7 +127,7 @@ Four stems (`vocals`, `drums`, `bass`, `other`), from Open-Unmix.
 Floats 43, 45, 46, 47 and 57 are **derived on the CPU in the render path and written into the
 snapshot**, identically on both audio paths, regardless of where floats 1–42 came from.
 
-**Warmup contract:** all of floats 1–42 are zero for the first ~10 s of live separation.
+**Warmup contract:** all of floats 1–42 are zero for the first ~10 s of live separation. **BR.18 (K6c):** on live separation the renderer then scales the eight energy deviation routes (`*EnergyRel`, `*EnergyDev`, all four stems) by a per-track quadratic warm-up over the first 10 s (`RenderPipeline.warmedUpLiveStems`) — BUG-041's aurora gate, generalised — so no scene sees the overswing. The local-file series is never gated.
 Presets are required to blend with `smoothstep(0.02, 0.06, totalStemEnergy)` (D-019) before
 consuming any of them ([Common.metal:125](../UzumeEngine/Sources/Renderer/Shaders/Common.metal#L125)).
 
@@ -206,7 +206,7 @@ and that callback feeds both the FFT and the stem sample buffer
 | `StemFeatures` source | **Pre-analysed `StemFeatureSeries`**, sampled by playback second | **Live Open-Unmix** on captured audio, every 2 s |
 | Stem latency | **0** — the frame describes the second being heard | **≈2.5 s** |
 | Stem update rate | 43 Hz grid, sampled **once per rendered frame** (~60 Hz) | Analysis-frame rate; measured at **12.8 Hz** in session `2026-08-27T16-53-29Z` (BUG-109) |
-| First ~10 s of a track | Series is correct from second 0 | Stems are **zero** until the first separation lands, then the per-stem deviation EMA overswings 1.2–3.3× for ~10 s (BUG-041) |
+| First ~10 s of a track | Series is correct from second 0 | Stems are **zero** until the first separation lands, then the per-stem deviation EMA overswings 1.2–3.3× for ~10 s (BUG-041) — warmed up for every scene since BR.18 |
 | `cached_bass_proportion` (float 44) | From the whole-track preview snapshot | From the 30 s preview clip |
 | Instrument-family floats 48–55 | From the preview PANNs sweep | From the preview PANNs sweep (identical) |
 | Beat grid | Built across the whole track | Built across the 30 s preview only |

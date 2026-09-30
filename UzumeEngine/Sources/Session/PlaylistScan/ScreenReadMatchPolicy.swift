@@ -72,7 +72,8 @@ public enum ScreenReadMatchPolicy {
             guard artistMatches(candidate.artist, reading: reading),
                   let tier = titleTier(candidate.title, reading: reading) else { return nil }
             var diff = 0.0
-            if let catalog = candidate.duration, let shown = duration { diff = abs(catalog - shown) }
+            // A zero / negative duration is unknown, not a song of length 0 (BR.19).
+            if let catalog = candidate.duration, let shown = duration, shown > 0 { diff = abs(catalog - shown) }
             let tolerance = tier == 2 ? exactTitleTolerance : looseTitleTolerance
             // With no artist to check, only the tightest evidence counts.
             let bound = reading.artistLine.isEmpty ? min(tolerance, looseTitleTolerance) : tolerance
