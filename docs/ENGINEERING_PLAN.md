@@ -254,7 +254,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.13** | 2 | ✅ PR open — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ✅ PR open — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
 | **BR.15** | 2 | ready | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
-| **BR.16** | 2 | ✅ PR open — F16's LICENSE holder is Matt's call | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
+| **BR.16** | 2 | ✅ PR open | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
 | **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
@@ -1701,7 +1701,8 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Audit A7, C13, K7/H9 and part of F16, as P2 lines under AUDIT-2026-09-29. Decision 9's privacy line on every permission surface; `RateGate` (in `MusicBrainzFetcher.swift`) holds MusicBrainz to 1 request/s process-wide; `AboutSettingsSection.acknowledgements` + strings; the licence line corrected; CREDITS.md gains Stave and names the in-app surface.
 **Done-when:** ✅ no "nothing leaves / nothing sent" copy left in the app, Info.plist or UX_SPEC; ✅ a burst of five lookups takes ≥ 4 intervals (test); ✅ every acknowledgement resolves and links, and the named credits are present (test); ✅ CREDITS.md lists all eight Milkdrop-inspired scenes.
-**Not done:** aligning `LICENSE` (Matt Deming) with the About box (Plait & Pattern) — Matt's call; the Acknowledgements page was checked by test, not by eye.
+**Also:** F16 — `LICENSE` and the About box both name Plait & Pattern (Matt, 2026-09-30).
+**Not done:** the Acknowledgements page was checked by test, not by eye.
 
 ### Increment BR.14 — window, keys, cursor, Settings ✅ (2026-09-30, pending live checks)
 
