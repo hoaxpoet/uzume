@@ -260,7 +260,11 @@ struct PlaybackView: View {
             onStallChanged: { active in stallBinding.wrappedValue = active },
             signalHealthPublisher: engine.captureState.$signalHealth.eraseToAnyPublisher(),   // ASH.2 band=low nudge
             isSpotifySourceProvider: { [weak engine = self.engine] in engine?.isSpotifySource ?? false },
-            oneShotErrorPublisher: engine.userFacingErrorSubject.eraseToAnyPublisher())  // PUB.5 LF failures
+            // PUB.5 LF failures + BR.10 Automation denied (published, so a denial at Ready shows here).
+            oneShotErrorPublisher: engine.userFacingErrorSubject
+                .merge(with: engine.$nowPlayingDeniedApp.compactMap { $0 }
+                    .map { UserFacingError.nowPlayingPermissionDenied(appName: $0) })
+                .eraseToAnyPublisher())
         playbackErrorBridge = errorBridge
 
         // Build registry — closures capture weak refs to avoid retain cycles

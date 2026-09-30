@@ -3,10 +3,10 @@
 // Tests:
 //   1. Every case has a presentation mode (no crash on switch exhaustion).
 //   2. Every case has a severity.
-//   3. The total case count matches UX_SPEC §9 row count (29).
+//   3. The total case count matches UX_SPEC §9 row count (30).
 //   4. log-only cases have no CTA keys.
 //   5. Condition-bound cases have conditionIDs; non-bound don't.
-//   6. CaseIterable allCases contains exactly 29 entries.
+//   6. CaseIterable allCases contains exactly 30 entries.
 //   7. SpotifyRejectionKind.allCases is stable (4 cases).
 
 import Testing
@@ -19,10 +19,10 @@ struct UserFacingErrorTests {
 
     // MARK: Count
 
-    @Test("allCases count matches UX_SPEC §9 row count (29)")
+    @Test("allCases count matches UX_SPEC §9 row count (30)")
     func test_caseCount_matchesSpecRowCount() {
-        // 3 (§9.1) + 7 (§9.2) + 7 (§9.3) + 12 (§9.4) = 29
-        #expect(UserFacingError.allCases.count == 29)
+        // 3 (§9.1) + 7 (§9.2) + 7 (§9.3) + 13 (§9.4, BR.10 added nowPlayingPermissionDenied) = 30
+        #expect(UserFacingError.allCases.count == 30)
     }
 
     // MARK: Presentation mode

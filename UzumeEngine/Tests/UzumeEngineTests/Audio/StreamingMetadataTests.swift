@@ -213,3 +213,57 @@ struct StreamingMetadataTests {
         #expect(callCount.value == 1)
     }
 }
+
+// MARK: - BR.10 (audit E1, E12, E14): Automation denied; only the session's own app
+
+@Suite("Now Playing: Automation denied, and only the session's own app (BR.10)")
+struct NowPlayingPermissionTests {
+
+    /// Counts polls and denials from any thread; `waitUntil` orders on the signal, not the clock.
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var polls = 0
+        private var denials: [MetadataSource] = []
+        func poll() { lock.withLock { polls += 1 } }
+        func deny(_ source: MetadataSource) { lock.withLock { denials.append(source) } }
+        var pollCount: Int { lock.withLock { polls } }
+        var denied: [MetadataSource] { lock.withLock { denials } }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<400 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    @Test func automationDenied_isReportedOncePerObservation() async throws {
+        let metadata = StreamingMetadata(pollInterval: .milliseconds(10))
+        let counter = Counter()
+        metadata.queryReader = { counter.poll(); return .automationDenied(.spotify) }
+        metadata.onAutomationDenied = { counter.deny($0) }
+
+        metadata.startObserving()
+        try await waitUntil { counter.pollCount >= 5 }
+        metadata.stopObserving()
+        #expect(counter.pollCount >= 5)
+        #expect(counter.denied == [.spotify], "one report, not one per 2 s poll")
+
+        metadata.startObserving()        // a new session reports again
+        try await waitUntil { counter.denied.count >= 2 }
+        metadata.stopObserving()
+        #expect(counter.denied == [.spotify, .spotify])
+    }
+
+    @Test func aSpotifySession_neverAsksMusic_andAClosedAppIsNeverAsked() {
+        #expect(StreamingMetadata.appsToQuery(allowed: [.spotify], appleMusicRunning: true, spotifyRunning: true)
+                == [.spotify])
+        #expect(StreamingMetadata.appsToQuery(allowed: [.appleMusic], appleMusicRunning: true, spotifyRunning: true)
+                == [.appleMusic])
+        #expect(StreamingMetadata.appsToQuery(allowed: [.appleMusic, .spotify],
+                                              appleMusicRunning: false, spotifyRunning: true) == [.spotify])
+    }
+
+    @Test func localFileModes_startNoNowPlayingPolling() {
+        #expect(InputMode.systemAudio.isCapture)
+        #expect(!InputMode.localFilePlayback(URL(fileURLWithPath: "/tmp/a.m4a")).isCapture)
+        #expect(!InputMode.localFile(URL(fileURLWithPath: "/tmp/a.m4a")).isCapture)
+    }
+}
