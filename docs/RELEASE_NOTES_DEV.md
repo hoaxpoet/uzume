@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-015424] BR.13 — local files keep their place
+
+- **Switching speakers or AirPods no longer restarts the song.** A local file carries on from where it was, and a paused song stays paused, instead of starting over out loud while the screen says paused.
+- **Opening something new stops the old song.** Opening another file, folder or playlist, or cancelling, used to leave the previous song playing, and its ending could start the new queue before it was ready.
+- **Mono files are heard at the right pitch.** They were analysed an octave too high.
+- Pending live checks in listening session 1.
+
 ### [dev-2026-09-29-222958] BR.6a — CI compiles every shader and builds the Release app (BUG-167)
 
 - **A broken shader can no longer reach a tester unnoticed.** Every pull request now compiles every shader the app compiles at launch, the same way the app does. It also builds the Release configuration that ships. Before, a shader error first showed up on a tester's Mac, as a crash on every launch or a scene silently missing.
