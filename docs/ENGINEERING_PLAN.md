@@ -254,8 +254,8 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.13** | 2 | ✅ merged (#329) — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ✅ merged (#330) — pending live checks (session 2) | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
 | **BR.15** | 2 | ✅ merged (#333) — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
-| **BR.16** | 2 | ✅ PR open | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
-| **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
+| **BR.16** | 2 | ✅ merged (#334) | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
+| **BR.17** | 2 | ✅ PR open — pending AirPods A/B (session 2) | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
 | **BR.19** | 2 | ready | The right song, reliably (BUG-152, C7, C8/A10) |
 | **BR.20** | 2 | ready | Flash check v2: regional + red (I8) |
@@ -1697,6 +1697,22 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
 **Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
+
+### Increment BR.17 — output devices as testers have them ✅ (2026-09-30, pending live check)
+
+**Delivered.** Audit I4/B7, G4, B9 as P2 lines under AUDIT-2026-09-29. `OutputLatency` (in `DefaultOutputDeviceMonitor.swift`) + `VisualizerEngine.applyOutputLatency()` on an `outputLatencyMonitor`; `VisualizerEngine.makeStemSampleBuffer()` (192 kHz × 13 s); `HighRateDecimator` + `FFTProcessor.processMono` (in `FFTProcessor.swift`).
+**Done-when:** ✅ offset = max(50 ms, device latency), trim kept, `UZUME_DEVICE_LATENCY=0` arm (tests); ✅ every stem / beat / recalibration window fits at 44.1–192 kHz (test, negative-controlled); ✅ high-rate tones land in the 48 kHz bin (test, negative-controlled). ⏳ AirPods: visual accents on the beat, with `UZUME_DEVICE_LATENCY=0` as the before — listening session 2.
+**BeatBench (offline-grid, all five suites):** identical before (`main`) and after (`br-17`) — the prep-time grid is untouched; both changes are on the live path, which BeatBench's session-replay mode (not built) would be needed to score.
+
+| suite | track | F | Cemgil | AMLt | downbeat F |
+|---|---|---|---|---|---|
+| 1 | billie_jean | 0.97 | 0.96 | 0.97 | 0.90 |
+| 2 | pyramid_song / solsbury_hill / take_five / yyz | 0.52 / 0.97 / 0.99 / 0.58 | 0.37 / 0.95 / 0.91 / 0.43 | 0.75 / 1.00 / 1.00 / 0.21 | — / 0.15 / 0.26 / 0.15 |
+| 3 | bohemian_rhapsody / money | 0.47 / 0.44 | 0.32 / 0.31 | 0.48 / 0.43 | 0.25 / 0.21 |
+| 4 | bleed | 0.99 | 0.96 | 1.00 | 0.08 |
+| 5 | clair_de_lune | 0.16 | 0.09 | 0.01 | 0.00 |
+
+**Not done:** a real anti-alias filter for the decimation; the latency read has not seen a Bluetooth device.
 
 ### Increment BR.16 — honest copy and credits ✅ (2026-09-30)
 

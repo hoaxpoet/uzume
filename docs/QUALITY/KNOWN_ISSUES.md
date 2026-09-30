@@ -1632,6 +1632,10 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.17 (2026-09-30), output devices as testers have them (P2, tracked here):**
+  - **I4 / B7** — the beat-phase display offset is the tuned 50 ms raised to the output device's own latency (device + safety offset + stream, read at launch and on every device change); built-in and wired output keep exactly 50 ms (this Mac mini reads 0.6 ms). `UZUME_DEVICE_LATENCY=0` is the A/B arm. Fixed (tests); ⏳ AirPods A/B, listening session 2 — the Bluetooth figure has not been read on a real Bluetooth device.
+  - **G4** — the live stem buffer holds 192 kHz × 13 s, so every ≤ 12 s window fits at 88.2 / 96 / 192 kHz; before, a 10 s window at 96 kHz returned 6.9 s and live stems never ran. Fixed (test; negative control: old sizing → red at 88.2 / 96 / 192).
+  - **B9** — above 80 kHz the live FFT input is averaged to 44.1 / 48 kHz (`HighRateDecimator`), keeping ~46 Hz bins. Fixed (test: tones at 96 / 192 kHz peak in the 48 kHz bin; negative control red). **Ceiling:** a box-car average is a weak anti-alias filter.
 - **BR.16 (2026-09-30), honest copy and credits (P2, tracked here):**
   - **A7** — the permission screens, both Info.plist usage strings and the scan permission now say *"Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz."* (decision 9); UX_SPEC, the tester notes and SECURITY_POSTURE follow. Fixed.
   - **C13** — MusicBrainz lookups share one process-wide `RateGate`: one request per second (test).

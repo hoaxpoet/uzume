@@ -179,6 +179,96 @@ public final class FFTProcessor: FFTProcessing, @unchecked Sendable {
     }
 }
 
+// MARK: - High-rate input (BR.17 / B9)
+
+extension FFTProcessor {
+
+    /// Zero-allocation mono path for input already reduced to the analysis rate (the
+    /// `HighRateDecimator` output). Uses the latest `fftSize` samples; zero-pads (front) if short.
+    @discardableResult
+    public func processMono(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) -> FFTResult {
+        let fftLength = Self.fftSize
+        kernel.windowed.withUnsafeMutableBufferPointer { dst in
+            dst.update(repeating: 0)
+            let valid = min(samples.count, fftLength)
+            let offset = samples.count - valid
+            for i in 0..<valid {
+                let sample = samples[offset + i]
+                dst[i] = sample.isFinite ? sample : 0
+            }
+        }
+        return runFFTCore(sampleRate: sampleRate)
+    }
+}
+
+// MARK: - HighRateDecimator
+
+/// Brings 88.2 kHz and faster live input down to 44.1 / 48 kHz before the FFT (BR.17 / B9), so
+/// a 1024-point frame keeps its ~46 Hz bins and ~21 ms span — the same bass resolution, band
+/// edges and chroma the 44.1 / 48 kHz paths get. At 96 kHz the undecimated frame had 93.75 Hz bins
+/// (bass three bins wide) and at 192 kHz 187.5 Hz; BUG-146 fixed only preparation.
+///
+/// Averages each run of `factor` stereo frames to one mono sample (L+R and time together) into a
+/// ring of `FFTProcessor.fftSize`. Allocation-free after init; owned by one real-time thread.
+///
+/// ponytail: a box-car average is a weak anti-alias filter (−3.9 dB at the new Nyquist); music
+/// carries little above 20 kHz. A proper low-pass (vDSP_desamp) if aliasing ever shows up.
+public struct HighRateDecimator {
+
+    /// 1 below 80 kHz (44.1 / 48 unchanged), 2 for 88.2 / 96, 4 for 176.4 / 192.
+    public static func factor(forRate rate: Float) -> Int {
+        rate >= 160_000 ? 4 : (rate >= 80_000 ? 2 : 1)
+    }
+
+    /// The rate the analysis sees for a given tap rate.
+    public static func analysisRate(forTapRate rate: Float) -> Float {
+        rate / Float(factor(forRate: rate))
+    }
+
+    public private(set) var factor = 1
+    private var ring: [Float]
+    private var head = 0
+    private var filled = 0
+    private var sum: Float = 0
+    private var summed = 0
+
+    public init(capacity: Int = FFTProcessor.fftSize) {
+        ring = [Float](repeating: 0, count: capacity)
+    }
+
+    /// Append interleaved stereo input; a changed `factor` (a device swap) starts a fresh history.
+    public mutating func append(interleavedStereo samples: UnsafePointer<Float>, count: Int, factor newFactor: Int) {
+        if newFactor != factor {
+            factor = newFactor
+            head = 0
+            filled = 0
+            sum = 0
+            summed = 0
+        }
+        let frames = count / 2
+        let norm = 1 / Float(2 * factor)
+        for frame in 0..<frames {
+            let left = samples[frame * 2], right = samples[frame * 2 + 1]
+            sum += (left.isFinite ? left : 0) + (right.isFinite ? right : 0)
+            summed += 1
+            guard summed == factor else { continue }
+            ring[head] = sum * norm
+            head = (head + 1) % ring.count
+            filled = min(filled + 1, ring.count)
+            sum = 0
+            summed = 0
+        }
+    }
+
+    /// Copy the held samples, oldest first, into `dst`; returns how many.
+    public func copyLatest(into dst: UnsafeMutableBufferPointer<Float>) -> Int {
+        let count = min(filled, dst.count)
+        let start = (head - count + ring.count) % ring.count
+        for i in 0..<count { dst[i] = ring[(start + i) % ring.count] }
+        return count
+    }
+}
+
 // MARK: - FFTError
 
 public enum FFTError: Error, Sendable {

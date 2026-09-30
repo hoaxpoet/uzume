@@ -155,3 +155,79 @@ public final class DefaultOutputDeviceMonitor: @unchecked Sendable {
         stop()
     }
 }
+
+// MARK: - OutputLatency (BR.17 / I4, B7)
+
+/// How late the listener hears what the tap / playhead reports, for the current output device.
+///
+/// The beat-phase display offset (`LiveBeatDriftTracker.audioOutputLatencyMs`) was a fixed 50 ms,
+/// tuned on built-in speakers (BUG-007.6). Bluetooth adds 100–300 ms, so Kagura's steps,
+/// Fireflies' flashes and Membrane's strikes landed early for AirPods listeners. The offset is now
+/// the larger of that tuned 50 ms and what the device reports — built-in and wired output keep
+/// exactly the calibrated value; only a slower device moves it.
+public enum OutputLatency {
+
+    /// The tuned built-in-speaker offset (BUG-007.6); never compensated below it.
+    public static let baselineMs: Float = 50
+
+    /// `UZUME_DEVICE_LATENCY=0` keeps the fixed baseline — the A/B arm (beat-sync house rule).
+    public static var isEnabled: Bool { ProcessInfo.processInfo.environment["UZUME_DEVICE_LATENCY"] != "0" }
+
+    /// The offset to apply for a device reporting `deviceMs` (nil: unreadable → baseline).
+    public static func compensationMs(deviceMs: Double?, enabled: Bool = isEnabled) -> Float {
+        guard enabled, let deviceMs, deviceMs.isFinite, deviceMs > 0 else { return baselineMs }
+        return max(baselineMs, Float(deviceMs))
+    }
+
+    /// Device + safety offset + first output stream latency, in frames, over the nominal rate.
+    public static func milliseconds(deviceFrames: UInt32, safetyFrames: UInt32, streamFrames: UInt32,
+                                    sampleRate: Double) -> Double? {
+        guard sampleRate > 0 else { return nil }
+        return Double(deviceFrames + safetyFrames + streamFrames) / sampleRate * 1000
+    }
+
+    /// Read the output latency of `device` from the HAL; nil when it can't be read.
+    public static func milliseconds(of device: AudioDeviceID) -> Double? {
+        guard device != 0,
+              let rate: Float64 = read(
+                  device,
+                  kAudioDevicePropertyNominalSampleRate,
+                  scope: kAudioObjectPropertyScopeGlobal
+              )
+        else { return nil }
+        let deviceFrames: UInt32 = read(device, kAudioDevicePropertyLatency) ?? 0
+        let safetyFrames: UInt32 = read(device, kAudioDevicePropertySafetyOffset) ?? 0
+        var streamFrames: UInt32 = 0
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
+                                              mScope: kAudioObjectPropertyScopeOutput,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        let streamSize = UInt32(MemoryLayout<AudioStreamID>.size)
+        if AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size) == noErr, size >= streamSize {
+            var streams = [AudioStreamID](repeating: 0, count: Int(size) / MemoryLayout<AudioStreamID>.size)
+            if AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &streams) == noErr, let first = streams.first {
+                streamFrames = read(first, kAudioStreamPropertyLatency, scope: kAudioObjectPropertyScopeGlobal) ?? 0
+            }
+        }
+        return milliseconds(
+            deviceFrames: deviceFrames,
+            safetyFrames: safetyFrames,
+            streamFrames: streamFrames,
+            sampleRate: rate
+        )
+    }
+
+    private static func read<T>(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector,
+                                scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeOutput) -> T? {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size = UInt32(MemoryLayout<T>.size)
+        let value = UnsafeMutablePointer<T>.allocate(capacity: 1)
+        defer { value.deallocate() }
+        guard AudioObjectGetPropertyData(object, &addr, 0, nil, &size, value) == noErr else { return nil }
+        return value.pointee
+    }
+}

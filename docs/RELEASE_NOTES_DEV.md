@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-153337] BR.17 — AirPods, and high-sample-rate output
+
+- **Beat accents wait for Bluetooth.** Uzume now reads how late your output device plays and holds the beat-timed accents back to match. With AirPods, Kagura's steps, Fireflies' flashes and Membrane's strikes were landing early. Built-in and wired speakers keep exactly the timing they had.
+- **Scenes that follow instruments work at 88.2 kHz and above.** At those output rates, the live instrument separation silently never ran.
+- **Bass stays precise at 96 and 192 kHz.** The live analysis now works at the usual resolution whatever rate the output runs at.
+- Pending an AirPods check in listening session 2.
+
 ### [dev-2026-09-30-151115] BR.16 — honest privacy copy and credits
 
 - **The privacy promise is now accurate.** Every permission screen said nothing ever leaves your Mac, but each song's title and artist are looked up online. They now say: "Your audio never leaves your Mac. Uzume looks up song details on Apple's iTunes and MusicBrainz."

@@ -127,6 +127,10 @@ extension VisualizerEngine {
         // touched on) the single real-time audio thread — no cross-thread share,
         // so no lock is needed (unlike tapSampleRate, D-079).
         var interleavedScratch = [Float](repeating: 0, count: FFTProcessor.fftSize * 2)
+        // BR.17 / B9: 88.2 kHz and faster input is averaged down before the FFT. Same thread,
+        // same no-lock rule as the scratch above.
+        var decimator = HighRateDecimator()
+        var monoScratch = [Float](repeating: 0, count: FFTProcessor.fftSize)
         return { [weak self, weak buf, weak fft] samples, count, rate, channels in
             guard let buf, let fft else { return }
             buf.write(from: samples, count: count)
@@ -164,18 +168,30 @@ extension VisualizerEngine {
             // Feed stem sample buffer (interleaved stereo, lightweight write).
             self?.stemSampleBuffer.write(samples: samples, count: count)
 
-            // BUG-036: fill the reused scratch + run the zero-alloc stereo FFT
-            // path instead of allocating a fresh [Float] per callback.
-            let frameSampleCount = interleavedScratch.withUnsafeMutableBufferPointer {
-                buf.latestSamples(into: $0)
-            }
-            guard frameSampleCount > 0 else { return }
+            let factor = HighRateDecimator.factor(forRate: rate)
+            let fftResult: FFTResult
+            if factor > 1 {
+                // BR.17 / B9: the decimated history, at 44.1 / 48 kHz.
+                decimator.append(interleavedStereo: samples, count: count, factor: factor)
+                let held = monoScratch.withUnsafeMutableBufferPointer { decimator.copyLatest(into: $0) }
+                guard held > 0 else { return }
+                fftResult = monoScratch.withUnsafeBufferPointer {
+                    fft.processMono(UnsafeBufferPointer(rebasing: $0[0..<held]), sampleRate: rate / Float(factor))
+                }
+            } else {
+                // BUG-036: fill the reused scratch + run the zero-alloc stereo FFT
+                // path instead of allocating a fresh [Float] per callback.
+                let frameSampleCount = interleavedScratch.withUnsafeMutableBufferPointer {
+                    buf.latestSamples(into: $0)
+                }
+                guard frameSampleCount > 0 else { return }
 
-            let fftResult = interleavedScratch.withUnsafeBufferPointer {
-                fft.processStereo(
-                    interleaved: UnsafeBufferPointer(rebasing: $0[0..<frameSampleCount]),
-                    sampleRate: rate
-                )
+                fftResult = interleavedScratch.withUnsafeBufferPointer {
+                    fft.processStereo(
+                        interleaved: UnsafeBufferPointer(rebasing: $0[0..<frameSampleCount]),
+                        sampleRate: rate
+                    )
+                }
             }
 
             // Copy magnitudes off the real-time thread for analysis.
@@ -187,9 +203,9 @@ extension VisualizerEngine {
             let binCount = Int(fftResult.binCount)
             let magnitudes = Array(fft.magnitudeBuffer.pointer.prefix(binCount))
 
-            // Capture the tap sample rate so the spectral-balance pass
-            // in the monitor knows the band-to-bin mapping.
-            let sr = rate
+            // The rate the magnitudes are at (the tap rate, or the decimated rate — BR.17), so the
+            // spectral-balance pass in the monitor knows the band-to-bin mapping.
+            let sr = HighRateDecimator.analysisRate(forTapRate: rate)
 
             // BUG087.2: the audio duration this callback actually carried. `count` is
             // total interleaved floats on BOTH paths — `mDataByteSize / sizeof(Float)`
@@ -258,7 +274,7 @@ extension VisualizerEngine {
         // thread — so every bin→Hz stage (chroma/key, bands, centroid) reads
         // the real rate. No-op once matched; recomputes the bin→Hz tables on a
         // device-swap rate change (couples to G1/CLEAN.1.5).
-        mir.setSampleRate(Float(tapSampleRate))
+        mir.setSampleRate(HighRateDecimator.analysisRate(forTapRate: Float(tapSampleRate)))   // BR.17 / B9
         // BUG-053 observability: persist the analysis rate to session.log the
         // first frame it's established and on any change (device swap), so the
         // session artifact self-documents the rate the live MIR actually ran at
