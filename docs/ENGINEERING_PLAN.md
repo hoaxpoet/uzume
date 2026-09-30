@@ -242,14 +242,14 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.1** | 1 | ✅ merged (#317) — pending live checks (BUG-163, BUG-164; session 1) | Photosensitivity safety: Reduce Motion at launch, Dim Flashing Lights, notice on every path, Fractal Tree on Apple7, flash-gate holes, unchecked scenes reachable (F1, F6, F7, K1/D1, K4, K3/E13/F15/A13) |
 | **BR.2** | 1 | ✅ merged (#316) — pending Matt's live `pmset` check (BUG-162) | Keep the display awake during a session (B1) |
 | **BR.3** | 1 | ✅ merged (#318) — TSan-clean (BUG-165) | Streaming song-change resets run off-main against the render loop and analysis queue (G1) |
-| **BR.4** | 1 | ready | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
+| **BR.4** | 1 | ✅ fixed, PR open (P2 lines under AUDIT-2026-09-29) | Public-build surface: stall-card copy, developer keys, raw string keys, Ended screen, `~/uzume_diag.log`, hot-reload folder, tester notes (I2/F3/A9, F8, F18, I10, H11, A13/G9) |
 | **BR.5** | 1 | ✅ merged (#319) — pending live check (BUG-166; session 3) | Evidence from testers: Report a Problem zip, abnormal-exit marker, independent watchdog, `capture_hang.sh` process name, build SHA (H3, F16, D3, H5, H7) |
-| **BR.6** | 1 | 🔨 BR.6a ✅ PR open (CI compiles shaders + builds Release, BUG-167); BR.6b (measure + cap) next | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
-| **BR.7** | 2 | ready | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
-| **BR.8** | 2 | ready | Long playlists keep their preparation (C1) |
-| **BR.9** | 2 | ready | Background preparation gets its own analyzers (C3/G3) |
-| **BR.10** | 2 | ready | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
-| **BR.11** | 2 | ready | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
+| **BR.6** | 1 | 🔨 BR.6a ✅ merged (#320, BUG-167); BR.6b cap + Alfvén exclusion ✅ merged (#325, BUG-168) — M4 / 4K measurement is Matt's | Reality check: CI compiles Metal + builds Release; macOS 15 launch; M4 MacBook Pro Retina (battery, Low Power Mode) + 4K sessions; cold-launch time; conservative tier-1 cap + Alfvén tier-1 exclusion (no M1 available) (H1, H8, K2, D4–D6) |
+| **BR.7** | 2 | ✅ fixed, PR open (BUG-169 + P2 lines) | Preparation never strands the tester (C2, F10, C11, F13, C10, F11) |
+| **BR.8** | 2 | ✅ fixed, PR open (BUG-170) | Long playlists keep their preparation (C1) |
+| **BR.9** | 2 | ✅ fixed, PR open (BUG-171) | Background preparation gets its own analyzers (C3/G3) |
+| **BR.10** | 2 | ✅ fixed, PR open (BUG-172) — pending live check (session 3) | Automation permission + fallbacks (E1, I3/A6/C6/F12, E12, E14) |
+| **BR.11** | 2 | ✅ fixed, PR open (BUG-173 + P2 lines) — pending live checks (sessions 1, 2) | Pause, off-plan songs, loops, stale plan, failed local file, late async results (E2, E7, E8/B2, E6, E3, G7) |
 | **BR.12** | 2 | ✅ PR open — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
 | **BR.13** | 2 | ready | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
@@ -1702,6 +1702,48 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 **Delivered.** Audit G2/B14, G8, B5, B6, G6 as P2 lines under AUDIT-2026-09-29. `SystemAudioCapture` runs start / stop / reinstall on one serial `lifecycleQueue` with a generation token (stop bumps it; a stale reinstall no-ops). A failed reinstall keeps the mode and the monitor. `DefaultOutputDeviceMonitor` listens for `kAudioHardwarePropertyServiceRestarted`, re-registers and reinstalls. `AudioInputRouter.holdColdInstallLadder()` / `releaseColdInstallLadder()` / `reinstallTapNow()`; the app holds the ladder while Ready listens and Ready's Retry reinstalls. Tap sample rates must be finite and positive.
 **Done-when:** ✅ serial lifecycle + generation token, end-during-reinstall race-free (TSan stress; negative control 10 races); ✅ failed reinstall keeps intent + monitor (test); ✅ service-restart listener reinstalls (test); ✅ no cold-install recreate while Ready waits (test); ✅ bad tap rate rejected (test). ⏳ AirPods swap during a session end, and `killall coreaudiod` mid-session — listening session 2.
 **Not done:** a tap that dies silently without a Core Audio restart (B5's ladder-after-first-audio half); the stall card's in-app "Restart listening" (audit line 127) — the router action exists, the card button does not.
+
+### Increment BR.11 — real listening habits ✅ (2026-09-29, pending live checks)
+
+**Delivered.** Audit E2 → BUG-173 (a pause is not a new song), plus E7 (off-plan songs run reactive), E8/B2 (the local-file clock follows the playhead; loops and repeat-one keep their scene timeline), E6 (ad-hoc sessions start with no stale plan), E3 (a failed file doesn't shift the plan) and G7 (late async results are dropped by track generation).
+**Done-when:** ✅ a paused player is not a track change (test, negative-controlled); ✅ off-plan songs get reactive scenes (wiring); ✅ loops and repeat-one keep their scene timeline (test, negative-controlled); ✅ the local-file clock follows the playhead (tests); ✅ ad-hoc sessions start with no stale plan (wiring); ✅ a failed file doesn't shift the plan (test); ✅ late async results are dropped by generation (wiring).
+**Not done:** the live loop and pause checks (sessions 1 and 2); streaming repeat-one still relies on the planned-length wrap (the player position isn't read for streaming).
+
+### Increment BR.10 — the "control Spotify / Music" permission and its fallbacks ✅ (2026-09-29, pending live check)
+
+**Delivered.** Audit E1, I3/A6/C6/F12 → BUG-172, plus E12/E14. −1743 is detected on both paths: Apple Music shows its permission screen; a streaming session runs reactive with a toast that names the app and the Automation setting. Only the session's own app is polled, and nothing in local-file sessions. The Automation prompt copy is reworded.
+**Done-when:** ✅ −1743 detected on both paths, and the existing permission screen (Apple Music) or a toast (streaming) appears (tests); ✅ a streaming session with no now-playing falls back to reactive mode (wired on denial; source-shape test); ✅ only the session's own source is polled (tests); ✅ `NSAppleEventsUsageDescription` reworded.
+**Not done:** reactive fallback when now-playing is merely *absent* (web player, another app) without a denial — the session still waits for a matching track then; an "Open Automation settings" button in the toast (toasts carry no action).
+
+### Increment BR.9 — background preparation gets its own analyzers ✅ (2026-09-29)
+
+**Delivered.** Audit C3/G3 → BUG-171. The preparer builds its own `StemAnalyzer` and `MoodClassifier` (`makePreparerAnalysis`); `makeSessionManager` can no longer be handed the live ones.
+**Done-when:** ✅ the preparer holds its own instances (identity test + factory source shape); ✅ the replay: a live stem trace with preparation bursts on a separate analyzer is identical to the baseline, and moves when the analyzer is shared (engine test, synthetic stems).
+**Not done:** a recorded-session replay comparison; the live effect was never measured before the fix.
+
+### Increment BR.8 — long playlists keep their preparation ✅ (2026-09-29)
+
+**Delivered.** Audit C1 → BUG-170. The in-memory `StemCache` keeps no separated stem audio (nothing read it at playback), so its 64-entry cap, which evicted tracks ~6–56 of a 120-track playlist before they played, becomes a 2048 safety bound.
+**Done-when:** ✅ a 120-track synthetic session keeps every prepared track planned (test, red at the old cap); ✅ stem audio is no longer held in the cache.
+**Not done:** memory was not measured on a real 120-track session (entries are now features, grids and profile only).
+
+### Increment BR.7 — preparation never strands the tester ✅ (2026-09-29)
+
+**Delivered.** Audit C2 → BUG-169 (a failed track among the first three no longer hides Start now), plus F10/C11 (no Ready with nothing prepared: the §9.3 recovery screen holds), F13 (the recovery screen's reactive escape is wired; no "offline" for local files), F11 (Cancel during Connecting sticks) and C10 (missing ML weights say so at launch).
+**Done-when:** ✅ a failed track in 1–3 doesn't block Start now; ✅ no `.ready` with nothing prepared; ✅ the reactive-mode escape is wired; ✅ no offline screen for local files; ✅ missing weights say so (live: Weights folder hidden → notice + log line); ✅ Cancel during Connecting sticks (gated-connector test, both branches). Every engine-side change is negative-controlled.
+**Not done:** the preparation banners' own reactive/retry buttons; a build-phase weights check.
+
+### Increment BR.4 — the public build shows testers only tester things ✅ (2026-09-29)
+
+**Delivered.** `BuildFlavor.showsDeveloperDiagnostics` (developer only) gates the rest of the developer surface. The no-audio card has no Terminal step and stays quiet before any audio (a frozen tap still raises it). No developer keys or bug IDs; `+` fires on US/UK keyboards; `.` has one binding. The three raw Settings keys have strings, and a test checks every referenced key exists. The Ended screen shows the real playing time and a pluralised count. No `~/uzume_diag.log`. A one-page [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md).
+**Done-when:** ✅ stall card (tests); ✅ keys, help, `+`, `.` (tests); ✅ string keys + existence test (negative-controlled); ✅ Ended screen (tests); ✅ no diag log (test); ✅ hot-reload folder off (BR.1); ✅ tester note.
+**Not done:** a public-flavor build was not run (all by test); the developer build's double `.` binding.
+
+### Increment BR.6b — tier-1 render cap and Alfvén exclusion ✅ (2026-09-29, measurement pending)
+
+**Delivered.** Audit D4/K2 → BUG-168. Tier-1 Macs cap the drawable at ~2560×1440 (compositor-upscaled) and don't get Alfvén (decision 4). Release harness numbers at 1080p / 1440p / 4K on the M2 Pro are in the audit (§BR.6).
+**Done-when:** ✅ tier-1 cap (tests, incl. a real-window delegate check); ✅ Alfvén excluded on tier 1 (test); ⏳ M4 MacBook Pro Retina (battery, Low Power Mode on/off) + 4K sessions with `RENDER_TARGET` / `frame_gpu_ms`, and a cold first launch after a fresh install — Matt's sessions; ⏳ whether a cap applies above tier 1 → DECISION-NEEDED with those numbers.
+**Note:** the M2 Pro Mac mini is tier 1 by the name match, so its 4K display now renders at 2560×1440 and is upscaled.
 
 ### Increment BR.6a — CI builds Release and compiles every shader ✅ (2026-09-29)
 

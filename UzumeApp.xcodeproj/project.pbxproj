@@ -182,6 +182,7 @@
 		H10034 /* ToastManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20034; };
 		H10035 /* LiveAdaptationToastBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20035; };
 		H10036 /* FullscreenObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20036; };
+		BR410001 /* LocalizationKeyCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR420001; };
 		BR110001 /* MeshCapabilityCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR120001; };
 		H10037 /* DisplayManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20037; };
 		H10038 /* MultiDisplayToastBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20038; };
@@ -422,6 +423,7 @@
 		H20034 /* ToastManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastManagerTests.swift; sourceTree = "<group>"; };
 		H20035 /* LiveAdaptationToastBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAdaptationToastBridgeTests.swift; sourceTree = "<group>"; };
 		H20036 /* FullscreenObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenObserverTests.swift; sourceTree = "<group>"; };
+		BR420001 /* LocalizationKeyCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKeyCoverageTests.swift; sourceTree = "<group>"; };
 		BR120001 /* MeshCapabilityCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshCapabilityCatalogTests.swift; sourceTree = "<group>"; };
 		H20037 /* DisplayManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManagerTests.swift; sourceTree = "<group>"; };
 		H20038 /* MultiDisplayToastBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiDisplayToastBridgeTests.swift; sourceTree = "<group>"; };
@@ -842,6 +844,7 @@
 				H20034 /* ToastManagerTests.swift */,
 				H20035 /* LiveAdaptationToastBridgeTests.swift */,
 				H20036 /* FullscreenObserverTests.swift */,
+				BR420001 /* LocalizationKeyCoverageTests.swift */,
 				BR520004 /* ProblemReportTests.swift */,
 				BR520002 /* MainThreadWatchdogTests.swift */,
 				BR220002 /* DisplaySleepGuardTests.swift */,
@@ -1179,6 +1182,7 @@
 				H10034 /* ToastManagerTests.swift in Sources */,
 				H10035 /* LiveAdaptationToastBridgeTests.swift in Sources */,
 				H10036 /* FullscreenObserverTests.swift in Sources */,
+				BR410001 /* LocalizationKeyCoverageTests.swift in Sources */,
 				BR510004 /* ProblemReportTests.swift in Sources */,
 				BR510002 /* MainThreadWatchdogTests.swift in Sources */,
 				BR210002 /* DisplaySleepGuardTests.swift in Sources */,

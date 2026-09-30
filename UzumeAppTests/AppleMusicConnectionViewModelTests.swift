@@ -10,6 +10,7 @@
 // auto-retry stays pending during the sub-millisecond poll (asserting the
 // pre-retry state); every other test injects InstantDelay.
 
+import Foundation
 import Session
 import Testing
 @testable import UzumeApp
@@ -76,6 +77,21 @@ struct AppleMusicConnectionViewModelTests {
         await awaitState(vm) { $0 == .notRunning }
         #expect(vm.state == .notRunning)
         #expect(connector.callCount == 1)  // no retry after notRunning
+    }
+
+    @Test("BR.10 (C6): Automation denied → .permissionDenied, not an endless 'checking every 2 s'")
+    func connectAutomationDenied() async {
+        let connector = MockAppleMusicConnector(
+            result: .failure(PlaylistConnectorError.automationPermissionDenied)
+        )
+        let vm = AppleMusicConnectionViewModel(
+            connector: connector,
+            delayProvider: InstantDelay()
+        )
+        vm.beginConnect()
+        await awaitState(vm) { $0 == .permissionDenied }
+        #expect(vm.state == .permissionDenied)
+        #expect(connector.callCount == 1, "no auto-retry loop")
     }
 
     @Test("connect throws parseFailure → .error state")
@@ -147,5 +163,40 @@ private final class MockAppleMusicConnector: PlaylistConnecting, @unchecked Send
         case .success(let tracks): return tracks
         case .failure(let error):  throw error
         }
+    }
+}
+
+// MARK: - BR.10 (E1): streaming wiring
+
+@Suite("Now Playing denial reaches the session (BR.10)")
+struct NowPlayingDenialWiringTests {
+    private func src(_ path: String) throws -> String {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        return try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+    }
+
+    @Test func denial_runsReactive_andShowsTheToast() throws {
+        let orchestrator = try src("UzumeApp/VisualizerEngine+Orchestrator.swift")
+        #expect(orchestrator.contains("if snapshot.hasPlan, snapshot.trackIndex == nil, nowPlayingGone {"))
+        let audio = try src("UzumeApp/VisualizerEngine+Audio.swift")
+        #expect(audio.contains("metadata.onAutomationDenied = { [weak self] source in"))
+        #expect(audio.contains("self?.handleNowPlayingDenied(source)"))
+        let playback = try src("UzumeApp/Views/Playback/PlaybackView.swift")
+        #expect(playback.contains(".merge(with: engine.$nowPlayingDeniedApp.compactMap { $0 }"))
+    }
+
+    @Test func theFlagIsClearedOnEveryPath() throws {
+        let engine = try src("UzumeApp/VisualizerEngine.swift")
+        #expect(engine.contains("self.orchestratorLock.withLock { self.nowPlayingUnavailable = false }"))
+        let capture = try src("UzumeApp/VisualizerEngine+Capture.swift")
+        #expect(capture.contains("self.nowPlayingUnavailable = false"))
+        #expect(capture.contains("self.nowPlayingDeniedApp = nil"))
+    }
+
+    @Test func toastCopy_namesTheApp() {
+        let copy = LocalizedCopy.string(for: .nowPlayingPermissionDenied(appName: "Spotify"))
+        #expect(copy.contains("Spotify"))
+        #expect(copy.contains("Automation"))
+        #expect(UserFacingError.nowPlayingPermissionDenied(appName: "Spotify").presentationMode == .bottomRightToast)
     }
 }

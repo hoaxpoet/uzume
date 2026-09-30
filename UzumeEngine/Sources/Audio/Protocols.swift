@@ -283,3 +283,15 @@ public protocol MetadataFetching: Sendable {
     /// Returns nil on failure or timeout — failures are always silent.
     func fetch(title: String, artist: String) async -> PartialTrackProfile?
 }
+
+// MARK: - InputMode + capture
+
+extension InputMode {
+    /// System or per-app capture — the modes whose song comes from a streaming app (BR.10).
+    var isCapture: Bool {
+        switch self {
+        case .systemAudio, .application: true
+        case .localFile, .localFilePlayback: false
+        }
+    }
+}

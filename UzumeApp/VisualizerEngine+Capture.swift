@@ -190,12 +190,16 @@ extension VisualizerEngine {
             let resolvedPlanIndex = self.indexInLivePlan(matching: event.current)
             self.orchestratorLock.withLock {
                 self.liveTrackPlanIndex = resolvedPlanIndex
+                // BR.11 (E7): a known song with no plan entry — the orchestrator runs reactive.
+                self.liveTrackIsOffPlan = resolvedPlanIndex == nil
                 // BUG-015 diagnostic: reset the per-track wire-active log
                 // latch so the next analysis tick that reaches
                 // `applyLiveUpdate(...)` produces exactly one diagnostic
                 // line for this new track. Pairs with the latch set in
                 // `runOrchestratorLiveUpdate(mir:)`.
                 self.orchestratorWireLoggedThisTrack = false
+                // BR.10: a real song change means now-playing works (permission granted later).
+                self.nowPlayingUnavailable = false
                 // LFPLAN.3: new track → plan resumes (clear the manual hold) and the
                 // first planned segment applies (clear the last-applied marker).
                 self.manualPresetOverrideThisTrack = false
@@ -239,6 +243,7 @@ extension VisualizerEngine {
                     // async fetch then lands the real bytes on a later tick.
                     // The stale pre-fetched profile drops with it — the new
                     // track's kickoffPreFetch repopulates.
+                    self.nowPlayingDeniedApp = nil   // BR.10: paired with nowPlayingUnavailable above
                     self.nowPlaying.publishTrack(
                         event.current, index: resolvedPlanIndex, artwork: .some(nil))
                     self.streamingArtworkPublisher?.update(for: identity)
@@ -271,9 +276,16 @@ extension VisualizerEngine {
 
     /// Run the metadata pre-fetcher for a new track and apply BPM/key on the main actor.
     func kickoffPreFetch(for track: TrackMetadata, fetcher: MetadataPreFetcher) {
+        let generation = currentTrackGeneration()   // BR.11 (G7): the song this lookup is for
         Task {
             let profile = await fetcher.prefetch(for: track)
             await MainActor.run {
+                // BR.11 (G7): a lookup that returns after the next song started is the last
+                // song's BPM / key / meter — drop it rather than dress the new song with it.
+                guard self.currentTrackGeneration() == generation else {
+                    captureLogger.info("Pre-fetch dropped — the song changed during the lookup")
+                    return
+                }
                 self.nowPlaying.setProfile(profile)
                 if let bpm = profile?.bpm {
                     self.estimatedTempo = bpm

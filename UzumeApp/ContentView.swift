@@ -134,7 +134,7 @@ struct ContentView: View {
             // LocalFileMenuCommands to re-open the right source.
             EndedView(
                 trackCount: engine.sessionManager.currentPlan?.tracks.count ?? 0,
-                sessionDuration: nil,
+                sessionDuration: engine.lastSessionPlaybackSeconds,
                 onStartNewSession: { engine.sessionManager.cancel() },
                 onOpenSessionsFolder: { EndedView.openSessionsFolder() },
                 lastLocalFileOrigin: engine.lastEndedLocalFileOrigin,
@@ -227,14 +227,20 @@ struct ContentView: View {
     @ViewBuilder
     private var preparingView: some View {
         if let publisher = engine.sessionManager.preparationProgress {
+            let isLocalFile = engine.sessionManager.currentSource?.isLocalFile == true
             PreparationProgressView(
                 publisher: publisher,
                 tracks: engine.sessionManager.preparingTracks,
                 progressiveReadinessPublisher: engine.sessionManager.$progressiveReadinessLevel
                     .eraseToAnyPublisher(),
+                // BR.7 (F13): local files need no network — never "You're offline".
+                reachability: isLocalFile ? StubReachabilityMonitor(initialValue: true) : ReachabilityMonitor(),
                 sessionManager: engine.sessionManager,
                 onCancel: { engine.sessionManager.cancel() },
-                onStartNow: { engine.sessionManager.startNow() }
+                onStartNow: { engine.sessionManager.startNow() },
+                // BR.7 (F13): the recovery screen's "Start reactive mode" — streaming only
+                // (a local-file session has no live source to follow).
+                onStartReactive: isLocalFile ? nil : { engine.sessionManager.startReactiveMode() }
             )
         } else {
             // Fallback (should not normally occur — SessionPreparer is always the publisher).
