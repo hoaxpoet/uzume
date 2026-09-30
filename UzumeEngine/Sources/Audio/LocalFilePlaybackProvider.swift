@@ -38,7 +38,7 @@ private let logger = Logger(subsystem: "io.uzume.audio", category: "LocalFilePla
 /// idempotent and safe to call concurrently (NSLock-serialized).
 ///
 /// `AVAudioEngineConfigurationChange` notifications are observed and
-/// trigger a stop → start cycle (best-effort restart from beginning).
+/// trigger a stop → start cycle that resumes at the last playhead and keeps a pause (BR.13 / B3).
 public final class LocalFilePlaybackProvider: @unchecked Sendable {
 
     // MARK: - State
@@ -63,6 +63,14 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// LFSEEK.1 — where the next `start()` begins, in seconds into the file. Set by `seek(to:)`;
     /// guarded by `lock`. 0 for a plain start.
     private var startSeconds: TimeInterval = 0
+
+    /// BR.13 / B3 — the next `start()` schedules the file without playing it (a restart or seek
+    /// while paused). One-shot: `_startLocked()` consumes it. Guarded by `lock`.
+    private var startPaused = false
+
+    /// BR.13 / B3 — the listener paused, as opposed to the player merely not rendering (after a
+    /// device change the engine is stopped, so `isPlaying` is false even mid-song). Guarded by `lock`.
+    private var userPaused = false
 
     /// BUG087.4 — when `UZUME_LF_ANALYSIS_CLOCK=1`, the analysis funnel is driven from the
     /// decoded file at the smoothed playhead instead of from tap arrival. Nil when the flag is
@@ -249,7 +257,11 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// LF.5.fix D-LF5-3: transport controls (hover-revealed Stop / Prev /
     /// Play-Pause / Next) drive into this method.
     public func pause() {
-        lock.withLock { playerNode?.pause() }
+        lock.withLock {
+            guard let player = playerNode else { return }
+            player.pause()
+            userPaused = true
+        }
     }
 
     /// Resume playback after `pause()`. Safe to call when already playing or
@@ -260,6 +272,7 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // failing to resume is a bad transport, not a reason to kill the app.
         lock.withLock {
             guard let player = playerNode else { return }
+            userPaused = false
             do {
                 try Self.catchingNSException { player.play() }
             } catch {
@@ -279,10 +292,11 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// ponytail: a full engine restart per jump (tens of ms); an in-place `scheduleSegment` if a
     /// gap is ever audible.
     public func seek(to seconds: TimeInterval) throws {
-        let wasPaused = isPaused
-        lock.withLock { startSeconds = max(0, seconds) }
+        lock.withLock {
+            startPaused = userPaused   // BR.13: schedule without playing, so no blip before a pause
+            startSeconds = max(0, seconds)
+        }
         try start()
-        if wasPaused { pause() }
     }
 
     /// Seconds into the file the player is at, as the analysis clock reads it (LFSEEK.1 test hook).
@@ -378,8 +392,12 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // yet, so simply throwing would leak a running engine — BUG-078's trap.
         // Hand the partial refs to `start()`, which tears them down AFTER
         // unlocking (BUG-021: no AVFoundation teardown under the provider lock).
+        // BR.13 / B3: a restart or seek while paused schedules the file but does not play it.
+        let playNow = !startPaused
+        startPaused = false
+        userPaused = !playNow
         do {
-            try Self.catchingNSException { player.play() }
+            if playNow { try Self.catchingNSException { player.play() } }
         } catch {
             throw StartAborted(
                 partial: TeardownRefs(player: player, engine: engine, observer: nil, clock: clock),
@@ -576,12 +594,12 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         }
     }
 
-    /// AVAudioEngine fires this when the audio configuration changes
-    /// (device switch, sample-rate change). Restart from the beginning —
-    /// mid-track resumption requires tracking the play head's frame
-    /// position and is out of scope for the LF.1 spike.
+    /// AVAudioEngine fires this when the audio configuration changes (device switch, sample-rate
+    /// change). BR.13 / B3: restart at the last playhead — wrapped inside the file, since a looping
+    /// schedule counts past its end — and keep a pause. One retry after a short settle, since the
+    /// new device can still be coming up; a second failure is reported, not swallowed.
     private func handleConfigurationChange() {
-        logger.info("[LF.1] AVAudioEngine config change — restarting engine")
+        logger.info("[LF.1] AVAudioEngine config change — restarting engine at the playhead")
         // Dispatch off the notification thread so we don't block it while
         // we tear down + restart. `start()` / `stop()` serialize on `lock` for
         // the provider's OWN state, and the loop re-schedule is hopped off the
@@ -590,15 +608,46 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
         // AVFoundation completion-queue ⇄ engine-lock ABBA. NB the provider
         // `lock` alone does NOT prevent that deadlock; it isn't in the cycle.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            self.lock.withLock { self.startSeconds = 0 }   // LFSEEK.1: keeps "from the beginning"
-            self.stop()
-            do {
-                try self.start()
-            } catch {
-                let msg = error.localizedDescription
+            self?.restartAtPlayhead(retries: 1)
+        }
+    }
+
+    private func restartAtPlayhead(retries: Int) {
+        let (clock, file) = lock.withLock { (analysisClock, audioFile) }
+        guard let file else { return }   // stopped in the meantime
+        // Read outside `lock`: the clock-queue hop must not nest inside it.
+        let played = clock?.lastKnownPlayheadSeconds
+        lock.withLock {
+            startSeconds = Self.resumeSeconds(played: played, fallback: startSeconds,
+                                              fileLength: file.length,
+                                              sampleRate: file.processingFormat.sampleRate)
+            startPaused = userPaused
+        }
+        do {
+            try start()
+        } catch {
+            let msg = error.localizedDescription
+            guard retries > 0 else {
                 logger.error("[LF.1] Failed to restart engine after config change: \(msg, privacy: .public)")
+                onDiagnosticEvent?("provider.restart FAILED \(msg)")
+                return
+            }
+            logger.error("[LF.1] Restart after config change failed, retrying: \(msg, privacy: .public)")
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.restartAtPlayhead(retries: retries - 1)
             }
         }
+    }
+
+    /// BR.13 test hook: the device-change restart, run synchronously with no retry.
+    func simulateConfigurationChangeForTesting() { restartAtPlayhead(retries: 0) }
+
+    /// Where a restart resumes: the last playhead, wrapped into the file; `fallback` (the current
+    /// start point) when the clock never ticked.
+    static func resumeSeconds(played: Double?, fallback: TimeInterval,
+                              fileLength: AVAudioFramePosition, sampleRate: Double) -> TimeInterval {
+        guard let played, played.isFinite, played >= 0, fileLength > 0, sampleRate > 0 else { return fallback }
+        let duration = Double(fileLength) / sampleRate
+        return played.truncatingRemainder(dividingBy: duration)
     }
 }
