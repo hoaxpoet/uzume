@@ -132,6 +132,55 @@ struct ConcurrencyStressTests {
         #expect(errors.message == nil, "\(errors.message ?? "")")
     }
 
+    /// PREP.3 surface: live batch-1 separation (stereo, `separate`) and a preparation batch
+    /// (mono, `separateBatch`, the batched model graph) on ONE shared separator. Both hold the
+    /// separator's lock across their model section, so they must serialise, never interleave.
+    ///
+    /// Always on, unlike the TSan-gated cases above: every result must EQUAL the same call made
+    /// alone — the separator is deterministic, so any cross-talk between the two paths' buffers
+    /// shows as a value difference with or without the sanitizer. `Scripts/tsan_stress.sh`
+    /// also runs it under TSan.
+    @Test func liveBatch1AndPrepBatch_interleave_raceFree() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice(), "Metal device required")
+        let separator = try StemSeparator(device: device)
+        let rate: Float = 44_100
+        let count = StemSeparator.requiredMonoSamples
+        let tone = AudioFixtures.sineWave(frequency: 220, sampleRate: 44_100, duration: 10.0)
+        let live = AudioFixtures.mixStereo(
+            left: tone,
+            right: AudioFixtures.sineWave(frequency: 330, sampleRate: 44_100, duration: 10.0))
+        let windows = (0..<4).map { index in
+            (0..<count).map { Float(sin(Double($0) * (0.01 + 0.004 * Double(index)))) * 0.3 }
+        }
+
+        let liveReference = try separator.separate(audio: live, channelCount: 2, sampleRate: rate).stemWaveforms
+        let prepReference = try separator.separateBatch(monoWindows: windows, sampleRate: rate).map(\.stemWaveforms)
+
+        let group = DispatchGroup()
+        let queue = DispatchQueue(label: "stress.prep3", attributes: .concurrent)
+        let errors = StressErrorBox()
+        for iteration in 0..<6 {
+            group.enter()
+            queue.async {
+                defer { group.leave() }
+                do {
+                    if iteration.isMultiple(of: 2) {
+                        let stems = try separator.separate(audio: live, channelCount: 2, sampleRate: rate).stemWaveforms
+                        if stems != liveReference { errors.set("live result differs under interleaving") }
+                    } else {
+                        let stems = try separator.separateBatch(monoWindows: windows, sampleRate: rate)
+                            .map(\.stemWaveforms)
+                        if stems != prepReference { errors.set("prep batch result differs under interleaving") }
+                    }
+                } catch {
+                    errors.set("separation threw: \(error)")
+                }
+            }
+        }
+        #expect(group.wait(timeout: .now() + 300) == .success, "interleaved separations timed out")
+        #expect(errors.message == nil, "\(errors.message ?? "")")
+    }
+
     /// BUG-032 surface: rapid session start → end/cancel cycles with preparation
     /// in flight, so the off-actor prep path (`analyzePreview` in `Task.detached`)
     /// overlaps the MainActor lifecycle teardown (cancel + generation bump +

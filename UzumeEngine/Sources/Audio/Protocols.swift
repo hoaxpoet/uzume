@@ -114,6 +114,20 @@ public protocol StemSeparating: AnyObject, Sendable {
     /// and a caller that slices it at input-rate offsets reads the wrong samples. At 48 kHz
     /// that put every read in the zero padding past the resampled audio (BUG-116).
     var outputSampleRate: Float? { get }
+
+    /// PREP.3 — separate several MONO windows, each exactly as `separate(audio:channelCount: 1,
+    /// sampleRate:)` would, in whatever grouping the implementation finds fastest.
+    ///
+    /// Results come back in input order. The production separator runs the model over all of
+    /// them in one batched graph run; the default loops over `separate`, so every test double
+    /// conforms unchanged. Live separation never calls this.
+    func separateBatch(monoWindows: [[Float]], sampleRate: Float) throws -> [StemSeparationResult]
+}
+
+extension StemSeparating {
+    public func separateBatch(monoWindows: [[Float]], sampleRate: Float) throws -> [StemSeparationResult] {
+        try monoWindows.map { try separate(audio: $0, channelCount: 1, sampleRate: sampleRate) }
+    }
 }
 
 extension StemSeparating {

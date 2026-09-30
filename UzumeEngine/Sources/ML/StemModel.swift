@@ -63,8 +63,8 @@ public final class StemModelEngine: @unchecked Sendable {
 
     // MARK: - Metal Resources
 
-    private let device: MTLDevice
-    private let commandQueue: MTLCommandQueue
+    let device: MTLDevice
+    let commandQueue: MTLCommandQueue
 
     // MARK: - Graph
 
@@ -95,7 +95,11 @@ public final class StemModelEngine: @unchecked Sendable {
 
     // MARK: - Threading
 
-    private let lock = NSLock()
+    let lock = NSLock()
+
+    /// PREP.3 — the batched graph and its buffers, built on first `predictBatch`. Guarded by
+    /// `lock`. Live separation never touches it.
+    let batchState = StemModelBatchState()
 
     // MARK: - Init
 

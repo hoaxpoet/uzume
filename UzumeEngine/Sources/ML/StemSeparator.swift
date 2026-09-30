@@ -71,7 +71,7 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     // MARK: - Model
 
     /// MPSGraph-based Open-Unmix HQ inference engine (Increment 3.8+3.9).
-    private let stemModel: StemModelEngine
+    let stemModel: StemModelEngine
 
     // MARK: - Output
 
@@ -92,7 +92,7 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     let fftEngine: StemFFTEngine
 
     /// Lock for thread safety.
-    private let lock = NSLock()
+    let lock = NSLock()
 
     // MARK: - Init
 

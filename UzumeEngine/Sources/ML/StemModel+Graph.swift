@@ -40,11 +40,17 @@ struct LinearConfig {
 extension StemModelEngine {
 
     /// Build the complete Open-Unmix HQ graph for all 4 stems.
-    static func buildGraph(allWeights: [StemWeights]) -> StemModelGraphBundle {
+    ///
+    /// PREP.3 — `batch` windows are stacked along the frame axis: input `[batch × 431, 2, 2049]`,
+    /// window-major. Every layer except the LSTM is row-wise, so the stacking is free; the LSTM
+    /// sees `[431, batch, 512]`, one independent sequence per window (its state starts fresh per
+    /// sequence, exactly as it does per `predict()` at batch 1). `batch == 1` builds the
+    /// pre-PREP.3 graph op for op — the live path's graph is unchanged.
+    static func buildGraph(allWeights: [StemWeights], batch: Int = 1) -> StemModelGraphBundle {
         let graph = MPSGraph()
 
         let shape: [NSNumber] = [
-            NSNumber(value: modelFrameCount),
+            NSNumber(value: batch * modelFrameCount),
             2,
             NSNumber(value: nBins)
         ]
@@ -62,7 +68,8 @@ extension StemModelEngine {
                 graph: graph,
                 input: input,
                 weights: weights,
-                name: stemNames[idx]
+                name: stemNames[idx],
+                batch: batch
             )
             outputs.append(output)
         }
@@ -81,14 +88,16 @@ extension StemModelEngine {
         graph: MPSGraph,
         input: MPSGraphTensor,
         weights: StemWeights,
-        name: String
+        name: String,
+        batch: Int
     ) -> MPSGraphTensor {
         // Steps 1-5: Input norm → FC1 → BN1 → Tanh
         let tanh1 = buildEncoderHead(
             graph: graph,
             input: input,
             weights: weights,
-            name: name
+            name: name,
+            batch: batch
         )
 
         // Step 6: LSTM stack (3 layers, bidirectional)
@@ -96,7 +105,8 @@ extension StemModelEngine {
             graph: graph,
             input: tanh1,
             layers: weights.lstmLayers,
-            name: "\(name)/lstm"
+            name: "\(name)/lstm",
+            batch: batch
         )
 
         // Step 7: Skip connection → FC2 → BN2 → ReLU → FC3 → BN3
@@ -123,7 +133,8 @@ extension StemModelEngine {
         graph: MPSGraph,
         input: MPSGraphTensor,
         weights: StemWeights,
-        name: String
+        name: String,
+        batch: Int
     ) -> MPSGraphTensor {
         // 1. Slice [431, 2, 2049] → [431, 2, 1487]
         let sliced = graph.sliceTensor(
@@ -141,7 +152,7 @@ extension StemModelEngine {
         let normalized = graph.division(sub, scale, name: "\(name)/div_scale")
 
         // 3. Reshape [431, 2, 1487] → [431, 2974]
-        let flatShape: [NSNumber] = [NSNumber(value: modelFrameCount), NSNumber(value: 2 * bandwidthBins)]
+        let flatShape: [NSNumber] = [NSNumber(value: batch * modelFrameCount), NSNumber(value: 2 * bandwidthBins)]
         let reshaped = graph.reshape(normalized, shape: flatShape, name: "\(name)/reshape_in")
 
         // 4-5. FC1 → BN1 → Tanh
@@ -182,7 +193,9 @@ extension StemModelEngine {
         weights: StemWeights,
         name: String
     ) -> MPSGraphTensor {
-        let outShape: [NSNumber] = [NSNumber(value: modelFrameCount), 2, NSNumber(value: nBins)]
+        // Rows = batch × 431, read off the input placeholder (PREP.3).
+        let rows = input.shape?.first ?? NSNumber(value: modelFrameCount)
+        let outShape: [NSNumber] = [rows, 2, NSNumber(value: nBins)]
         let maskReshaped = graph.reshape(bn3Out, shape: outShape, name: "\(name)/reshape_out")
 
         let outScale = makeConstant(graph, weights.outputScale, shape: [1, 1, NSNumber(value: nBins)])
@@ -245,9 +258,20 @@ extension StemModelEngine {
         graph: MPSGraph,
         input: MPSGraphTensor,
         layers: [LSTMLayerWeights],
-        name: String
+        name: String,
+        batch: Int
     ) -> MPSGraphTensor {
-        var current = graph.expandDims(input, axis: 1, name: "\(name)/expand_batch")
+        // [batch × 431, 512] → [431, batch, 512]: time-major, one sequence per window.
+        var current = batch == 1
+            ? graph.expandDims(input, axis: 1, name: "\(name)/expand_batch")
+            : graph.transposeTensor(
+                graph.reshape(
+                    input,
+                    shape: [NSNumber(value: batch), NSNumber(value: modelFrameCount), -1],
+                    name: "\(name)/split_windows"),
+                dimension: 0,
+                withDimension: 1,
+                name: "\(name)/time_major")
 
         for (idx, layer) in layers.enumerated() {
             current = buildBidirectionalLSTMLayer(
@@ -258,7 +282,12 @@ extension StemModelEngine {
             )
         }
 
-        return graph.squeeze(current, axis: 1, name: "\(name)/squeeze_batch")
+        guard batch > 1 else { return graph.squeeze(current, axis: 1, name: "\(name)/squeeze_batch") }
+        let windowMajor = graph.transposeTensor(current, dimension: 0, withDimension: 1, name: "\(name)/window_major")
+        return graph.reshape(
+            windowMajor,
+            shape: [NSNumber(value: batch * modelFrameCount), -1],
+            name: "\(name)/merge_windows")
     }
 
     /// Build a single bidirectional LSTM layer using MPSGraph's LSTM op.
