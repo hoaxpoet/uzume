@@ -80,4 +80,3 @@ public enum ITunesStorefront {
         return region.uppercased()
     }
 }
-
