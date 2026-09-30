@@ -94,6 +94,9 @@
 "playback.audioStall.step1"         = "Restart the Mac’s audio engine — paste this into Terminal:";
 "playback.audioStall.step2"         = "If you just rebuilt Uzume, re-grant Screen & System Audio Recording in System Settings → Privacy & Security, then quit and reopen the app.";
 "playback.audioStall.step3"         = "Check that the right output device is selected in System Settings → Sound → Output.";
+/* BR.4 — the public build's steps (no Terminal; step 2 reuses step3's output-device copy) */
+"playback.audioStall.public.step1"  = "Check that music is playing in Spotify or Music, and that it isn’t muted.";
+"playback.audioStall.public.step3"  = "Still nothing? Quit Uzume and open it again.";
 "playback.audioStall.autoClearHint" = "This message clears itself as soon as audio comes back.";
 
 "a11y.audioStallCard.label"         = "Uzume is not receiving audio. On-screen steps explain how to restore it.";
@@ -264,6 +267,7 @@
 "ended.subtext"             = "Start a new session to continue";
 /* %lld = track count (Int) */
 "ended.summary.tracks"      = "%lld tracks";
+"ended.summary.track_one"   = "1 track";
 /* %@ = formatted duration string e.g. "12 min" or "—" */
 "ended.summary.duration"    = "%@";
 "ended.cta.newSession"      = "Start another session";
@@ -580,3 +584,7 @@
 /* BR.7 (C10) — the ML weights are missing or damaged */
 "analysis_unavailable.title" = "Uzume can’t analyse music on this Mac";
 "analysis_unavailable.body"  = "Some of Uzume’s files are missing or damaged, so it can’t prepare playlists and will only follow the music live. Download and reinstall Uzume to fix this.";
+/* BR.4 (F18) — keys the Settings views referenced that did not exist (they showed as raw keys) */
+"settings.about.app.title"               = "Uzume";
+"settings.about.copy_debug_info.caption" = "Copies the version, macOS and graphics chip, for a bug report. No audio or personal data.";
+"settings.visuals.blocklist.caption"     = "Scene families to leave out. Not applied yet in this build.";
