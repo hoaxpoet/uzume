@@ -64,6 +64,10 @@ final class ReadyViewModel: ObservableObject {
     private let firstAudioDetector: FirstAudioDetector
     private let sessionManager: SessionManager
     private var timeoutTask: Task<Void, Never>?
+
+    /// BR.12 (audit B6): Retry also recreates the tap — the cold-install ladder is held at Ready,
+    /// so this is how a tap that came up dead is replaced.
+    private let onRetry: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Init
@@ -82,8 +86,10 @@ final class ReadyViewModel: ObservableObject {
         audioSignalStatePublisher: AnyPublisher<AudioSignalState, Never>,
         planPublisher: AnyPublisher<PlannedSession?, Never>,
         reduceMotion: Bool,
-        delayProvider: any DelayProviding = RealDelay()
+        delayProvider: any DelayProviding = RealDelay(),
+        onRetry: (() -> Void)? = nil
     ) {
+        self.onRetry = onRetry
         if case .playlist(let source) = origin {
             self.sourceName = source.displayName
         } else {
@@ -120,6 +126,7 @@ final class ReadyViewModel: ObservableObject {
 
     /// Reset the detector and 90-second timer; dismiss the timeout overlay.
     func retry() {
+        onRetry?()
         firstAudioDetector.reset()
         hasDetectedAudio = false
         isTimedOut = false

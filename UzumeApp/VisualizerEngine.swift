@@ -1120,6 +1120,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .sink { [weak self] newState in
                 guard let self else { return }
                 self.displaySleepGuard.update(state: newState)
+                // BR.12 (B6): Ready held the cold-install ladder; anything past Ready releases it.
+                if newState == .playing || newState == .ended || newState == .idle {
+                    (self.router as? AudioInputRouter)?.releaseColdInstallLadder()
+                }
                 if newState == .connecting {
                     self.currentSessionPlanSeed = nil
                     // LF.6.fix.1 (BUG-024): wipe stale LF artwork at session
