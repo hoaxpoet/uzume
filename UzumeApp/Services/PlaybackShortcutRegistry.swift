@@ -218,8 +218,16 @@ final class PlaybackShortcutRegistry {
         #endif
         // BR.4 (F8): no developer keys in the public build — not in the help overlay, and not
         // live (`,` pulled the visuals off the beat until relaunch; `.` was bound twice).
-        shortcuts = flavor.showsDeveloperDiagnostics ? all : all.filter { $0.category != .developer }
+        let tested = flavor.showsDeveloperDiagnostics ? all : all.filter { $0.category != .developer }
+        // BR.15 (E4): the adaptation keys whose effect is not what their toast says.
+        shortcuts = flavor.exposesUnwiredControls ? tested : tested.filter { !Self.unwiredIDs.contains($0.id) }
     }
+
+    /// `-` re-pins the excluded scene, `+` changes nothing, `.` and `⌘R` re-plan onto the wrong
+    /// track index, `←` is a no-op and `→` cuts at once while promising the next boundary (E4).
+    static let unwiredIDs: Set<String> = [
+        "moreLikeThis", "lessLikeThis", "reshuffleUpcoming", "presetNudgeNext", "presetNudgePrev", "rePlan"
+    ]
     // swiftlint:enable function_body_length
 
     // MARK: - Shortcut Table
