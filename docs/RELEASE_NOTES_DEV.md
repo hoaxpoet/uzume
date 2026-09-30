@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-001436] BR.9 — preparing the next songs no longer disturbs the visuals (BUG-167)
+
+- **The visuals no longer twitch while Uzume prepares songs in the background.** Preparation shared the live analysers, so each prepared song briefly pulled the energy and mood readings toward a different song. It now uses its own.
+
 ### [dev-2026-09-29-215718] BR.5 — testers can send Matt evidence (BUG-166)
 
 - **Help › Report a Problem.** Uzume asks first, then saves a zip of its recent log messages, any Uzume crash or freeze reports, and the Mac's model, macOS and graphics chip, with the build number and commit. No audio, nothing sent. The zip opens in Finder and a pre-filled GitHub issue opens for the tester to attach it.
