@@ -93,7 +93,14 @@ extension RenderPipeline {
         // preset tick and the draw, so publishing after it would land a frame late — the exact
         // off-by-one-frame class this whole arc has been about. No-op when no series is
         // installed (live separation publishes on its own cadence).
-        perFrameStemPublishLock.withLock { perFrameStemPublish }?()
+        let seriesPublish = perFrameStemPublishLock.withLock { perFrameStemPublish }
+        seriesPublish?()
+        // BR.18 / K6c: live separation (no series installed) warms up every stem route per track.
+        liveStemWarmupApplied = seriesPublish == nil
+        if liveStemWarmupApplied {
+            liveStemWarmup01 = min(1, liveStemWarmup01 + max(0, features.deltaTime) / Self.liveStemWarmupSeconds)
+        }
+        let liveStemGate = liveStemWarmupApplied ? liveStemWarmup01 : 1
 
         // Snapshot the active passes for this frame.
         let passes = passesLock.withLock { activePasses }
@@ -103,7 +110,7 @@ extension RenderPipeline {
         let activePipeline = pipelineLock.withLock { pipelineState }
         // FF.5 — the track's energy level at the playhead, patched into this frame's snapshot.
         let stemFeatures   = stemFeaturesLock.withLock { () -> StemFeatures in
-            var stems = latestStemFeatures
+            var stems = Self.warmedUpLiveStems(latestStemFeatures, warmup01: liveStemGate)
             stems.energyLevel = Self.energyLevel(trackEnergyLevels, at: features.trackElapsedS)
             return stems
         }

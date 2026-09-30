@@ -1635,6 +1635,9 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.18 (2026-09-30), streaming fidelity for the newest scenes (P2, tracked here):**
+  - **K6c** — every live stem deviation route now warms up over a track's first 10 s (the BUG-041 quadratic gate, on the render snapshot, live separation only; Ferrofluid's aurora no longer gates twice). Fixed (tests on the real BUG-041 session series; red arm: ungated, the same data breaks the bound). ⏳ Matt's streaming review of the top ten scenes (listening session 2).
+  - **K6a** — **kept as is for the beta (Matt, 2026-09-30, option A).** On streaming, Fireflies and Kagura see the preview's one typical energy level for the whole song (the meadow doesn't thin in quiet stretches; Kagura's dance is chosen from one level). A live energy measure was declined for the beta: no grounded way to keep it independent of the app's volume. Stated in the tester notes.
 - **BR.19 (2026-09-30), the right song, reliably (P2, tracked here):**
   - **BUG-152** — fixed; see its entry (ScanBench 11 → 0 wrong songs).
   - **C7** — a 429, 5xx or thrown error (timeout, offline) is retried after 2 s and 6 s, then left uncached; a 200 that isn't JSON (a captive portal's page) is transient, never a cached "no preview". Fixed (tests).
