@@ -106,13 +106,19 @@ extension VisualizerEngine: LocalFilePreparing {
             familyAnalyzer: famAnalyzer,
             persistentCache: persistentCache,
             recorder: recorder,
-            timingSink: timingSink
+            timingSink: timingSink,
+            prefetcher: localFilePrefetcher
         )
         let result = await Task.detached(priority: .userInitiated) {
             await LocalFilePreparationPipeline.run(inputs: inputs)
         }.value
         timingSink?.flush()
         return result
+    }
+
+    /// PREP.3 — read the next file ahead while the current one analyses.
+    public func prefetchLocalFile(url: URL) async {
+        localFilePrefetcher.prefetch(url: url, persistentCache: persistentStemCache, sink: prepTimingSink)
     }
 
     // MARK: - Local-file start (called when the Ready countdown reaches zero)

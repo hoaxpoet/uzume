@@ -82,6 +82,12 @@ struct PrepTimingRunner: AsyncParsableCommand {
     @Option(name: .long, help: "PREP.3: time N single separate() calls (stereo + mono) on the first input file.")
     var benchSeparate: Int?
 
+    @Option(name: .long, help: "PREP.3: windows per batched model run in the stem sweep (default: shipping value).")
+    var sweepBatch: Int?
+
+    @Flag(name: .long, help: "PREP.3: read each file inline instead of one ahead (to measure the lookahead).")
+    var noPrefetch: Bool = false
+
     @Flag(name: .long, help: "Write the summary to disk only; no progress on stderr.")
     var quiet: Bool = false
 
@@ -101,6 +107,7 @@ struct PrepTimingRunner: AsyncParsableCommand {
             )
         }
 
+        if let sweepBatch { SessionPreparer.sweepBatchSize = sweepBatch }
         let urls = try resolveInputs()
         guard !urls.isEmpty || goldenCompare != nil else { throw ValidationError("no input files") }
 
@@ -112,19 +119,7 @@ struct PrepTimingRunner: AsyncParsableCommand {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw ValidationError("no Metal device")
         }
-        if let goldenCapture {
-            try GoldenMode.capture(urls: urls, into: URL(fileURLWithPath: goldenCapture), device: device)
-            return
-        }
-        if let benchSeparate, let first = urls.first {
-            try SeparateBench.run(url: first, iterations: benchSeparate, device: device, out: outDir)
-            return
-        }
-        if let goldenCompare {
-            let pass = try GoldenMode.compare(goldens: URL(fileURLWithPath: goldenCompare), out: outDir, device: device)
-            if !pass { throw ExitCode(1) }
-            return
-        }
+        if try runMeasurementMode(urls: urls, device: device, outDir: outDir) { return }
 
         // --disable-probe is how the gate gets proved with a number rather than
         // an assertion: same files, same build, probe off.
@@ -142,6 +137,10 @@ struct PrepTimingRunner: AsyncParsableCommand {
         let started = Date()
         if concurrency <= 1 {
             for (index, url) in urls.enumerated() {
+                // PREP.3 — the shipping walk's one-file lookahead (SessionPreparer).
+                if index + 1 < urls.count, !noPrefetch {
+                    workers[0].prefetcher.prefetch(url: urls[index + 1], persistentCache: workers[0].cache, sink: sink)
+                }
                 try await prepare(url, worker: workers[0], sink: sink, index: index, of: urls.count)
             }
         } else {
@@ -152,6 +151,23 @@ struct PrepTimingRunner: AsyncParsableCommand {
         sink?.flush()
         Summary(rows: sink?.snapshot ?? [], wallSeconds: wall, trackCount: urls.count)
             .write(to: outDir.appendingPathComponent("summary.txt"), alsoPrinting: !quiet)
+    }
+
+    /// PREP.3 modes that replace the timing run: golden capture / compare, separation latency.
+    /// Returns whether one ran.
+    private func runMeasurementMode(urls: [URL], device: MTLDevice, outDir: URL) throws -> Bool {
+        if let goldenCapture {
+            try GoldenMode.capture(urls: urls, into: URL(fileURLWithPath: goldenCapture), device: device)
+            return true
+        }
+        if let benchSeparate, let first = urls.first {
+            try SeparateBench.run(url: first, iterations: benchSeparate, device: device, out: outDir)
+            return true
+        }
+        guard let goldenCompare else { return false }
+        let pass = try GoldenMode.compare(goldens: URL(fileURLWithPath: goldenCompare), out: outDir, device: device)
+        if !pass { throw ExitCode(1) }
+        return true
     }
 
     // MARK: One track
@@ -262,6 +278,7 @@ private final class Worker: @unchecked Sendable {
     let family: InstrumentFamilyAnalyzer
     let classifier: MoodClassifier
     let cache: PersistentStemCache
+    let prefetcher = LocalFilePrefetcher()
 
     init(device: MTLDevice, cacheRoot: URL) throws {
         separator = try StemSeparator(device: device)
@@ -282,7 +299,8 @@ private final class Worker: @unchecked Sendable {
             familyAnalyzer: family,
             persistentCache: cache,
             recorder: nil,
-            timingSink: sink
+            timingSink: sink,
+            prefetcher: prefetcher
         )
     }
 

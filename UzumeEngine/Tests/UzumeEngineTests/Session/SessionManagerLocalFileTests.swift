@@ -101,6 +101,41 @@ private final class MultiStubLocalFilePreparer: LocalFilePreparing, @unchecked S
     }
 }
 
+/// PREP.3 — records the walk's lookahead hints and preparations as one timeline, so a test
+/// can assert both the order and the spacing of what the walk asks for.
+private final class PrefetchRecordingLocalFilePreparer: LocalFilePreparing, @unchecked Sendable {
+
+    enum Event: Equatable {
+        case prefetch(String)
+        case prepareStart(String)
+        case prepareEnd(String)
+    }
+
+    let resultsByFilename: [String: LocalFilePrepResult]
+    let preparationDelayMs: UInt64
+    private let lock = NSLock()
+    private var log: [(event: Event, at: Date)] = []
+
+    init(results: [String: LocalFilePrepResult], preparationDelayMs: UInt64) {
+        self.resultsByFilename = results
+        self.preparationDelayMs = preparationDelayMs
+    }
+
+    var events: [Event] { lock.withLock { log.map(\.event) } }
+    var timeline: [(event: Event, at: Date)] { lock.withLock { log } }
+
+    private func record(_ event: Event) { lock.withLock { log.append((event, Date())) } }
+
+    func prefetchLocalFile(url: URL) async { record(.prefetch(url.lastPathComponent)) }
+
+    func prepareLocalFile(url: URL) async -> LocalFilePrepResult? {
+        record(.prepareStart(url.lastPathComponent))
+        try? await Task.sleep(nanoseconds: preparationDelayMs * 1_000_000)
+        record(.prepareEnd(url.lastPathComponent))
+        return resultsByFilename[url.lastPathComponent]
+    }
+}
+
 // MARK: - Helpers
 
 @MainActor
@@ -1064,6 +1099,69 @@ struct LocalFileEarlyStartTests {
         await walk.value
         manager.endSession()
         #expect(!preparer.isPlaybackActive, "a session boundary must disarm pacing")
+    }
+
+    /// PREP.3 — the walk reads one file ahead, but prepares, completes and publishes in
+    /// playlist order, and never holds more than one file of lookahead.
+    @Test("the one-file lookahead keeps completion in playlist order")
+    func lookaheadKeepsPlaylistOrder() async throws {
+        let names = (1...6).map { "t\($0).flac" }
+        let (manager, preparer) = try makeLFManagerWithPreparer()
+        let stub = PrefetchRecordingLocalFilePreparer(results: results(names), preparationDelayMs: 5)
+        manager.localFilePreparer = stub
+
+        await manager.startLocalFiles(at: urls(names), origin: .localFiles(urls(names)))
+
+        var expected: [PrefetchRecordingLocalFilePreparer.Event] = []
+        for (index, name) in names.enumerated() {
+            if index + 1 < names.count { expected.append(.prefetch(names[index + 1])) }
+            expected.append(.prepareStart(name))
+            expected.append(.prepareEnd(name))
+        }
+        #expect(stub.events == expected, """
+                The walk must hint exactly the NEXT file just before preparing each one, and \
+                prepare strictly in playlist order: \(stub.events)
+                """)
+        let identities = names.map { results(names)[$0]?.identity }
+        #expect(preparer.orderedLocalTracks == identities.compactMap { $0 },
+                "tracks must publish in playlist order under the lookahead")
+    }
+
+    /// PREP.3 — pacing still governs the walk once music plays: the lookahead moves reading
+    /// earlier, never the next ANALYSIS. A lower bound on the gap between preparations, so a
+    /// slow, contended suite can only make it pass by a wider margin, never flake it.
+    @Test("pacing still spaces preparations after beginPlayback, with the lookahead on")
+    func pacingStillAppliesWithLookahead() async throws {
+        let names = (1...6).map { "t\($0).flac" }
+        let (manager, preparer) = try makeLFManagerWithPreparer()
+        // 40 ms each: readiness arrives at track 3, leaving tracks to prepare after playback.
+        let stub = PrefetchRecordingLocalFilePreparer(results: results(names), preparationDelayMs: 40)
+        manager.localFilePreparer = stub
+        // Each stub track is 12.5 s of audio; at 50x realtime it owns 0.25 s of wall clock.
+        preparer.pacingRate = 50
+
+        let walk = Task { await manager.startLocalFiles(at: urls(names), origin: .localFiles(urls(names))) }
+        for _ in 0..<200 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+            if manager.progressiveReadinessLevel >= .readyForFirstTracks { break }
+        }
+        manager.startNow()
+        manager.beginPlayback()
+        let armedAt = Date()
+        await walk.value
+
+        let starts = stub.timeline.compactMap { entry -> Date? in
+            if case .prepareStart = entry.event, entry.at > armedAt { return entry.at }
+            return nil
+        }
+        #expect(starts.count >= 2, "the walk should still have tracks to prepare after playback begins")
+        for (earlier, later) in zip(starts, starts.dropFirst()) {
+            #expect(later.timeIntervalSince(earlier) >= 0.2, """
+                    Two preparations \(later.timeIntervalSince(earlier)) s apart after playback \
+                    began; at 50x realtime each 12.5 s track owns 0.25 s. The lookahead let the \
+                    walk outrun pacingRate.
+                    """)
+        }
     }
 
     /// The pacing policy itself, as arithmetic — deliberately NOT a wall-clock
