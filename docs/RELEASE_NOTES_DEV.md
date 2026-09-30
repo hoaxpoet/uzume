@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-170203] PROMO.1 — the LinkedIn launch video
+
+- **A 32-second square video is ready to post:** Kagura, Ferrofluid Ocean, Cymatic Resonance, Fractal Tree and Fireflies, cut on the song's bars, scored with the first 32 s of *Sherman's March to the Sea*, ending on "Uzume / uzume.io". It's at `~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4`, with three cover stills to pick a thumbnail from.
+- **One command rebuilds it** (`tools/promo/cut_promo.py --edit tools/promo/edit.json`), so a reshot scene or a moved cut doesn't need another session.
+- The first half-second is black, because the takes begin just after the song does. LinkedIn's pre-play frame is therefore black: set a cover as the thumbnail.
+
 ### [dev-2026-09-30-162430] REC.2 — record one scene for a whole song
 
 - **`UZUME_PIN_SCENE=<scene>` keeps Uzume on one scene.** The session opens on the named scene and stays there. The plan, live switching and scene-completion events leave it alone. A misspelt name is logged with the valid names and nothing starts, so a take never records the wrong scene by accident. Dev launch switch only; no UI.

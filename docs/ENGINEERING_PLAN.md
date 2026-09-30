@@ -1685,6 +1685,30 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment PROMO.1 — the LinkedIn launch cut from the REC.2 takes ✅ (2026-09-30)
+
+**Delivered.** `tools/promo/cut_promo.py` + `edit.json` rebuild
+`~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4` in one command: 32.167 s, 1080×1080, 30 fps
+CFR, H.264 High CRF 16 (7.2 Mbps), AAC-LC 48 kHz 256 kbps, true peak −1.1 dBTP. Five scenes in Matt's order, hard
+cuts at 8.71 / 14.56 / 20.39 / 26.28, end tag "Uzume / uzume.io" from 30.21, picture to black over the last 0.5 s,
+audio out over 1.0 s. Also written: `contact_sheet.png`, `cover_1..3.png`. `--self-test` checks the frame rule on a
+synthetic map with a drop and a cut between frames; it fails with the pre-fix `[from, to)` rule.
+**Matt's calls (2026-09-30), from stop conditions in the prompt.** (1) **Offline bars, not the engine's
+downbeats:** the engine ran 23–123 ms early, and a low-band onset check of the song put the kick on the offline
+bars (8.700, 26.290, 30.230 s). The engine counts 3 bars between consecutive cuts, all `beat_in_bar` 1; both sets
+are recorded in `edit.json`. (2) **Black for the first 0.5 s:** the takes start at ≈ 0.51 s (REC.2), so frames
+0–14 are black and frame 0 (LinkedIn's pre-play frame) is black; use a cover as the custom thumbnail. (3) **End tag
+by CoreText:** Homebrew's ffmpeg 8.1 / 9.0.2 is built without freetype, so there is no `drawtext`; `render_text.swift`
+draws a PNG that ffmpeg overlays. The face is **Alumni Sans SemiBold** (uzume-site `--font-display`, BRAND.md
+wordmark), not UX_SPEC's Clash Display: the site wins.
+**Findings.** The takes are 2560×1440, not 1920×1080, so each frame is a full-height 1440² crop scaled to 1080;
+all crop offsets 0. Fractal Tree's outer twigs spill off both sides of the square equally. No offset fixes that;
+only a wider framing would. The song's true peak was +0.3 dBTP; one −1.4 dB step (0.1 dB margin) took it to −1.1.
+CRF 16–18 gave 7.0 / 5.9 / 5.0 Mbps, all under the ≈ 12 Mbps target, so CRF 16 (the nearest) was kept.
+**Done-when:** ✅ every verification command; ✅ duration 32.167 vs end 32.16 (+6.7 ms); ✅ A/V within one frame;
+✅ each segment's first frame within ½ frame of its cut (−13.3 … +10.0 ms); ✅ last frame Y = 16 (black); ✅ tag
+legible at 360 px.
+
 ### Increment REC.2 — pinned-scene capture for promo footage ✅ (2026-09-30)
 
 **Delivered.** `UZUME_PIN_SCENE=<scene id>` (RUNBOOK §Diagnostic Session Captures): `engageScenePin()` engages
