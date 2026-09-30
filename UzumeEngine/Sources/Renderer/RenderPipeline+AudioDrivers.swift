@@ -10,6 +10,7 @@
 // snapshot bound at fragment buffer(3).
 
 import Foundation
+import Shared
 
 extension RenderPipeline {
 
@@ -68,6 +69,29 @@ extension RenderPipeline {
             smoothed: nextSmoothed,
             warmup01: nextWarmup,
             output: nextSmoothed * gate)
+    }
+
+    // MARK: - Live stem warm-up (BR.18 / K6c)
+
+    /// Same window as the aurora's (BUG-041): the overswing settles by ~10 s on every observed track.
+    static let liveStemWarmupSeconds: Float = 10.0
+
+    /// The stem deviation primitives scaled by the quadratic warm-up gate (BUG-041's curve),
+    /// smallest where the overswing peaks. Only the eight live-separated routes; the instrument
+    /// activity fields come from the preview, offline, and do not overswing. Pure, for tests.
+    static func warmedUpLiveStems(_ stems: StemFeatures, warmup01: Float) -> StemFeatures {
+        guard warmup01 < 1 else { return stems }
+        let gate = max(0, warmup01) * max(0, warmup01)
+        var out = stems
+        out.vocalsEnergyRel *= gate
+        out.vocalsEnergyDev *= gate
+        out.drumsEnergyRel *= gate
+        out.drumsEnergyDev *= gate
+        out.bassEnergyRel *= gate
+        out.bassEnergyDev *= gate
+        out.otherEnergyRel *= gate
+        out.otherEnergyDev *= gate
+        return out
     }
 
     // MARK: - Aurora hue driver (FBS.S5, D-158)

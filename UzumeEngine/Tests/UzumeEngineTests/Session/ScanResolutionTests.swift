@@ -106,13 +106,19 @@ struct ScreenReadMatchPolicyTests {
 @Suite("PreviewResolver — screen-read mode (SCAN.2)")
 struct PreviewResolverScreenReadTests {
 
-    @Test("streaming tracks: unchanged limit-1 request, first hit taken, catalog names returned")
-    func streamingUnchanged() async throws {
-        let (resolver, recorder) = resolver(serving: try searchResponse([hit("Any Title", "Someone Else", seconds: 100, id: 9)]))
-        let match = try await resolver.resolvePreviewMatch(for: TrackIdentity(title: "Ride", artist: "Klangkarussell"))
-        #expect(limit(of: recorder.requests.first) == "1")
-        #expect(match?.previewURL.absoluteString == "https://audio.example/9.m4a")
-        #expect(match?.catalogTitle == "Any Title")
+    /// BR.19 / BUG-152: streaming tracks are verified too — the first hit used to be taken
+    /// whatever it was (8 % of rows were another song). Before/after: ScanBench, 11 → 0 wrong.
+    @Test("streaming tracks: wider request, another song rejected, the song itself taken")
+    func streamingVerified() async throws {
+        let (other, otherLog) = resolver(serving: try searchResponse([hit("Any Title", "Someone Else", seconds: 100, id: 9)]))
+        let rejected = try await other.resolvePreviewMatch(for: TrackIdentity(title: "Ride", artist: "Klangkarussell"))
+        #expect(limit(of: otherLog.requests.first) == String(ScreenReadMatchPolicy.candidateLimit))
+        #expect(rejected == nil, "a different song is no match")
+
+        let (same, _) = resolver(serving: try searchResponse([hit("Ride", "Klangkarussell", seconds: 200, id: 7)]))
+        let match = try await same.resolvePreviewMatch(for: TrackIdentity(title: "Ride", artist: "Klangkarussell", duration: 201))
+        #expect(match?.previewURL.absoluteString == "https://audio.example/7.m4a")
+        #expect(match?.catalogTitle == "Ride")
     }
 
     @Test("screen-read tracks: wider request, verified pick, cached")

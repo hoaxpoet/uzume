@@ -36,7 +36,8 @@ final class ITunesSearchFetcher: MetadataFetching, @unchecked Sendable {
 
         let query = "\(title) \(artist)"
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "https://itunes.apple.com/search?term=\(query)&entity=song&limit=5"
+        let country = ITunesStorefront.country   // BR.19 / C8
+        let urlString = "https://itunes.apple.com/search?term=\(query)&entity=song&limit=5&country=\(country)"
 
         guard let url = URL(string: urlString) else { return nil }
 

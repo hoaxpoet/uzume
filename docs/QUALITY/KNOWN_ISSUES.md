@@ -29,7 +29,6 @@ belongs in the second table, not the first.
 | BUG-081 | P2 | app.hang | A beachball about 78 s into one session (2026-08-03), with no stack. One instance: the "08-04 ×2" formerly listed here were BUG-085's. Probably the same defect as BUG-085. | With BUG-085. |
 | BUG-060 | P3 | renderer / app.hang | The render loop died on a switch to Gossamer (2026-06-18). It recurred once, undated. No stack. | With BUG-085. |
 | BUG-091 | P1 | app.session / pipeline-wiring | One local file selected: preparation finishes and nothing ever plays; every audio field is 0. One instance (2026-08-17). Instrumented. | One reproduction: listening session 1, "start a single file a few times". |
-| BUG-152 | P2 | session / preview | About 8 % of streaming tracks without a scan match get analysed as a different song. | BR.19. |
 | BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. |
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
@@ -58,6 +57,7 @@ passes, the entry moves to §Resolved (recent).
 
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
+| BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
 | BUG-151 | P2 | audio.localfile | The local queue cut the last second off every song. | Session 1: listen to four or five song endings. |
 | BUG-156 | P3 | audio.localfile | The test flake is fixed. The product half is an unobserved risk: Next, Stop or seek could stall while preparation runs. | Session 1: press Next and seek repeatedly while preparation is running. |
@@ -135,12 +135,15 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 ### BUG-152 — the streaming preview lookup lands on another song for 8 % of rows (2026-09-28)
 
-**Severity:** P2 · **Domain:** `session` (preview resolution) · **Failure class:** `algorithm` (first hit trusted without verification) · **Status:** Open — not SCAN's to change · **Found by:** SCAN.0 (the ground-truth resolution in ScanBench is exactly this path) · **Related:** D-260, `ScreenReadMatchPolicy`
+**Severity:** P2 · **Domain:** `session` (preview resolution) · **Failure class:** `algorithm` (first hit trusted without verification) · **Status:** Fixed 2026-09-30 (BR.19) — pending a spot-check in listening session 2 · **Found by:** SCAN.0 (the ground-truth resolution in ScanBench is exactly this path) · **Related:** D-260, `ScreenReadMatchPolicy`
 
 **Expected:** a planned track's preview is the song in the playlist.
 **Actual:** `PreviewResolver` asks iTunes Search for one result for "artist title" and takes it. On the four SCAN fixture playlists, 11 of the 136 rows that have a preview resolve to a different song (`docs/diagnostics/SCAN_FEASIBILITY_2026-09-28.md` §Failures, "truth resolves elsewhere"): an underscore or acute accent in a name breaks the search, and when the catalog lacks the song the first hit is whatever else ranks first. Stems, beat grid and energy are then measured on the wrong music.
 
-**Likely fix.** Apply the verified lookup SCAN built for screen-read rows (title, primary artist and duration must agree; else no match) to every track. The prompt that built it forbade changing the streaming path without a before/after on a known playlist; that measurement is the fix increment's first step (ScanBench's ground-truth column already gives the "before").
+**Fix (BR.19, 2026-09-30).** `PreviewResolver` sends every track through `ScreenReadMatchPolicy` (a track not read off a screen is its own uncut reading): 25 candidates, title + primary artist + duration must agree, one title-only retry, else no match. A zero duration counts as unknown.
+**Before / after (ScanBench, the four SCAN fixture playlists, 144 ground-truth rows):** right song 125 → **129**; a different song **11 → 0**; no preview 8 → 15. The scan side is unchanged (0 wrong); `PlaylistScanFixtureTests` re-pinned to 127/129.
+
+**Likely fix (as filed).** Apply the verified lookup SCAN built for screen-read rows (title, primary artist and duration must agree; else no match) to every track. The prompt that built it forbade changing the streaming path without a before/after on a known playlist; that measurement is the fix increment's first step (ScanBench's ground-truth column already gives the "before").
 
 ### BUG-159 — the Settings "record sessions" switch does nothing (2026-09-29)
 
@@ -1632,6 +1635,13 @@ P3, `dsp.beat`. (Renumbered from BUG-064 on the GLAZE.8→main merge — BUG-064
 - **H1 → BUG-167** (BR.6a, 2026-09-29): CI compiles every shader + builds Release; macOS 15 launch open (BR.6b). **H8** fixed in the same increment.
 - **H3/F16 → BUG-166** (BR.5, 2026-09-29); **D3, H7** fixed in the same increment (independent watchdog; scripts look for `Uzume`).
 - **G1 → BUG-165** (BR.3, 2026-09-29): fixed, TSan-clean.
+- **BR.18 (2026-09-30), streaming fidelity for the newest scenes (P2, tracked here):**
+  - **K6c** — every live stem deviation route now warms up over a track's first 10 s (the BUG-041 quadratic gate, on the render snapshot, live separation only; Ferrofluid's aurora no longer gates twice). Fixed (tests on the real BUG-041 session series; red arm: ungated, the same data breaks the bound). ⏳ Matt's streaming review of the top ten scenes (listening session 2).
+  - **K6a** — **kept as is for the beta (Matt, 2026-09-30, option A).** On streaming, Fireflies and Kagura see the preview's one typical energy level for the whole song (the meadow doesn't thin in quiet stretches; Kagura's dance is chosen from one level). A live energy measure was declined for the beta: no grounded way to keep it independent of the app's volume. Stated in the tester notes.
+- **BR.19 (2026-09-30), the right song, reliably (P2, tracked here):**
+  - **BUG-152** — fixed; see its entry (ScanBench 11 → 0 wrong songs).
+  - **C7** — a 429, 5xx or thrown error (timeout, offline) is retried after 2 s and 6 s, then left uncached; a 200 that isn't JSON (a captive portal's page) is transient, never a cached "no preview". Fixed (tests).
+  - **C8 / A10** — every iTunes request (preview, artwork, metadata) names the Mac's region as `country`, US when the region is unknown or not a country. Fixed (tests). **Not done:** a region with no iTunes store gets an error and no preview — no second US attempt.
 - **BR.17 (2026-09-30), output devices as testers have them (P2, tracked here):**
   - **I4 / B7** — the beat-phase display offset is the tuned 50 ms raised to the output device's own latency (device + safety offset + stream, read at launch and on every device change); built-in and wired output keep exactly 50 ms (this Mac mini reads 0.6 ms). `UZUME_DEVICE_LATENCY=0` is the A/B arm. Fixed (tests); ⏳ AirPods A/B, listening session 2 — the Bluetooth figure has not been read on a real Bluetooth device.
   - **G4** — the live stem buffer holds 192 kHz × 13 s, so every ≤ 12 s window fits at 88.2 / 96 / 192 kHz; before, a 10 s window at 96 kHz returned 6.9 s and live stems never ran. Fixed (test; negative control: old sizing → red at 88.2 / 96 / 192).
