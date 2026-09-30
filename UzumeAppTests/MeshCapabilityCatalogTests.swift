@@ -133,6 +133,35 @@ struct PublicFlavorSceneReachTests {
     }
 }
 
+// MARK: - BR.9 (audit C3 / G3): background preparation has its own analyzers
+
+@Suite("Background preparation never shares the live analyzers (BR.9)")
+struct PreparerAnalysisIsolationTests {
+
+    @Test func preparerAnalysis_isFreshEveryTime() {
+        let first = VisualizerEngine.makePreparerAnalysis()
+        let second = VisualizerEngine.makePreparerAnalysis()
+        #expect(first.stemAnalyzer !== second.stemAnalyzer)
+        #expect(first.moodClassifier !== second.moodClassifier)
+    }
+
+    /// Source shape: the session-manager factory takes no analyzer or classifier (so the live
+    /// ones can't be handed to it) and builds its own through `makePreparerAnalysis`.
+    @Test func sessionManagerFactory_buildsItsOwn() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let helpers = try String(
+            contentsOf: root.appendingPathComponent("UzumeApp/VisualizerEngine+InitHelpers.swift"), encoding: .utf8)
+        let factory = try #require(helpers.range(of: "static func makeSessionManager("))
+        let body = helpers[factory.lowerBound...].prefix(1_500)
+        #expect(!body.contains("analyzer: StemAnalyzer"), "no live analyzer parameter")
+        #expect(!body.contains("classifier: MoodClassifier"), "no live classifier parameter")
+        #expect(body.contains("let analysis = makePreparerAnalysis()"))
+        #expect(body.contains("stemAnalyzer: analysis.stemAnalyzer"))
+    }
+}
+
 // MARK: - Tier-1 render cap + Alfvén exclusion (BR.6b / decision 4)
 
 @Suite("Tier-1 Macs: capped drawable, no Alfvén (BR.6b)")

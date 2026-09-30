@@ -10,6 +10,9 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-09-30-001436] BR.9 — preparing the next songs no longer disturbs the visuals (BUG-171)
+
+- **The visuals no longer twitch while Uzume prepares songs in the background.** Preparation shared the live analysers, so each prepared song briefly pulled the energy and mood readings toward a different song. It now uses its own.
 ### [dev-2026-09-30-000123] BR.8 — long playlists keep their preparation (BUG-170)
 
 - **Playlists over about 64 songs no longer lose their preparation.** Uzume used to drop prepared songs from memory before they played, so most of a long playlist played without its planned scenes. It now keeps only what playback needs, which is small, and keeps all of it.
