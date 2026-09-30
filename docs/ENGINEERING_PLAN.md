@@ -253,7 +253,7 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.12** | 2 | ✅ PR open — TSan-clean; pending live checks (session 2) | Audio capture lifecycle (G2/B14, G8, B5, B6, G6) |
 | **BR.13** | 2 | ✅ PR open — pending live checks (session 1) | Local-file transport (B3/BUG-056, B4, B10) |
 | **BR.14** | 2 | ready | Window, keys, cursor, Settings access (F4/D7, F9, F14, F19, F6, D8) |
-| **BR.15** | 2 | ✅ PR open — hidden in the public build (decision 6) | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
+| **BR.15** | 2 | ✅ PR open — hidden in the public build (decision 6); toasts default off | Controls that do nothing — wire or hide (F5/E5, E4, E14) |
 | **BR.16** | 2 | ready | Honest privacy copy + acknowledgements (A7, C13, K7/H9, F16) |
 | **BR.17** | 2 | ready | Bluetooth latency, 88.2/96 kHz stems, high-rate FFT (I4/B7, G4, B9) |
 | **BR.18** | 2 | ready | Streaming fidelity for the newest scenes (K6) |
@@ -1701,7 +1701,8 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 **Delivered.** Audit F5/E5, E4, E14 as P2 lines under AUDIT-2026-09-29, per decision 6 (hide for the beta, wire after). `BuildFlavor.exposesUnwiredControls` (developer only) gates Settings' tier / quality ceiling and family blocklist / toast toggle, and `PlaybackShortcutRegistry.unwiredIDs` (`+` `-` `.` `←` `→` `⌘R`). Tester notes updated.
 **Done-when:** ✅ public registry lacks the six keys, developer keeps them, ⇧← ⇧→ ⌘Z remain (test); ✅ the four Settings controls sit behind the flag (source test).
-**Not done:** the wiring (after the beta); the toast default disagreement between `LiveAdaptationToastBridge` (on) and `SettingsStore` (off) — a product call; a public-flavor build was not run (by test).
+**Also:** adaptation toasts off until turned on (Matt 2026-09-30; reverses U.6b) — bridge and Settings toggle now agree (test, negative-controlled).
+**Not done:** the wiring (after the beta); a public-flavor build was not run (by test).
 
 ### Increment BR.13 — local-file transport ✅ (2026-09-29, pending live checks)
 

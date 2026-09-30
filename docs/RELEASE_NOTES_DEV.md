@@ -15,6 +15,7 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 - **Settings:** "Device tier", "Quality ceiling", "Hidden scene families" and the adaptation-message toggle are gone from the tester build. None of them changed which scenes play.
 - **Keys:** − + . ← → and ⌘R are gone from the tester build and its ? overlay. They didn't do what their messages said (− pinned the scene you disliked). ⇧← ⇧→ (cut to another scene) and ⌘Z stay.
 - The developer build keeps all of them, to be wired after the beta.
+- **Adaptation messages are off until you turn them on** (Settings › Visuals, developer build) — before, they showed while the toggle said off.
 
 ### [dev-2026-09-30-015424] BR.13 — local files keep their place
 
