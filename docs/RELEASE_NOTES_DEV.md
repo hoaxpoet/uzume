@@ -17,6 +17,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 - **Settings › About › Acknowledgements** credits the models, shaders, motion capture and Milkdrop presets Uzume builds on, each with a link. The licence line no longer claims MIT for all of it (Aurora Veil's shader is non-commercial).
 - **One copyright holder:** Plait & Pattern, in the licence file and the About box.
 
+### [dev-2026-09-30-144510] BR.15 — the tester build hides controls that don't work yet
+
+- **Settings:** "Device tier", "Quality ceiling", "Hidden scene families" and the adaptation-message toggle are gone from the tester build. None of them changed which scenes play.
+- **Keys:** − + . ← → and ⌘R are gone from the tester build and its ? overlay. They didn't do what their messages said (− pinned the scene you disliked). ⇧← ⇧→ (cut to another scene) and ⌘Z stay.
+- The developer build keeps all of them, to be wired after the beta.
+- **Adaptation messages are off until you turn them on** (Settings › Visuals, developer build) — before, they showed while the toggle said off.
 ### [dev-2026-09-30-142354] BR.14 — the window, keys and Settings behave
 
 - **Fullscreen and Esc work when Spotify was in front.** Uzume used to attach its fullscreen and display handling to whatever window was active when playback began — usually Spotify's — so ⌘F did nothing and Esc in fullscreen asked to end the session.
