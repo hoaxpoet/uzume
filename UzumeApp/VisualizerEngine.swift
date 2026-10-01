@@ -239,6 +239,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// via `setMeshPresetTick` / `setDirectPresetFragmentBuffer` in `applyPreset`.
     var gossamerState: GossamerState?
 
+    /// Understory frond springs (UND.1) — allocated when Understory is active, released on
+    /// preset change (same lifecycle as `gossamerState`).
+    var understoryField: UnderstoryField?
+
     /// PR.21 — Nebula's peak-held ring bands. Allocated when Nebula is the active preset,
     /// released on preset change (same lifecycle as `gossamerState`).
     var nebulaState: NebulaState?

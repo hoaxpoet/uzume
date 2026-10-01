@@ -81,6 +81,9 @@ public enum StatefulRuntimeRegistry {
         "Kagura",
         // FF.2 — Fireflies' world fragment reads the shared camera (`FirefliesGeometry.worldBuffer`)
         // at slot 6, so the world and the swarm project through one camera.
-        "Fireflies"
+        "Fireflies",
+        // UND.1 — Understory's feedback-IFS fronds read their spring-driven bend from
+        // `UnderstoryField.buffer` at slot 6 in the `fronds` stage; the tick runs the springs.
+        "Understory"
     ]
 }

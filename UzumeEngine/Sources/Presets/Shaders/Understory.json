@@ -1,0 +1,57 @@
+{
+  "name": "Understory",
+  "family": "fractal",
+  "description": "Look-spike (UND.1): one fern frond, Flexi's feedback fractal ported verbatim, rising from a seed in the middle of a centred 4:3 frame and drawn in one flat pale colour on a dark blue-black ground. Every frame the frond is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later: that lag is the whip. The frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans it one way, a treble swell the other, and a strong swing curls it into a crozier before it snaps back. At silence the springs come to rest and the frond stands upright and still.",
+  "author": "Uzume engine",
+  "inspired_by": {
+    "milkdrop_filename": "flexi - fractal seafood",
+    "original_artist": "Flexi",
+    "pack": "Milkdrop 2 original pack (via butterchurn-presets@2.4.7 presets/converted)",
+    "source_form": "butterchurn pre-converted JSON, presets/converted/flexi - fractal seafood.json; the .milk (projectM presets-milkdrop-original) was read for comments only; neither file is committed (D-116 bullet 4)",
+    "sha256": "d0ca386c74a4be1ebacfc451cf48e3e7c6a3aac94ddf705d116ad5ebccd627d9"
+  },
+  "passes": ["staged"],
+  "stages": [
+    {
+      "name": "fronds",
+      "fragment_function": "understory_fronds_fragment",
+      "persistent": true
+    },
+    {
+      "name": "bed",
+      "fragment_function": "understory_bed_fragment",
+      "samples": ["fronds"]
+    },
+    {
+      "name": "present",
+      "fragment_function": "understory_present_fragment",
+      "samples": ["bed"]
+    }
+  ],
+  "vertex_function": "fullscreen_vertex",
+  "fragment_function": "understory_present_fragment",
+  "duration": 60,
+  "visual_density": 0.4,
+  "motion_intensity": 0.4,
+  "color_temperature_range": [0.3, 0.7],
+  "fatigue_risk": "low",
+  "transition_affordances": ["crossfade"],
+  "section_suitability": ["ambient", "comedown", "bridge"],
+  "complexity_cost": { "tier1": 1.2, "tier2": 0.9 },
+  "certified": false,
+  "rubric_profile": "lightweight",
+  "audio_routes": [
+    {
+      "route": "wind_bass",
+      "primitive": "bass",
+      "kind": "continuous",
+      "note": "UND.1 — bass half of the wind. UnderstoryField ports butterchurn's AudioLevels verbatim: bass over its own ~4 s long average (scale-free, so the AGC cancels — a deviation form, not an absolute threshold, FA #31), EMA .97/.04, then drive = 0.2·(bb − tt) into Flexi's two springs at 60 Hz substeps."
+    },
+    {
+      "route": "wind_treble",
+      "primitive": "treble",
+      "kind": "continuous",
+      "note": "UND.1 — treble half of the same balance, same normalisation. One visual layer, one balance: a bass swell leans the frond one way, a treble swell the other. bassDev − trebDev (trebDev ~100× below bassDev) and the BandDeviationTracker ratio (~21 s average, one-sided lean) were measured on the fixtures and rejected."
+    }
+  ]
+}

@@ -215,6 +215,9 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // warped onto the cached grid) and the MSL reads no audio at all,
                                      // so the source heuristic sees no coupling (Filigree precedent).
                                      // Certified at KAG.4 on Matt's M7.
+    "Understory":           false,   // UND.1 look-spike — lightweight; the wind is CPU-side
+                                     // (UnderstoryField's springs at slot 6) and the MSL reads no audio,
+                                     // so the source heuristic sees no coupling (the Kagura precedent).
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
     "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
                                      // surface, not a certification candidate. Reads no audio at all

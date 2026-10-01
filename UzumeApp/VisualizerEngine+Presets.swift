@@ -175,6 +175,7 @@ extension VisualizerEngine {
         pipeline.setStructuralPrediction(.none)   // Skein.ENGINE.3 (D-151): reset to inert default on preset switch
         pipeline.setMVWarpCanvasGround(nil)   // Skein.5.3b: drop the per-track ground override (only Skein sets it)
         gossamerState = nil
+        understoryField = nil
         nebulaState = nil
         waveformState = nil
         nimbusState = nil
@@ -549,6 +550,7 @@ extension VisualizerEngine {
 
     // MARK: - Stateful preset runtimes (R2 / PUB.8)
 
+    // swiftlint:disable cyclomatic_complexity
     /// The ONE dispatch point for presets that allocate CPU-side state at
     /// apply time (the D-097 `resolveParticleGeometry` shape: one switch, one
     /// row per preset). Before PUB.8 these lived as name-keyed `if` blocks
@@ -571,6 +573,7 @@ extension VisualizerEngine {
     /// Keep the switch below in sync with `StatefulRuntimeRegistry.
     /// knownPresetNames` (Renderer) — `StatefulRuntimeRegistryTests` gates the
     /// sidecar-rename hazard against that set.
+    /// One flat row per preset is the contract, so complexity grows by one per row by design.
     private func bindStatefulPresetRuntime(for desc: PresetDescriptor) {
         switch desc.name {
         case "Gossamer":    bindGossamerRuntime(desc)
@@ -582,12 +585,14 @@ extension VisualizerEngine {
         case "Witchlight":  bindWitchlightRuntime(desc)
         case "Kagura":      bindKaguraRuntime(desc)
         case "Fireflies":   bindFirefliesRuntime(desc)
+        case "Understory":  bindUnderstoryRuntime(desc)
         // Cymatic Resonance (CR.2) is a `feedback+particles` preset — its runtime is
         // the CymaticSandGeometry, wired via the `.particles` pass through
         // resolveParticleGeometry, not a slot-6 state binding.
         default: break
         }
     }
+    // swiftlint:enable cyclomatic_complexity
 
     private func bindWitchlightRuntime(_ desc: PresetDescriptor) {
         // Witchlight-specific (WL.2): NO slot-6 state buffer — the ribbon's uniforms travel
@@ -727,6 +732,20 @@ extension VisualizerEngine {
         let plain = Self.kaguraGrid(grid)
         Task { @MainActor [weak self] in
             dancer.setGrid(plain, streaming: self?.sessionManager.currentSource?.isLocalFile != true)
+        }
+    }
+
+    private func bindUnderstoryRuntime(_ desc: PresetDescriptor) {
+        // UND.1 — Flexi's two springs on the CPU (60 Hz substeps); the `fronds` stage reads each
+        // frond's bend at slot 6. The staged encoder binds slots 6–8 to every stage.
+        guard let field = UnderstoryField(device: context.device) else {
+            logger.error("UnderstoryField: failed to allocate buffer for preset '\(desc.name)'")
+            return
+        }
+        understoryField = field
+        pipeline.setDirectPresetFragmentBuffer(field.buffer)
+        pipeline.setMeshPresetTick { [weak field] features, _ in
+            field?.tick(deltaTime: features.deltaTime, features: features)
         }
     }
 
