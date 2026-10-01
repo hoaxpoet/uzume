@@ -123,8 +123,8 @@ one synchronous stretch.
 
 ⚠ `StemSeparatorMemoryTests` (#345's gate) reads *process-wide* footprint. In a filtered parallel run
 on unmodified main it failed one time in two (170 MB against its 150 MB bound) because other suites
-allocate in the same process. Alone it passes every time. A separate task to make it deterministic
-has been offered; the bound was not widened here.
+allocate in the same process. Alone it passes every time. It was made deterministic in #346
+(minimum growth over up to three batches; bound unchanged).
 
 **What batching costs in memory.** The batched model is a separate graph from live's batch-1 graph,
 built on first use from a second load of the weights. Against task 3 (1.34 GB album footprint):
