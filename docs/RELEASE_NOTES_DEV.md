@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-01-195907] BUG178.1 — skipping ahead in a local playlist keeps the track bar and seek (BUG-178)
+
+- **Seek works on every song.** A song preparation had not reached showed a zero-length track bar and ignored seek. The bar now takes the length from the file itself, prepared or not.
+- **Preparation follows the listener.** Skip to a song that isn't prepared and it is prepared next, then the songs after it; anything skipped over is picked up afterwards. Until it is ready the visuals stay live-reactive, as before. A listener no longer waits out the paced gap between songs (up to half a song's length) for it to start.
+- The plan stays in playlist order, so each song still gets its own scenes and beat grid.
+- Matt's re-run of the skip-ahead is pending.
+
 ### [dev-2026-10-01-000246] PREP.3 — local playlists prepare almost three times faster (BUG-177 follow-through)
 
 - **Preparing a local playlist is ~2.9× faster.** Bowie's *Low* (11 tracks) took 166.6 s on the Mac mini and now takes 58.5 s (Release, nothing cached). A 40-track playlist of 4-minute songs should now be fully prepared in about four minutes, inside the 5-minute target. "Start now" appears after ~11 s instead of ~31 s. Not yet confirmed in a live session.
