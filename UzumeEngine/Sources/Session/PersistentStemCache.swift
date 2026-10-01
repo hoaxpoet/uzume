@@ -239,7 +239,10 @@ public final class PersistentStemCache: @unchecked Sendable {
     ///   v17 (NRG.1, D-259) — adds `TrackProfile.energyCurve`, the measured loudness + activity
     ///                       curve scene choice will read instead of mood. v16 entries decode
     ///                       with it nil — re-analyse so every cached song has one.
-    public static let currentSchemaVersion: Int = 17
+    ///   v18 (BUG-149) — `TrackProfile.key` came from the live 1024-point chroma, whose spectral
+    ///                       tilt read F# minor on 35 % of songs; it is now `KeyEstimator`'s
+    ///                       whole-song peak chroma. Every v17 key is suspect — re-analyse.
+    public static let currentSchemaVersion: Int = 18
 
     /// Names of the stem `.f32` files. Order matches `CachedTrackData.stemWaveforms`
     /// (`[vocals, drums, bass, other]`).

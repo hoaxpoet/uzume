@@ -168,6 +168,10 @@ public final class SessionManager: ObservableObject {
     /// without needing access to `SessionPreparer` internals.
     public var preparationProgress: (any PreparationProgressPublishing)? { preparer }
 
+    /// BUG-178: the listener reached local queue position `index` before preparation did —
+    /// prepare it next.
+    public func prioritizeLocalPreparation(at index: Int) { preparer.prioritizeLocalFile(at: index) }
+
     // MARK: - Init
 
     /// Create a session manager.

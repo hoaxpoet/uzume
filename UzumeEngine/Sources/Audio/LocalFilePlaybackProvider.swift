@@ -305,9 +305,16 @@ public final class LocalFilePlaybackProvider: @unchecked Sendable {
     /// BR.11 (B2): the playhead wrapped at the file length — the local-file track clock. The
     /// player keeps counting across a loop; the track restarts.
     public var trackPlayheadSeconds: Double? {
-        let (clock, file) = lock.withLock { (analysisClock, audioFile) }
-        guard let raw = clock?.playheadSeconds, let file else { return nil }
-        return Self.wrapped(raw, fileSeconds: Double(file.length) / file.processingFormat.sampleRate)
+        guard let raw = lock.withLock({ analysisClock })?.playheadSeconds,
+              let fileSeconds = fileDurationSeconds else { return nil }
+        return Self.wrapped(raw, fileSeconds: fileSeconds)
+    }
+
+    /// BUG-178: the playing file's own length, prepared or not — the track bar's length. A song
+    /// the walk has not reached carries a placeholder identity with no duration.
+    public var fileDurationSeconds: Double? {
+        guard let file = lock.withLock({ audioFile }) else { return nil }
+        return Double(file.length) / file.processingFormat.sampleRate
     }
 
     /// `raw` seconds of playback wrapped into a file `fileSeconds` long.
