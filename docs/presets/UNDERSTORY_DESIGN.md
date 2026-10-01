@@ -558,3 +558,12 @@ Map (one line per new Swift file, D-168 gate), `docs/CREDITS.md` §Milkdrop-insp
   (streaming) path, where stems lag ~2.5 s (AUDIO_CONTRACT §2.3) — needs Matt's live session;
   (c) a sung track WITH a horn or string section keeps its fiddleheads closed while those play —
   a known trade-off of the veto, for M7.
+
+### UND.7 prep — the certification flash measurement (2026-10-01)
+
+`UnderstoryStagedHarnessTests.understoryIsFlashSafe` (always runs): the shared worst-case drive
+(`FlashHarnessSupport` 4.5 Hz beat train on a 270 BPM 4/4 grid, arousal 0.85, worst harmonic
+motion, worst stem train) through the production staged path, 10 s warm-up discarded, 30 s
+measured. It CONTAINS the hazard — **135 shimmers** in the window — and measures **0.00
+flashes/s, 0 transitions**, regional and red safe, frame-mean luminance 0.057…0.068 (Δ0.011,
+3.7× the responsiveness floor: measured, not static). `certified` stays false until Matt's M7.

@@ -7,7 +7,8 @@
 // `present` stage into a capture texture (no MTKView headless). Slot 6 carries a real
 // `UnderstoryField.buffer`, ticked every frame exactly as the app's `setMeshPresetTick` does.
 //
-// Two tests, both GPU and env-gated (not in the default parallel run):
+// GPU tests. `understoryIsFlashSafe` (the certification flash measurement) always runs; the rest
+// are env-gated (not in the default parallel run):
 //   • HARNESS_TEMPLATES=1 — 60 silence frames: the persistent frond neither blows up, decays to
 //     nothing, nor renders black.
 //   • UNDERSTORY_SEQUENCE=<fixture> — replays `route_coverage/<fixture>/features.csv` at 60 fps
@@ -28,7 +29,7 @@ import UniformTypeIdentifiers
 
 // MARK: - UnderstoryStagedHarnessTests
 
-@Suite("Understory staged harness (env-gated, UND.1)")
+@Suite("Understory staged harness (UND.1 →; GPU, most tests env-gated)")
 @MainActor
 struct UnderstoryStagedHarnessTests {
 
@@ -210,9 +211,12 @@ struct UnderstoryStagedHarnessTests {
         // Photosensitivity on the production frames (the shimmer must travel, never flash).
         let regional = FlashAnalyzer.analyzeRegional(flashFrames, fps: 60)
         let red = FlashAnalyzer.analyzeRed(flashFrames, fps: 60)
-        print(String(format: "[understory-flash] %@: regional %.2f flashes/s (safe %@), red %.2f (safe %@)",
-                     fixture, regional.peakFlashesPerSecond, regional.isSafe ? "yes" : "NO",
+        // The gate must CONTAIN the hazard: count the shimmers inside the analysed window.
+        let shimmers = rig.field.shimmerEventsForTesting().filter { $0.time >= 8 }.count
+        print(String(format: "[understory-flash] %@: %d shimmers in the window; regional %.2f flashes/s (safe %@), red %.2f (safe %@)",
+                     fixture, shimmers, regional.peakFlashesPerSecond, regional.isSafe ? "yes" : "NO",
                      red.peakFlashesPerSecond, red.isSafe ? "yes" : "NO"))
+        #expect(shimmers > 0, "a flash pass on frames without a shimmer proves nothing")
         #expect(regional.isSafe && red.isSafe)
         #expect(rig.pipeline.stagedWatchdogTripCount == 0)
     }
@@ -271,6 +275,33 @@ struct UnderstoryStagedHarnessTests {
             }
         }
         return out
+    }
+
+    // MARK: Photosensitivity (certification measurement)
+
+    /// The certification-grade flash measurement (NEW_PRESET_CHECKLIST §4): the shared worst-case
+    /// drive — `FlashHarnessSupport`'s 4.5 Hz beat train on a 270 BPM 4/4 grid with arousal 0.85
+    /// (the longest trails), the worst harmonic motion, and the worst stem train — through the
+    /// production staged path. At 4.5 Hz a beat lands every 0.22 s, faster than a shimmer lasts,
+    /// so shimmers overlap across fronds: the scene's worst case. 10 s warm-up discarded (forest
+    /// build, grid trust), 30 s measured. Not env-gated: it is a safety gate.
+    @Test("Understory is flash-safe under the worst-case beat + stem train")
+    func understoryIsFlashSafe() throws {
+        let seconds = 40.0
+        let drive = FlashHarnessSupport.withHarmonicMotion(FlashHarnessSupport.worstCaseBeatTrain(seconds: seconds))
+        let stems = FlashHarnessSupport.worstCaseStemTrain(seconds: seconds)
+        let rig = try Self.rig(width: 320, height: 180)
+        var samples: [FlashHarnessSupport.FlashSample] = []
+        for (i, frame) in drive.enumerated() {
+            var f = frame
+            f.aspectRatio = 320.0 / 180.0
+            try rig.frame(f, stems: i < stems.count ? stems[i] : .zero)
+            if i >= 600 { samples.append(FlashHarnessSupport.sample(rig.pixels, width: 320, height: 180)) }
+        }
+        let shimmers = rig.field.shimmerEventsForTesting().filter { $0.time >= 10 }.count
+        print("[understory-flash-cert] \(shimmers) shimmers inside the measured 30 s")
+        #expect(shimmers > 100, "the measurement must CONTAIN the hazard (a shimmer per beat at 4.5 Hz)")
+        FlashHarnessSupport.assertFlashSafe(name: "Understory", samples: samples)
     }
 
     // MARK: κ fitting
