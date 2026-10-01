@@ -29,7 +29,7 @@ belongs in the second table, not the first.
 | BUG-081 | P2 | app.hang | A beachball about 78 s into one session (2026-08-03), with no stack. One instance: the "08-04 ×2" formerly listed here were BUG-085's. Probably the same defect as BUG-085. | With BUG-085. |
 | BUG-060 | P3 | renderer / app.hang | The render loop died on a switch to Gossamer (2026-06-18). It recurred once, undated. No stack. | With BUG-085. |
 | BUG-091 | P1 | app.session / pipeline-wiring | One local file selected: preparation finishes and nothing ever plays; every audio field is 0. One instance (2026-08-17). Instrumented. | One reproduction: listening session 1, "start a single file a few times". |
-| BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. |
+| BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. **Session 2 (2026-10-01):** 10 of 10 swaps recovered; BUG-139 closed. |
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
 | BUG-175 | P2 | preset.fidelity / Kagura · dsp.beat | Kagura sways for a song's first ~16 s instead of dancing when the intro's beat grid is uneven. It reads as warm-up exercises, out of sync. | Measure how many songs it hits (cached grids), then Matt's call on the fix direction. |
@@ -60,7 +60,6 @@ passes, the entry moves to §Resolved (recent).
 |---|---|---|---|---|
 | BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
 | BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. | The fix increment; Matt re-runs the skip-ahead. |
-| BUG-176 | P1 | renderer / photosensitivity | Membrane and Waveform flashed in a ninth of the screen at fast tempos (4.0 and 5.0 /s against WCAG's 3). Membrane's strike contrast is 0.8; Waveform's bars fall over 0.6 s (BR.20). | Session 1: Membrane on a fast song, and the launch screen with music playing — both still read as before. **Membrane half ✅ (build 10, 2026-10-01):** B.O.B., Matt: *"beats were synced. I registered the ripples. No flickers."* Waveform half still unseen. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
 | BUG-151 | P2 | audio.localfile | The local queue cut the last second off every song. | Session 1: listen to four or five song endings. |
@@ -71,11 +70,7 @@ passes, the entry moves to §Resolved (recent).
 | BUG-148 | P2 | orchestrator | Scene choice now follows measured energy instead of the mood model (D-259, NRG.1–4). | Session 1: do the scenes suit the songs? ✅ **Passed (build 10, 2026-10-01):** *"Looks good. Good variety overall."* |
 | BUG-133 | P2 | orchestrator | The same few scenes cycled. The entry's measurement predates NRG.3. | Session 1: count distinct scenes on the current scorer, plus the felt check. ✅ **Passed (build 10, 2026-10-01):** *"Good variety overall"*; about a dozen distinct scenes on the PREP.3 run. |
 | BUG-144 | P2 | dsp.mir | A song's stored mood was its fade-out. Scoring no longer reads mood (NRG.3); only Kagura does. | Session 1, or close on Matt's call. |
-| BUG-139 | P2 | audio.capture | Tap teardown could deadlock against its own IO callback. | Session 2: start and stop twice, then three to five output swaps. |
-| BUG-070 | P2 | audio.capture | A failed tap reinstall left the capture state untruthful. The residual race (ending a session during silence) is fixed too: BR.12 G2, TSan-clean. | Session 2: output swaps; pause 30 s, then end and restart. |
-| BUG-173 | P1 | audio / session | Pausing Spotify or Music for more than ~2 s counted as a new song and reset the scene (BR.11). | Session 2: pause 30 s or more, then resume. |
 | BUG-106 | P2 | ml.stem | At 4K, stems ran a period late. The timing was measured live ✅; the felt half remains. | Session 2: stem-driven scenes, fullscreen at 4K. |
-| BUG-171 | P1 | session / dsp.stem | Background preparation jolted the live visuals' drivers. | Session 2: *Start now* on a long playlist; watch the first minutes. |
 | BUG-162 | P1 | app / session | The display slept and the Mac locked mid-session. | Session 2: on battery, past the display-off interval; run `pmset -g assertions`. |
 | BUG-168 | P1 | renderer / performance | Retina and 5K displays rendered 2.5–7× the budgeted pixels. Tier-1 Macs are now capped. | BR.6 measurement: the M4 MacBook Pro (battery, Low Power Mode) and the 4K display. |
 | BUG-055 | P2 | app / permission | After an update, streaming said "ready" but the tap was silent (stale Screen Recording grant). | Session 3: install the DMG, stream, install an update build, stream again. |
@@ -182,19 +177,6 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Evidence:** the code path above; PR.4 found no frame stall in any recorded session (max frame gap 199 ms). This is the designed hold, not a renderer hang. That reading is **PLAUSIBLE**; Matt hasn't confirmed it's the moment he saw.
 
 **Fix direction (audit K8):** keep the cells breathing through the hold (a slow phase drift or membrane motion), or shorten it. The choice is a look decision for Matt.
-
-
-### BUG-176 — Membrane and Waveform flashed in part of the screen at fast tempos (2026-09-30)
-
-*(Numbering: filed as BUG-175 on `br-20`; renumbered to BUG-176 when #342 merged first with its own BUG-175.)*
-
-**Severity:** P1 (photosensitivity) · **Domain:** renderer / photosensitivity · **Failure class:** `render-state` · **Status:** Fixed 2026-09-30 (BR.20) — pending the felt check in listening session 1 · **Found by:** the flash check v2 (BR.20 / audit I8)
-
-**Expected.** No region of the frame the size of WCAG's small-safe area (a ninth of the screen) flashes more than three times a second, under the 270 BPM worst-case beat train the gate uses.
-**Actual.** The whole-frame check (v1) passed both; the new regional check did not. **Membrane** (certified) — 4.0 regional flashes/s: each strike ring's bright crest and dark trough sweeping across a patch of skin. **Waveform** (uncertified, but the launch screen and the fallback) — 5.0: its 64 bars read the raw spectrum, so a kick's bars jumped to full and dropped straight back.
-**Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
-**Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
-**Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
 
 
 ### BUG-177 — local-file preparation ran the Mac out of memory on long songs (2026-09-30)
@@ -334,18 +316,6 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 **Gates.** `Tier1RenderBudgetTests`: the sizing math (Air 13", 5K, 4K, ≤ budget untouched); the cap only when set; in a real 3840×2160 offscreen window the drawable is capped **and** the render pipeline's `drawableSizeWillChange` receives the capped size; Alfvén excluded on tier 1 and kept on tier 2.
 
-### BUG-171 — background preparation disturbed the live visuals' drivers (2026-09-29)
-
-*(Numbering: filed as BUG-167 on `br-9`; renumbered to BUG-171 behind BR.6a, BR.6b, BR.7 and BR.8.)*
-
-**Severity:** P1 (the primary visual drivers jump during normal streaming sessions) · **Domain:** session / `dsp.stem` · **Failure class:** `concurrency` (shared mutable analysis state) · **Status:** Fixed 2026-09-29 (BR.9). Visibility was never measured live; see the listening note below.
-
-**Actual** (audit C3/G3, re-verified ✔︎). `makeSessionManager` handed the engine's live `StemAnalyzer` and `MoodClassifier` to `SessionPreparer`, "to avoid double-loading the ML weights". Neither object has weights. Preparation runs about 430 `analyze` frames and about 1,300 `classify` calls per track on them, with no reset. That happens behind playback every few seconds, for minutes. So the live AGC level was ~97 % replaced and the deviation EMA moved ~38 %: live `bass` / `drums` energy and the `*Dev` drivers jumped or flattened for 1–2 s, and live mood snapped to the other song.
-
-**Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
-
-**Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
-
 ### BUG-172 — declining "control Spotify / Music" froze the session on one scene (2026-09-29)
 
 *(Numbering: filed as BUG-168 on `br-10`; renumbered to BUG-172 behind BR.6b, BR.7, BR.8 and BR.9.)*
@@ -368,24 +338,6 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 - `NSAppleEventsUsageDescription` is reworded to say what declining costs.
 
 **Gates.** `NowPlayingPermissionTests` (denial reported once per observation, again after restart, ordered on poll count; which apps are asked; local-file modes don't poll); `PlaylistConnectorTests` (−1743 case); `AppleMusicConnectionViewModelTests` (→ `.permissionDenied`, no retry loop); `NowPlayingDenialWiringTests` (reactive fallback, toast, clearing on every path; source shape); `UserFacingErrorTests` (30 cases).
-
-### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
-
-*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
-
-**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
-
-**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
-- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
-- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
-- cut the song's first planned scene back in;
-- restarted the track clock at 0, so every later planned change landed offset.
-
-A single failed poll mid-song did the same.
-
-**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
-
-**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -544,128 +496,6 @@ Found while fixing BUG140.2. `StemSeparator.separate` resamples its input to 44.
 1. ✅ Automated: `StemFeatureSeriesTests.localFileSweep_analyzerUsesSeparatorRate` (a 220 Hz tone at 48 kHz must read 220 ± 5 Hz; it read 239.5 before the fix) and `analyzePreview_warmupUsesSeparatorRate` (warmup fps must be 44100/1024; it was 46.875). Both were confirmed to **fail** on the unfixed code.
 2. ✅ Real-file A/B above: the 44.1 kHz control is bit-identical and the 48/96 kHz shifts are in the predicted direction.
 3. ⏳ Manual (optional; low expected visibility at 48 kHz): a Ferrofluid Ocean session on a 96 kHz local file. Its reflected aurora sky is the one reader of `aurora_palette_phase` (AUDIO_CONTRACT §Ferrofluid Ocean), so its hue should follow the vocal line rather than a pitch an octave high.
-
-### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
-
-**Severity:** P2 · **Domain tag:** audio.capture · **Status:** **RESOLVED 2026-09-23 (BUG139.1,
-`bf7c73fe`)** — root-caused from source, not inferred, and the lock-held teardown is gone. Found while running BUG-103's 5×
-verification streak; unrelated to that fix (BUG103.1 touches `LocalFilePlaybackProvider` only —
-`SystemAudioCapture.swift` is not in its diff).
-
-⚠ **Domain tag corrected.** Filed as `audio.capture / test-infrastructure` because it was first seen
-killing a test run. That was wrong: the deadlocking code is the **shipped** tap teardown, reached by
-`stopCapture()`, `performReinstall()` and `deinit`. The test suite is where it was *observed*, not
-where it lives.
-
-#### Expected behavior
-
-`swift test --package-path UzumeEngine` terminates. A capture teardown completes or fails; it does not
-block forever.
-
-#### Actual behavior
-
-The suite hangs **indefinitely** — no timeout, no failing test, no crash report. Killed manually after
-12+ minutes on a run whose predecessor had completed in 259 s. Presents as a wedged CI/gate run rather
-than a failure, which is the worst shape: BUG-103's SIGABRT at least left an `.ips`.
-
-#### The stack (captured, `sample`)
-
-Main thread, blocked:
-
-```
-FerrofluidLiveAudioTests.testLiveDSPPipeline()   FerrofluidLiveAudioTests.swift:76
-  SystemAudioCapture.stopCapture()               SystemAudioCapture.swift:283
-    SystemAudioCapture.cleanup()                 SystemAudioCapture.swift:485
-      SystemAudioCapture.teardownTapResources()  SystemAudioCapture.swift:407
-        _pthread_mutex_firstfit_lock_wait
-          __psynch_mutexwait
-```
-
-Concurrently, a tap IO-callback thread sits in `caulk::semaphore::timed_wait` inside the
-`AudioTimeStamp`/`AudioBufferList` callback thunk.
-
-#### Root cause — an exact ABBA, readable in the source (BUG139.1)
-
-`SystemAudioCapture.swift:407` — the line the sample is parked on — is `AudioDeviceStop(agg, proc)`,
-and `stateLock` has been held since line 401:
-
-```swift
-private func teardownTapResources() {
-    stateLock.lock()                       // 401
-    ...
-    if agg != 0 {
-        AudioDeviceStop(agg, proc)         // 407  ← BLOCKS until the IO proc drains
-```
-
-The other side is the IO proc block created in `createIOProc` (line ~243). It runs on the CoreAudio
-**real-time HAL thread** and calls `self?.probeInstallRMS(...)`, whose body is
-`stateLock.withLock { … }` (line 459).
-
-So:
-
-| Thread | Holds | Waits for |
-|---|---|---|
-| teardown (`stopCapture` / `performReinstall` / `deinit`) | `stateLock` | the IO proc to stop, inside `AudioDeviceStop` |
-| CoreAudio IO proc (real-time) | its HAL cycle | `stateLock`, inside `probeInstallRMS` |
-
-Neither can advance and `AudioDeviceStop` never returns. Both halves of the captured sample are
-accounted for, which is why this is recorded as proven rather than hypothesised.
-
-**This is BUG-021's lesson in a second place.** BUG-021 was *"no AVFoundation teardown under the
-provider lock"* in `LocalFilePlaybackProvider`; this is CoreAudio teardown under `stateLock` in the
-tap path. The doc comment above `probeInstallRMS` asserts *"the uncontended per-buffer stateLock"* —
-that word is the whole defect. The lock is uncontended per buffer and fatally contended at teardown.
-A secondary smell, not fixed here: an RT audio callback should not take a mutex at all (cf. BUG-036).
-
-#### Verification criteria (written before the fix)
-
-- [x] Automated: `SystemAudioCaptureTeardownTests` (4 tests) — claim returns the handles and clears
-      them in one locked step; a second claim yields nothing (no double-destroy); the lock is free the
-      moment claim returns; teardown and lock-taking callers interleave without wedging. As written,
-      this pins the **structure**, not the deadlock: reproducing the deadlock needs a real aggregate
-      device (hardware + Screen Recording) and is out of reach in the suite — the same honesty posture
-      BUG-103 took. **Negative control was run:** reintroducing the lock-held return wedged the suite,
-      the exact signature BUG-139 produces, so the gate demonstrably bites.
-- [x] Automated: full engine suite — see the closeout evidence block.
-      ⚠ `FerrofluidLiveAudioTests` in isolation is **not** a reproduction attempt worth anything: all
-      three of its tests **skip** (two after a ~10 s wait for a tap that a permissionless run never
-      gets). They exercise the teardown path via cleanup, which is how the deadlock was reached, but
-      they never take a live capture. Stated so nobody later reads "green in isolation" as evidence
-      the race was exercised.
-- [ ] **Manual: NOT DONE — the one gap in this fix.** This is the **shipped** streaming path, and the
-      automated gate cannot touch a real aggregate device. Outstanding: one app-level streaming
-      session (start capture, let audio flow, stop) plus one output-device change to exercise
-      `performReinstall`. Needs Screen Recording on a real Mac. Until that runs, the fix is
-      *structurally* proven and *not* live-validated.
-
-#### Suspected failure class
-
-`concurrency` — ABBA between the teardown path and the IO callback. Same *shape* as BUG-021 (which was
-the provider's `NSLock` vs. the `scheduleFile` completion callback) but a different lock, a different
-path, and the tap rather than the local-file provider. Related but distinct from BUG-058, which reaches
-`teardownTapResources()` via a device-change `performReinstall` rather than an ordinary `stopCapture()`.
-
-#### Reproduction
-
-Not reproduced on demand. Observed once: run 2 of 5 consecutive `swift test --package-path UzumeEngine`
-runs, run 1 green. `swift test --filter FerrofluidLiveAudio` in isolation was not attempted — doing that
-first is the obvious next step, since isolation-passes/parallel-hangs would match BUG-103's profile.
-
-#### Session artifacts
-
-`docs/diagnostics/BUG139_TEARDOWN_HANG_2026-09-23.txt` — the full `sample` output, committed so the
-stack survives the session. To capture a fresh one while hung: `sample <xctest-pid> 3`.
-
-#### Why it was filed rather than fixed at the time
-
-Found during another defect's verification. Fixing an audio-teardown lock ordering on one observation,
-inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first — and
-the evidence, read the next day, turned out to be conclusive from the source alone.
-
----
-
-
----
 
 ### BUG-135 — the grid's bar position cannot be confirmed to be the true musical downbeat (2026-09-14)
 
@@ -1515,18 +1345,6 @@ withholds a drawable from a client holding none.
 
 ---
 
-### BUG-070 — Failed tap reinstall leaves untruthful capture state; engine detectors starved (2026-07-12)
-
-**P2 · audio.capture / resource-management.** From the 2026-07-11 ultra review (concurrency + audio dimensions); root cause verified in code at PUB.6.
-
-**Expected:** after a failed device-change reinstall, the capture object's state reflects reality (not capturing), engine-side health classification can still fire, and a recovery restart can proceed.
-**Actual (pre-fix):** `performReinstall`'s catch did nothing — its comment claimed "the create steps already tore down + stopped the monitor on failure," which was false on both counts. End state: `_isCapturing=true`, monitor running, zero IO callbacks → `SignalHealthMonitor.evaluate` (sample-driven, `ingest` window boundaries) never runs so `deadTap` never confirms; the router's `.silent` recovery is likewise callback-starved; `startCapture` recovery blocked by the alreadyCapturing guard. Only the app-layer Mode-B stall card (1 Hz poll on the tap frame count, ~10 s dwell) surfaced it — detection existed, engine truth and recovery did not.
-**Fix (landed, PUB.6):** catch clears `_isCapturing` (unblocks stopCapture+startCapture recovery), monitor deliberately left running as a diagnostic beacon (later fires land in the SKIP branch and breadcrumb), comment corrected.
-**Verification criteria:** automated — engine builds; audio suites green (a real failed reinstall cannot be staged headless: Core Audio create-step failures need a live device transition). Manual (pending): a live device-swap session confirming normal reinstalls still work (the G1 12/12 behaviour), and — if a reinstall failure can be provoked — the stall card appears AND a subsequent session restart recovers cleanly.
-**Residual (documented, deliberately open):** the 3-queue lifecycle interleave (device-change reinstall vs silence-recovery reinstall vs user stop) is real but static-only evidence; the per-step breadcrumbs + install-generation probes are the instrumentation. Serialize ONLY on a reproduced interleave artifact — restructuring the G1-live-validated path on theory is the BUG-063 class.
-
----
-
 ### BUG-077 — `BeatGridResolver.snapToBeats` diverges from the Beat This! reference post-processor (2026-07-30)
 
 **P3 · dsp.beat / api-contract.** Found at DBN.1 while auditing the resolver against the paper it implements.
@@ -2191,6 +2009,54 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 
 ## Resolved (recent)
 
+### BUG-176 — Membrane and Waveform flashed in part of the screen at fast tempos (2026-09-30)
+
+**Resolved 2026-10-01 — both halves passed live (build 10).** Membrane on B.O.B. (session 1), Matt: *"No flickers."* Waveform for 23 s with music in session `2026-10-01T18-05-22Z` (from 18:13:12Z), Matt: *"Waveform did not flicker."*
+
+*(Numbering: filed as BUG-175 on `br-20`; renumbered to BUG-176 when #342 merged first with its own BUG-175.)*
+
+**Severity:** P1 (photosensitivity) · **Domain:** renderer / photosensitivity · **Failure class:** `render-state` · **Status:** Fixed 2026-09-30 (BR.20) — pending the felt check in listening session 1 · **Found by:** the flash check v2 (BR.20 / audit I8)
+
+**Expected.** No region of the frame the size of WCAG's small-safe area (a ninth of the screen) flashes more than three times a second, under the 270 BPM worst-case beat train the gate uses.
+**Actual.** The whole-frame check (v1) passed both; the new regional check did not. **Membrane** (certified) — 4.0 regional flashes/s: each strike ring's bright crest and dark trough sweeping across a patch of skin. **Waveform** (uncertified, but the launch screen and the fallback) — 5.0: its 64 bars read the raw spectrum, so a kick's bars jumped to full and dropped straight back.
+**Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
+**Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
+**Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
+
+### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** A 44 s Spotify pause (18:10:01–18:10:45Z) resumed on the same song with no track change; the next change (18:11:31Z) was the real next song.
+
+*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
+
+**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
+
+**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
+- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
+- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
+- cut the song's first planned scene back in;
+- restarted the track clock at 0, so every later planned change landed offset.
+
+A single failed poll mid-song did the same.
+
+**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
+
+**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
+
+### BUG-171 — background preparation disturbed the live visuals' drivers (2026-09-29)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** *Start now* with 7 of 40 songs prepared; the other 33 finished behind playback. Matt saw no twitch as songs finished preparing.
+
+*(Numbering: filed as BUG-167 on `br-9`; renumbered to BUG-171 behind BR.6a, BR.6b, BR.7 and BR.8.)*
+
+**Severity:** P1 (the primary visual drivers jump during normal streaming sessions) · **Domain:** session / `dsp.stem` · **Failure class:** `concurrency` (shared mutable analysis state) · **Status:** Fixed 2026-09-29 (BR.9). Visibility was never measured live; see the listening note below.
+
+**Actual** (audit C3/G3, re-verified ✔︎). `makeSessionManager` handed the engine's live `StemAnalyzer` and `MoodClassifier` to `SessionPreparer`, "to avoid double-loading the ML weights". Neither object has weights. Preparation runs about 430 `analyze` frames and about 1,300 `classify` calls per track on them, with no reset. That happens behind playback every few seconds, for minutes. So the live AGC level was ~97 % replaced and the deviation EMA moved ~38 %: live `bass` / `drums` energy and the `*Dev` drivers jumped or flattened for 1–2 s, and live mood snapped to the other song.
+
+**Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
+
+**Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
+
 ### BUG-157 — the StemSeparator concurrency test waited on a thread pool the suite keeps busy (2026-09-29)
 
 **Severity:** P3 · **Domain:** `test-infra` (UzumeEngineTests, `ml.stem`) · **Failure class:** `concurrency` (a wall-clock wait on pooled work) · **Status:** Fixed (BUG157.1, `f0078ebb`) · **Related:** BUG-156 (same mechanism; its KNOWN_ISSUES entry named this test as a sibling), BUG-031 (what the test guards)
@@ -2389,28 +2255,6 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 **Verification.**
 1. ✅ Automated: with 500 ms of latency injected into both mock connectors, both suites pass 16/16 (before the fix, 3/4 OAuth tests failed). Full app suite 476/476; SwiftLint strict clean.
 2. Manual: none required (test-only change; the VM's behaviour is unchanged).
-
----
-
-### BUG-142 — a Now Playing poll in flight at `stopObserving()` fires a stale track change (2026-09-25)
-
-**Severity:** P2 · **Domain:** `audio` (streaming metadata) · **Failure class:** `concurrency` · **Status:** Fixed (BUG142.1, `86ba965e` + `d9500a41`), merged #277 (`5f4d421e`) · **Related:** BUG-024 (the same stale-surface-across-a-session-boundary class, CLAUDE.md §What NOT To Do)
-
-**Symptom.** CI fast-gate run 36162100751 (PR #275, attempt 1) failed `StreamingMetadataTests.trackChange_secondTrack_hasPrevious` at line 115: `events.value.count → 3`, expected 2. `main` passes it normally. The same log shows the test took **0.698 s** against its ~0.45 s of sleeps, so the runner was starved. Only the count expectation failed: `events[1]` was correctly A → B, so the extra event came after the second one, with the track unchanged.
-
-**Expected:** after `stopObserving()` returns, no `onTrackChange` fires and `currentTrack` stays `nil` until the next `startObserving()`.
-**Actual:** `stopObserving()` cancels `pollingTask` and clears `_currentTrack` / `lastTrackIdentity` under `lock`, but `pollNowPlaying()` did not re-check anything after `await reader()` returned. A poll parked in the reader when stop ran resumed, saw `identity != lastTrackIdentity` (now `nil`), wrote `_currentTrack` back, and fired `onTrackChange(previous: nil, current: …)`. In the CI case that was the third event.
-
-**Production impact.** `AudioInputRouter.stop()` calls `stopObserving()`, and the real reader is an AppleScript query to Music/Spotify that can take hundreds of ms, so the window there is wider than in the test. The router forwards the late event to the app as a fresh track change after the session ended. A restart had the same hole: `startObserving()` calls `stopObserving()` first, and the old task's in-flight poll could fire into the new session. Not observed live; found through the CI flake.
-
-**Reproduction (deterministic).** `stopObserving_whilePollInFlight_firesNoEvent`: the reader parks on a continuation, the test waits until it is parked, calls `stopObserving()`, releases the reader and awaits the polling task. On the unfixed code it fails every time in 0.002 s: 1 event (expected 0) and `currentTrack` = Track A (expected `nil`). No sleeps.
-
-**Fix.** `StreamingMetadata` keeps a `generation` counter. `stopObserving()` increments it under `lock`, and `startObserving()` passes the current value to its polling task. Both of a poll's locked state writes (the nil-info clear and the compare-and-fire) do nothing unless the poll's generation is still current. The check is inside the same lock as the stop's clear, so the ordering is fixed: either the poll's write lands before the stop (and the stop clears it), or it sees the new generation and drops its result. A `Task.isCancelled` check alone would leave a window between the check and the lock. **Remaining ceiling:** `onTrackChange` is called outside the lock (calling it inside could deadlock a callback that calls stop). A poll that passed the locked compare *before* the stop can still deliver its event while the stop is running. That event describes a change detected before the stop, and `currentTrack` is still left `nil` after the stop.
-
-**Verification.**
-1. ✅ Automated: `stopObserving_whilePollInFlight_firesNoEvent`. It **failed** on the unfixed code (both expectations) and passes after the fix. The rest of the `StreamingMetadata` suite (8 tests) passes, and so does SwiftLint strict.
-2. The existing `trackChange_secondTrack_hasPrevious` is unchanged; its sleep budget was **not** widened. The late third event it caught can no longer happen. It still relies on sleeps to see A and then B, which is a separate timing assumption that this fix does not remove.
-3. Manual: none required (no musical-feel or visual surface). A streaming session stop no longer logs a `Track change detected` line after `Stopped observing Now Playing metadata`.
 
 ---
 

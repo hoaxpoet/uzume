@@ -4,6 +4,173 @@ Resolved entries rotated out of [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §Resolved 
 
 ---
 
+### BUG-142 — a Now Playing poll in flight at `stopObserving()` fires a stale track change (2026-09-25)
+
+**Severity:** P2 · **Domain:** `audio` (streaming metadata) · **Failure class:** `concurrency` · **Status:** Fixed (BUG142.1, `86ba965e` + `d9500a41`), merged #277 (`5f4d421e`) · **Related:** BUG-024 (the same stale-surface-across-a-session-boundary class, CLAUDE.md §What NOT To Do)
+
+**Symptom.** CI fast-gate run 36162100751 (PR #275, attempt 1) failed `StreamingMetadataTests.trackChange_secondTrack_hasPrevious` at line 115: `events.value.count → 3`, expected 2. `main` passes it normally. The same log shows the test took **0.698 s** against its ~0.45 s of sleeps, so the runner was starved. Only the count expectation failed: `events[1]` was correctly A → B, so the extra event came after the second one, with the track unchanged.
+
+**Expected:** after `stopObserving()` returns, no `onTrackChange` fires and `currentTrack` stays `nil` until the next `startObserving()`.
+**Actual:** `stopObserving()` cancels `pollingTask` and clears `_currentTrack` / `lastTrackIdentity` under `lock`, but `pollNowPlaying()` did not re-check anything after `await reader()` returned. A poll parked in the reader when stop ran resumed, saw `identity != lastTrackIdentity` (now `nil`), wrote `_currentTrack` back, and fired `onTrackChange(previous: nil, current: …)`. In the CI case that was the third event.
+
+**Production impact.** `AudioInputRouter.stop()` calls `stopObserving()`, and the real reader is an AppleScript query to Music/Spotify that can take hundreds of ms, so the window there is wider than in the test. The router forwards the late event to the app as a fresh track change after the session ended. A restart had the same hole: `startObserving()` calls `stopObserving()` first, and the old task's in-flight poll could fire into the new session. Not observed live; found through the CI flake.
+
+**Reproduction (deterministic).** `stopObserving_whilePollInFlight_firesNoEvent`: the reader parks on a continuation, the test waits until it is parked, calls `stopObserving()`, releases the reader and awaits the polling task. On the unfixed code it fails every time in 0.002 s: 1 event (expected 0) and `currentTrack` = Track A (expected `nil`). No sleeps.
+
+**Fix.** `StreamingMetadata` keeps a `generation` counter. `stopObserving()` increments it under `lock`, and `startObserving()` passes the current value to its polling task. Both of a poll's locked state writes (the nil-info clear and the compare-and-fire) do nothing unless the poll's generation is still current. The check is inside the same lock as the stop's clear, so the ordering is fixed: either the poll's write lands before the stop (and the stop clears it), or it sees the new generation and drops its result. A `Task.isCancelled` check alone would leave a window between the check and the lock. **Remaining ceiling:** `onTrackChange` is called outside the lock (calling it inside could deadlock a callback that calls stop). A poll that passed the locked compare *before* the stop can still deliver its event while the stop is running. That event describes a change detected before the stop, and `currentTrack` is still left `nil` after the stop.
+
+**Verification.**
+1. ✅ Automated: `stopObserving_whilePollInFlight_firesNoEvent`. It **failed** on the unfixed code (both expectations) and passes after the fix. The rest of the `StreamingMetadata` suite (8 tests) passes, and so does SwiftLint strict.
+2. The existing `trackChange_secondTrack_hasPrevious` is unchanged; its sleep budget was **not** widened. The late third event it caught can no longer happen. It still relies on sleeps to see A and then B, which is a separate timing assumption that this fix does not remove.
+3. Manual: none required (no musical-feel or visual surface). A streaming session stop no longer logs a `Track change detected` line after `Stopped observing Now Playing metadata`.
+
+---
+
+---
+
+
+### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
+
+**Resolved 2026-10-01 — listening session 2 (build 10 recording build, `2026-10-01T18-05-22Z`).** Two ends and restarts (18:13:07Z, 18:14:19Z) plus ten output swaps (18:08:45–18:09:08Z): every teardown completed and the tap came back each time, no hang.
+
+**Severity:** P2 · **Domain tag:** audio.capture · **Status:** **RESOLVED 2026-09-23 (BUG139.1,
+`bf7c73fe`)** — root-caused from source, not inferred, and the lock-held teardown is gone. Found while running BUG-103's 5×
+verification streak; unrelated to that fix (BUG103.1 touches `LocalFilePlaybackProvider` only —
+`SystemAudioCapture.swift` is not in its diff).
+
+⚠ **Domain tag corrected.** Filed as `audio.capture / test-infrastructure` because it was first seen
+killing a test run. That was wrong: the deadlocking code is the **shipped** tap teardown, reached by
+`stopCapture()`, `performReinstall()` and `deinit`. The test suite is where it was *observed*, not
+where it lives.
+
+#### Expected behavior
+
+`swift test --package-path UzumeEngine` terminates. A capture teardown completes or fails; it does not
+block forever.
+
+#### Actual behavior
+
+The suite hangs **indefinitely** — no timeout, no failing test, no crash report. Killed manually after
+12+ minutes on a run whose predecessor had completed in 259 s. Presents as a wedged CI/gate run rather
+than a failure, which is the worst shape: BUG-103's SIGABRT at least left an `.ips`.
+
+#### The stack (captured, `sample`)
+
+Main thread, blocked:
+
+```
+FerrofluidLiveAudioTests.testLiveDSPPipeline()   FerrofluidLiveAudioTests.swift:76
+  SystemAudioCapture.stopCapture()               SystemAudioCapture.swift:283
+    SystemAudioCapture.cleanup()                 SystemAudioCapture.swift:485
+      SystemAudioCapture.teardownTapResources()  SystemAudioCapture.swift:407
+        _pthread_mutex_firstfit_lock_wait
+          __psynch_mutexwait
+```
+
+Concurrently, a tap IO-callback thread sits in `caulk::semaphore::timed_wait` inside the
+`AudioTimeStamp`/`AudioBufferList` callback thunk.
+
+#### Root cause — an exact ABBA, readable in the source (BUG139.1)
+
+`SystemAudioCapture.swift:407` — the line the sample is parked on — is `AudioDeviceStop(agg, proc)`,
+and `stateLock` has been held since line 401:
+
+```swift
+private func teardownTapResources() {
+    stateLock.lock()                       // 401
+    ...
+    if agg != 0 {
+        AudioDeviceStop(agg, proc)         // 407  ← BLOCKS until the IO proc drains
+```
+
+The other side is the IO proc block created in `createIOProc` (line ~243). It runs on the CoreAudio
+**real-time HAL thread** and calls `self?.probeInstallRMS(...)`, whose body is
+`stateLock.withLock { … }` (line 459).
+
+So:
+
+| Thread | Holds | Waits for |
+|---|---|---|
+| teardown (`stopCapture` / `performReinstall` / `deinit`) | `stateLock` | the IO proc to stop, inside `AudioDeviceStop` |
+| CoreAudio IO proc (real-time) | its HAL cycle | `stateLock`, inside `probeInstallRMS` |
+
+Neither can advance and `AudioDeviceStop` never returns. Both halves of the captured sample are
+accounted for, which is why this is recorded as proven rather than hypothesised.
+
+**This is BUG-021's lesson in a second place.** BUG-021 was *"no AVFoundation teardown under the
+provider lock"* in `LocalFilePlaybackProvider`; this is CoreAudio teardown under `stateLock` in the
+tap path. The doc comment above `probeInstallRMS` asserts *"the uncontended per-buffer stateLock"* —
+that word is the whole defect. The lock is uncontended per buffer and fatally contended at teardown.
+A secondary smell, not fixed here: an RT audio callback should not take a mutex at all (cf. BUG-036).
+
+#### Verification criteria (written before the fix)
+
+- [x] Automated: `SystemAudioCaptureTeardownTests` (4 tests) — claim returns the handles and clears
+      them in one locked step; a second claim yields nothing (no double-destroy); the lock is free the
+      moment claim returns; teardown and lock-taking callers interleave without wedging. As written,
+      this pins the **structure**, not the deadlock: reproducing the deadlock needs a real aggregate
+      device (hardware + Screen Recording) and is out of reach in the suite — the same honesty posture
+      BUG-103 took. **Negative control was run:** reintroducing the lock-held return wedged the suite,
+      the exact signature BUG-139 produces, so the gate demonstrably bites.
+- [x] Automated: full engine suite — see the closeout evidence block.
+      ⚠ `FerrofluidLiveAudioTests` in isolation is **not** a reproduction attempt worth anything: all
+      three of its tests **skip** (two after a ~10 s wait for a tap that a permissionless run never
+      gets). They exercise the teardown path via cleanup, which is how the deadlock was reached, but
+      they never take a live capture. Stated so nobody later reads "green in isolation" as evidence
+      the race was exercised.
+- [ ] **Manual: NOT DONE — the one gap in this fix.** This is the **shipped** streaming path, and the
+      automated gate cannot touch a real aggregate device. Outstanding: one app-level streaming
+      session (start capture, let audio flow, stop) plus one output-device change to exercise
+      `performReinstall`. Needs Screen Recording on a real Mac. Until that runs, the fix is
+      *structurally* proven and *not* live-validated.
+
+#### Suspected failure class
+
+`concurrency` — ABBA between the teardown path and the IO callback. Same *shape* as BUG-021 (which was
+the provider's `NSLock` vs. the `scheduleFile` completion callback) but a different lock, a different
+path, and the tap rather than the local-file provider. Related but distinct from BUG-058, which reaches
+`teardownTapResources()` via a device-change `performReinstall` rather than an ordinary `stopCapture()`.
+
+#### Reproduction
+
+Not reproduced on demand. Observed once: run 2 of 5 consecutive `swift test --package-path UzumeEngine`
+runs, run 1 green. `swift test --filter FerrofluidLiveAudio` in isolation was not attempted — doing that
+first is the obvious next step, since isolation-passes/parallel-hangs would match BUG-103's profile.
+
+#### Session artifacts
+
+`docs/diagnostics/BUG139_TEARDOWN_HANG_2026-09-23.txt` — the full `sample` output, committed so the
+stack survives the session. To capture a fresh one while hung: `sample <xctest-pid> 3`.
+
+#### Why it was filed rather than fixed at the time
+
+Found during another defect's verification. Fixing an audio-teardown lock ordering on one observation,
+inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first — and
+the evidence, read the next day, turned out to be conclusive from the source alone.
+
+---
+
+
+---
+
+---
+
+
+### BUG-070 — Failed tap reinstall leaves untruthful capture state; engine detectors starved (2026-07-12)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** Ten output swaps, each reinstall delivered audio within a second; a 44 s pause (18:10:01–18:10:45Z) was held as a pause, then the session was ended and restarted cleanly.
+
+**P2 · audio.capture / resource-management.** From the 2026-07-11 ultra review (concurrency + audio dimensions); root cause verified in code at PUB.6.
+
+**Expected:** after a failed device-change reinstall, the capture object's state reflects reality (not capturing), engine-side health classification can still fire, and a recovery restart can proceed.
+**Actual (pre-fix):** `performReinstall`'s catch did nothing — its comment claimed "the create steps already tore down + stopped the monitor on failure," which was false on both counts. End state: `_isCapturing=true`, monitor running, zero IO callbacks → `SignalHealthMonitor.evaluate` (sample-driven, `ingest` window boundaries) never runs so `deadTap` never confirms; the router's `.silent` recovery is likewise callback-starved; `startCapture` recovery blocked by the alreadyCapturing guard. Only the app-layer Mode-B stall card (1 Hz poll on the tap frame count, ~10 s dwell) surfaced it — detection existed, engine truth and recovery did not.
+**Fix (landed, PUB.6):** catch clears `_isCapturing` (unblocks stopCapture+startCapture recovery), monitor deliberately left running as a diagnostic beacon (later fires land in the SKIP branch and breadcrumb), comment corrected.
+**Verification criteria:** automated — engine builds; audio suites green (a real failed reinstall cannot be staged headless: Core Audio create-step failures need a live device transition). Manual (pending): a live device-swap session confirming normal reinstalls still work (the G1 12/12 behaviour), and — if a reinstall failure can be provoked — the stall card appears AND a subsequent session restart recovers cleanly.
+**Residual (documented, deliberately open):** the 3-queue lifecycle interleave (device-change reinstall vs silence-recovery reinstall vs user stop) is real but static-only evidence; the per-step breadcrumbs + install-generation probes are the instrumentation. Serialize ONLY on a reproduced interleave artifact — restructuring the G1-live-validated path on theory is the BUG-063 class.
+
+---
+
+
 ### BUG-134 — cached BeatGrids carry two tempo octaves; `computeBPM` averages them (2026-09-14)
 
 **Resolved 2026-10-01 — Matt's live check (listening session 1, build 10): closed on his call.** On *Ready to Start* the opening scene was not beat-locked, so the first ~9 s showed nothing; the beat-locked scene after it "synced well with the music". Whether the song's cache was cleared first was not recorded.
