@@ -580,3 +580,29 @@ flashes/s, 0 transitions**, regional and red safe, frame-mean luminance 0.057…
   palette follows it at most **0.25 turns/s** along the shortest arc. Unit gate: a phase flipping
   half a turn every frame at c = 0.09 never moves the palette more than the slew per frame.
 - The recipe came from Nacre (TONAL.3); the same risk is flagged for Nacre as a separate task.
+
+### UND.6 — round 1: the band in the fronds (2026-10-01)
+
+- **Matt, on the full films:** *"The beat sync looks a little floppy. Wondering if this could be
+  tightened up. Looks good though, great progress being made."* Asked what "tight" looks like:
+  he picked *"fronds move on the beat"*, then clarified — *"It's more like 'fronds move on musical
+  signals, e.g., drum hits, bass notes/rhythm, vocal melody'"* — and chose **each instrument gets
+  fronds**. (A metronomic grid nod was built between those two answers and discarded unshipped.)
+- `UnderstoryMotion`: far row **flicks on drum hits** (`spectralLevelRise` rising past 0.3, ≥ 0.1 s
+  apart; alpha pulse peaking 30 ms after the hit, neighbours opposite ways); mid row **pushes on
+  bass notes** (`bassDev` → x/(x+0.15) → 15 ms attack / 0.18 s release, leaning outward from the
+  centre); near row **sways with the vocal line** (vocal-stem centroid vs its own 3 s average,
+  tanh-scaled, 0.1 s smoothing, gated by `UnderstoryVoice` presence). All added to the bend on top
+  of the wind; none kicks Flexi's lightly damped springs (they would ring — floppy).
+- **Signals by measurement:** the drum STEM is more drum-specific (56–75 % of level-rise hits
+  coincide with drum-stem hits; drum-stem hits 1.3–1.9/s vs level-rise 0.7–1.4/s), but every stem
+  is ~2.5 s late on streaming, and lateness is what Matt called floppy — so drums and bass use the
+  live FeatureVector primitives (0 lag on both paths). The vocal line has no live equivalent: tight
+  on local files, ~2.5 s late on streaming — flagged for his live review.
+- **One primitive per layer (FA #67):** the mid row reads `bassDev` (note-scale pulses) and the
+  bass/treble LEVEL wind (0.2–2 s) — same band, different timescale and shape; watch at M7 for the
+  two fighting.
+- **Round-1 evidence (replay, 1080p):** motion gate 0 spikes / 0 frozen on all three; 0.00
+  flashes/s on the replays and under the worst-case train (135 shimmers, luma Δ0.010). Drum-flick
+  alignment: the far frond's bend changes **2.5–3.6×** more across a hit than at random moments;
+  41–71 % of hits exceed the random p90 (chance 10 %). Films: `/Volumes/Extreme SSD/understory/und6/`.
