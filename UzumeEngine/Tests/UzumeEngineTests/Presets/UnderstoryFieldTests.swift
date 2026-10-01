@@ -1,6 +1,7 @@
 // UnderstoryFieldTests — spring, drive, wind and layout invariants for Understory's CPU state
 // (UND.1 → UND.2).
 
+import Foundation
 import Testing
 import Metal
 @testable import Presets
@@ -115,6 +116,20 @@ struct UnderstoryFieldTests {
             return (colour.rotation, colour.trailDecay)
         }
         let tonal = try run(fifths: .pi / 2, consonance: 0.5, arousal: 0)
+        // Noisy harmony (the phase flipping half a turn every frame, just above the gate) must
+        // never pop the palette: no published step larger than the slew allows.
+        let noisy = try Self.field()
+        var last: Float = 0, worst: Float = 0
+        for i in 0..<600 {
+            var f = Self.features(bass: 0.3, treble: 0.01)
+            f.tonalPhaseFifths = i.isMultiple(of: 2) ? 2.6 : -0.5
+            f.tonalConsonance = 0.09
+            noisy.tick(deltaTime: 1 / 60, features: f)
+            let now = noisy.colourForTesting().rotation
+            var step = now - last; step -= step.rounded()
+            worst = max(worst, abs(step)); last = now
+        }
+        #expect(worst <= UnderstoryField.paletteSlew / 60 + 1e-5, "largest per-frame palette step \(worst)")
         #expect(abs(tonal.0 - 0.25) < 0.01, "fifths at π/2 → a quarter turn (\(tonal.0))")
         let atonal = try run(fifths: .pi / 2, consonance: 0.0, arousal: 0)
         #expect(abs(atonal.0) < 1e-4, "atonal music holds the palette (\(atonal.0))")
@@ -227,6 +242,17 @@ struct UnderstoryLayoutTests {
         let first = UnderstoryLayout(seed: 42, aspect: 16.0 / 9.0)
         #expect(first == UnderstoryLayout(seed: 42, aspect: 16.0 / 9.0))
         #expect(first.fronds.map(\.root) != UnderstoryLayout(seed: 43, aspect: 16.0 / 9.0).fronds.map(\.root))
+    }
+
+    @Test("UNDERSTORY_LAYOUT=<seed> prints a field's layout (diagnostics)")
+    func dumpLayout() {
+        guard let raw = ProcessInfo.processInfo.environment["UNDERSTORY_LAYOUT"], let seed = UInt32(raw) else { return }
+        let layout = UnderstoryLayout(seed: seed, aspect: 16.0 / 9.0)
+        for (i, f) in layout.fronds.enumerated() {
+            print(String(format: "[understory-layout] %2d %@ root (%.2f, %.2f) scale %.2f curl %+.2f%@", i,
+                         String(describing: f.layer), f.root.x, f.root.y, f.scale, f.curl,
+                         i == layout.leadIndex ? " LEAD" : ""))
+        }
     }
 
     @Test("roots spread across the screen without a mirror (FA #44)")

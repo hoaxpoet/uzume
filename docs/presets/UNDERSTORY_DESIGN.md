@@ -567,3 +567,16 @@ motion, worst stem train) through the production staged path, 10 s warm-up disca
 measured. It CONTAINS the hazard — **135 shimmers** in the window — and measures **0.00
 flashes/s, 0 transitions**, regional and red safe, frame-mean luminance 0.057…0.068 (Δ0.011,
 3.7× the responsiveness floor: measured, not static). `certified` stays false until Matt's M7.
+
+### Pre-M7 motion check — a whole-field palette pop, found and fixed (2026-10-01)
+
+- The motion gate on the 1080p love_rehab film flagged **one spike** (frame 188, t ≈ 11.13 s).
+  A difference image showed EVERY moving frond and every light pool changing colour in one
+  frame — not the shimmer (one frond). Cause: the palette read `atan2` of the circular average
+  of `tonalPhaseFifths` directly. Just above the consonance gate (c ≈ 0.09–0.10) the fifths phase
+  is near-random frame to frame, the average collapses (|v| ≈ 0.005) and its angle stepped
+  **0.39–0.41 turns in one frame** (11.000 s, 11.150 s).
+- Fix: the averaged direction is trusted only while coherent (|v| ramp 0.15 → 0.40) and the
+  palette follows it at most **0.25 turns/s** along the shortest arc. Unit gate: a phase flipping
+  half a turn every frame at c = 0.09 never moves the palette more than the slew per frame.
+- The recipe came from Nacre (TONAL.3); the same risk is flagged for Nacre as a separate task.

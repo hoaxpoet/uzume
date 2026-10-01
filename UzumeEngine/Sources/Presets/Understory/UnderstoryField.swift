@@ -107,6 +107,9 @@ public final class UnderstoryField: @unchecked Sendable {
     public static let trailDecayCalm: Float = 0.50
     public static let trailDecayIntense: Float = 0.82
 
+    /// Fastest the palette may turn, turns per second: a modulation glides, never jumps.
+    public static let paletteSlew: Float = 0.25
+
     /// Arousal mapped onto the trail range. The fixtures span about −0.4 … 0.65.
     static func trailDecay(arousal: Float) -> Float {
         let unit = min(max((arousal + 0.2) / 0.8, 0), 1)
@@ -252,7 +255,20 @@ public final class UnderstoryField: @unchecked Sendable {
         let gate = min(max((features.tonalConsonance - 0.05) / 0.03, 0), 1)
         let target = SIMD2<Float>(cos(features.tonalPhaseFifths), sin(features.tonalPhaseFifths))
         if features.tonalPhaseFifths.isFinite { fifths += (target - fifths) * (0.025 * gate) }
-        if simd_length(fifths) > 1e-3 { paletteRotation = atan2(fifths.y, fifths.x) / (2 * .pi) }
+        // The averaged DIRECTION is trusted only while the harmony is coherent, and the palette
+        // follows it at most `paletteSlew` turns/s along the shortest arc. Reading atan2 of the
+        // average directly (the Nacre recipe as first ported) popped the whole field's colour by
+        // 0.4 of a turn in one frame on love_rehab (11.0 s, 11.15 s): just above the consonance
+        // gate the fifths phase is near-random, the average collapses toward 0, and its angle whips.
+        let length = simd_length(fifths)
+        let trust = min(max((length - 0.15) / 0.25, 0), 1)
+        if trust > 0 {
+            var delta = atan2(fifths.y, fifths.x) / (2 * .pi) - paletteRotation
+            delta -= delta.rounded()
+            let slew = Self.paletteSlew / Self.substepHz
+            paletteRotation += min(max(delta * 0.05, -slew), slew) * trust
+            paletteRotation -= paletteRotation.rounded(.down)
+        }
         if features.arousal.isFinite { arousal += (features.arousal - arousal) * (1 / (2 * Self.substepHz)) }
     }
 
