@@ -165,6 +165,7 @@ struct UnderstoryStagedHarnessTests {
         let (width, height) = dims.count == 2 ? (dims[0], dims[1]) : (640, 480)
         let rig = try Self.rig(width: width, height: height)
         var bendLog = ["frame,t,bend,direction"]
+        var flashFrames: [[FlashRegionSample]] = []
         var row = 0
         for i in 0..<(20 * 60) {
             let t = Float(i) / 60
@@ -172,6 +173,7 @@ struct UnderstoryStagedHarnessTests {
             var f = SessionReplayHarness.featureForReplay(from: rows[row], aspect: Float(width) / Float(height))
             f.time = t
             f.deltaTime = 1.0 / 60.0
+            f.beatsPerBar = 4   // the fixtures' meter (every row: 4); the replay row does not carry it
             try rig.frame(f)
             guard t >= 8 else { continue }
             let n = i - 8 * 60
@@ -185,12 +187,29 @@ struct UnderstoryStagedHarnessTests {
                                   to: out.appendingPathComponent(String(format: "atlas_age_%05d.png", n)))
                 try Self.atlasRaw(atlas).write(to: out.appendingPathComponent(String(format: "atlas_%05d.f16", n)))
             }
-            try Self.writePNG(rig.pixels, width: width, height: height,
+            let pixels = rig.pixels
+            flashFrames.append(FlashAnalyzer.regions(bgra: pixels, width: width, height: height))
+            try Self.writePNG(pixels, width: width, height: height,
                               to: out.appendingPathComponent(String(format: "understory_seq_%05d.png", n)))
         }
         try (bendLog.joined(separator: "\n") + "\n").write(to: out.appendingPathComponent("bend.csv"),
                                                           atomically: true, encoding: .utf8)
+        // UND.4 evidence: every shimmer (time on the fixture's clock, frond, why), and which frond
+        // is the lead — checked against the grid's own wraps offline.
+        let lead = rig.field.layoutForTesting.leadIndex
+        let shimmerLog = ["time,frond,kind,is_lead"] + rig.field.shimmerEventsForTesting().map {
+            String(format: "%.4f,%d,%@,%d", $0.time, $0.frond, $0.kind.rawValue, $0.frond == lead ? 1 : 0)
+        }
+        try (shimmerLog.joined(separator: "\n") + "\n").write(to: out.appendingPathComponent("shimmer.csv"),
+                                                              atomically: true, encoding: .utf8)
         print("[understory-harness] wrote 720 frames + bend.csv to \(out.path); watchdog \(rig.pipeline.stagedWatchdogTripCount)")
+        // Photosensitivity on the production frames (the shimmer must travel, never flash).
+        let regional = FlashAnalyzer.analyzeRegional(flashFrames, fps: 60)
+        let red = FlashAnalyzer.analyzeRed(flashFrames, fps: 60)
+        print(String(format: "[understory-flash] %@: regional %.2f flashes/s (safe %@), red %.2f (safe %@)",
+                     fixture, regional.peakFlashesPerSecond, regional.isSafe ? "yes" : "NO",
+                     red.peakFlashesPerSecond, red.isSafe ? "yes" : "NO"))
+        #expect(regional.isSafe && red.isSafe)
         #expect(rig.pipeline.stagedWatchdogTripCount == 0)
     }
 

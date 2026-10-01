@@ -1,7 +1,7 @@
 {
   "name": "Understory",
   "family": "fractal",
-  "description": "A dim green forest floor with a field of fourteen glowing fern fronds among still ones: big furrowed trunks receding into green haze, a moss-covered fallen log across the middle distance, and a dense carpet of still sword ferns in depth rows. That forest is drawn once and held, the same place for every track. The fourteen moving fronds (ten open, four fiddleheads held curled into croziers) are Flexi's feedback fractal, ported verbatim: every frame each is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Each glows in saturated rainbow bands running up the stem and out across its leaflets, every frond at its own place on the colour wheel, and the whole field's colours turn with the harmony (the circle-of-fifths position, smoothed, held when the music is atonal or silent; never on a timer). Each moving frond's light spills onto the forest around its root. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels left to right, about 1.7 s across the screen, and each frond has slightly different springs, so neighbours drift out of phase. Moving fronds leave a short afterglow trail, longer when the music is more intense (arousal). A new track grows a new field of moving fronds from their seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
+  "description": "A dim green forest floor with a field of fourteen glowing fern fronds among still ones: big furrowed trunks receding into green haze, a moss-covered fallen log across the middle distance, and a dense carpet of still sword ferns in depth rows. That forest is drawn once and held, the same place for every track. The fourteen moving fronds (ten open, four fiddleheads held curled into croziers) are Flexi's feedback fractal, ported verbatim: every frame each is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Each glows in saturated rainbow bands running up the stem and out across its leaflets, every frond at its own place on the colour wheel, and the whole field's colours turn with the harmony (the circle-of-fifths position, smoothed, held when the music is atonal or silent; never on a timer). Each moving frond's light spills onto the forest around its root. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels left to right, about 1.7 s across the screen, and each frond has slightly different springs, so neighbours drift out of phase. On every beat of the song's beat grid one frond shimmers: a white-hot band, the palette turned half a turn under it, climbs from its base up the stem and out through every leaflet in about a third of a second, with a short afterglow behind it. The downbeat goes to the large lead frond in front; beats two to four go to a set of mid-distance fronds, always left to right, the same set for four bars before the next group takes over, so the eye learns where the next shimmer will land. Nothing shimmers until the grid has completed a bar and four seconds of the track have passed; with no grid, shimmers follow drum hits on a random frond, at least 0.35 s apart. Moving fronds leave a short afterglow trail, longer when the music is more intense (arousal). A new track grows a new field of moving fronds from their seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
   "author": "Uzume engine",
   "inspired_by": {
     "milkdrop_filename": "flexi - fractal seafood",
@@ -95,6 +95,24 @@
       "primitive": "arousal",
       "kind": "continuous",
       "note": "UND.3 — trail decay per 1/60 s from arousal (EMA ~2 s), 0.50 calm → 0.82 intense: a ghost falls to 10 % in ~3 frames calm, ~12 intense. One slow route, its own layer (FA #67)."
+    },
+    {
+      "route": "shimmer_beat",
+      "primitive": "beatPhase01",
+      "kind": "accent",
+      "note": "UND.4 — each beatPhase01 wrap (sub-frame interpolated) is a beat; its place in the bar is round(barPhase01 · beatsPerBar), so a bar wrap the grid skips while re-anchoring cannot silence the bar. Beats 2…N → a mid-layer set left to right, rotating every 4 bars. Replay: 101/101 grid beats matched on the three fixtures, 0 off-grid, 0.00 flashes/s."
+    },
+    {
+      "route": "shimmer_downbeat",
+      "primitive": "barPhase01",
+      "kind": "accent",
+      "note": "UND.4 — each barPhase01 wrap is the downbeat → the lead frond (25/25 on the fixtures). Also the grid-trust gate: nothing fires until it has wrapped once and 4 s have passed (cold start; D-154 no-grid tracks)."
+    },
+    {
+      "route": "shimmer_no_grid",
+      "primitive": "drumsEnergyDev",
+      "kind": "accent",
+      "note": "UND.4 — only when no grid is live (no bar wrap for 6 s): a rising crossing of 0.30, at least 0.35 s apart, shimmers a random mid frond (Matt's §10-2 default)."
     }
   ]
 }

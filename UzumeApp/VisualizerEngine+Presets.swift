@@ -750,8 +750,8 @@ extension VisualizerEngine {
         }
         understoryField = field
         pipeline.setDirectPresetFragmentBuffer(field.buffer)
-        pipeline.setMeshPresetTick { [weak field] features, _ in
-            field?.tick(deltaTime: features.deltaTime, features: features)
+        pipeline.setMeshPresetTick { [weak field] features, stems in
+            field?.tick(deltaTime: features.deltaTime, features: features, stems: stems)
         }
     }
 

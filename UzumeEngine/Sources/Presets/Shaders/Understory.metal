@@ -56,7 +56,7 @@ struct UnderstoryFrond {
     float4 crop;    // Flexi frame uv held by the tile: x0, y0, x1, y1
     float4 place;   // seed on screen (uv), frame height in screen heights, lean (rad)
     float4 look;    // Flexi's ww, Flexi's w, layer (0 far … 2 near), brightness
-    float4 colour;  // hue offset (turns), saturation, (UND.4 shimmer), (UND.4 shimmer)
+    float4 colour;  // hue offset (turns), saturation, seconds since this frond's shimmer, unused
 };
 
 struct UnderstoryFieldGPU {
@@ -74,6 +74,12 @@ constant float4 kFlexiAspect = float4(1.0, 0.75, 1.0, 4.0 / 3.0);
 // bright frond spans ~12 generations (measured, UND.3): one turn over the frond, each stem bead
 // its own hue, and every leaflet a small rainbow starting at its junction's hue.
 constant float kUnderstoryBandsPerGeneration = 1.0 / 12.0;
+
+// The beat shimmer (design §4.3, UND.4): a bright band climbing the frond's full path age, so it
+// rises through the stem and runs out into every leaflet. ~12 generations of bright frond at 40
+// generations/s ≈ 0.3 s base → tip (the design's ~0.35 s); gone by 0.9 s.
+constant float kUnderstoryShimmerSpeed = 40.0;   // generations per second
+constant float kUnderstoryShimmerWidth = 1.6;    // generations
 
 // Flexi's `texture(sampler_main, clamp(c, 0, 1))` (R density, G age·R, B stem·R), with `c` in frame
 // uv, read from this frond's tile. Frame uv OUTSIDE the tile's crop reads black: that is the
@@ -215,10 +221,19 @@ fragment float4 understory_bed_fragment(
         float2 halfTexel = 0.5 / (fr.tile.zw * size);
         float3 rgb = fronds.sample(understory_linear, fr.tile.xy + clamp(t, halfTexel, 1.0 - halfTexel) * fr.tile.zw).xyz;
         float stem = rgb.z / max(rgb.x, 1e-3);
+        float age = rgb.y / max(rgb.x, 1e-3);
+        // The shimmer: a white-hot band with the palette turned half a turn under it, and a
+        // short afterglow behind it. One frond, a travelling band: never a whole-frond flash.
+        float since = fr.colour.z;
+        float front = since * kUnderstoryShimmerSpeed;
+        float fade = smoothstep(0.9, 0.45, since);
+        float band = exp(-pow((age - front) / kUnderstoryShimmerWidth, 2.0)) * fade;
+        float trail = (age < front ? 0.30 * exp(-(front - age) / 3.0) : 0.0) * fade;
         // Hue bands run up the stem and across its leaflets; each frond has its own place on
         // the wheel; harmony turns the whole field.
-        float hue = fract(rotation + fr.colour.x + stem * kUnderstoryBandsPerGeneration);
-        float3 tint = understory_hsv(hue, fr.colour.y, fr.look.w);
+        float hue = fract(rotation + fr.colour.x + stem * kUnderstoryBandsPerGeneration + 0.5 * band);
+        float3 tint = understory_hsv(hue, fr.colour.y, fr.look.w) * (1.0 + trail);
+        tint = mix(tint, float3(1.25, 1.22, 1.15) * max(fr.look.w, 0.6), 0.75 * band);
         color = mix(color, tint, density);
         coverage = mix(coverage, 1.0, density);
     }

@@ -163,6 +163,9 @@ public final class UnderstoryField: @unchecked Sendable {
     private var arousal: Float = 0
     private var frameIndex: Float = 0
     private var clearPending = false
+    private var shimmer: UnderstoryShimmer
+    private var onsets: [Float]
+    private var events: [UnderstoryShimmer.Event] = []
 
     // MARK: Init
 
@@ -176,6 +179,8 @@ public final class UnderstoryField: @unchecked Sendable {
         layout = UnderstoryLayout(seed: seed, aspect: 16.0 / 9.0)
         springs = Array(repeating: Springs(), count: Self.maxFronds)
         history = Array(repeating: 0, count: Self.historyLength)
+        shimmer = UnderstoryShimmer(seed: seed)
+        onsets = Array(repeating: -100, count: Self.maxFronds)
         writeToGPU()
     }
 
@@ -185,14 +190,17 @@ public final class UnderstoryField: @unchecked Sendable {
         lock.withLock {
             layout = UnderstoryLayout(seed: seed, aspect: layout.aspect)
             clearPending = true
+            shimmer.reset(seed: seed, at: clock)
+            onsets = Array(repeating: -100, count: Self.maxFronds)
         }
         writeToGPU()
     }
 
     // MARK: Tick
 
-    /// Advance the springs by `deltaTime` in fixed 1/60 s substeps and publish the field.
-    public func tick(deltaTime: Float, features: FeatureVector) {
+    /// Advance the springs by `deltaTime` in fixed 1/60 s substeps, run the beat sequencer, and
+    /// publish the field. `stems` feeds only the no-grid drum fallback.
+    public func tick(deltaTime: Float, features: FeatureVector, stems: StemFeatures = .zero) {
         lock.withLock {
             frameIndex = frameIndex >= 1_000_000 ? 0 : frameIndex + 1
             if features.aspectRatio > 0, abs(features.aspectRatio - layout.aspect) > 1e-3 {
@@ -214,6 +222,19 @@ public final class UnderstoryField: @unchecked Sendable {
                     let back = (historyHead - frond.delaySubsteps + history.count) % history.count
                     springs[i].step(target: history[back], stiffness: frond.stiffness)
                 }
+            }
+            let frame = min(max(deltaTime, 0), 0.25)
+            let input = UnderstoryShimmer.Frame(
+                clock: clock,
+                dt: frame,
+                beatPhase: features.beatPhase01,
+                barPhase: features.barPhase01,
+                beatsPerBar: features.beatsPerBar,
+                drumsDev: stems.drumsEnergyDev
+            )
+            if let event = shimmer.step(input, layout: layout) {
+                onsets[event.frond] = event.time
+                if events.count < 8192 { events.append(event) }
             }
         }
         writeToGPU()
@@ -275,7 +296,7 @@ public final class UnderstoryField: @unchecked Sendable {
                     crop: frond.crop,
                     place: SIMD4(frond.root.x, frond.root.y, frond.scale, frond.rotation),
                     look: SIMD4(bend, -5 * bend, Float(frond.layer.rawValue), frond.brightness),
-                    colour: SIMD4(frond.hueOffset, frond.saturation, 0, 0)
+                    colour: SIMD4(frond.hueOffset, frond.saturation, min(clock - onsets[i], 100), 0)
                 )
             }
         }
@@ -300,6 +321,12 @@ public final class UnderstoryField: @unchecked Sendable {
     public func colourForTesting() -> (rotation: Float, trailDecay: Float) {
         lock.withLock { (paletteRotation, Self.trailDecay(arousal: arousal)) }
     }
+
+    /// Every shimmer fired so far (capped), for the replay evidence.
+    func shimmerEventsForTesting() -> [UnderstoryShimmer.Event] { lock.withLock { events } }
+
+    /// The field's clock (seconds of substeps run).
+    public var clockForTesting: Float { lock.withLock { clock } }
 
     /// The current layout.
     public var layoutForTesting: UnderstoryLayout { lock.withLock { layout } }
