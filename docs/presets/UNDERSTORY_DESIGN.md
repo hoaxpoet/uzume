@@ -532,3 +532,29 @@ Map (one line per new Swift file, D-168 gate), `docs/CREDITS.md` §Milkdrop-insp
   + red): **0.00 flashes/s**.
 - Look: the band is visible as white beads lighting from the base and a pale band climbing; its
   brightness, speed and width are the M7 eye call (plan: "tuned by eye").
+
+### UND.5 — fiddleheads and the voice (2026-10-01)
+
+- **κ_max fitted to ref 02** (coils rendered at silence, near tile): κ 0.25 a half-turn crozier,
+  0.35 three-quarters, **0.45 one tight turn with the leaflets packed inside** (ref 02), 0.55 an
+  overcoiled muddle. Resting curl 0.40–0.48 per fiddlehead, applied to `ww` (and so to `w`), as a
+  strong swing does in the source.
+- **The voice primitive, measured before built.** The design named `vocals_energy_rel`. On the
+  fixtures the separated vocal stem carries so_what's TRUMPET as strongly as a singer (vocalsEnergy
+  median 0.30 vs 0.30 / 0.32 on the sung tracks); `vocalsPitchConfidence` is 0 on both sung clips
+  and high on the trumpet. The instrument-family model separates them: brass median 0.167 on
+  so_what vs 0.001–0.002 on the sung clips. So presence = `vocalsEnergyRel` (D-019-gated on total
+  stem energy) **vetoed by brass + woodwind + string activity** (`UnderstoryVoice`). Envelope
+  attack 1.5 s / release 5 s; the four fiddleheads open in a stagger, left to right.
+- **Replay evidence** (local-file path, real stems): unfurl mean (t 8–20 s) **love_rehab 0.83,
+  there_there 0.87** (open > 0.5 the whole window), **so_what 0.00** (coiled throughout). A/B frame
+  on file: sung → all open; instrumental → tight rainbow coils.
+- **Harness gap found on the way:** `SessionReplayHarness` carried only the family DEVIATIONS,
+  not the levels, so the first replay saw no brass and so_what uncoiled (0.69). Levels now carried
+  and listed in `ReplayHarnessRouteCoverageTests`. Also: the veto smoothed up from 0, opening a
+  horn track's fiddleheads for its first half second — now seeded on the first sample.
+- **Cannot verify yet:** (a) PHRASE-level timing — neither sung clip has a long instrumental gap,
+  so "re-coil when the voice drops out" is shown only in a unit test, not on music; (b) the live
+  (streaming) path, where stems lag ~2.5 s (AUDIO_CONTRACT §2.3) — needs Matt's live session;
+  (c) a sung track WITH a horn or string section keeps its fiddleheads closed while those play —
+  a known trade-off of the veto, for M7.
