@@ -224,7 +224,7 @@ grid does not stutter, so a review asked to watch for stutter cannot see it.
 **PREP.3 candidates:** **BUG-132 first — it is a P1 this increment made routine.** Then: tune `pacingRate` against the live number; the unexplained 23–45 GB at four
 concurrent workers (PREP.1 §5); and Option 2 if Matt wants *fully prepared* inside 300 s.
 
-### Increment PREP.3 — the sweep stops waiting on itself 🔨 code-complete 2026-09-30; ⏸ awaiting Matt's live run (task 7)
+### Increment PREP.3 — the sweep stops waiting on itself ✅ live run 2026-10-01: no disruption (Matt: *"Saw no stutters or hitches"*) · ⏳ Skein / Aurora Veil not yet seen live
 
 **Done-when:** a local playlist prepares in well under half the time, memory no longer grows with
 track length, and stem values match pre-change goldens within a pre-registered tolerance; Matt has
@@ -252,9 +252,27 @@ prepares in **276.0 s** headless, flat out.
 **Task 7 (HARD STOP):** Matt runs a Release build on a 30+ track local playlist, cold cache, and
 watches (i) music and visuals undisturbed while the walk runs behind playback, (ii) Skein and Aurora
 Veil looking as they did, (iii) when Start now appears and when the walk reports fully prepared.
-**Matt's verdict:** *pending.*
+**Matt's verdict (2026-10-01):** *"Saw no stutters or hitches. Did not see Aurora Veil nor Skein."* —
+(i) **passed**; (ii) **not observed** (neither scene came up in ~17 min), so stem-scene parity rests on the golden
+comparison (§5 of the report), not a live look; (iii) measured below. Run: session `2026-10-01T13-48-05Z`, the
+PREP.3 code as a **Developer-ID developer-flavor build** from `/Users/Shared/Uzume PREP.3/` (the Apple-Development
+worktree build could not hold the machine's Screen & System Audio grant, and macOS kept reopening the installed
+build 9 instead — two attempts were lost to that, and one ran out of memory on build 9, i.e. BUG-177 pre-fix);
+`PREP3_task7_B_tracks.m3u`, 41 tracks, cold. **Start now:** first three tracks (Underworld, ~23 min of audio)
+ready **36 s** after loading; Start pressed at +46 s. Walk paced at 2× behind playback as designed (track 4 done
+13:49:20, track 5 started 13:53:53); footprint cycled 1.8–2.7 GB, no climb; 60,882 frames, clean exit; 9 of 41
+tracks prepared when the session ended (fully prepared during playback is set by pacing, not speed — the flat-out
+number is the 276 s headless run). **Found:** BUG-178 (skipping ahead of the paced walk leaves a song with no
+length and no seek; Matt chose option A). **Also seen, Matt: "ignore, not important right now":** ⌘, did not
+open Settings and no ? help overlay appeared (BR.14 live checks; BR.14 is in this build).
+**Listening-session-1 checks run in the same session** (audit §Manual verification debt, item 1) — Matt:
+*"BUG-156: pass · Output swap: pass · BUG-151: pass · Scene choice: pass, scenes suited the songs, saw about a
+dozen different scenes · All BR.14–BR.16 controls verified."* ⚠ On the PREP.3 diagnostic build, not the notarized
+DMG launched from Finder the audit specifies, and on a playlist without the session-1 songs (no Ready to Start →
+BUG-134 not covered).
 
-**Next (PREP.4 candidates):** cross-track workers (two now reach 41.4 s at 4.3 GB); pipelining two
+**Next (PREP.4 candidates):** BUG-178 (option A — seek from the file's length; the walk prepares the song being
+played next); cross-track workers (two now reach 41.4 s at 4.3 GB); pipelining two
 window groups so the sweep is model-bound (~55 → ~40 s on *Low*); `pacingRate` against a live
 frame-time number on the MacBook Pro; BUG-132 (still listed first above, untouched here).
 

@@ -59,6 +59,7 @@ passes, the entry moves to §Resolved (recent).
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
 | BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
+| BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. | The fix increment; Matt re-runs the skip-ahead. |
 | BUG-176 | P1 | renderer / photosensitivity | Membrane and Waveform flashed in a ninth of the screen at fast tempos (4.0 and 5.0 /s against WCAG's 3). Membrane's strike contrast is 0.8; Waveform's bars fall over 0.6 s (BR.20). | Session 1: Membrane on a fast song, and the launch screen with music playing — both still read as before. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
@@ -86,6 +87,35 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-178 — skipping ahead of preparation leaves a local song with no length and no seek (2026-10-01)
+
+**Severity:** P2 (transport looks broken on the songs a listener chose to jump to; music and Next still
+work) · **Domain:** `session.lf` / transport (`advanceLocalFileQueue`, the LF.1 no-cache fallthrough,
+`SessionPreparer` walk order) · **Failure class:** `pipeline-wiring` · **Status:** Open — **decision made, not
+fixed** · **Found by:** Matt, PREP.3 task 7 live run, 2026-10-01 (*"from Push Downstairs onwards I cannot seek
+(time is zeroed out), but I can advance to the next song"*)
+
+**Actual.** Session `2026-10-01T13-48-05Z` (PREP.3 Developer-ID diagnostic build, `PREP3_task7_B_tracks.m3u`,
+41 tracks). After Start now, the walk is paced at 2× realtime (PREP.2). Matt moved through tracks 1–8 sampling
+endings and reached track 9 at 14:02:27 while the walk was still on track 8:
+`StemCache.loadForPlayback track='09 Push Downstairs.m4a' … duration=0.00 … engineCacheHit=false`. Every later
+song he reached (10, 11, …) loaded the same way. Push Downstairs finished preparing at 14:04:27; tracks after it
+were still unprepared when he reached them.
+**Expected.** Seek works on any playing song; preparation never decides whether transport works.
+**Cause (from the log, not yet confirmed in code).** An unprepared song plays through the LF.1 no-cache path,
+which carries no decoded duration, so the track bar has length 0. The walk keeps playlist order regardless of
+where the listener is.
+**Decision (Matt, 2026-10-01): option A.** (1) The track bar shows the song's length from the file itself, so
+seek works at once, prepared or not. (2) When the listener lands on an unprepared song, the walk prepares THAT
+song next (then carries on from there) instead of continuing in playlist order. Until it is prepared the visuals
+stay live-reactive, as now. Rejected: B (seek only; walk stays in order — long live-reactive stretches after a
+far jump) and C (leave it).
+**Not PREP.3.** PREP.3 made the walk faster; pacing (PREP.2) still caps it at 2× realtime once music plays, and
+any listener who skips faster than that outruns it.
+**Verification (written before the fix):** a test that a song with no prepared entry exposes its file duration
+to the track bar; a test that landing on unprepared song k makes k the next prepared track; Matt re-runs a
+skip-ahead past the prepared prefix and can seek on every song.
 
 ### BUG-175 — Kagura sways through a song's opening instead of dancing when the intro's beat grid is uneven (2026-09-30)
 
