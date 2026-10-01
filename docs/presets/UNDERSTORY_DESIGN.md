@@ -1,6 +1,6 @@
 # Understory — Design
 
-**Status:** 🔨 **UND.0 + UND.1 built (2026-10-01); awaiting Matt's UND.1 GO / NO-GO.** Written
+**Status:** 🔨 **UND.1 GO (Matt, 2026-10-01: "yes, looks great - keep going"); UND.2 field built.** Written
 2026-10-01 from Matt's direction (same day) and a desk port-survey of the source preset. Concept-gate
 artifacts 1–3 exist (§2); artifact 4, the running look-spike, is built and motion-gated (§2, §12).
 **Family:** `fractal` · **Rubric:** `lightweight` (stylized 2D graphic, the Fractal Tree precedent) ·
@@ -410,3 +410,39 @@ Map (one line per new Swift file, D-168 gate), `docs/CREDITS.md` §Milkdrop-insp
   against the source's 8-bit target).
 - **Films for the GO/NO-GO:** `/Volumes/Extreme SSD/understory/und1/side_by_side_<fixture>.mp4`
   (left: source, rooted; right: Uzume).
+
+### UND.2 — the field: atlas, layout, wind (2026-10-01)
+
+- **Matt's GO on UND.1** (2026-10-01): *"yes, looks great - keep going"*.
+- **Layout** (`UnderstoryLayout`): 14 fronds, 10 open + 4 fiddleheads (near 2 incl. the lead frond,
+  mid 6, far 6), seeded per track; roots, scales, leans, stiffness and which slots are fiddleheads
+  all come from the seed; drawn far → near. Fiddleheads carry a provisional resting curl
+  (0.22–0.30 rad/generation, added to `ww`), which UND.5 fits against ref `02` and uncoils with
+  the voice. No mirrored twins: the field direction needs none, and a twin would sway in lock-step.
+- **Atlas** (§5.4 decided): depth rows, near 2 / mid 3 + 3 / far 6. Each tile holds a crop of
+  Flexi's frame (full width, frame y up to 0.60) at square texels, so the frond keeps its source
+  geometry at any drawable aspect. At 1080p: near tiles 960×405 (1.5× source), mid 640×270
+  (1.0×), far 320×135 (0.5×); with the chosen sizes every depth is upscaled ~2.4× to the screen.
+  It reads soft at native 1080p. `bed` reads the atlas with a Catmull-Rom filter (A/B on a crop:
+  leaflet edges defined, not smeared), which narrows it but does not close it. **The softness is
+  for Matt's eye at the colour review**, since colour and glow change how it reads. The levers
+  if it stays: bigger near tiles (fewer or smaller far fronds), or an off-drawable atlas, which is
+  an engine addition and his call.
+- **Defect found and fixed:** the first crop clamped samples to the crop edge. A fiddlehead's coil
+  touching the edge below the seed smeared back through the maps until its whole tile filled with
+  a grey ring pattern (frames 521–637 of so_what, +17 luma). Flexi clamps to the *frame* edge,
+  which is empty. Now frame uv outside the crop reads black, and the crop runs to 0.60 instead
+  of 0.56. Peak frame luma is now within 0.6–1.3 of the median on all three fixtures.
+- **Wind:** one drive history; each frond reads it `root.x / 0.6` s late (≈1.7 s across the
+  screen) with its own ±15 % stiffness. Tested: the gust reaches the rightmost frond exactly its
+  delay after the leftmost (±2 substeps), and a bass swell and a treble swell lean every frond
+  in opposite directions. **Idle breeze** at silence: peak sway < 0.02 rad/generation, never
+  frozen (§6.2).
+- **Per track:** `resetPerTrackPresetState` re-seeds the layout and zeroes the persistent atlas,
+  so a new song's field regrows from its seeds (~1 s) rather than jumping.
+- **Release GPU cost** (`UNDERSTORY_PERF=1 swift test -c release --enable-testable-imports`,
+  Mac mini M2 Pro, full staged frame, no readback, median of 180): **1.447 ms at 1080p,
+  5.735 ms at 4K.** Sidecar `complexity_cost` tier1 3.0 / tier2 1.5 (the Kagura convention:
+  measured on this machine, scaled up for base M1/M2, tier2 half).
+- **Motion gate** (1080p, three fixtures): 0 spikes / 719, 0 frozen. Films:
+  `/Volumes/Extreme SSD/understory/und2/field_<fixture>_1080p.mp4`.
