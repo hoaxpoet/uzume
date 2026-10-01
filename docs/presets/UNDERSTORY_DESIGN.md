@@ -1,6 +1,6 @@
 # Understory — Design
 
-**Status:** 🔨 **UND.1 GO (Matt, 2026-10-01: "yes, looks great - keep going"); UND.2 field built.** Written
+**Status:** 🔨 **UND.1 GO; UND.2 field built; UND.3 colour + forest backdrop first pass — fidelity push in progress (Matt: "the fidelity of the background is low overall").** Written
 2026-10-01 from Matt's direction (same day) and a desk port-survey of the source preset. Concept-gate
 artifacts 1–3 exist (§2); artifact 4, the running look-spike, is built and motion-gated (§2, §12).
 **Family:** `fractal` · **Rubric:** `lightweight` (stylized 2D graphic, the Fractal Tree precedent) ·
@@ -446,3 +446,42 @@ Map (one line per new Swift file, D-168 gate), `docs/CREDITS.md` §Milkdrop-insp
   measured on this machine, scaled up for base M1/M2, tier2 half).
 - **Motion gate** (1080p, three fixtures): 0 spikes / 719, 0 frozen. Films:
   `/Volumes/Extreme SSD/understory/und2/field_<fixture>_1080p.mp4`.
+
+### UND.3 — colour, path-length stamp, trails, and the forest (2026-10-01)
+
+- **Path length (§5.3), built as AGE, verified before use.** G = R · age: each map copies the
+  winning tap's age + 1; the seed is age 0; premultiplied so bilinear reads ignore empty texels.
+  Same quantity as the design's frame stamp without the mod-1024 wrap. Measured on the near and
+  a mid tile (raw atlas, so_what): mean age rises with distance from the seed in **100 %** of
+  distance bins; spatial speckle (> 4 generations from the 3×3 median) **0.22–0.35 %**; frame to
+  frame |Δage| > 3 on 1.2–5.5 % of pixels — the frond moving, highest on the curled fiddlehead.
+  **Age is a generation count, not a length:** the main arm contracts 1/1.12, so the bright
+  frond spans only ~12 generations and the tip piles up the rest.
+- **Colour.** Colouring by full age gave every leaflet its own rainbow, which read as speckle and
+  hid the fern. A second stamp, **B = R · stem**, counts only the main-arm generations outside the
+  first branch (main arm wins: +1; a side arm wins: reset to 0), so a leaflet carries the stem
+  position it grows from: clean bands up the stem and across its leaflets, one hue turn per ~12
+  generations, each frond at its own place on the wheel, smooth HSV. Full age (G) is kept for
+  UND.4's shimmer, which should run out into the leaflets.
+- **Harmony:** palette rotation = Nacre's circular EMA of `tonalPhaseFifths` (~0.8 s), gated by
+  `tonalConsonance`, holding when atonal/silent. Never a clock.
+- **Trails:** `bed` persistent, `max(new, prev · decay^(dt·60))`. The first range (0.80–0.94 per
+  1/60 s from arousal) smeared every leaflet into motion blur on so_what; now **0.50–0.82**.
+- **The forest (Matt).** *"We need a beautiful background for these ferns - they are just floating
+  in space."* He picked a moonlit forest floor from four options, then sent reference photos —
+  *"The first image would be close to what I'm envisioning. A fallen tree, covered in moss with a
+  bunch of ferns in the foreground, not all of which are moving - only a subset would move to the
+  beat."* — and chose **psychedelic movers** in a **dim green daylight** forest. Built as a
+  `backdrop` stage: four depths of furrowed redwood-scale trunks with lichen and moss fading into
+  green haze, a loam floor, six depth rows of still sword-fern clumps (a different, simply pinnate
+  species, drawn analytically), and a fallen log with Worley-plate bark and cushion moss. Each
+  moving frond's light pools around its root. **Cached:** the stage is persistent and computes
+  each pixel in one frame of 16 (a ¼ s dissolve-in, no hitch), then only carries itself; one
+  forest for every track, so a track change clears only the frond atlas (`clear_fronds`), no
+  longer every persistent stage.
+- **Cost (Release, M2 Pro):** drawn every frame the forest cost **23 ms at 1080p** (over budget);
+  cached, the whole frame is **2.57 ms @1080p, 10.3 ms @4K**.
+- **Matt's verdict on the forest:** *"This is a good first pass, but the fidelity of the
+  background is low overall."* Offered a photographic plate (a CC0 candidate was found); he chose
+  **keep it drawn, push detail**, and keep searching for references closer to his photo. The
+  honest ceiling was stated: drawn reads as illustration, not photograph.
