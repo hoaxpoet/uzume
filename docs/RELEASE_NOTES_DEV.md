@@ -15,6 +15,19 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 - **Nacre's colour could jump by up to a third of the colour wheel in one frame** when a song's key was hazy. love_rehab did it 289 times in 30 s. The same recipe caused Understory's colour pop. Nacre now follows the key only when it reads clearly, and its colour moves at most a quarter-turn a second.
 - **Clear-key songs keep their colours:** a held key lands within ~5° of where it did before. Saturation is unchanged.
 - Nacre is certified, so this waits on Matt's live M7 before it ships.
+### [dev-2026-10-01-204615] BUG149.1 — the key readout names the song's key, not F♯ minor (BUG-149)
+
+- **Most songs read F♯ minor; now they read their key.** The old estimate came from a spectrum too coarse to tell neighbouring notes apart, so the music's overall tilt decided it — pink noise read F♯ minor too. On clean chord progressions it was right in 3 of 24 keys; the new one is right in all 24.
+- On a thousand songs from Matt's library the readout now spreads the way keys in popular music do (D, G, C, A, E major most often) instead of piling a third of them on F♯ minor. Speech, comedy and noise-based tracks show no key rather than a guess.
+- Only the stored key (the preparation readout) changes. The live tonal visuals and mood are untouched.
+- Cached songs re-prepare once (cache v18) so they pick up the new key.
+
+### [dev-2026-10-01-195907] BUG178.1 — skipping ahead in a local playlist keeps the track bar and seek (BUG-178)
+
+- **Seek works on every song.** A song preparation had not reached showed a zero-length track bar and ignored seek. The bar now takes the length from the file itself, prepared or not.
+- **Preparation follows the listener.** Skip to a song that isn't prepared and it is prepared next, then the songs after it; anything skipped over is picked up afterwards. Until it is ready the visuals stay live-reactive, as before. A listener no longer waits out the paced gap between songs (up to half a song's length) for it to start.
+- The plan stays in playlist order, so each song still gets its own scenes and beat grid.
+- Matt's re-run of the skip-ahead is pending.
 
 ### [dev-2026-10-01-000246] PREP.3 — local playlists prepare almost three times faster (BUG-177 follow-through)
 

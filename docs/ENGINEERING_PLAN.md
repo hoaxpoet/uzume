@@ -271,8 +271,15 @@ dozen different scenes · All BR.14–BR.16 controls verified."* ⚠ On the PREP
 DMG launched from Finder the audit specifies, and on a playlist without the session-1 songs (no Ready to Start →
 BUG-134 not covered).
 
-**Next (PREP.4 candidates):** BUG-178 (option A — seek from the file's length; the walk prepares the song being
-played next); cross-track workers (two now reach 41.4 s at 4.3 GB); pipelining two
+**BUG178.1 ✅ (2026-10-01, `a042e84d`) — pending Matt's live skip-ahead:** seek uses the file's own length; the walk
+prepares the song the listener lands on next and a pending priority ends the pacing idle; the plan stays in queue
+order. Six live-checked ledger rows closed alongside (BUG-156, 117, 148, 133, 141, 144).
+
+**BUG149.1 ✅ (2026-10-01) — pending Matt's look at the readout:** the stored key comes from `KeyEstimator` (whole-song
+8192-point peak chroma, whitened, contrast-gated) instead of the live 1024-point chroma; synthetic 24/24 (was 3/24),
+the census pilot's F♯-minor attractor (35 %) is gone. Cache v18.
+
+**Next (PREP.4 candidates):** cross-track workers (two now reach 41.4 s at 4.3 GB); pipelining two
 window groups so the sweep is model-bound (~55 → ~40 s on *Low*); `pacingRate` against a live
 frame-time number on the MacBook Pro; BUG-132 (still listed first above, untouched here).
 
