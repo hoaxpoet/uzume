@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-01-000246] PREP.3 — local playlists prepare almost three times faster (BUG-177 follow-through)
+
+- **Preparing a local playlist is ~2.9× faster.** Bowie's *Low* (11 tracks) took 166.6 s on the Mac mini and now takes 58.5 s (Release, nothing cached). A 40-track playlist of 4-minute songs should now be fully prepared in about four minutes, inside the 5-minute target. "Start now" appears after ~11 s instead of ~31 s. Not yet confirmed in a live session.
+- **What scenes see does not change.** Stem values match what they were before the change to float rounding, checked on every frame of three songs, including a 48 kHz file and a 6-minute one.
+- **Memory stays flat however long the song** (about 1.2 GB for one track), building on BR.MEM's BUG-177 fix. Four songs at once, which used to run the Mac out of memory, now peak at 3.1 GB.
+- Live stem separation during playback got slightly faster (~5 %), not slower.
+
 ### [dev-2026-09-30-221341] BR.MEM — long local songs no longer run the Mac out of memory (BUG-177)
 
 - **Found in Matt's first listening session.** Preparing a long local song used memory in proportion to its length — 23 GB for a 9-minute song — so a playlist of long songs made the app stutter, hang and run the Mac out of memory. It now peaks at about 1.5 GB, however long the songs, and prepares slightly faster. What Uzume learns about each song is exactly the same.

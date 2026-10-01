@@ -224,6 +224,39 @@ grid does not stutter, so a review asked to watch for stutter cannot see it.
 **PREP.3 candidates:** **BUG-132 first — it is a P1 this increment made routine.** Then: tune `pacingRate` against the live number; the unexplained 23–45 GB at four
 concurrent workers (PREP.1 §5); and Option 2 if Matt wants *fully prepared* inside 300 s.
 
+### Increment PREP.3 — the sweep stops waiting on itself 🔨 code-complete 2026-09-30; ⏸ awaiting Matt's live run (task 7)
+
+**Done-when:** a local playlist prepares in well under half the time, memory no longer grows with
+track length, and stem values match pre-change goldens within a pre-registered tolerance; Matt has
+run a 30+ track cold-cache session and given a verdict. Prompt: `prompts/PREP.3-prompt.md`. Report:
+[`docs/diagnostics/PREP3_PREPARATION_THROUGHPUT_2026-09-30.md`](diagnostics/PREP3_PREPARATION_THROUGHPUT_2026-09-30.md);
+artifacts `docs/diagnostics/PREP3/`. Branch `claude/prep-3-prompt-0fff0b`, unpushed.
+
+**Delivered (Release, Mac mini M2 Pro, cold; Bowie *Low*, 11 tracks): 166.6 s → 58.5 s; peak
+footprint 12.9 → 2.6 GB.** 40 × 4 min projects to **241 s — inside D-242's 300 s *fully prepared***,
+without Option 2. Start now: 31.0 → 11.3 s on *Low*.
+- **Memory (BUG-177).** BR.MEM (#345) drained each separation's pool; PREP.3 measured the per-length
+  curve (11.9 GB → 1.2 GB on a 339 s track) and added pre-allocated model outputs plus Beat This! /
+  PANNs pools. `--concurrency 4` now completes at 3.1 GB.
+- **Separation.** Mono runs 4 inverse transforms instead of 8, all in one batched graph run; live
+  stereo runs 8 in one run. Live batch-1 latency 114.7 → 109.0 ms.
+- **Batching.** A separate batched model graph (live keeps batch 1); the sweep separates 8 windows
+  per run while the analyzer works behind it. N = 8 chosen from the N sweep (N = 16 is 15 % faster
+  for +1.2 GB). Placement byte-identical.
+- **Overlap.** `analyzePreview` runs alongside the sweep (−12.5 s); the next file is read one track
+  ahead (~0.5 s, marginal; kept, bounded to one file).
+- **Parity.** Goldens (44.1 kHz, 48 kHz, 384 s) bit-identical through task 2; within the
+  pre-registered tolerance after (worst field 2.7 % of it). **No behavioural change to beat sync.**
+
+**Task 7 (HARD STOP):** Matt runs a Release build on a 30+ track local playlist, cold cache, and
+watches (i) music and visuals undisturbed while the walk runs behind playback, (ii) Skein and Aurora
+Veil looking as they did, (iii) when Start now appears and when the walk reports fully prepared.
+**Matt's verdict:** *pending.*
+
+**Next (PREP.4 candidates):** cross-track workers (two now reach 41.4 s at 4.3 GB); pipelining two
+window groups so the sweep is model-bound (~55 → ~40 s on *Low*); `pacingRate` against a live
+frame-time number on the MacBook Pro; BUG-132 (still listed first above, untouched here).
+
 **Superseded planning note.** PREP.2 was originally "whichever option Matt picks", with concurrency
 across tracks and splitting the budget in two named as the likely candidates. The budget split is
 what he took (plus Release); **concurrency across tracks was not taken** — it is a 1.7× on a walk
