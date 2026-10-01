@@ -224,7 +224,7 @@ grid does not stutter, so a review asked to watch for stutter cannot see it.
 **PREP.3 candidates:** **BUG-132 first — it is a P1 this increment made routine.** Then: tune `pacingRate` against the live number; the unexplained 23–45 GB at four
 concurrent workers (PREP.1 §5); and Option 2 if Matt wants *fully prepared* inside 300 s.
 
-### Increment PREP.3 — the sweep stops waiting on itself ✅ live run 2026-10-01: no disruption (Matt: *"Saw no stutters or hitches"*) · ⏳ Skein / Aurora Veil not yet seen live
+### Increment PREP.3 — the sweep stops waiting on itself ✅ **DONE 2026-10-01** — live run: no disruption (Matt: *"Saw no stutters or hitches"*); stem-scene parity accepted on the goldens (Matt: *"golden parity is enough"*)
 
 **Done-when:** a local playlist prepares in well under half the time, memory no longer grows with
 track length, and stem values match pre-change goldens within a pre-registered tolerance; Matt has
@@ -253,8 +253,8 @@ prepares in **276.0 s** headless, flat out.
 watches (i) music and visuals undisturbed while the walk runs behind playback, (ii) Skein and Aurora
 Veil looking as they did, (iii) when Start now appears and when the walk reports fully prepared.
 **Matt's verdict (2026-10-01):** *"Saw no stutters or hitches. Did not see Aurora Veil nor Skein."* —
-(i) **passed**; (ii) **not observed** (neither scene came up in ~17 min), so stem-scene parity rests on the golden
-comparison (§5 of the report), not a live look; (iii) measured below. Run: session `2026-10-01T13-48-05Z`, the
+(i) **passed**; (ii) **not observed** (neither scene came up in ~17 min) — **Matt, 2026-10-01: *"golden parity is
+enough"***, so stem-scene parity rests on the golden comparison (§5 of the report), by his call; (iii) measured below. Run: session `2026-10-01T13-48-05Z`, the
 PREP.3 code as a **Developer-ID developer-flavor build** from `/Users/Shared/Uzume PREP.3/` (the Apple-Development
 worktree build could not hold the machine's Screen & System Audio grant, and macOS kept reopening the installed
 build 9 instead — two attempts were lost to that, and one ran out of memory on build 9, i.e. BUG-177 pre-fix);
