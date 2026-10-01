@@ -1,11 +1,11 @@
-// UnderstoryField — CPU state for the Understory staged scene (UND.1).
+// UnderstoryField — CPU state for the Understory staged scene (UND.1 → UND.2).
 //
 // Flexi's "fractal seafood" bends its fern with a two-spring system driven by bass
 // against treble, evaluated once per Milkdrop frame. This class runs those springs
-// VERBATIM (coefficients, update order) at a fixed 60 Hz substep, so the sway's
-// character does not depend on the render rate, and publishes each frond's bend to
-// `Understory.metal` at fragment buffer(6). The feedback IFS itself lives in the
-// shader; see `docs/presets/UNDERSTORY_DESIGN.md §3`.
+// VERBATIM (coefficients, update order) at a fixed 60 Hz substep for every frond in the
+// field, and publishes each frond's bend, atlas tile and screen placement to
+// `Understory.metal` at fragment buffer(6). The feedback IFS itself lives in the shader;
+// see `docs/presets/UNDERSTORY_DESIGN.md §3`. The layout lives in `UnderstoryLayout`.
 //
 // The DRIVE input (design §3 "Adapt") is Milkdrop's own band level, ported verbatim from
 // butterchurn's `AudioLevels`: each band over its own long average (rate 0.992 per 30 fps
@@ -18,7 +18,12 @@
 //     average makes the ratio lopsided — on so_what the frond leaned one way (bend p02 −0.08
 //     vs the source's −0.25). Milkdrop's ~4 s average swings both ways like the source.
 //
-// GPU layout (buffer(6)): `Header` (16 B) followed by `maxFronds` × `Frond` (32 B).
+// UND.2 — the wind travels (design §4.2): one drive history, each frond reading it delayed by
+// its root's x over `windSpeed`, with its own ±15 % spring stiffness, so a swell crosses the
+// field left to right and neighbours drift out of phase. A small idle breeze rides the drive
+// so silence reads as still air, not a frozen frame (design §6.2).
+//
+// GPU layout (buffer(6)): `Header` (16 B) followed by `maxFronds` × `Frond` (64 B).
 
 import Foundation
 import Metal
@@ -35,7 +40,7 @@ public final class UnderstoryField: @unchecked Sendable {
     // MARK: Constants
 
     /// Upper bound on simulated fronds. Must equal `kUnderstoryMaxFronds` in `Understory.metal`.
-    public static let maxFronds = 12
+    public static let maxFronds = UnderstoryLayout.frondCount
 
     /// Spring substep rate. Flexi's equations are per-frame; 60 Hz is the frame rate its
     /// `70/fps` bend correction is evaluated at (`bendTwitchGain`).
@@ -47,6 +52,18 @@ public final class UnderstoryField: @unchecked Sendable {
     /// Drive gain — Flexi's `0.2`, kept verbatim: the UND.1 re-fit (bend `ww` RMS / sd against
     /// the butterchurn oracle on the three tempo fixtures) landed at 0.188 / 0.189.
     public static let driveGain: Float = 0.2
+
+    /// Gust speed across the screen, screen widths per second (design §4.2).
+    public static let windSpeed: Float = 0.6
+
+    /// Idle breeze added to the drive (design §6.2): ~1 % of a typical musical swing, a slow
+    /// two-sine sway so silence is still air rather than a frozen frame.
+    static func idleBreeze(at seconds: Float) -> Float {
+        0.004 * sin(seconds * 2 * .pi / 9.0) + 0.002 * sin(seconds * 2 * .pi / 4.3 + 1.1)
+    }
+
+    /// Drive history length in substeps — covers the widest delay (one screen width).
+    static let historyLength = Int((1 / windSpeed) * substepHz) + 2
 
     // MARK: GPU layout
 
@@ -62,28 +79,30 @@ public final class UnderstoryField: @unchecked Sendable {
     struct Frond {
         /// Atlas tile in drawable uv: origin.xy, size.xy.
         var tile: SIMD4<Float>
-        /// Flexi's `ww`: per-generation rotation of the main arm.
-        var bend: Float
-        /// Flexi's `w`: heading of the arm offsets (`heading − 5·ww`).
-        var direction: Float
-        var pad0: Float = 0
-        var pad1: Float = 0
+        /// The region of Flexi's 4:3 frame the tile holds: x0, y0, x1, y1 (frame uv).
+        var crop: SIMD4<Float>
+        /// Screen placement: seed position (drawable uv), frame height in screen heights,
+        /// rotation (radians).
+        var place: SIMD4<Float>
+        /// Flexi's `ww` (bend + resting curl), Flexi's `w` (heading − 5·ww), depth layer
+        /// (0 far … 2 near), brightness.
+        var look: SIMD4<Float>
     }
 
     /// Two-spring state for one frond (Flexi's `y1 v1 y2 v2`).
     struct Springs {
         var y1: Float = 0, v1: Float = 0, y2: Float = 0, v2: Float = 0
-        var heading: Float = 0
 
         /// Flexi's `ww`.
         var bend: Float { -(y1 - y2) * UnderstoryField.bendTwitchGain - 0.8 * y1 }
 
         /// One Flexi frame: positions from old velocities, then velocities from new positions.
-        mutating func step(target q16: Float) {
+        /// `stiffness` scales both spring constants (the ±15 % jitter); 1 is Flexi's.
+        mutating func step(target q16: Float, stiffness: Float = 1) {
             y1 += 0.1 * v1
             y2 += 0.2 * v2
-            v1 = 0.95 * v1 - 0.1 * (y1 - q16)
-            v2 = 0.99 * v2 - 0.2 * (y2 - y1)
+            v1 = 0.95 * v1 - 0.1 * stiffness * (y1 - q16)
+            v2 = 0.99 * v2 - 0.2 * stiffness * (y2 - y1)
         }
     }
 
@@ -93,8 +112,11 @@ public final class UnderstoryField: @unchecked Sendable {
     public let buffer: MTLBuffer
 
     private let lock = NSLock()
+    private var layout: UnderstoryLayout
     private var springs: [Springs]
-    private var tiles: [SIMD4<Float>]
+    private var history: [Float]
+    private var historyHead = 0
+    private var clock: Float = 0
     private var bb: Float = 0
     private var tt: Float = 0
     private var levels = MilkdropLevels()
@@ -102,44 +124,52 @@ public final class UnderstoryField: @unchecked Sendable {
 
     // MARK: Init
 
-    /// UND.1 — one frond in a centred 4:3 tile (the source's frame), heading 0 (upright).
-    public init?(device: MTLDevice) {
+    public init?(device: MTLDevice, seed: UInt32 = 0) {
         let size = MemoryLayout<Header>.stride + Self.maxFronds * MemoryLayout<Frond>.stride
         guard let buf = device.makeBuffer(length: size, options: .storageModeShared) else {
             logger.error("UnderstoryField: failed to allocate buffer (\(size) bytes)")
             return nil
         }
         buffer = buf
-        springs = [Springs()]
-        tiles = [Self.centredTile(aspect: 16.0 / 9.0)]
+        layout = UnderstoryLayout(seed: seed, aspect: 16.0 / 9.0)
+        springs = Array(repeating: Springs(), count: Self.maxFronds)
+        history = Array(repeating: 0, count: Self.historyLength)
+        writeToGPU()
+    }
+
+    /// New track: a new field (design §4.1 "re-seeded at track change"). The springs keep
+    /// moving — the wind does not stop because the song changed.
+    public func reseed(_ seed: UInt32) {
+        lock.withLock { layout = UnderstoryLayout(seed: seed, aspect: layout.aspect) }
         writeToGPU()
     }
 
     // MARK: Tick
 
-    /// Advance the springs by `deltaTime` in fixed 1/60 s substeps and publish the bends.
+    /// Advance the springs by `deltaTime` in fixed 1/60 s substeps and publish the field.
     public func tick(deltaTime: Float, features: FeatureVector) {
         lock.withLock {
-            // ponytail: one centred 4:3 tile until UND.2's atlas layout.
-            tiles[0] = Self.centredTile(aspect: features.aspectRatio)
+            if features.aspectRatio > 0, abs(features.aspectRatio - layout.aspect) > 1e-3 {
+                layout = UnderstoryLayout(seed: layout.seed, aspect: features.aspectRatio)
+            }
             pending = min(pending + max(deltaTime, 0), 0.25)
             let step = 1 / Self.substepHz
             while pending + 1e-5 >= step {   // tolerance: 2 × (1/120) must make one step
                 pending -= step
+                clock += step
                 let level = levels.step(bass: features.bass, treble: features.treble)
                 bb = 0.97 * bb + 0.04 * level.bass
                 tt = 0.97 * tt + 0.04 * level.treble
-                let q16 = Self.driveGain * (bb - tt)
-                for i in springs.indices { springs[i].step(target: q16) }
+                historyHead = (historyHead + 1) % history.count
+                history[historyHead] = Self.driveGain * (bb - tt) + Self.idleBreeze(at: clock)
+                for i in springs.indices {
+                    let frond = layout.fronds[i]
+                    let back = (historyHead - frond.delaySubsteps + history.count) % history.count
+                    springs[i].step(target: history[back], stiffness: frond.stiffness)
+                }
             }
         }
         writeToGPU()
-    }
-
-    /// The source's 4:3 frame, full height, centred in a drawable of `aspect` (width/height).
-    static func centredTile(aspect: Float) -> SIMD4<Float> {
-        let width = aspect > 0 ? min(1, (4.0 / 3.0) / aspect) : 1
-        return SIMD4((1 - width) / 2, 0, width, 1)
     }
 
     /// butterchurn `AudioLevels.updateAudioLevels`, the `val` half, for bass and treble at the
@@ -175,14 +205,33 @@ public final class UnderstoryField: @unchecked Sendable {
             base.storeBytes(of: Header(frondCount: UInt32(springs.count)), as: Header.self)
             let fronds = (base + MemoryLayout<Header>.stride).assumingMemoryBound(to: Frond.self)
             for (i, spring) in springs.enumerated() {
-                let bend = spring.bend.isFinite ? spring.bend : 0
-                fronds[i] = Frond(tile: tiles[i], bend: bend, direction: spring.heading - 5 * bend)
+                let frond = layout.fronds[i]
+                let bend = (spring.bend.isFinite ? spring.bend : 0) + frond.curl
+                fronds[i] = Frond(
+                    tile: frond.tile,
+                    crop: frond.crop,
+                    place: SIMD4(frond.root.x, frond.root.y, frond.scale, frond.rotation),
+                    look: SIMD4(bend, -5 * bend, Float(frond.layer.rawValue), frond.brightness)
+                )
             }
         }
     }
 
-    /// Test seam: per-frond `(bend, direction)`.
+    // MARK: Test seams
+
+    /// Per-frond `(bend, direction)` as published (resting curl included).
     public func frondsForTesting() -> [(bend: Float, direction: Float)] {
-        lock.withLock { springs.map { ($0.bend, $0.heading - 5 * $0.bend) } }
+        lock.withLock {
+            zip(springs, layout.fronds).map { spring, frond in
+                let bend = spring.bend + frond.curl
+                return (bend, -5 * bend)
+            }
+        }
     }
+
+    /// The spring bend alone (no resting curl), per frond.
+    public func swayForTesting() -> [Float] { lock.withLock { springs.map(\.bend) } }
+
+    /// The current layout.
+    public var layoutForTesting: UnderstoryLayout { lock.withLock { layout } }
 }

@@ -1,7 +1,7 @@
 {
   "name": "Understory",
   "family": "fractal",
-  "description": "Look-spike (UND.1): one fern frond, Flexi's feedback fractal ported verbatim, rising from a seed in the middle of a centred 4:3 frame and drawn in one flat pale colour on a dark blue-black ground. Every frame the frond is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later: that lag is the whip. The frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans it one way, a treble swell the other, and a strong swing curls it into a crozier before it snaps back. At silence the springs come to rest and the frond stands upright and still.",
+  "description": "A field of fourteen fern fronds rising from the bottom of the frame on a dark blue-black ground, in three depths with dark ground between them: ten open fronds and four fiddleheads, young fronds held curled into croziers. Each frond is Flexi's feedback fractal, ported verbatim: every frame it is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels: each frond feels the drive later the further right it is rooted, about 1.7 s across the screen, and each has slightly different springs, so neighbours drift out of phase. Far fronds are smaller, dimmer and bluer; colour is one flat pale tint per depth for now. A new track grows a new field from its seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
   "author": "Uzume engine",
   "inspired_by": {
     "milkdrop_filename": "flexi - fractal seafood",
@@ -37,7 +37,7 @@
   "fatigue_risk": "low",
   "transition_affordances": ["crossfade"],
   "section_suitability": ["ambient", "comedown", "bridge"],
-  "complexity_cost": { "tier1": 1.2, "tier2": 0.9 },
+  "complexity_cost": { "tier1": 3.0, "tier2": 1.5 },
   "certified": false,
   "rubric_profile": "lightweight",
   "audio_routes": [

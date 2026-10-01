@@ -11,7 +11,7 @@
 //   • HARNESS_TEMPLATES=1 — 60 silence frames: the persistent frond neither blows up, decays to
 //     nothing, nor renders black.
 //   • UNDERSTORY_SEQUENCE=<fixture> — replays `route_coverage/<fixture>/features.csv` at 60 fps
-//     from t = 0 and writes 640×480 frames for t ∈ [8, 20) s to
+//     from t = 0 and writes frames (UNDERSTORY_SIZE=WxH, default 640×480) for t ∈ [8, 20) s to
 //     /tmp/uzume_visual/understory_<fixture>/understory_seq_*.png, plus `bend.csv` — the
 //     side-by-side input for the UND.1 GO/NO-GO against the butterchurn oracle (same window,
 //     same frame size, same 4:3 frame the source draws in).
@@ -60,6 +60,24 @@ struct UnderstoryStagedHarnessTests {
         }
 
         var pixels: [UInt8] { HarnessTemplateCore.readBGRA(capture, width: width, height: height) }
+
+        /// `frame`, returning the command buffer's GPU time in seconds.
+        func timedFrame(_ features: FeatureVector) throws -> Double {
+            var features = features
+            field.tick(deltaTime: features.deltaTime, features: features)
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { throw HarnessError.commandBufferFailed }
+            let front = pipeline.encodeOffscreenStages(commandBuffer: cmd, features: &features, stemFeatures: .zero)
+            let desc = MTLRenderPassDescriptor()
+            desc.colorAttachments[0].texture = capture
+            desc.colorAttachments[0].loadAction = .clear
+            desc.colorAttachments[0].storeAction = .store
+            guard let enc = cmd.makeRenderCommandEncoder(descriptor: desc) else { throw HarnessError.encoderCreationFailed }
+            pipeline.encodeStage(stage: finalSpec, encoder: enc, features: &features, stemFeatures: .zero, textures: front)
+            enc.endEncoding()
+            cmd.commit()
+            cmd.waitUntilCompleted()
+            return cmd.gpuEndTime - cmd.gpuStartTime
+        }
     }
 
     private static func rig(width: Int, height: Int) throws -> Rig {
@@ -141,13 +159,17 @@ struct UnderstoryStagedHarnessTests {
         let out = URL(fileURLWithPath: "/tmp/uzume_visual/understory_\(fixture)")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-        let rig = try Self.rig(width: 640, height: 480)
+        // UNDERSTORY_SIZE=WxH (default 640x480, the oracle's frame for the UND.1 side-by-side).
+        let dims = (ProcessInfo.processInfo.environment["UNDERSTORY_SIZE"] ?? "640x480")
+            .split(separator: "x").compactMap { Int($0) }
+        let (width, height) = dims.count == 2 ? (dims[0], dims[1]) : (640, 480)
+        let rig = try Self.rig(width: width, height: height)
         var bendLog = ["frame,t,bend,direction"]
         var row = 0
         for i in 0..<(20 * 60) {
             let t = Float(i) / 60
             while row + 1 < rows.count && rows[row + 1].time <= t { row += 1 }
-            var f = SessionReplayHarness.featureForReplay(from: rows[row], aspect: 640.0 / 480.0)
+            var f = SessionReplayHarness.featureForReplay(from: rows[row], aspect: Float(width) / Float(height))
             f.time = t
             f.deltaTime = 1.0 / 60.0
             try rig.frame(f)
@@ -155,13 +177,61 @@ struct UnderstoryStagedHarnessTests {
             let n = i - 8 * 60
             let frond = rig.field.frondsForTesting()[0]
             bendLog.append(String(format: "%d,%.4f,%.5f,%.5f", n, t, frond.bend, frond.direction))
-            try Self.writePNG(rig.pixels, width: 640, height: 480,
+            if n % 90 == 0, ProcessInfo.processInfo.environment["UNDERSTORY_ATLAS"] == "1",
+               let atlas = rig.pipeline.stagedTexture(named: "fronds") {
+                try Self.writePNG(Self.atlasGray(atlas), width: atlas.width, height: atlas.height,
+                                  to: out.appendingPathComponent(String(format: "atlas_%05d.png", n)))
+            }
+            try Self.writePNG(rig.pixels, width: width, height: height,
                               to: out.appendingPathComponent(String(format: "understory_seq_%05d.png", n)))
         }
         try (bendLog.joined(separator: "\n") + "\n").write(to: out.appendingPathComponent("bend.csv"),
                                                           atomically: true, encoding: .utf8)
         print("[understory-harness] wrote 720 frames + bend.csv to \(out.path); watchdog \(rig.pipeline.stagedWatchdogTripCount)")
         #expect(rig.pipeline.stagedWatchdogTripCount == 0)
+    }
+
+    // MARK: GPU cost
+
+    /// UNDERSTORY_PERF=1 — median GPU time of the full staged frame at 1080p and 4K, the number
+    /// behind the sidecar's `complexity_cost`. Quote it only from a Release run:
+    /// `swift test -c release --enable-testable-imports` (CLAUDE.md: Debug numbers mean nothing).
+    @Test("GPU cost of the staged frame at 1080p and 4K")
+    func gpuCost() throws {
+        guard ProcessInfo.processInfo.environment["UNDERSTORY_PERF"] == "1" else { return }
+        #if DEBUG
+        print("[understory-perf] DEBUG build — numbers below are NOT a cost (use -c release)")
+        #endif
+        for (width, height) in [(1920, 1080), (3840, 2160)] {
+            let rig = try Self.rig(width: width, height: height)
+            var millis: [Double] = []
+            for i in 0..<240 {
+                var f = HarnessTemplateCore.silenceFeature(frame: i)
+                f.aspectRatio = Float(width) / Float(height)
+                f.bass = 0.3 + 0.2 * sin(Float(i) * 0.3)
+                f.treble = 0.01
+                let gpu = try rig.timedFrame(f)
+                if i >= 60 { millis.append(gpu * 1000) }
+            }
+            millis.sort()
+            print(String(format: "[understory-perf] %dx%d GPU ms: median %.3f  p90 %.3f  max %.3f",
+                         width, height, millis[millis.count / 2], millis[millis.count * 9 / 10],
+                         millis.last ?? 0))
+        }
+    }
+
+    /// The `fronds` atlas density as an opaque grey BGRA image (diagnostics).
+    private static func atlasGray(_ tex: MTLTexture) -> [UInt8] {
+        let bytes = HarnessTemplateCore.readHalf(tex, width: tex.width, height: tex.height)
+        var out = [UInt8](repeating: 255, count: tex.width * tex.height * 4)
+        bytes.withUnsafeBytes { raw in
+            let halves = raw.bindMemory(to: UInt16.self)
+            for i in 0..<(tex.width * tex.height) {
+                let v = UInt8(max(0, min(255, HarnessTemplateCore.halfToFloat(halves[i * 4]) * 255)))
+                out[i * 4] = v; out[i * 4 + 1] = v; out[i * 4 + 2] = v
+            }
+        }
+        return out
     }
 
     private static func writePNG(_ bgra: [UInt8], width: Int, height: Int, to url: URL) throws {

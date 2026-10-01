@@ -1,4 +1,5 @@
-// UnderstoryFieldTests — UND.1 spring + drive invariants for Understory's CPU state.
+// UnderstoryFieldTests — spring, drive, wind and layout invariants for Understory's CPU state
+// (UND.1 → UND.2).
 
 import Testing
 import Metal
@@ -10,9 +11,9 @@ import Metal
 @Suite("UnderstoryField")
 struct UnderstoryFieldTests {
 
-    private static func field() throws -> UnderstoryField {
+    private static func field(seed: UInt32 = 7) throws -> UnderstoryField {
         let device = try #require(MTLCreateSystemDefaultDevice())
-        return try #require(UnderstoryField(device: device))
+        return try #require(UnderstoryField(device: device, seed: seed))
     }
 
     private static func features(bass: Float, treble: Float, dt: Float = 1 / 60) -> FeatureVector {
@@ -38,30 +39,62 @@ struct UnderstoryFieldTests {
         #expect(first.bass == 1 && first.treble == 1, "the average seeds from the first sample, not from 1.0")
     }
 
-    @Test("silence leaves the frond upright; balanced bands bend it nowhere")
-    func silenceIsUpright() throws {
+    @Test("silence is still air: the field barely sways, and keeps swaying")
+    func silenceIsStillAir() throws {
         let field = try Self.field()
-        for _ in 0..<600 { field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0, treble: 0)) }
-        let frond = try #require(field.frondsForTesting().first)
-        #expect(abs(frond.bend) < 1e-4)
-        #expect(abs(frond.direction) < 1e-3)
+        var samples: [Float] = []
+        for i in 0..<1200 {
+            field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0, treble: 0))
+            if i >= 600 { samples.append(field.swayForTesting()[0]) }
+        }
+        let peak = samples.map(abs).max() ?? 0
+        #expect(peak < 0.02, "idle breeze must stay small (peak sway \(peak))")
+        #expect((samples.max() ?? 0) - (samples.min() ?? 0) > 1e-4, "silence must not freeze the field")
     }
 
-    @Test("bass leans the frond one way and treble the other")
+    @Test("bass leans the field one way and treble the other")
     func bassAndTrebleOppose() throws {
-        /// Settle at a steady mix, then swell one band to 2× and read the bend 0.5 s later.
-        func bendAfterSwell(bassGain: Float, trebleGain: Float) throws -> Float {
+        /// Settle at a steady mix, swell one band to 2× for 2.5 s (longer than the gust takes to
+        /// cross the screen), and read every frond's sway relative to an unswelled run.
+        func sway(bassGain: Float, trebleGain: Float) throws -> [Float] {
             let field = try Self.field()
             for _ in 0..<3000 { field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01)) }
-            for _ in 0..<30 {
+            for _ in 0..<150 {
                 field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3 * bassGain, treble: 0.01 * trebleGain))
             }
-            return try #require(field.frondsForTesting().first).bend
+            return field.swayForTesting()
         }
-        let bassy = try bendAfterSwell(bassGain: 2, trebleGain: 1)
-        let trebly = try bendAfterSwell(bassGain: 1, trebleGain: 2)
-        #expect(bassy < -0.01 && trebly > 0.01, "bass bend \(bassy), treble bend \(trebly)")
-        #expect(abs(bassy + trebly) < 1e-3, "equal relative swells in either band mirror (scale-free levels)")
+        let base = try sway(bassGain: 1, trebleGain: 1)
+        let bassy = zip(try sway(bassGain: 2, trebleGain: 1), base).map { $0 - $1 }
+        let trebly = zip(try sway(bassGain: 1, trebleGain: 2), base).map { $0 - $1 }
+        #expect(bassy.allSatisfy { $0 < -0.005 } && trebly.allSatisfy { $0 > 0.005 },
+                "bass \(bassy.map { ($0 * 1000).rounded() / 1000 }) treble \(trebly.map { ($0 * 1000).rounded() / 1000 })")
+    }
+
+    @Test("the gust travels: a frond further right feels a swell later")
+    func gustTravelsLeftToRight() throws {
+        // Two identical fields; one gets a bass swell. The idle breeze moves both alike, so the
+        // first frame a frond's sway DIVERGES between them is when the gust reached it.
+        let calm = try Self.field(), gusty = try Self.field()
+        let layout = calm.layoutForTesting
+        let left = try #require(layout.fronds.indices.min { layout.fronds[$0].root.x < layout.fronds[$1].root.x })
+        let right = try #require(layout.fronds.indices.max { layout.fronds[$0].root.x < layout.fronds[$1].root.x })
+        for _ in 0..<3000 {
+            calm.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01))
+            gusty.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01))
+        }
+        var leftMoved: Int?, rightMoved: Int?
+        for frame in 0..<180 {
+            calm.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01))
+            gusty.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.6, treble: 0.01))
+            let gap = zip(gusty.swayForTesting(), calm.swayForTesting()).map { abs($0 - $1) }
+            if leftMoved == nil, gap[left] > 1e-4 { leftMoved = frame }
+            if rightMoved == nil, gap[right] > 1e-4 { rightMoved = frame }
+        }
+        let leftFrame = try #require(leftMoved), rightFrame = try #require(rightMoved)
+        let expected = layout.fronds[right].delaySubsteps - layout.fronds[left].delaySubsteps
+        #expect(abs((rightFrame - leftFrame) - expected) <= 2,
+                "left felt it at frame \(leftFrame), right at \(rightFrame); delay gap \(expected) substeps")
     }
 
     @Test("the springs integrate at 60 Hz whatever the render rate")
@@ -79,12 +112,58 @@ struct UnderstoryFieldTests {
         let at30 = try bend(after: 2, at: 30)
         #expect(abs(at60 - at120) < 1e-5 && abs(at60 - at30) < 1e-5, "60 \(at60) / 120 \(at120) / 30 \(at30)")
     }
+}
 
-    @Test("the centred tile is the source's 4:3 frame")
-    func centredTileIsFourByThree() {
-        let tile = UnderstoryField.centredTile(aspect: 16.0 / 9.0)
-        #expect(abs(tile.z * 16 / 9 / tile.w - 4.0 / 3.0) < 1e-5)
-        #expect(abs(tile.x + tile.z / 2 - 0.5) < 1e-6)
-        #expect(UnderstoryField.centredTile(aspect: 4.0 / 3.0) == SIMD4<Float>(0, 0, 1, 1))
+// MARK: - UnderstoryLayoutTests
+
+@Suite("UnderstoryLayout")
+struct UnderstoryLayoutTests {
+
+    @Test("a field: 10 open fronds and 4 fiddleheads, far drawn before near, lead frond near and open")
+    func fieldComposition() {
+        let layout = UnderstoryLayout(seed: 1, aspect: 16.0 / 9.0)
+        #expect(layout.fronds.count == UnderstoryLayout.frondCount)
+        #expect(layout.fronds.filter(\.isFiddlehead).count == 4)
+        let layers = layout.fronds.map(\.layer.rawValue)
+        #expect(layers == layers.sorted(), "painter's order is far → near")
+        let lead = layout.fronds[layout.leadIndex]
+        #expect(lead.layer == .near && !lead.isFiddlehead)
+    }
+
+    @Test("tiles tile the atlas exactly, with square pixels, at several aspects")
+    func tilesPackTheAtlas() {
+        for aspect: Float in [16.0 / 9.0, 16.0 / 10.0, 21.0 / 9.0, 4.0 / 3.0] {
+            let layout = UnderstoryLayout(seed: 3, aspect: aspect)
+            let area = layout.fronds.reduce(Float(0)) { $0 + $1.tile.z * $1.tile.w }
+            #expect(abs(area - 1) < 1e-5, "tiles cover the atlas once (aspect \(aspect))")
+            for frond in layout.fronds {
+                #expect(frond.tile.x >= 0 && frond.tile.y >= 0
+                        && frond.tile.x + frond.tile.z <= 1 + 1e-6 && frond.tile.y + frond.tile.w <= 1 + 1e-6)
+                // tile px aspect == crop aspect in a 4:3 frame
+                let tilePx = frond.tile.z * aspect / frond.tile.w
+                let cropPx = (frond.crop.z - frond.crop.x) * (4.0 / 3.0) / (frond.crop.w - frond.crop.y)
+                #expect(abs(tilePx - cropPx) < 1e-4, "square texels (aspect \(aspect))")
+                #expect(frond.crop.w > 0.53, "the crop keeps the whole seed")
+            }
+        }
+    }
+
+    @Test("a seed always grows the same field; another seed grows another")
+    func seededLayout() {
+        let first = UnderstoryLayout(seed: 42, aspect: 16.0 / 9.0)
+        #expect(first == UnderstoryLayout(seed: 42, aspect: 16.0 / 9.0))
+        #expect(first.fronds.map(\.root) != UnderstoryLayout(seed: 43, aspect: 16.0 / 9.0).fronds.map(\.root))
+    }
+
+    @Test("roots spread across the screen without a mirror (FA #44)")
+    func noMirrorSymmetry() throws {
+        for seed: UInt32 in 0..<20 {
+            let xs = UnderstoryLayout(seed: seed, aspect: 16.0 / 9.0).fronds.map(\.root.x)
+            let low = try #require(xs.min()), high = try #require(xs.max())
+            #expect(low < 0.25 && high > 0.75, "seed \(seed) leaves a side empty")
+            let mirrored = xs.map { 1 - $0 }.sorted()
+            let paired = zip(xs.sorted(), mirrored).allSatisfy { abs($0 - $1) < 0.01 }
+            #expect(!paired, "seed \(seed) is mirror-symmetric")
+        }
     }
 }

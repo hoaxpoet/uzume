@@ -89,6 +89,13 @@ extension VisualizerEngine {
     /// `currentSkeinSeed()` derives the reseed from it (call after `applyLocalFileTrackState`
     /// on the LF path).
     func resetPerTrackPresetState() {
+        // UND.2 (design §4.1): a new track grows a new field — re-seed the layout and clear the
+        // persistent frond atlas so every frond regrows from its seed instead of jumping to its
+        // new place. No-op unless Understory is active.
+        if let understoryField {
+            understoryField.reseed(currentSkeinSeed())
+            pipeline.resetStagedPersistentState()
+        }
         // NB.4: settle Nimbus into the new track. Zeroing the bloom follower shrinks/dims the
         // body to its floor and the flow phase re-seeds; the dim settle-in masks the gas re-seed
         // so the body blooms back UP into the new track rather than popping (DESIGN §1.5).
@@ -736,9 +743,10 @@ extension VisualizerEngine {
     }
 
     private func bindUnderstoryRuntime(_ desc: PresetDescriptor) {
-        // UND.1 — Flexi's two springs on the CPU (60 Hz substeps); the `fronds` stage reads each
-        // frond's bend at slot 6. The staged encoder binds slots 6–8 to every stage.
-        guard let field = UnderstoryField(device: context.device) else {
+        // UND.1/UND.2 — Flexi's two springs on the CPU (60 Hz substeps); the `fronds` and `bed`
+        // stages read the field at slot 6 (the staged encoder binds slots 6–8 to every stage).
+        // Seeded from the track identity so a track always grows its own field.
+        guard let field = UnderstoryField(device: context.device, seed: currentSkeinSeed()) else {
             logger.error("UnderstoryField: failed to allocate buffer for preset '\(desc.name)'")
             return
         }
