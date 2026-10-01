@@ -314,6 +314,8 @@ the known-issues ledger and an abandoned-work sweep into the increments below. *
 | **BR.MEM** | 1 | ✅ PR open — re-run session 1 | Local-file preparation memory: 23 GB → 1.4 GB on a 9-minute song (BUG-177, found in listening session 1) |
 | **BR.KI** | — | ✅ (2026-09-30), PR open | Known-issues ledger reconciliation (the audit's §Known-issues ledger, pulled forward from the Oct 11 freeze). 42 closed entries left §Open verbatim: 17 to §Resolved (recent), 25 to history. The six index/body contradictions carry dated notes. BUG-054 is a duplicate of 149; BUG-028 is superseded by 065. The index is now two tables: open with no fix, and fixed but waiting on a live check (by listening session). K8 (the Cytokinesis hold) is filed as BUG-174, after BR.11's BUG-173 merged. **Done-when:** every §Open entry is unfinished work, and `DocIntegrityTests` is green. |
 
+**Listening session 1 on build 10 (2026-10-01, public build, so no `session.log`).** Matt: BUG-156, output swap, scene choice (BUG-148, BUG-133) and BUG-117 pass; St. Louis Blues not pitched up (BR.17). **BUG-134 closed** on his call: on *Ready to Start* the first scene was not beat-locked, and the one after it synced well. **BUG-176:** Membrane passed on B.O.B. (fast); Waveform not seen. Superstition on Ferrofluid Ocean synced well, which supports the optional BUG-141 check; the sky did not visibly follow the singing, so the sidecar now says the colour "drifts slowly with the register" (Matt: *"soften"*), and AUDIO_CONTRACT §4.1 records why. Not run: BUG-091, BR.11 loops, BUG-163, the notice reset.
+
 ## Phase BETA — The beta scene programme 🔨 (2026-09-24; D-251…D-256)
 
 Matt's 2026-09-24 decisions (D-251…D-256) replace Phase PR with a scene programme aimed at the October 15
