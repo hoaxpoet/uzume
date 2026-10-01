@@ -23,6 +23,9 @@
 // field left to right and neighbours drift out of phase. A small idle breeze rides the drive
 // so silence reads as still air, not a frozen frame (design §6.2).
 //
+// UND.6 — the band in the fronds (`UnderstoryMotion`): the far row flicks on drum hits, the mid
+// row pushes on bass notes, the near row sways with the vocal line, on top of the wind.
+//
 // UND.5 — the voice uncoils the fiddleheads (design §4.4): curl = κ_max · (1 − opening), the
 // opening following `UnderstoryVoice`'s voice-presence envelope.
 //
@@ -170,6 +173,7 @@ public final class UnderstoryField: @unchecked Sendable {
     private var frameIndex: Float = 0
     private var clearPending = false
     private var voice = UnderstoryVoice()
+    private var motion = UnderstoryMotion()
     private var shimmer: UnderstoryShimmer
     private var onsets: [Float]
     private var events: [UnderstoryShimmer.Event] = []
@@ -232,6 +236,7 @@ public final class UnderstoryField: @unchecked Sendable {
             }
             let frame = min(max(deltaTime, 0), 0.25)
             voice.step(stems, dt: frame)
+            motion.step(features, stems, presence: voice.presence, clock: clock, dt: frame)
             let input = UnderstoryShimmer.Frame(
                 clock: clock,
                 dt: frame,
@@ -312,6 +317,7 @@ public final class UnderstoryField: @unchecked Sendable {
             for (i, spring) in springs.enumerated() {
                 let frond = layout.fronds[i]
                 let bend = (spring.bend.isFinite ? spring.bend : 0) + openedCurl(i)
+                    + motion.bend(index: i, layout: layout, clock: clock)
                 fronds[i] = Frond(
                     tile: frond.tile,
                     crop: frond.crop,
@@ -337,7 +343,7 @@ public final class UnderstoryField: @unchecked Sendable {
     public func frondsForTesting() -> [(bend: Float, direction: Float)] {
         lock.withLock {
             springs.indices.map { i in
-                let bend = springs[i].bend + openedCurl(i)
+                let bend = springs[i].bend + openedCurl(i) + motion.bend(index: i, layout: layout, clock: clock)
                 return (bend, -5 * bend)
             }
         }
@@ -356,6 +362,9 @@ public final class UnderstoryField: @unchecked Sendable {
 
     /// The field's clock (seconds of substeps run).
     public var clockForTesting: Float { lock.withLock { clock } }
+
+    /// The band-motion state (drum hits so far, last hit time, bass push, vocal sway), for evidence.
+    var motionForTesting: UnderstoryMotion { lock.withLock { motion } }
 
     /// The voice envelope (0 coiled … 1 open), for the vocal-route evidence.
     public var unfurlForTesting: Float { lock.withLock { voice.unfurl } }

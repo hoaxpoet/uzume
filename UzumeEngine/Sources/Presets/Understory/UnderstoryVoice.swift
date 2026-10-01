@@ -22,6 +22,8 @@ struct UnderstoryVoice {
     static let release: Float = 5.0
 
     private(set) var unfurl: Float = 0
+    /// This frame's voice presence (0…1), before the envelope: the vocal-line sway's gate.
+    private(set) var presence: Float = 0
     private var familyVeto: Float = 0
     private var vetoSeeded = false
 
@@ -37,7 +39,7 @@ struct UnderstoryVoice {
         }
         let total = stems.drumsEnergy + stems.bassEnergy + stems.vocalsEnergy + stems.otherEnergy
         let sung = stems.vocalsEnergyRel.isFinite ? stems.vocalsEnergyRel : 0
-        let presence = Self.ramp(0.05, 0.35, sung) * (1 - Self.ramp(0.03, 0.10, familyVeto))
+        presence = Self.ramp(0.05, 0.35, sung) * (1 - Self.ramp(0.03, 0.10, familyVeto))
             * Self.ramp(0.02, 0.10, total)
         let tau = presence > unfurl ? Self.attack : Self.release
         unfurl += (presence - unfurl) * (1 - exp(-dt / tau))
