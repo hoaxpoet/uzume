@@ -359,6 +359,23 @@ Open for Matt's live look (not blocking KAG.1): whether the beat lock is legible
 whether the macarena's slightly early arms read as anticipation. The Superstition D-154 false positive is
 tracked as its own beat-sync task, not inside Kagura.
 
+### Lane · Understory (working name) — a field of feedback-IFS ferns
+
+Flexi's *fractal seafood* frond, kept verbatim and multiplied into a field of swaying ferns and
+fiddleheads. Design [`docs/presets/UNDERSTORY_DESIGN.md`](presets/UNDERSTORY_DESIGN.md), plan
+[`UNDERSTORY_PLAN.md`](presets/UNDERSTORY_PLAN.md), references `docs/VISUAL_REFERENCES/understory/`.
+Branch `claude/understory-development-2c507d`.
+
+| ID | Status | Done-when |
+|---|---|---|
+| **UND.0** reference lock + harness | ✅ 2026-10-01 | Source oracle rendered deterministically (60 fps, audio injected per frame; `tools/milkdrop-render/render-sequence.js`), motion-gated (0 spikes ×3 fixtures). 6 references curated (Matt's review pending). `UnderstoryStagedHarnessTests`: production staged path, persistent `fronds`, real slot-6 field, non-black at silence. Sidecar `certified: false`, `lightweight`, `inspired_by` with sha256 |
+| **UND.1** look-spike: one frond, verbatim (GO / NO-GO) | ✅ built 2026-10-01 — **⏳ Matt's GO / NO-GO** | Flexi's three maps + seed verbatim in a persistent staged stage; springs verbatim at 60 Hz on the CPU; drive = Milkdrop `AudioLevels` on `bass`/`treble` (gain 0.2 kept; re-fit 0.19). Side-by-side films vs the oracle (`/Volumes/Extreme SSD/understory/und1/`); motion gate 0 spikes ×3; bend stats in the source's range per fixture (design §12) |
+| **UND.2** the field: atlas, layout, wind | ⏸ gated on UND.1 GO | Matt's §10-3 **field** (open fronds + fiddleheads, dark ground between). Tile resolution measured (design §5.4 corrected: 0.75×, not 3×); Release frame time at 1080p + 4K → `complexity_cost` |
+| **UND.3** colour + path-length stamp + trails | ⏸ | Stamp verified on a still + sequence; palette on `tonal_phase_fifths`; `bed` persistent with `arousal` decay |
+| **UND.4** shimmer sequencer | ⏸ | Replay log of (beat time, frond) against the grid; 0.00 flashes/s |
+| **UND.5** fiddleheads + vocals | ⏸ | κ from coil renders vs ref 02; vocal route fires on a vocal fixture, coiled on an instrumental, both paths |
+| **UND.6 / UND.7** M7 + certification | ⏸ | Matt's M7 PASS; NEW_PRESET_CHECKLIST §4 gates; 10-minute soak, watchdog silent |
+
 ### Lane · SCAN — Spotify playlists from the screen (D-260)
 
 Spotify's February 2026 Web API rules cap the paste-a-link connector at 5 users, so Spotify playlists are
