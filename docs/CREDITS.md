@@ -90,9 +90,9 @@ retraining or fine-tuning.
 ## Milkdrop-inspired scene attribution
 
 **Status:** **Active — populated per D-111 (as amended by the D-113
-inspired-by reframe).** Eight scenes are Milkdrop-inspired works; each
-declares its source in an `inspired_by` sidecar block. (`Meniscus` is the
-newest and is not yet certified — MEN.2a.)
+inspired-by reframe).** Nine scenes are Milkdrop-inspired works; each
+declares its source in an `inspired_by` sidecar block. (`Understory` is the
+newest and is not yet certified — UND.1.)
 
 **Source pack:**
 [`projectM-visualizer/presets-cream-of-the-crop`](https://github.com/projectM-visualizer/presets-cream-of-the-crop)
@@ -146,6 +146,7 @@ Where no hash was taken at authoring, `sha256` is omitted rather than invented.
 | `Meniscus` | `Martin - QBikal - Surface Turbulence IIb` | Martin, QBikal | butterchurn built-in JSON (hashed) | ✅ |
 | `Witchlight` | `martin - witchcraft reloaded` | Martin | butterchurn built-in JSON (hashed) | ✅ |
 | `Stave` | `Martin - charisma` | Martin | butterchurn built-in JSON (hashed; from `butterchurn-presets`, not the Cream of the Crop pack) | ✅ |
+| `Understory` (working name) | `flexi - fractal seafood` | Flexi | butterchurn-presets@2.4.7 `presets/converted` JSON (hashed; Milkdrop 2 original pack, not Cream of the Crop) | ⏳ UND.1 |
 
 **Reference-image attribution (`docs/VISUAL_REFERENCES/`).** The Witchlight
 reference set (WL.1) is eleven license-verified images from Wikimedia
@@ -169,7 +170,12 @@ character against a live butterchurn oracle, and then adds Uzume's
 music coupling — deviation primitives (D-026), stem-driven routing,
 beat-grid/downbeat events, and (Nacre) the Tonal Interval Vector
 palette. No Milkdrop runtime, `.milk` parser, or transpiled shader
-text ships in Uzume.
+text ships in Uzume. Understory is the closest to a port: Flexi's three warp
+maps, seed and two-spring sway are re-expressed by hand in Metal and Swift with
+his constants (the frond IS his mechanism, design §3), around which the field,
+colour, shimmer and fiddleheads are Uzume's own. Its reference images carry
+CC BY-SA obligations listed in
+[`docs/VISUAL_REFERENCES/understory/README.md`](VISUAL_REFERENCES/understory/README.md) §Provenance.
 
 ---
 

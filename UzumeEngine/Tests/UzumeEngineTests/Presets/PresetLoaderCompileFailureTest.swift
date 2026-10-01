@@ -142,7 +142,8 @@ struct PresetLoaderCompileFailureTest {
     /// 30 → 31 at FF.1 (Fireflies, the `particles`-only pulse-coupled swarm; certified: false).
     /// 31 → 32 when KAG.2 and FF.1 merged: each branch counted 30 → 31 on its own; with both
     /// presets in the roster the gate counts 32.
-    static let expectedProductionPresetCount = 32
+    /// 32 → 33 at UND.1 (Understory, the `staged` feedback-IFS fern field; certified: false).
+    static let expectedProductionPresetCount = 33
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

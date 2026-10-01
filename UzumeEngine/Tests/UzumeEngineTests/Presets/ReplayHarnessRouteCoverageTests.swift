@@ -99,6 +99,8 @@ struct ReplayHarnessRouteCoverageTests {
         "vocalsBand1", "otherBand1",
         "stringsActivityDev", "brassActivityDev", "woodwindsActivityDev",
         "percussionActivityDev",
+        // UND.5 — the family levels (Understory's voice veto).
+        "stringsActivity", "brassActivity", "woodwindsActivity", "percussionActivity",
         // BC.1 — track-scoped beat clarity (missing column → unknown, not zero)
         "beatClarity01"
     ]
