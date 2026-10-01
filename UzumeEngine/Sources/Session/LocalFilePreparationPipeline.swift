@@ -51,9 +51,11 @@ public enum LocalFilePreparationPipeline {
         let trackCPU0 = PrepStageSink.cpuSeconds()
         var probe = PrepStageProbe(sink: inputs.timingSink, track: inputs.filename)
 
+        // PREP.3 — the lookahead read this file while the previous one analysed.
+        let fetched = await inputs.prefetcher?.take(url: inputs.url)
         let contentHash: String
         do {
-            contentHash = try probe.measure(PrepStage.contentHash) {
+            contentHash = try fetched?.contentHash ?? probe.measure(PrepStage.contentHash) {
                 try PreviewAudio.sha256(of: inputs.url)
             }
         } catch {
@@ -81,7 +83,7 @@ public enum LocalFilePreparationPipeline {
         let result = await analyzeAndPersist(
             inputs: inputs,
             contentHash: contentHash,
-            shortHash: shortHash,
+            fetched: fetched,
             probe: probe
         )
         recordTrackTotal(
@@ -171,7 +173,35 @@ public enum LocalFilePreparationPipeline {
         inputs.recorder?.log(
             "LOUDNESS_PROFILE: track='\(inputs.filename)', "
             + (loudness?.summary ?? "none — surge keeps the fixed band"))
-        let analyzed = try SessionPreparer.analyzePreview(
+        // PREP.3 — the sweep does not depend on `analyzePreview` (they share only the
+        // separator, whose lock serialises their model sections), so it runs alongside it on
+        // its own thread and the two join before the result is assembled.
+        let sweep = BackgroundJob { [recorder = inputs.recorder, filename = inputs.filename] in
+            analyzeStemSeriesForLocalFile(
+                preview: preview, separator: separator, filename: filename, recorder: recorder, probe: probe)
+        }
+        let analyzed: CachedTrackData
+        do {
+            analyzed = try analyzePreviewForLocalFile(
+                preview: preview, separator: separator, inputs: inputs, probe: probe)
+        } catch {
+            _ = try? sweep.join()
+            throw error
+        }
+        let series = try sweep.join()
+        return analyzed
+            .with(loudnessProfile: loudness)
+            .with(stemFeatureSeries: series)
+    }
+
+    /// The shared (streaming + local) analysis, over the whole decoded file.
+    private static func analyzePreviewForLocalFile(
+        preview: PreviewAudio,
+        separator: any StemSeparating,
+        inputs: LocalFilePrepWorkerInputs,
+        probe: PrepStageProbe
+    ) throws -> CachedTrackData {
+        try SessionPreparer.analyzePreview(
             preview,
             separator: separator,
             analyzer: inputs.analyzer,
@@ -186,16 +216,6 @@ public enum LocalFilePreparationPipeline {
             wholeTrackAudio: true,
             probe: probe
         )
-        let series = analyzeStemSeriesForLocalFile(
-            preview: preview,
-            separator: separator,
-            filename: inputs.filename,
-            recorder: inputs.recorder,
-            probe: probe
-        )
-        return analyzed
-            .with(loudnessProfile: loudness)
-            .with(stemFeatureSeries: series)
     }
 
     /// LFSTEM.1 — sweep the whole decoded file into a `StemFeatureSeries`.
@@ -229,7 +249,8 @@ public enum LocalFilePreparationPipeline {
                 // bins to Hz at that rate — at the file's rate every band edge and the vocal
                 // pitch were scaled by 48000/44100 on a 48 kHz file.
                 analyzer: StemAnalyzer(
-                    sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate))
+                    sampleRate: separator.outputSampleRate ?? Float(preview.sampleRate)),
+                probe: probe
             )) ?? .empty
         }
         let elapsed = Date().timeIntervalSince(start)
@@ -253,23 +274,19 @@ public enum LocalFilePreparationPipeline {
     static func analyzeAndPersist(
         inputs: LocalFilePrepWorkerInputs,
         contentHash: String,
-        shortHash: String,
+        fetched: LocalFilePrefetcher.Fetched?,
         probe: PrepStageProbe
     ) async -> LocalFilePrepResult? {
+        let shortHash = String(contentHash.prefix(12))
         guard let separator = inputs.separator else {
             lfLogger.warning("[LF.4] no stem separator — continuing without cached install")
             return nil
         }
-        let (extracted, artwork) = await probe.measureAsync(PrepStage.metadata) {
-            (
-                await PreviewAudio.extractMetadata(at: inputs.url),
-                await PreviewAudio.extractArtwork(at: inputs.url)
-            )
-        }
+        let (extracted, artwork) = await metadataAndArtwork(url: inputs.url, fetched: fetched, probe: probe)
         let preview: PreviewAudio
         let cached: CachedTrackData
         do {
-            preview = try probe.measure(PrepStage.decode) {
+            preview = try fetched?.preview ?? probe.measure(PrepStage.decode) {
                 try PreviewAudio.fromLocalFile(at: inputs.url, contentHash: contentHash)
             }
             cached = try Self.analyzeWholeFile(
@@ -313,6 +330,16 @@ public enum LocalFilePreparationPipeline {
             source: .freshAnalysis,
             artworkData: outcome.artwork
         )
+    }
+
+    /// Tags and artwork: from the lookahead when it read them (PREP.3), otherwise read now.
+    private static func metadataAndArtwork(
+        url: URL, fetched: LocalFilePrefetcher.Fetched?, probe: PrepStageProbe
+    ) async -> (LocalFileMetadata, Data?) {
+        if let metadata = fetched?.metadata { return (metadata, fetched?.artwork) }
+        return await probe.measureAsync(PrepStage.metadata) {
+            (await PreviewAudio.extractMetadata(at: url), await PreviewAudio.extractArtwork(at: url))
+        }
     }
 
     /// Write the freshly-analyzed entry + AVAsset-extracted metadata + optional

@@ -59,6 +59,7 @@ passes, the entry moves to §Resolved (recent).
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
 | BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
+| BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. | The fix increment; Matt re-runs the skip-ahead. |
 | BUG-176 | P1 | renderer / photosensitivity | Membrane and Waveform flashed in a ninth of the screen at fast tempos (4.0 and 5.0 /s against WCAG's 3). Membrane's strike contrast is 0.8; Waveform's bars fall over 0.6 s (BR.20). | Session 1: Membrane on a fast song, and the launch screen with music playing — both still read as before. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
@@ -86,6 +87,35 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-178 — skipping ahead of preparation leaves a local song with no length and no seek (2026-10-01)
+
+**Severity:** P2 (transport looks broken on the songs a listener chose to jump to; music and Next still
+work) · **Domain:** `session.lf` / transport (`advanceLocalFileQueue`, the LF.1 no-cache fallthrough,
+`SessionPreparer` walk order) · **Failure class:** `pipeline-wiring` · **Status:** Open — **decision made, not
+fixed** · **Found by:** Matt, PREP.3 task 7 live run, 2026-10-01 (*"from Push Downstairs onwards I cannot seek
+(time is zeroed out), but I can advance to the next song"*)
+
+**Actual.** Session `2026-10-01T13-48-05Z` (PREP.3 Developer-ID diagnostic build, `PREP3_task7_B_tracks.m3u`,
+41 tracks). After Start now, the walk is paced at 2× realtime (PREP.2). Matt moved through tracks 1–8 sampling
+endings and reached track 9 at 14:02:27 while the walk was still on track 8:
+`StemCache.loadForPlayback track='09 Push Downstairs.m4a' … duration=0.00 … engineCacheHit=false`. Every later
+song he reached (10, 11, …) loaded the same way. Push Downstairs finished preparing at 14:04:27; tracks after it
+were still unprepared when he reached them.
+**Expected.** Seek works on any playing song; preparation never decides whether transport works.
+**Cause (from the log, not yet confirmed in code).** An unprepared song plays through the LF.1 no-cache path,
+which carries no decoded duration, so the track bar has length 0. The walk keeps playlist order regardless of
+where the listener is.
+**Decision (Matt, 2026-10-01): option A.** (1) The track bar shows the song's length from the file itself, so
+seek works at once, prepared or not. (2) When the listener lands on an unprepared song, the walk prepares THAT
+song next (then carries on from there) instead of continuing in playlist order. Until it is prepared the visuals
+stay live-reactive, as now. Rejected: B (seek only; walk stays in order — long live-reactive stretches after a
+far jump) and C (leave it).
+**Not PREP.3.** PREP.3 made the walk faster; pacing (PREP.2) still caps it at 2× realtime once music plays, and
+any listener who skips faster than that outruns it.
+**Verification (written before the fix):** a test that a song with no prepared entry exposes its file duration
+to the track bar; a test that landing on unprepared song k makes k the next prepared track; Matt re-runs a
+skip-ahead past the prepared prefix and can seek on every song.
 
 ### BUG-175 — Kagura sways through a song's opening instead of dancing when the intro's beat grid is uneven (2026-09-30)
 
@@ -177,6 +207,7 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Fix.** `StemSeparator.separate` runs inside its own `autoreleasepool`. Dance Yrself Clean **1.41 GB**, and 4 long songs back to back 1.50 GB; the prepared cache is **byte-identical** (6 of 6 files) and preparation ~10 % faster. The per-call stem-FFT probe lines moved from notice to info — 60 000 lines in 15 minutes had flooded the unified log and hidden everything else.
 **Gates.** `StemSeparatorMemoryTests` — batches of 20 separations on one background thread: 2 MB growth fixed, 646 MB unfixed (bound 150 MB). The footprint is process-wide, so concurrent suites added 170–327 MB of noise in a filtered parallel run; the gate takes the minimum over up to 3 batches (stops at the first clean one). Negative control with the pool removed: [642, 639, 708] MB — fails; filtered parallel run 5/5 green.
 **Open.** Whether BR.13's device-change restart behaved in that session is unknown (its log lines were flooded out); it stays in session 1.
+**PREP.3 addition (2026-09-30).** The per-length curve, Release, one Bowie *Low* track per process (`docs/diagnostics/PREP3/scaling-*/scaling.csv`): peak footprint **2.78 → 11.93 GB** (113 s → 339 s) before BR.MEM, **1.18 → 1.42 GB** after it, **1.10 → 1.24 GB** with PREP.3's two additions — `StemModelEngine.predict()` now writes its four outputs into pre-allocated buffers through `resultsDictionary` (no per-call result tensors, no `readBytes` copy; the `StemFFT+GPU` pattern), and the Beat This! and PANNs per-call bodies drain their own pools (whole-track grid tiling and the family sweep are the same long synchronous loops). The residue grows ~0.5 MB per second of audio, about three copies of the track's decoded mono PCM — the track's own data, not a per-call leak (estimate; not attributed allocation by allocation). Four tracks at once (`--concurrency 4`), killed at 23–45 GB in PREP.1, now completes at a **3.1 GB** peak. Stem series and a sweep window's stems are **bit-identical** to goldens captured before either change. ⚠ `StemSeparatorMemoryTests` reads process-wide footprint, so it fails intermittently when other suites run in the same process (170 MB in a filtered parallel run on unmodified main); it passes alone every time. Deflaked in #346 (minimum growth over up to three batches; bound unchanged).
 
 ### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
 

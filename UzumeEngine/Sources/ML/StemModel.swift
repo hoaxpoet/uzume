@@ -63,8 +63,8 @@ public final class StemModelEngine: @unchecked Sendable {
 
     // MARK: - Metal Resources
 
-    private let device: MTLDevice
-    private let commandQueue: MTLCommandQueue
+    let device: MTLDevice
+    let commandQueue: MTLCommandQueue
 
     // MARK: - Graph
 
@@ -88,9 +88,18 @@ public final class StemModelEngine: @unchecked Sendable {
     /// Internal buffers for each stem's [431, 2, 2049] output.
     private let outputAssembledBuffers: [MTLBuffer]
 
+    /// PREP.3 (BUG-177) — the graph writes each stem straight into `outputAssembledBuffers`
+    /// through these, instead of allocating four fresh ~7 MB result tensors per call and
+    /// copying them out with `readBytes`. Same pattern as `StemFFT+GPU`.
+    private let outputResults: [MPSGraphTensor: MPSGraphTensorData]
+
     // MARK: - Threading
 
-    private let lock = NSLock()
+    let lock = NSLock()
+
+    /// PREP.3 — the batched graph and its buffers, built on first `predictBatch`. Guarded by
+    /// `lock`. Live separation never touches it.
+    let batchState = StemModelBatchState()
 
     // MARK: - Init
 
@@ -149,6 +158,10 @@ public final class StemModelEngine: @unchecked Sendable {
         }
         self.outputBuffers = outBufs
         self.outputAssembledBuffers = assembledOuts
+        let assembledShape: [NSNumber] = [NSNumber(value: Self.modelFrameCount), 2, NSNumber(value: Self.nBins)]
+        self.outputResults = Dictionary(uniqueKeysWithValues: zip(graphBundle.stemOutputTensors, assembledOuts).map {
+            ($0, MPSGraphTensorData($1, shape: assembledShape, dataType: .float32))
+        })
 
         logger.info("StemModelEngine ready: MPSGraph, \(Self.stemCount) stems, \(Self.modelFrameCount) frames")
     }
@@ -162,7 +175,8 @@ public final class StemModelEngine: @unchecked Sendable {
     ///
     /// After return, read separated magnitudes from `outputBuffers[stem].magL/magR`.
     ///
-    /// - Throws: `StemModelError.predictionFailed` if graph execution fails.
+    /// - Throws: never since PREP.3 (outputs are pre-allocated, so there is no missing result
+    ///   to report); kept `throws` so callers are unchanged.
     public func predict() throws {
         lock.lock()
         defer { lock.unlock() }
@@ -188,23 +202,18 @@ public final class StemModelEngine: @unchecked Sendable {
             graphBundle.inputTensor: inputData
         ]
 
-        let results = graphBundle.graph.run(
-            with: commandQueue,
-            feeds: feeds,
-            targetTensors: graphBundle.stemOutputTensors,
-            targetOperations: nil
-        )
-
-        // Extract outputs
-        for (idx, tensor) in graphBundle.stemOutputTensors.enumerated() {
-            guard let result = results[tensor] else {
-                throw StemModelError.predictionFailed("Missing output for stem \(idx)")
-            }
-            result.mpsndarray().readBytes(
-                outputAssembledBuffers[idx].contents(),
-                strideBytes: nil
+        SeparationSplit.measure("model_run") {
+            graphBundle.graph.run(
+                with: commandQueue,
+                feeds: feeds,
+                targetOperations: nil,
+                resultsDictionary: outputResults
             )
-            disassembleOutput(stemIndex: idx)
+        }
+
+        // Split each stem's [frame, 2, bin] output to L/R.
+        SeparationSplit.measure("readback") {
+            for idx in 0..<Self.stemCount { disassembleOutput(stemIndex: idx) }
         }
     }
 

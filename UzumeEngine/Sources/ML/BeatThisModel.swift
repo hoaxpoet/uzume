@@ -228,6 +228,12 @@ public final class BeatThisModel: @unchecked Sendable {
     // MARK: - Private Inference
 
     private func predictCore(spectrogram: [Float], frameCount: Int) throws -> CorePrediction {
+        // PREP.3 (BUG-177): drain this call's MPSGraph result tensors here — whole-track grid
+        // tiling calls it in a long synchronous loop whose outer pool would otherwise hold them.
+        try autoreleasepool { try predictCoreInPool(spectrogram: spectrogram, frameCount: frameCount) }
+    }
+
+    private func predictCoreInPool(spectrogram: [Float], frameCount: Int) throws -> CorePrediction {
         lock.lock()
         defer { lock.unlock() }
 

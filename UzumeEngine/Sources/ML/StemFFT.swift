@@ -91,7 +91,11 @@ public final class StemFFTEngine: @unchecked Sendable {
     internal let fftSetup: FFTSetup
 
     /// Serializes access to the graph execution path.
-    private let lock = NSLock()
+    internal let lock = NSLock()
+
+    /// PREP.3 — batched inverse graphs and their buffers, built on first use per row count.
+    /// Guarded by `lock`.
+    internal let batchState = InverseBatchState()
 
     // MARK: - GPU Resources
     //

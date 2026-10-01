@@ -1,0 +1,16 @@
+== t2 run 1 (load 3.18)
+stereo (live) median 114.7 ms   p90 122.8 ms   min 111.7 ms
+mono (sweep) median 112.7 ms   p90 121.1 ms   min 108.6 ms
+
+== t5 run 1 (load 3.59)
+stereo (live)  median 108.7 ms   p90 116.6 ms   min 105.9 ms
+mono (sweep)   median 101.7 ms   p90 109.6 ms   min 97.8 ms
+
+== t2 run 2 (load 3.44)
+stereo (live) median 114.6 ms   p90 123.2 ms   min 112.2 ms
+mono (sweep) median 112.6 ms   p90 121.1 ms   min 109.3 ms
+
+== t5 run 2 (load 3.27)
+stereo (live)  median 109.3 ms   p90 116.9 ms   min 106.0 ms
+mono (sweep)   median 102.8 ms   p90 109.0 ms   min 98.0 ms
+

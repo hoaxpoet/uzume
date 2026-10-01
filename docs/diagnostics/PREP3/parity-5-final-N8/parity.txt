@@ -1,0 +1,3 @@
+02 - Breaking Glass: series differs · all fields within tolerance · window stems differ (max |Δ| 1.19e-07 of peak 0.713)
+02 Hammerhead: series differs · all fields within tolerance · window stems differ (max |Δ| 2.38e-07 of peak 0.959)
+08 - Warszawa: series differs · all fields within tolerance · window stems differ (max |Δ| 2.24e-08 of peak 0.137)

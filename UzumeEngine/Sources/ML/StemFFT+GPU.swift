@@ -181,7 +181,8 @@ extension StemFFTEngine {
 
         packInverseInputs(magnitude: magnitude, phase: phase)
         runInverseGraph()
-        let output = overlapAddAndNormalize()
+        let output = overlapAddAndNormalize(frames: inverseOutputBuffer.contents().bindMemory(
+            to: Float.self, capacity: Self.modelFrameCount * Self.nFFT))
 
         // Strip center padding if an original length was supplied.
         if let origLen = originalLength {
@@ -312,12 +313,11 @@ extension StemFFTEngine {
     /// Each frame is multiplied by the Hann window (via `vDSP_vmul`) then
     /// added into the output buffer with `vDSP_vadd`. The normalization
     /// by the precomputed window-square sum uses `vDSP_vdiv`.
-    private func overlapAddAndNormalize() -> [Float] {
+    /// `outPtr` is `modelFrameCount` rows of `nFFT` time-domain samples — the fixed-size inverse
+    /// graph's output, or one item of the PREP.3 batched graph's.
+    func overlapAddAndNormalize(frames outPtr: UnsafePointer<Float>) -> [Float] {
         let outLength = (Self.modelFrameCount - 1) * Self.hopLength + Self.nFFT
         var output = [Float](repeating: 0, count: outLength)
-        let outPtr = inverseOutputBuffer.contents().bindMemory(
-            to: Float.self, capacity: Self.modelFrameCount * Self.nFFT
-        )
         var scratch = [Float](repeating: 0, count: Self.nFFT)
 
         output.withUnsafeMutableBufferPointer { outBuf in

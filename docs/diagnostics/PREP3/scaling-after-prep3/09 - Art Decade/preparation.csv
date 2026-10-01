@@ -1,0 +1,17 @@
+track,stage,wall_ms,cpu_ms,cpu_cores,audio_s,ms_per_audio_s
+"09 - Art Decade.flac",content_hash,48.6,13.3,0.27,227.16,0.21
+"09 - Art Decade.flac",cache_probe,0.1,0.1,1.01,227.16,0.00
+"09 - Art Decade.flac",metadata_artwork,14.9,10.6,0.71,227.16,0.07
+"09 - Art Decade.flac",decode,230.3,230.2,1.00,227.16,1.01
+"09 - Art Decade.flac",loudness_profile,23.0,23.0,1.00,227.16,0.10
+"09 - Art Decade.flac",stem_separation,187.4,152.8,0.82,227.16,0.83
+"09 - Art Decade.flac",stem_warmup,31.3,31.3,1.00,227.16,0.14
+"09 - Art Decade.flac",mir,420.7,420.3,1.00,227.16,1.85
+"09 - Art Decade.flac",beat_grid,1229.3,895.6,0.73,227.16,5.41
+"09 - Art Decade.flac",grid_onset_calibration,70.7,70.5,1.00,227.16,0.31
+"09 - Art Decade.flac",instrument_family,359.0,343.1,0.96,227.16,1.58
+"09 - Art Decade.flac",sweep_separate,13143.9,8628.6,0.66,227.16,57.86
+"09 - Art Decade.flac",sweep_analyze,717.6,712.8,0.99,227.16,3.16
+"09 - Art Decade.flac",stem_series_sweep,13882.2,9362.0,0.67,227.16,61.11
+"09 - Art Decade.flac",cache_write,11.8,6.9,0.59,227.16,0.05
+"09 - Art Decade.flac",TRACK_TOTAL,16509.6,11560.0,0.70,227.16,72.68

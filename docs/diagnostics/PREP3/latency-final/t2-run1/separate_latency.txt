@@ -1,0 +1,3 @@
+separate() latency, 60 calls after one warm-up, 10 s input
+stereo (live) median 114.7 ms   p90 122.8 ms   min 111.7 ms
+mono (sweep) median 112.7 ms   p90 121.1 ms   min 108.6 ms

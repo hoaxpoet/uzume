@@ -1,0 +1,17 @@
+track,stage,wall_ms,cpu_ms,cpu_cores,audio_s,ms_per_audio_s
+"02 - Breaking Glass.flac",content_hash,21.8,7.9,0.36,112.89,0.19
+"02 - Breaking Glass.flac",cache_probe,0.1,0.1,0.99,112.89,0.00
+"02 - Breaking Glass.flac",metadata_artwork,17.8,10.7,0.60,112.89,0.16
+"02 - Breaking Glass.flac",decode,124.0,123.8,1.00,112.89,1.10
+"02 - Breaking Glass.flac",loudness_profile,12.4,12.4,1.00,112.89,0.11
+"02 - Breaking Glass.flac",stem_separation,215.7,162.5,0.75,112.89,1.91
+"02 - Breaking Glass.flac",stem_warmup,32.6,32.6,1.00,112.89,0.29
+"02 - Breaking Glass.flac",mir,128.0,128.2,1.00,112.89,1.13
+"02 - Breaking Glass.flac",beat_grid,987.1,816.8,0.83,112.89,8.74
+"02 - Breaking Glass.flac",grid_onset_calibration,34.5,34.4,1.00,112.89,0.31
+"02 - Breaking Glass.flac",instrument_family,206.3,189.7,0.92,112.89,1.83
+"02 - Breaking Glass.flac",sweep_separate,6602.7,4555.1,0.69,112.89,58.49
+"02 - Breaking Glass.flac",sweep_analyze,358.7,358.3,1.00,112.89,3.18
+"02 - Breaking Glass.flac",stem_series_sweep,6971.8,4923.6,0.71,112.89,61.76
+"02 - Breaking Glass.flac",cache_write,9.2,5.4,0.59,112.89,0.08
+"02 - Breaking Glass.flac",TRACK_TOTAL,8761.7,6448.5,0.74,112.89,77.61

@@ -731,6 +731,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// when off.
     let prepTimingSink: PrepStageSink?
 
+    /// PREP.3 — one-file lookahead for the local-file walk: the next file is hashed, tagged
+    /// and decoded while the current one analyses. Holds at most one decoded file.
+    let localFilePrefetcher = LocalFilePrefetcher()
+
     // MARK: - Signal Quality Monitor
 
     /// Continuous assessment of tap input quality (peak dBFS + spectral balance).

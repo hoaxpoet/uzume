@@ -71,7 +71,7 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     // MARK: - Model
 
     /// MPSGraph-based Open-Unmix HQ inference engine (Increment 3.8+3.9).
-    private let stemModel: StemModelEngine
+    let stemModel: StemModelEngine
 
     // MARK: - Output
 
@@ -89,10 +89,10 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
     /// GPU-accelerated STFT/iSTFT engine (Increment 3.1a). Replaces the
     /// original CPU-based Accelerate path. The engine keeps a CPU vDSP
     /// fallback behind `forceCPUFallback` for cross-validation testing.
-    private let fftEngine: StemFFTEngine
+    let fftEngine: StemFFTEngine
 
     /// Lock for thread safety.
-    private let lock = NSLock()
+    let lock = NSLock()
 
     // MARK: - Init
 
@@ -177,8 +177,8 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
         // CLEAN.4.2: mono input deinterleaves to (audio, audio) → left == right, so the
         // right STFT is identical to the left; compute it once and reuse. Stereo (>= 2 ch)
         // still runs the real right channel.
-        let (magL, phaseL) = stft(mono: left)
-        let (magR, phaseR) = channelCount >= 2 ? stft(mono: right) : (magL, phaseL)
+        let (magL, phaseL) = SeparationSplit.measure("stft") { stft(mono: left) }
+        let (magR, phaseR) = channelCount >= 2 ? SeparationSplit.measure("stft") { stft(mono: right) } : (magL, phaseL)
 
         let nbFrames = magL.count / Self.nBins
 
@@ -210,19 +210,15 @@ public final class StemSeparator: StemSeparating, @unchecked Sendable {
             }
             ConcurrencyAuditProbe.checkInputOwnership(id: raceID, stage: "post-predict")
 
-            return Self.readStemMagnitudes(
-                outputBuffers: stemModel.outputBuffers, elemCount: elemCount
-            )
+            return SeparationSplit.measure("readback") {
+                Self.readStemMagnitudes(outputBuffers: stemModel.outputBuffers, elemCount: elemCount) }
         }
 
         let outputFrames = nbFrames
-        let stemWaveforms = reconstructStemWaveforms(
-            allStemMagL: allStemMagL,
-            allStemMagR: allStemMagR,
-            phaseL: phaseL,
-            phaseR: phaseR,
-            nbFrames: outputFrames
-        )
+        let spectra = StemSpectra(magL: allStemMagL, magR: allStemMagR, phaseL: phaseL, phaseR: phaseR)
+        let stemWaveforms = SeparationSplit.measure("istft") {
+            reconstructStemWaveforms(spectra, nbFrames: outputFrames, mono: channelCount < 2)
+        }
 
         // Step 7: keep `stemBuffers` populated for tests / FixtureSessionCaptureGenerator
         // (CLEAN.1.2: production reads `result.stemWaveforms` by value). writeToBuffers

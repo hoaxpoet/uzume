@@ -224,6 +224,58 @@ grid does not stutter, so a review asked to watch for stutter cannot see it.
 **PREP.3 candidates:** **BUG-132 first — it is a P1 this increment made routine.** Then: tune `pacingRate` against the live number; the unexplained 23–45 GB at four
 concurrent workers (PREP.1 §5); and Option 2 if Matt wants *fully prepared* inside 300 s.
 
+### Increment PREP.3 — the sweep stops waiting on itself ✅ **DONE 2026-10-01** — live run: no disruption (Matt: *"Saw no stutters or hitches"*); stem-scene parity accepted on the goldens (Matt: *"golden parity is enough"*)
+
+**Done-when:** a local playlist prepares in well under half the time, memory no longer grows with
+track length, and stem values match pre-change goldens within a pre-registered tolerance; Matt has
+run a 30+ track cold-cache session and given a verdict. Prompt: `prompts/PREP.3-prompt.md`. Report:
+[`docs/diagnostics/PREP3_PREPARATION_THROUGHPUT_2026-09-30.md`](diagnostics/PREP3_PREPARATION_THROUGHPUT_2026-09-30.md);
+artifacts `docs/diagnostics/PREP3/`. Branch `claude/prep-3-prompt-0fff0b`, unpushed.
+
+**Delivered (Release, Mac mini M2 Pro, cold; Bowie *Low*, 11 tracks): 166.6 s → 58.5 s; peak
+footprint 12.9 → 2.6 GB.** 40 × 4 min projects to **241 s — inside D-242's 300 s *fully prepared***,
+without Option 2. Start now: 31.0 → 11.3 s on *Low*. The 37-track task-7 playlist (189.6 min)
+prepares in **276.0 s** headless, flat out.
+- **Memory (BUG-177).** BR.MEM (#345) drained each separation's pool; PREP.3 measured the per-length
+  curve (11.9 GB → 1.2 GB on a 339 s track) and added pre-allocated model outputs plus Beat This! /
+  PANNs pools. `--concurrency 4` now completes at 3.1 GB.
+- **Separation.** Mono runs 4 inverse transforms instead of 8, all in one batched graph run; live
+  stereo runs 8 in one run. Live batch-1 latency 114.7 → 109.0 ms.
+- **Batching.** A separate batched model graph (live keeps batch 1); the sweep separates 8 windows
+  per run while the analyzer works behind it. N = 8 chosen from the N sweep (N = 16 is 15 % faster
+  for +1.2 GB). Placement byte-identical.
+- **Overlap.** `analyzePreview` runs alongside the sweep (−12.5 s); the next file is read one track
+  ahead (~0.5 s, marginal; kept, bounded to one file).
+- **Parity.** Goldens (44.1 kHz, 48 kHz, 384 s) bit-identical through task 2; within the
+  pre-registered tolerance after (worst field 2.7 % of it). **No behavioural change to beat sync.**
+
+**Task 7 (HARD STOP):** Matt runs a Release build on a 30+ track local playlist, cold cache, and
+watches (i) music and visuals undisturbed while the walk runs behind playback, (ii) Skein and Aurora
+Veil looking as they did, (iii) when Start now appears and when the walk reports fully prepared.
+**Matt's verdict (2026-10-01):** *"Saw no stutters or hitches. Did not see Aurora Veil nor Skein."* —
+(i) **passed**; (ii) **not observed** (neither scene came up in ~17 min) — **Matt, 2026-10-01: *"golden parity is
+enough"***, so stem-scene parity rests on the golden comparison (§5 of the report), by his call; (iii) measured below. Run: session `2026-10-01T13-48-05Z`, the
+PREP.3 code as a **Developer-ID developer-flavor build** from `/Users/Shared/Uzume PREP.3/` (the Apple-Development
+worktree build could not hold the machine's Screen & System Audio grant, and macOS kept reopening the installed
+build 9 instead — two attempts were lost to that, and one ran out of memory on build 9, i.e. BUG-177 pre-fix);
+`PREP3_task7_B_tracks.m3u`, 41 tracks, cold. **Start now:** first three tracks (Underworld, ~23 min of audio)
+ready **36 s** after loading; Start pressed at +46 s. Walk paced at 2× behind playback as designed (track 4 done
+13:49:20, track 5 started 13:53:53); footprint cycled 1.8–2.7 GB, no climb; 60,882 frames, clean exit; 9 of 41
+tracks prepared when the session ended (fully prepared during playback is set by pacing, not speed — the flat-out
+number is the 276 s headless run). **Found:** BUG-178 (skipping ahead of the paced walk leaves a song with no
+length and no seek; Matt chose option A). **Also seen, Matt: "ignore, not important right now":** ⌘, did not
+open Settings and no ? help overlay appeared (BR.14 live checks; BR.14 is in this build).
+**Listening-session-1 checks run in the same session** (audit §Manual verification debt, item 1) — Matt:
+*"BUG-156: pass · Output swap: pass · BUG-151: pass · Scene choice: pass, scenes suited the songs, saw about a
+dozen different scenes · All BR.14–BR.16 controls verified."* ⚠ On the PREP.3 diagnostic build, not the notarized
+DMG launched from Finder the audit specifies, and on a playlist without the session-1 songs (no Ready to Start →
+BUG-134 not covered).
+
+**Next (PREP.4 candidates):** BUG-178 (option A — seek from the file's length; the walk prepares the song being
+played next); cross-track workers (two now reach 41.4 s at 4.3 GB); pipelining two
+window groups so the sweep is model-bound (~55 → ~40 s on *Low*); `pacingRate` against a live
+frame-time number on the MacBook Pro; BUG-132 (still listed first above, untouched here).
+
 **Superseded planning note.** PREP.2 was originally "whichever option Matt picks", with concurrency
 across tracks and splitting the budget in two named as the likely candidates. The budget split is
 what he took (plus Release); **concurrency across tracks was not taken** — it is a 1.7× on a walk
@@ -2649,59 +2701,7 @@ its own `[DOC.6]` commit. `generate_presets.py --check` exits 0 / 8 entries, unc
 after; zero sidecars touched.
 
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
-
-**Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after
-the writer lock; the capture-mode test passes 20/20 under load; every lost capture frame is logged
-with its reason.
-
-**Delivered.** Diagnosis before fix (`11bc5908`): every frame lost under load was
-`isReadyForMoreMediaData == false`, discarded with a one-in-120 log. Fix (`8a896e4a`): capture waits up
-to 1 s for the writer, admits frames against a 512 MB backlog budget, and logs every loss; tests
-(`c2b047ea`). Pacing code moved to `SessionRecorder+VideoPacing.swift`.
-
-**Evidence.** Loaded test runs 6/20 → 20/20, 19/20 (one failure of unknown cause), 30/30. Live
-`2026-09-16T21-40-11Z`, 10 busy processes, 3½ min: 12,642 rendered, 29 lock, **12,613 appended,
-capture dropped 0**, render 59.97 fps.
-
-**Learning (durable).** Run CPU load for reproduction with `yes > /dev/null &` per core and clear it
-with `pkill -x yes`: killing the recorded PIDs once left all ten running.
-
 ### Increment REC.1 — capture-grade session video: every frame, ProRes ✅ **LIVE-MEASURED 2026-09-16**
-
-**Done-when:** `UZUME_RECORD_VIDEO=capture` writes every rendered frame as ProRes 422 `.mov` — live
-≥ 99.5 % written, one-frame intervals, 0 duplicates, render fps within 0.2 of baseline — and `=1`
-delivers ≈ 30 fps H.264. Prerequisite for the site repo's W.3a footage capture.
-
-**Delivered.** BUG-136 filed and fixed (half-frame tolerance on the diagnostic keep decision; tests red
-on the old comparison). Capture mode (ProRes 422, `.mov`, no keep decision). Per-frame IOSurface
-`CVPixelBuffer`s shared with Metal through `CVMetalTextureCache`, replacing the shared capture
-texture + `getBytes`. BUG-022 fragments and every BUG-039 log path kept; `PresetSessionReplay` finds
-`video.mov`.
-
-**Live evidence** (LG 1920×1080, local file, Cymatic Resonance, Release build of the branch):
-
-| Session | Render fps | Written ÷ rendered | Intervals (sixtieths) | Dups |
-|---|---|---|---|---|
-| `15-02-55Z` baseline, off | 59.99 (91.7 s window) | — | — | — |
-| `16-04-13Z` capture | 59.99 (109.2 s) | 6,550 / 6,552 = 99.97 % | {0: 2, 1: 6,544, 2: 1, 3: 2} | 0 |
-| `15-09-56Z` diagnostic | 60.00 (150.3 s) | 4,509 / 9,017 = 50.01 % → 30.00 fps | {1: 3, 2: 4,503, 3: 2} | 0 |
-
-Capture's two unwritten frames are the encoder's start-up (`video input not ready`, logged 0.2 s
-after lock); every other odd interval matches a late or catch-up render row. ProRes 422 at 1080p on
-Cymatic Resonance: **≈ 1.1 GB/min** (2.07 GB / 109 s) — W.3a should still budget the ≈ 294 Mbps
-(2.2 GB/min) codec ceiling for denser material. The earlier capture run `15-05-41Z` (keep decision
-still applied) skipped two catch-up frames after a late render; Matt chose every-frame capture.
-
-**CPU.** Offline probe (Debug `swift test`, 1080p blits at 60 Hz, `getrusage`): process CPU per frame
-off 0.78 ms, diagnostic 1.54 ms, capture 2.22 ms → **ProRes ≈ +1.4 ms/frame vs BUG-050's ≈ 7 ms**;
-render-thread cost 0.15 ms flat over 3,000 frames. Not counted: any out-of-process VideoToolbox work.
-
-**Measurement learnings (durable).** (1) `frame_cpu_ms` / `renderframe_cpu_ms` include the drawable
-wait: they ramp 0 → ~8.7 ms and wrap with recording OFF (`2026-09-14T17-28-08Z`, `15-02-55Z`), so
-they cannot attribute recorder cost. (2) `.mov`/`.mp4` sample durations round to the 1/600 track
-timescale and accumulate, so packet pts cannot be matched to `wallclock_s` absolutely — align by
-walking intervals, anchored where the pattern is unique.
-
 ### BUG133.2 — near-tie sampling: the planner stops deciding on 0.003 ✅ **LIVE-MEASURED 2026-09-14** — 10 → 16 distinct presets on an identical window (Matt's felt verdict outstanding)
 ### BUG133.1 — preset fatigue cools the preset, not the family ✅ (2026-09-14, Matt: *"cool down the preset, not the family"*, live check owed)
 ### BUG132.1 — a plan rebuild no longer pre-fires over the playing track ✅ (2026-09-14, live re-check owed)

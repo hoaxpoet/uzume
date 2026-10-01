@@ -99,6 +99,15 @@ public protocol LocalFilePreparing: AnyObject, Sendable {
     ///   `nil` is non-fatal — the LF.1 live-analyze fallthrough still
     ///   gets the user playback, just without the cached BeatGrid.
     func prepareLocalFile(url: URL) async -> LocalFilePrepResult?
+
+    /// PREP.3 — start reading `url` ahead (hash, tags, decode) while the current file analyses.
+    /// A hint: the next `prepareLocalFile(url:)` for the same URL picks the work up. The default
+    /// does nothing, so a preparer without lookahead is unchanged.
+    func prefetchLocalFile(url: URL) async
+}
+
+extension LocalFilePreparing {
+    public func prefetchLocalFile(url: URL) async {}
 }
 
 // MARK: - Worker inputs
@@ -120,6 +129,8 @@ public struct LocalFilePrepWorkerInputs: Sendable {
     /// PREP.1 — per-stage timing sink. `nil` in production unless
     /// `UZUME_PREP_TIMING=1`.
     public let timingSink: PrepStageSink?
+    /// PREP.3 — one-file lookahead; `nil` reads the file inline, as before.
+    public let prefetcher: LocalFilePrefetcher?
 
     public init(
         url: URL,
@@ -131,7 +142,8 @@ public struct LocalFilePrepWorkerInputs: Sendable {
         familyAnalyzer: (any InstrumentFamilyAnalyzing)?,
         persistentCache: PersistentStemCache?,
         recorder: SessionRecorder?,
-        timingSink: PrepStageSink? = nil
+        timingSink: PrepStageSink? = nil,
+        prefetcher: LocalFilePrefetcher? = nil
     ) {
         self.url = url
         self.filename = filename
@@ -143,5 +155,6 @@ public struct LocalFilePrepWorkerInputs: Sendable {
         self.persistentCache = persistentCache
         self.recorder = recorder
         self.timingSink = timingSink
+        self.prefetcher = prefetcher
     }
 }

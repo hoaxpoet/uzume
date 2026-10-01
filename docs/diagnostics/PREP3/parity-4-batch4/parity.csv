@@ -1,0 +1,193 @@
+track,field,max_abs_diff,tolerance,median_step,frames_over,pass
+"02 - Breaking Glass",vocalsEnergy,1.7881393e-07,0.00014679476,0.014679477,0,true
+"02 - Breaking Glass",vocalsBand0,4.4703484e-08,1.7940401e-05,0.0017940402,0,true
+"02 - Breaking Glass",vocalsBand1,1.4901161e-08,1.3811066e-05,0.0013811067,0,true
+"02 - Breaking Glass",vocalsBeat,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",drumsEnergy,1.7881393e-07,0.00015638812,0.015638813,0,true
+"02 - Breaking Glass",drumsBand0,1.1920929e-07,6.770618e-05,0.0067706183,0,true
+"02 - Breaking Glass",drumsBand1,1.8626451e-08,8.066948e-06,0.00080669485,0,true
+"02 - Breaking Glass",drumsBeat,0.0,0.00027638092,0.027638093,0,true
+"02 - Breaking Glass",bassEnergy,2.3841858e-07,0.00019078955,0.019078955,0,true
+"02 - Breaking Glass",bassBand0,1.1920929e-07,6.9149355e-05,0.006914936,0,true
+"02 - Breaking Glass",bassBand1,2.3841858e-07,0.00019598722,0.019598722,0,true
+"02 - Breaking Glass",bassBeat,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",otherEnergy,2.3841858e-07,0.00014298051,0.014298052,0,true
+"02 - Breaking Glass",otherBand0,1.1920929e-07,5.640283e-05,0.005640283,0,true
+"02 - Breaking Glass",otherBand1,1.8626451e-08,9.137578e-06,0.00091375783,0,true
+"02 - Breaking Glass",otherBeat,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",vocalsEnergyRel,3.5762787e-07,0.00029400646,0.029400647,0,true
+"02 - Breaking Glass",vocalsEnergyDev,3.5762787e-07,0.00040254236,0.040254235,0,true
+"02 - Breaking Glass",drumsEnergyRel,3.5762787e-07,0.00031169562,0.031169564,0,true
+"02 - Breaking Glass",drumsEnergyDev,3.5762787e-07,0.00046369282,0.046369284,0,true
+"02 - Breaking Glass",bassEnergyRel,4.7683716e-07,0.00038210332,0.038210332,0,true
+"02 - Breaking Glass",bassEnergyDev,4.7683716e-07,0.00061066565,0.061066568,0,true
+"02 - Breaking Glass",otherEnergyRel,4.7683716e-07,0.00028595477,0.028595477,0,true
+"02 - Breaking Glass",otherEnergyDev,4.7683716e-07,0.00039288282,0.039288282,0,true
+"02 - Breaking Glass",vocalsOnsetRate,0.0,0.0020006276,0.20006275,0,true
+"02 - Breaking Glass",vocalsCentroid,4.4703484e-07,0.00013486289,0.0134862885,0,true
+"02 - Breaking Glass",vocalsAttackRatio,4.7683716e-07,0.00045042395,0.045042396,0,true
+"02 - Breaking Glass",vocalsEnergySlope,1.3113022e-06,0.00023919553,0.023919554,0,true
+"02 - Breaking Glass",drumsOnsetRate,0.0,0.001784625,0.1784625,0,true
+"02 - Breaking Glass",drumsCentroid,3.5762787e-07,0.00018713652,0.018713653,0,true
+"02 - Breaking Glass",drumsAttackRatio,3.5762787e-07,0.000589838,0.058983803,0,true
+"02 - Breaking Glass",drumsEnergySlope,1.2889504e-06,0.0002101793,0.021017931,0,true
+"02 - Breaking Glass",bassOnsetRate,0.0,0.0016897512,0.16897511,0,true
+"02 - Breaking Glass",bassCentroid,2.8312206e-07,2.2780625e-05,0.0022780625,0,true
+"02 - Breaking Glass",bassAttackRatio,4.7683716e-07,0.0006438172,0.06438172,0,true
+"02 - Breaking Glass",bassEnergySlope,1.3113022e-06,0.0002457389,0.024573889,0,true
+"02 - Breaking Glass",otherOnsetRate,0.0,0.0019598675,0.19598675,0,true
+"02 - Breaking Glass",otherCentroid,2.9802322e-07,8.9814064e-05,0.008981407,0,true
+"02 - Breaking Glass",otherAttackRatio,4.7683716e-07,0.00043709038,0.04370904,0,true
+"02 - Breaking Glass",otherEnergySlope,1.2889504e-06,0.00022556058,0.022556059,0,true
+"02 - Breaking Glass",vocalsPitchHz,0.00012207031,0.0779071,7.7907104,0,true
+"02 - Breaking Glass",vocalsPitchConfidence,1.5497208e-06,0.0007685274,0.07685274,0,true
+"02 - Breaking Glass",drumsEnergyDevSmoothed,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",cachedBassProportion,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",auroraPalettePhase,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",totalEnergySmoothed,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",auroraOrbitAzimuth,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",stringsActivity,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",stringsActivityDev,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",brassActivity,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",brassActivityDev,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",woodwindsActivity,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",woodwindsActivityDev,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",percussionActivity,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",percussionActivityDev,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",beatClarity01,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",energyLevel,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad16,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad17,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad18,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad19,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad20,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad21,0.0,0.0,0.0,0,true
+"02 - Breaking Glass",_sfPad22,0.0,0.0,0.0,0,true
+"02 Hammerhead",vocalsEnergy,2.3841858e-07,0.0003034982,0.03034982,0,true
+"02 Hammerhead",vocalsBand0,3.7252903e-08,2.2105723e-05,0.0022105724,0,true
+"02 Hammerhead",vocalsBand1,1.4901161e-08,1.1055898e-05,0.0011055898,0,true
+"02 Hammerhead",vocalsBeat,0.0,0.0,0.0,0,true
+"02 Hammerhead",drumsEnergy,1.4901161e-07,0.00022472291,0.022472292,0,true
+"02 Hammerhead",drumsBand0,1.1920929e-07,0.00015019953,0.015019953,0,true
+"02 Hammerhead",drumsBand1,7.450581e-09,5.548787e-06,0.00055487873,0,true
+"02 Hammerhead",drumsBeat,0.0,0.00027638092,0.027638093,0,true
+"02 Hammerhead",bassEnergy,1.7881393e-07,0.00027549773,0.027549773,0,true
+"02 Hammerhead",bassBand0,1.1920929e-07,0.00013740659,0.013740659,0,true
+"02 Hammerhead",bassBand1,1.4901161e-07,0.00027564183,0.027564183,0,true
+"02 Hammerhead",bassBeat,0.0,0.0,0.0,0,true
+"02 Hammerhead",otherEnergy,1.1920929e-07,0.00025764972,0.025764972,0,true
+"02 Hammerhead",otherBand0,5.9604645e-08,7.833868e-05,0.007833868,0,true
+"02 Hammerhead",otherBand1,4.656613e-09,4.83287e-06,0.00048328703,0,true
+"02 Hammerhead",otherBeat,0.0,0.0,0.0,0,true
+"02 Hammerhead",vocalsEnergyRel,4.7683716e-07,0.000607329,0.0607329,0,true
+"02 Hammerhead",vocalsEnergyDev,4.7683716e-07,0.00075561163,0.075561166,0,true
+"02 Hammerhead",drumsEnergyRel,3.2782555e-07,0.0004489046,0.044890463,0,true
+"02 Hammerhead",drumsEnergyDev,3.2782555e-07,0.00047213284,0.047213286,0,true
+"02 Hammerhead",bassEnergyRel,3.5762787e-07,0.0005502647,0.05502647,0,true
+"02 Hammerhead",bassEnergyDev,3.5762787e-07,0.0005802041,0.058020413,0,true
+"02 Hammerhead",otherEnergyRel,2.3841858e-07,0.0005150324,0.05150324,0,true
+"02 Hammerhead",otherEnergyDev,2.3841858e-07,0.0005865383,0.05865383,0,true
+"02 Hammerhead",vocalsOnsetRate,0.0,0.002367072,0.23670721,0,true
+"02 Hammerhead",vocalsCentroid,4.3213367e-07,0.00022275001,0.022275,0,true
+"02 Hammerhead",vocalsAttackRatio,4.7683716e-07,0.0009070676,0.090706766,0,true
+"02 Hammerhead",vocalsEnergySlope,1.2889504e-06,0.0004304564,0.04304564,0,true
+"02 Hammerhead",drumsOnsetRate,0.0,0.002127595,0.2127595,0,true
+"02 Hammerhead",drumsCentroid,2.8312206e-07,0.00025731415,0.025731415,0,true
+"02 Hammerhead",drumsAttackRatio,5.9604645e-07,0.00097632525,0.09763253,0,true
+"02 Hammerhead",drumsEnergySlope,9.685755e-07,0.0003040016,0.03040016,0,true
+"02 Hammerhead",bassOnsetRate,0.0,0.0020760726,0.20760727,0,true
+"02 Hammerhead",bassCentroid,5.4202974e-07,1.9851848e-05,0.0019851848,0,true
+"02 Hammerhead",bassAttackRatio,4.7683716e-07,0.0011593854,0.115938544,0,true
+"02 Hammerhead",bassEnergySlope,9.685755e-07,0.00037433946,0.03743395,0,true
+"02 Hammerhead",otherOnsetRate,0.0,0.0023219346,0.23219347,0,true
+"02 Hammerhead",otherCentroid,1.3262033e-06,0.00013043142,0.013043143,0,true
+"02 Hammerhead",otherAttackRatio,4.7683716e-07,0.00093599915,0.093599916,0,true
+"02 Hammerhead",otherEnergySlope,1.2838282e-06,0.00033867158,0.033867158,0,true
+"02 Hammerhead",vocalsPitchHz,0.0006713867,0.97321296,97.3213,0,true
+"02 Hammerhead",vocalsPitchConfidence,1.3113022e-06,0.001296001,0.12960011,0,true
+"02 Hammerhead",drumsEnergyDevSmoothed,0.0,0.0,0.0,0,true
+"02 Hammerhead",cachedBassProportion,0.0,0.0,0.0,0,true
+"02 Hammerhead",auroraPalettePhase,0.0,0.0,0.0,0,true
+"02 Hammerhead",totalEnergySmoothed,0.0,0.0,0.0,0,true
+"02 Hammerhead",auroraOrbitAzimuth,0.0,0.0,0.0,0,true
+"02 Hammerhead",stringsActivity,0.0,0.0,0.0,0,true
+"02 Hammerhead",stringsActivityDev,0.0,0.0,0.0,0,true
+"02 Hammerhead",brassActivity,0.0,0.0,0.0,0,true
+"02 Hammerhead",brassActivityDev,0.0,0.0,0.0,0,true
+"02 Hammerhead",woodwindsActivity,0.0,0.0,0.0,0,true
+"02 Hammerhead",woodwindsActivityDev,0.0,0.0,0.0,0,true
+"02 Hammerhead",percussionActivity,0.0,0.0,0.0,0,true
+"02 Hammerhead",percussionActivityDev,0.0,0.0,0.0,0,true
+"02 Hammerhead",beatClarity01,0.0,0.0,0.0,0,true
+"02 Hammerhead",energyLevel,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad16,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad17,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad18,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad19,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad20,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad21,0.0,0.0,0.0,0,true
+"02 Hammerhead",_sfPad22,0.0,0.0,0.0,0,true
+"08 - Warszawa",vocalsEnergy,2.3841858e-07,8.370608e-05,0.008370608,0,true
+"08 - Warszawa",vocalsBand0,5.9604645e-08,1.5189498e-05,0.0015189499,0,true
+"08 - Warszawa",vocalsBand1,7.450581e-09,9.935908e-07,9.935908e-05,0,true
+"08 - Warszawa",vocalsBeat,0.0,0.0,0.0,0,true
+"08 - Warszawa",drumsEnergy,1.7881393e-07,5.822688e-05,0.0058226883,0,true
+"08 - Warszawa",drumsBand0,1.937151e-07,4.972875e-05,0.004972875,0,true
+"08 - Warszawa",drumsBand1,2.2351742e-08,3.5762134e-06,0.00035762135,0,true
+"08 - Warszawa",drumsBeat,0.0,0.00027638092,0.027638093,0,true
+"08 - Warszawa",bassEnergy,1.7881393e-07,7.3264535e-05,0.007326454,0,true
+"08 - Warszawa",bassBand0,1.1920929e-07,5.6229383e-05,0.0056229383,0,true
+"08 - Warszawa",bassBand1,1.7881393e-07,7.8187135e-05,0.007818714,0,true
+"08 - Warszawa",bassBeat,0.0,0.0,0.0,0,true
+"08 - Warszawa",otherEnergy,1.1920929e-07,6.268948e-05,0.0062689483,0,true
+"08 - Warszawa",otherBand0,7.4505806e-08,4.496336e-05,0.004496336,0,true
+"08 - Warszawa",otherBand1,7.450581e-09,7.701688e-07,7.7016884e-05,0,true
+"08 - Warszawa",otherBeat,0.0,0.0,0.0,0,true
+"08 - Warszawa",vocalsEnergyRel,4.7683716e-07,0.00016721754,0.016721755,0,true
+"08 - Warszawa",vocalsEnergyDev,4.7683716e-07,0.00022341906,0.022341907,0,true
+"08 - Warszawa",drumsEnergyRel,3.5762787e-07,0.00011667311,0.011667311,0,true
+"08 - Warszawa",drumsEnergyDev,3.5762787e-07,0.00013653249,0.013653249,0,true
+"08 - Warszawa",bassEnergyRel,3.5762787e-07,0.00014611064,0.014611065,0,true
+"08 - Warszawa",bassEnergyDev,3.5762787e-07,0.00017762124,0.017762125,0,true
+"08 - Warszawa",otherEnergyRel,2.3841858e-07,0.00012532681,0.012532681,0,true
+"08 - Warszawa",otherEnergyDev,2.3841858e-07,0.00015385807,0.015385807,0,true
+"08 - Warszawa",vocalsOnsetRate,0.0,0.0024971913,0.24971914,0,true
+"08 - Warszawa",vocalsCentroid,3.5762787e-07,3.066793e-05,0.003066793,0,true
+"08 - Warszawa",vocalsAttackRatio,4.7683716e-07,0.00032292842,0.032292843,0,true
+"08 - Warszawa",vocalsEnergySlope,1.925975e-06,0.00015210187,0.015210187,0,true
+"08 - Warszawa",drumsOnsetRate,0.0,0.002562933,0.2562933,0,true
+"08 - Warszawa",drumsCentroid,5.364418e-07,3.3414737e-05,0.0033414736,0,true
+"08 - Warszawa",drumsAttackRatio,4.7683716e-07,0.00022531151,0.022531152,0,true
+"08 - Warszawa",drumsEnergySlope,1.2852252e-06,0.000108954526,0.010895452,0,true
+"08 - Warszawa",bassOnsetRate,0.0,0.0025681735,0.25681734,0,true
+"08 - Warszawa",bassCentroid,2.3841858e-07,9.30421e-06,0.00093042105,0,true
+"08 - Warszawa",bassAttackRatio,3.5762787e-07,0.00022440313,0.022440314,0,true
+"08 - Warszawa",bassEnergySlope,1.2889504e-06,0.00013409625,0.013409626,0,true
+"08 - Warszawa",otherOnsetRate,0.0,0.002529087,0.2529087,0,true
+"08 - Warszawa",otherCentroid,2.9802322e-07,2.664361e-05,0.0026643611,0,true
+"08 - Warszawa",otherAttackRatio,4.7683716e-07,0.0002927196,0.02927196,0,true
+"08 - Warszawa",otherEnergySlope,1.6046688e-06,0.000120762525,0.012076253,0,true
+"08 - Warszawa",vocalsPitchHz,0.00018310547,0.040589295,4.0589294,0,true
+"08 - Warszawa",vocalsPitchConfidence,2.9802322e-07,0.00046679616,0.046679616,0,true
+"08 - Warszawa",drumsEnergyDevSmoothed,0.0,0.0,0.0,0,true
+"08 - Warszawa",cachedBassProportion,0.0,0.0,0.0,0,true
+"08 - Warszawa",auroraPalettePhase,0.0,0.0,0.0,0,true
+"08 - Warszawa",totalEnergySmoothed,0.0,0.0,0.0,0,true
+"08 - Warszawa",auroraOrbitAzimuth,0.0,0.0,0.0,0,true
+"08 - Warszawa",stringsActivity,0.0,0.0,0.0,0,true
+"08 - Warszawa",stringsActivityDev,0.0,0.0,0.0,0,true
+"08 - Warszawa",brassActivity,0.0,0.0,0.0,0,true
+"08 - Warszawa",brassActivityDev,0.0,0.0,0.0,0,true
+"08 - Warszawa",woodwindsActivity,0.0,0.0,0.0,0,true
+"08 - Warszawa",woodwindsActivityDev,0.0,0.0,0.0,0,true
+"08 - Warszawa",percussionActivity,0.0,0.0,0.0,0,true
+"08 - Warszawa",percussionActivityDev,0.0,0.0,0.0,0,true
+"08 - Warszawa",beatClarity01,0.0,0.0,0.0,0,true
+"08 - Warszawa",energyLevel,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad16,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad17,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad18,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad19,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad20,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad21,0.0,0.0,0.0,0,true
+"08 - Warszawa",_sfPad22,0.0,0.0,0.0,0,true

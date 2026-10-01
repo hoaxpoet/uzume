@@ -57,22 +57,94 @@ extension SessionPreparer {
     ///   - hopSeconds: Playback seconds each separation contributes. 2.0 matches the live
     ///     separation period, so the offline sweep does the same amount of model work per second
     ///     of audio that live playback would.
+    ///   - probe: PREP.3 — records `sweep_separate` / `sweep_analyze` sub-stages when enabled.
     /// - Returns: The series, or `.empty` when there is too little audio to analyse.
     nonisolated public static func analyzeStemSeries(
         samples: [Float],
         sampleRate: Int,
         separator: any StemSeparating,
         analyzer: any StemAnalyzing,
-        hopSeconds: Double = 2.0
+        hopSeconds: Double = 2.0,
+        probe: PrepStageProbe = .disabled
     ) throws -> StemFeatureSeries {
         let hop = Self.seriesAnalysisHop
         guard sampleRate > 0, hopSeconds > 0 else { return .empty }
 
+        let (samples, sampleRate) = workingAudio(samples, sampleRate: sampleRate, separator: separator)
+        let sampleCount = samples.count
+        guard sampleCount >= hop else { return .empty }
+
+        let fps = Float(sampleRate) / Float(hop)
+        let hopSamples = max(hop, Int(hopSeconds * Double(sampleRate)))
+        let frameCount = sampleCount / hop
+        var frames: [StemFeatures] = []
+        frames.reserveCapacity(frameCount)
+
+        let grid = SweepGrid(sampleCount: sampleCount, hop: hop, hopSamples: hopSamples)
+        var separateTime = SweepSubStages.Total()
+        var analyzeTime = SweepSubStages.Total()
+        defer { SweepSubStages.record(probe: probe, separate: separateTime, analyze: analyzeTime) }
+        let rate = Float(sampleRate)
+
+        // The first window is separated alone: its result's length IS the separator's window
+        // (it pads or truncates to its own), which places every window after it. Reading it
+        // keeps a test double with a different window working.
+        let first = SweepWindow(spanStart: 0, windowStart: 0, windowEnd: sampleCount)
+        let firstResult = try SweepSubStages.time(&separateTime, probe) {
+            try separator.separate(audio: grid.audio(first, samples), channelCount: 1, sampleRate: rate)
+        }
+        guard let windowSamples = firstResult.stemWaveforms.first?.count, windowSamples >= hop else {
+            return .empty
+        }
+        SweepSubStages.time(&analyzeTime, probe) {
+            grid.analyzeSpan(first, stems: firstResult.stemWaveforms, into: &frames, analyzer: analyzer, fps: fps)
+        }
+
+        // PREP.3 — every later window, in groups of `sweepBatchSize` per model run, with the
+        // GPU separating group k+1 while this thread analyses group k's kept spans IN PLAYBACK
+        // ORDER on the one analyzer (its AGC must sweep in order; separation is stateless).
+        let groups = grid.windows(after: first, windowSamples: windowSamples).chunked(Self.sweepBatchSize)
+        let separateGroup: @Sendable ([SweepWindow]) throws -> TimedSeparation = { group in
+            var total = SweepSubStages.Total()
+            let results = try SweepSubStages.time(&total, probe) {
+                try separator.separateBatch(monoWindows: group.map { grid.audio($0, samples) }, sampleRate: rate)
+            }
+            return TimedSeparation(results: results, time: total)
+        }
+        var pending = groups.first.map { group in BackgroundJob { try separateGroup(group) } }
+        for (index, group) in groups.enumerated() {
+            guard let job = pending else { break }
+            let separated = try job.join()
+            separateTime.add(separated.time)
+            pending = index + 1 < groups.count
+                ? BackgroundJob { [upcoming = groups[index + 1]] in try separateGroup(upcoming) }
+                : nil
+            var valid = true
+            SweepSubStages.time(&analyzeTime, probe) {
+                for (window, result) in zip(group, separated.results) {
+                    guard let length = result.stemWaveforms.first?.count, length >= hop else { valid = false; return }
+                    grid.analyzeSpan(window, stems: result.stemWaveforms, into: &frames, analyzer: analyzer, fps: fps)
+                }
+            }
+            guard valid else {
+                _ = try? pending?.join()
+                return .empty
+            }
+        }
+
+        guard !frames.isEmpty else { return .empty }
+        return StemFeatureSeries(frames: frames, hopSeconds: Double(hop) / Double(sampleRate))
+    }
+
+    /// The audio the sweep works on, in the separator's time base (BUG-116).
+    nonisolated static func workingAudio(
+        _ samples: [Float], sampleRate: Int, separator: any StemSeparating
+    ) -> (samples: [Float], rate: Int) {
         // BUG-116 — work in the SEPARATOR's time base, not the caller's.
         //
         // `separate` resamples any input to its own model rate and pads to a fixed sample
-        // count, so its output is in that rate whatever it was handed. Every offset below is
-        // an index into that output, so feeding it audio at some other rate makes the two
+        // count, so its output is in that rate whatever it was handed. Every offset in the
+        // sweep is an index into that output, so feeding it audio at some other rate makes the two
         // disagree: at 48 kHz a 440,320-sample window holds 9.17 s of audio, which resamples
         // to 404,544 samples, and the remaining 35,776 are ZERO PADDING. The kept span sits
         // at the window's tail by design, so it landed squarely in that padding — all four
@@ -93,63 +165,149 @@ extension SessionPreparer {
             workingSamples = samples
             workingRate = sampleRate
         }
-        let samples = workingSamples
-        let sampleRate = workingRate
+        return (workingSamples, workingRate)
+    }
+}
 
-        let sampleCount = samples.count
-        guard sampleCount >= hop else { return .empty }
+// MARK: - Sweep batching (PREP.3)
 
-        let fps = Float(sampleRate) / Float(hop)
-        let hopSamples = max(hop, Int(hopSeconds * Double(sampleRate)))
-        let frameCount = sampleCount / hop
-        var frames: [StemFeatures] = []
-        frames.reserveCapacity(frameCount)
+extension SessionPreparer {
+    // ponytail: process-wide knob, written once at startup by the measurement CLI only.
+    /// Windows per batched model run in the sweep. Chosen by measurement (PREP.3 N sweep,
+    /// `docs/diagnostics/PREP3_PREPARATION_THROUGHPUT_2026-09-30.md`); settable only so
+    /// `PrepTimingRunner` can measure other values.
+    nonisolated(unsafe) public static var sweepBatchSize = 8
+}
 
-        var windowSamples = 0
-        var spanStart = 0
+/// One separation window of the sweep and the kept span it contributes.
+struct SweepWindow {
+    let spanStart: Int
+    let windowStart: Int
+    let windowEnd: Int
+}
 
-        while spanStart < sampleCount {
-            // Place the kept span at the window's end where the audio allows it — but leave
-            // ONE analysis frame of room past the span, or the frame starting on the span's
-            // last sample has no 1024 samples left inside the window and is silently dropped.
-            // That cost 10 of 1292 frames over 30 s before `stemSeries_spanBoundariesDoNotDrift`
-            // caught it: a per-span shortfall, invisible in any single span, compounding.
-            let windowStart = windowSamples > 0
-                ? max(0, spanStart + hopSamples + hop - windowSamples)
-                : 0
-            let windowEnd = windowSamples > 0
-                ? min(sampleCount, windowStart + windowSamples)
-                : sampleCount
-            let window = Array(samples[windowStart..<max(windowStart, windowEnd)])
+/// The sweep's placement arithmetic and per-span analysis, unchanged from LFSTEM.1 — only
+/// pulled out of the loop so windows can be separated in groups.
+struct SweepGrid {
+    let sampleCount: Int
+    let hop: Int
+    let hopSamples: Int
 
-            // The separator pads-or-truncates to its own window, so the result's length IS the
-            // window length — read it rather than hard-coding a constant from another module.
-            let result = try separator.separate(
-                audio: window, channelCount: 1, sampleRate: Float(sampleRate))
-            let stems = result.stemWaveforms
-            guard let stemLength = stems.first?.count, stemLength >= hop else { return .empty }
-            if windowSamples == 0 { windowSamples = stemLength }
-
-            // Emit every frame of the global 1024-sample grid whose start falls in this span.
-            // Indexing globally (rather than counting within the span) keeps the grid uniform
-            // even though hopSamples is not a whole number of analysis frames.
-            let firstFrame = Int(ceil(Double(spanStart) / Double(hop)))
-            let spanEnd = min(spanStart + hopSamples, sampleCount)
-            var frameIndex = max(firstFrame, frames.count)
-            while frameIndex * hop < spanEnd {
-                let absolute = frameIndex * hop
-                guard absolute + hop <= sampleCount else { break }
-                let offset = absolute - windowStart
-                guard offset >= 0, offset + hop <= stemLength else { break }
-                let slice = stems.map { Array($0[offset..<(offset + hop)]) }
-                frames.append(analyzer.analyze(stemWaveforms: slice, fps: fps))
-                frameIndex += 1
-            }
-
-            spanStart += hopSamples
+    /// Every window after `first`, placed as LFSTEM.1 places them. Place the kept span at the
+    /// window's end where the audio allows it — but leave ONE analysis frame of room past the
+    /// span, or the frame starting on the span's last sample has no 1024 samples left inside
+    /// the window and is silently dropped. That cost 10 of 1292 frames over 30 s before
+    /// `stemSeries_spanBoundariesDoNotDrift` caught it: a per-span shortfall, invisible in any
+    /// single span, compounding.
+    func windows(after first: SweepWindow, windowSamples: Int) -> [SweepWindow] {
+        stride(from: first.spanStart + hopSamples, to: sampleCount, by: hopSamples).map { spanStart in
+            let windowStart = max(0, spanStart + hopSamples + hop - windowSamples)
+            return SweepWindow(
+                spanStart: spanStart,
+                windowStart: windowStart,
+                windowEnd: min(sampleCount, windowStart + windowSamples))
         }
+    }
 
-        guard !frames.isEmpty else { return .empty }
-        return StemFeatureSeries(frames: frames, hopSeconds: Double(hop) / Double(sampleRate))
+    func audio(_ window: SweepWindow, _ samples: [Float]) -> [Float] {
+        Array(samples[window.windowStart..<max(window.windowStart, window.windowEnd)])
+    }
+
+    /// Emit every frame of the global 1024-sample grid whose start falls in this span.
+    /// Indexing globally (rather than counting within the span) keeps the grid uniform even
+    /// though hopSamples is not a whole number of analysis frames.
+    func analyzeSpan(
+        _ window: SweepWindow,
+        stems: [[Float]],
+        into frames: inout [StemFeatures],
+        analyzer: any StemAnalyzing,
+        fps: Float
+    ) {
+        let stemLength = stems.first?.count ?? 0
+        let firstFrame = Int(ceil(Double(window.spanStart) / Double(hop)))
+        let spanEnd = min(window.spanStart + hopSamples, sampleCount)
+        var frameIndex = max(firstFrame, frames.count)
+        while frameIndex * hop < spanEnd {
+            let absolute = frameIndex * hop
+            guard absolute + hop <= sampleCount else { break }
+            let offset = absolute - window.windowStart
+            guard offset >= 0, offset + hop <= stemLength else { break }
+            let slice = stems.map { Array($0[offset..<(offset + hop)]) }
+            frames.append(analyzer.analyze(stemWaveforms: slice, fps: fps))
+            frameIndex += 1
+        }
+    }
+}
+
+extension Array {
+    /// Consecutive slices of at most `size` elements.
+    func chunked(_ size: Int) -> [[Element]] {
+        let step = Swift.max(1, size)
+        return stride(from: 0, to: count, by: step).map { Array(self[$0..<Swift.min($0 + step, count)]) }
+    }
+}
+
+/// A group's separations and the time they took on the background thread.
+struct TimedSeparation: Sendable {
+    let results: [StemSeparationResult]
+    let time: SweepSubStages.Total
+}
+
+/// Runs `work` on its own thread while the caller carries on; `join()` waits for it. The
+/// sweep's one use: separate the next window group while this thread analyses the current one.
+/// A thread rather than a task because the sweep is synchronous code on a detached task and
+/// the work is a blocking GPU wait — it should not sit on a cooperative-pool thread.
+final class BackgroundJob<T: Sendable>: @unchecked Sendable {
+    private var result: Result<T, Error>?
+    private let done = DispatchSemaphore(value: 0)
+
+    init(_ work: @escaping @Sendable () throws -> T) {
+        let thread = Thread { [self] in
+            result = Result { try work() }
+            done.signal()
+        }
+        thread.qualityOfService = .userInitiated
+        thread.start()
+    }
+
+    /// Wait for the work; rethrows its error. Call once.
+    func join() throws -> T {
+        done.wait()
+        guard let result else { throw CancellationError() }
+        return try result.get()
+    }
+}
+
+// MARK: - Sweep sub-stage timing (PREP.3)
+
+/// Wall + CPU totals for the sweep's two halves, recorded once per track. Per-call rows would
+/// be ~100 per track; the report needs only the split. The halves overlap in time since PREP.3
+/// (the GPU separates the next group while the analyzer runs), so their sum exceeds the sweep.
+enum SweepSubStages {
+    struct Total: Sendable {
+        var wallMs = 0.0
+        var cpuMs = 0.0
+
+        mutating func add(_ other: Total) {
+            wallMs += other.wallMs
+            cpuMs += other.cpuMs
+        }
+    }
+
+    static func time<T>(_ total: inout Total, _ probe: PrepStageProbe, _ body: () throws -> T) rethrows -> T {
+        guard probe.isEnabled else { return try body() }
+        let wall0 = Date()
+        let cpu0 = PrepStageSink.cpuSeconds()
+        defer {
+            total.wallMs += Date().timeIntervalSince(wall0) * 1000
+            total.cpuMs += (PrepStageSink.cpuSeconds() - cpu0) * 1000
+        }
+        return try body()
+    }
+
+    static func record(probe: PrepStageProbe, separate: Total, analyze: Total) {
+        guard probe.isEnabled else { return }
+        probe.record(PrepStage.sweepSeparate, wallMs: separate.wallMs, cpuMs: separate.cpuMs)
+        probe.record(PrepStage.sweepAnalyze, wallMs: analyze.wallMs, cpuMs: analyze.cpuMs)
     }
 }

@@ -46,6 +46,7 @@ echo "==> TSan stress run (this rebuilds with instrumentation on first use; be p
 # anchors; suite display names contain spaces/parens that are awkward to match.
 UZUME_STRESS=1 swift test --package-path UzumeEngine --sanitize=thread \
   --filter liveAndPrepOverlap_sharedSeparator_raceFree \
+  --filter liveBatch1AndPrepBatch_interleave_raceFree \
   --filter sessionStartEndCancelChurn_raceFreeNoDeadlock \
   --filter concurrentSeparations_returnPerCallerOwnStems \
   --filter endThenRestart_staleOrphanDoesNotMutateNewSession \

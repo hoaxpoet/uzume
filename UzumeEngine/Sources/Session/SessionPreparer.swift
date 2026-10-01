@@ -778,6 +778,11 @@ extension SessionPreparer {
 
             trackStatuses[placeholder] = .analyzing(stage: .stemSeparation)
             let fileStart = Date()
+            // PREP.3 — read the NEXT file while this one analyses (one file ahead, as
+            // streaming's `prefetchWindow` does for downloads). Analysis, completion and
+            // publication below stay in playlist order; pacing still gates when the next
+            // analysis starts, so the lookahead cannot let the walk outrun `pacingRate`.
+            if index + 1 < urls.count { await delegate?.prefetchLocalFile(url: urls[index + 1]) }
             let result: LocalFilePrepResult? = await (delegate?.prepareLocalFile(url: url))
             if Task.isCancelled { break }
 

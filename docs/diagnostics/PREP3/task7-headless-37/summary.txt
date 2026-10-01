@@ -1,0 +1,31 @@
+tracks                 37
+audio decoded          11377.9 s (189.6 min)
+wall clock             276.0 s
+per track              7.5 s
+per second of audio    0.024 s
+sum of TRACK_TOTAL     276.0 s (100% of wall)
+
+stage                     wall_s   share   cores   ms/audio_s
+stem_series_sweep          263.3   68.3%    0.81        23.1
+beat_grid                   30.2    7.8%    0.64         2.7
+mir                         29.6    7.7%    1.54         2.6
+instrument_family           23.9    6.2%    1.40         2.1
+decode                      20.2    5.2%    1.87         1.8
+stem_separation              8.6    2.2%    1.08         0.8
+grid_onset_calibration       3.5    0.9%    1.38         0.3
+content_hash                 2.6    0.7%    1.09         0.2
+loudness_profile             1.2    0.3%    1.49         0.1
+stem_warmup                  1.2    0.3%    1.80         0.1
+cache_write                  0.9    0.2%    0.71         0.1
+metadata_artwork             0.2    0.0%    1.21         0.0
+cache_probe                  0.0    0.0%    1.00         0.0
+SUM OF STAGES              385.4
+  ↳ sweep_separate         261.1            0.80        22.9
+  ↳ sweep_analyze           37.2            2.08         3.3
+
+separation part           total_s   calls   ms/call
+stft                        13.3    5744      2.32
+model_run                  183.5     798    229.99
+readback                    14.8     872     16.94
+istft                       44.3    5744      7.71
+unattributed remainder    -109.4 s (-39.7% of per-track wall)
