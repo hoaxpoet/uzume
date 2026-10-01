@@ -10,6 +10,11 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-01-221600] NACRE.7 — Nacre's colour no longer jumps when the key is unclear (BUG-179)
+
+- **Nacre's colour could jump by up to a third of the colour wheel in one frame** when a song's key was hazy. love_rehab did it 289 times in 30 s. The same recipe caused Understory's colour pop. Nacre now follows the key only when it reads clearly, and its colour moves at most a quarter-turn a second.
+- **Clear-key songs keep their colours:** a held key lands within ~5° of where it did before. Saturation is unchanged.
+- Nacre is certified, so this waits on Matt's live M7 before it ships.
 ### [dev-2026-10-01-204615] BUG149.1 — the key readout names the song's key, not F♯ minor (BUG-149)
 
 - **Most songs read F♯ minor; now they read their key.** The old estimate came from a spectrum too coarse to tell neighbouring notes apart, so the music's overall tilt decided it — pink noise read F♯ minor too. On clean chord progressions it was right in 3 of 24 keys; the new one is right in all 24.

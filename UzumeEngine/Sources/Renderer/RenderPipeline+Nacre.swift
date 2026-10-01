@@ -65,6 +65,47 @@ private let kNacreDesatAtonal: Float = 0.38    // atonal → gentle desaturate t
 private let kNacreSpinGain: Float = 0.012
 private let kNacreSpinFloor: Float = 0.18
 
+// MARK: - NacreHueState (TONAL.3 hue ← harmony; BUG-179 pop fix)
+
+// BUG-179: the averaged fifths vector is only a KEY when it is coherent. Just above the
+// consonance gate the per-frame fifths phase can be near-random, the circular mean collapses
+// (|v| ~ 0.005 on love_rehab) and its atan2 stepped up to 0.38 turns in one frame — a
+// colour pop at the core seed that the zoom spreads into mismatched rings. Trust the
+// direction only as |v| ramps 0.15 → 0.4 (incoherent → the atonal rest state, as Nacre's
+// design already intends), and slew the palette along the shortest arc. The slew sits well
+// above the faithful clock (1/14.4 ≈ 0.07 turns/s), so only jumps are bounded. (The same
+// recipe as Understory's `stepColour`, UND.5.)
+private let kNacreCoherenceLo: Float = 0.15
+private let kNacreCoherenceHi: Float = 0.40
+private let kNacreSlewTurnsPerSecond: Float = 0.25
+private let kNacrePaletteTruePeriod: Float = 2 * .pi / 0.437   // `nacrePalette`'s actual period (wrap)
+
+/// Per-frame palette-phase state for Nacre: the circular fifths mean, the clock drift and
+/// the slewed output phase (seconds of `nacrePalette`). Pure — no Metal — so the BUG-179
+/// regression test replays a fixture through it directly.
+struct NacreHueState {
+    /// ~0.8 s circular mean of the fifths phase as a unit vector (wrap-safe).
+    var fifths: SIMD2<Float> = .zero
+    /// Palette-phase clock: the faithful rate when atonal, near-stopped when a key holds.
+    var drift: Float = 0
+    /// The slewed palette phase actually sent to the shader.
+    var hue: Float = 0
+
+    /// Advance one frame and return the palette phase (palette-seconds).
+    mutating func step(tonalGate: Float, phaseFifths: Float, deltaTime: Float) -> Float {
+        fifths += (SIMD2<Float>(cos(phaseFifths), sin(phaseFifths)) - fifths) * 0.025
+        let coherence = max(0, min(1, (simd_length(fifths) - kNacreCoherenceLo)
+                                      / (kNacreCoherenceHi - kNacreCoherenceLo)))
+        let keyGate = tonalGate * coherence
+        let harmonyAnchor = (atan2(fifths.y, fifths.x) / (2 * .pi)) * kNacrePalettePeriod
+        drift += deltaTime * (kNacreFaithfulRate + (kNacreTonalDriftRate - kNacreFaithfulRate) * keyGate)
+        let target = harmonyAnchor * keyGate + drift
+        let limit = kNacreSlewTurnsPerSecond * kNacrePaletteTruePeriod * max(0, deltaTime)
+        hue += max(-limit, min(limit, remainder(target - hue, kNacrePaletteTruePeriod)))
+        return hue
+    }
+}
+
 extension RenderPipeline {
 
     // MARK: Per-frame uniforms
@@ -125,9 +166,6 @@ extension RenderPipeline {
         //   · The fifths phase is circular-EMA'd as a unit vector (a circular mean, ~0.8 s)
         //     so modulations GLIDE — wrap-safe, unlike a scalar EMA across ±π.
         let tonalGate = max(0, min(1, (features.tonalConsonance - 0.05) / 0.03))  // analyzer atonal floor
-        let fifthsVec = SIMD2<Float>(cos(features.tonalPhaseFifths), sin(features.tonalPhaseFifths))
-        nacreFifthsVec += (fifthsVec - nacreFifthsVec) * 0.025                    // ~0.8 s circular smoothing
-        let smoothedFifths = atan2(nacreFifthsVec.y, nacreFifthsVec.x)
         // Round 2: harmony SETS the hue position — the key you're in IS the colour (a POSITION
         // on the palette wheel), not a nudge on the clock. Round 1's `time + offset` let the
         // clock rotate the palette ~14× over a song while harmony only wobbled ±½ cycle, so
@@ -135,10 +173,10 @@ extension RenderPipeline {
         // palette read as the usual time rotation). Now the clock is DEMOTED to a slow drift
         // when tonal (harmony holds the hue on a vamp) and restored to the faithful full
         // rotation at silence/atonal — a continuous accumulator so the rate change never snaps.
-        let harmonyAnchor = (smoothedFifths / (2 * .pi)) * kNacrePalettePeriod
-        let driftRate = kNacreFaithfulRate + (kNacreTonalDriftRate - kNacreFaithfulRate) * tonalGate
-        nacrePaletteDrift += features.deltaTime * driftRate
-        uni.hueShift = harmonyAnchor * tonalGate + nacrePaletteDrift              // FULL palette phase
+        // BUG-179: coherence-gated + slew-limited — see `NacreHueState`.
+        uni.hueShift = nacreHue.step(tonalGate: tonalGate,
+                                     phaseFifths: features.tonalPhaseFifths,
+                                     deltaTime: features.deltaTime)               // FULL palette phase
 
         // ── Saturation ← consonance (TONAL.3) ── atonal MUSIC desaturates toward the rest
         // state; SILENCE keeps the faithful palette (D-019 warmup must stay colourful — the

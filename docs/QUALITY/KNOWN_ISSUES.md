@@ -57,6 +57,7 @@ passes, the entry moves to §Resolved (recent).
 
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
+| BUG-179 | P2 | preset.fidelity / Nacre | Nacre's colour jumped up to 0.38 of a turn in one frame when the key was unclear (289 jumps in love_rehab's 30 s). Its colour now trusts the key only when the key is clear, and moves at most a quarter-turn a second (NACRE.7). | Matt's live M7 on Nacre: love_rehab, plus one clear-key song to confirm its colours are unchanged. |
 | BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
 | BUG-149 | P3 | dsp.mir / key | The stored key read F♯ minor on 35 % of songs: the live chroma's coarse spectrum read the spectral tilt, not the notes. Preparation now runs `KeyEstimator` (BUG149.1); the census pilot spreads across D/G/C/A/E major, no attractor. | Matt: do the preparation readout's keys look right on songs he knows? (Needs a re-prepare: cache v18.) |
 | BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. **Fixed (BUG178.1, `a042e84d`).** | Matt re-runs a skip-ahead past the prepared songs and seeks on each. |
@@ -75,6 +76,22 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-179 — Nacre's colour jumped when the song's key was unclear (2026-10-01)
+
+**Severity:** P2 (a certified scene breaks its own anti-reference, "hue never strobes") · **Domain:** `preset.fidelity` (Nacre, TONAL.3 hue ← harmony) · **Failure class:** `algorithm` (the angle of a collapsed circular mean) · **Status:** Fixed 2026-10-01 (NACRE.7) — pending Matt's live M7 · **Found by:** replay, from the same recipe's pop in Understory (UND.5); not yet seen live
+
+**Expected.** Nacre's palette phase moves smoothly: it holds while a key holds, glides on a key change, and never steps by a visible amount in one frame.
+
+**Actual.** Replaying `route_coverage/love_rehab/features.csv` through the TONAL.3 math (`harmonyAnchor * tonalGate + nacrePaletteDrift`): the largest single-frame step is **0.377 turns** (t = 28.49 s), with **289 of 1,287 frames** stepping more than 0.02 turns. so_what: 0.033 max, 35 frames. there_there: 0.043, 6 frames. The palette colours the core seed, which the zoom carries outward, so on screen this should read as a colour break at the centre spreading into mismatched rings (inferred from the shader; not rendered).
+
+**Root cause.** Just above the consonance gate (consonance 0.09–0.11), `tonal_phase_fifths` is near-random frame to frame. Its ~0.8 s circular mean collapses (|v| 0.004–0.03, against ~1 for a held key), and `atan2` of a near-zero vector swings freely. 284 of the 289 jumps are that swing; 4 are the gate itself switching.
+
+**Fix (NACRE.7).** `NacreHueState` (`RenderPipeline+Nacre.swift`). The key sets the colour only as |v| ramps 0.15 → 0.4 (an unclear key falls back to the atonal rest state, Nacre's design intent), and the palette is slewed at 0.25 turns/s along the shortest arc. Saturation is untouched. Replay: largest step **0.0058 turns** on all three fixtures, zero frames over 0.02. so_what and there_there move under 0.015 turns from today on average; love_rehab 0.08 (the coherence gate rejects 74 % of its tonal frames). A held clear key settles within ~5° of the pre-fix colour.
+
+**Gate.** `NacreHueStateTests` — love_rehab replay never steps faster than the slew, with the pre-fix formula replayed alongside as the negative control (0.378 turns, must exceed 0.2); a held key lands on the pre-fix colour.
+
+**Live check.** Matt's M7 on Nacre: love_rehab (or any song with a hazy key), plus one clear-key song to confirm its colours are unchanged.
 
 ### BUG-178 — skipping ahead of preparation leaves a local song with no length and no seek (2026-10-01)
 
