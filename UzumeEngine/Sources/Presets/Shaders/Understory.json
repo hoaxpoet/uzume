@@ -1,7 +1,7 @@
 {
   "name": "Understory",
   "family": "fractal",
-  "description": "A dim green forest floor with a field of fourteen glowing fern fronds among still ones: big furrowed trunks receding into green haze, a moss-covered fallen log across the middle distance, and a dense carpet of still sword ferns in depth rows. That forest is drawn once and held, the same place for every track. The fourteen moving fronds (ten open, four fiddleheads held curled into croziers) are Flexi's feedback fractal, ported verbatim: every frame each is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Each glows in saturated rainbow bands running up the stem and out across its leaflets, every frond at its own place on the colour wheel, and the whole field's colours turn with the harmony (the circle-of-fifths position, smoothed, held when the music is atonal or silent; never on a timer). Each moving frond's light spills onto the forest around its root. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels left to right, about 1.7 s across the screen, and each frond has slightly different springs, so neighbours drift out of phase. On every beat of the song's beat grid one frond shimmers: a white-hot band, the palette turned half a turn under it, climbs from its base up the stem and out through every leaflet in about a third of a second, with a short afterglow behind it. The downbeat goes to the large lead frond in front; beats two to four go to a set of mid-distance fronds, always left to right, the same set for four bars before the next group takes over, so the eye learns where the next shimmer will land. Nothing shimmers until the grid has completed a bar and four seconds of the track have passed; with no grid, shimmers follow drum hits on a random frond, at least 0.35 s apart. Moving fronds leave a short afterglow trail, longer when the music is more intense (arousal). A new track grows a new field of moving fronds from their seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
+  "description": "A dim green forest floor with a field of fourteen glowing fern fronds among still ones: big furrowed trunks receding into green haze, a moss-covered fallen log across the middle distance, and a dense carpet of still sword ferns in depth rows. That forest is drawn once and held, the same place for every track. The fourteen moving fronds (ten open, and four fiddleheads, young fronds coiled into tight spirals that uncoil while someone sings) are Flexi's feedback fractal, ported verbatim: every frame each is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Each glows in saturated rainbow bands running up the stem and out across its leaflets, every frond at its own place on the colour wheel, and the whole field's colours turn with the harmony (the circle-of-fifths position, smoothed, held when the music is atonal or silent; never on a timer). Each moving frond's light spills onto the forest around its root. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels left to right, about 1.7 s across the screen, and each frond has slightly different springs, so neighbours drift out of phase. On every beat of the song's beat grid one frond shimmers: a white-hot band, the palette turned half a turn under it, climbs from its base up the stem and out through every leaflet in about a third of a second, with a short afterglow behind it. The downbeat goes to the large lead frond in front; beats two to four go to a set of mid-distance fronds, always left to right, the same set for four bars before the next group takes over, so the eye learns where the next shimmer will land. Nothing shimmers until the grid has completed a bar and four seconds of the track have passed; with no grid, shimmers follow drum hits on a random frond, at least 0.35 s apart. The fiddleheads follow the voice: a sung line uncoils them over about a second and a half, one after another from left to right, and when the singing stops they coil back over about five seconds; the voice is the vocal stem's energy against its own average, ignored when the instrument model hears brass, woodwinds or strings (a trumpet lands in the vocal stem as strongly as a singer), so an instrumental keeps them coiled. Moving fronds leave a short afterglow trail, longer when the music is more intense (arousal). A new track grows a new field of moving fronds from their seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
   "author": "Uzume engine",
   "inspired_by": {
     "milkdrop_filename": "flexi - fractal seafood",
@@ -113,6 +113,30 @@
       "primitive": "drumsEnergyDev",
       "kind": "accent",
       "note": "UND.4 — only when no grid is live (no bar wrap for 6 s): a rising crossing of 0.30, at least 0.35 s apart, shimmers a random mid frond (Matt's §10-2 default)."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "vocalsEnergyRel",
+      "kind": "continuous",
+      "note": "UND.5 — voice presence: smoothstep(0.05, 0.35, vocalsEnergyRel), D-019-gated on total stem energy; envelope attack 1.5 s / release 5 s; curl = κ_max (0.40–0.48, fitted to ref 02) · (1 − opening), staggered left to right. Replay: love_rehab 0.83, there_there 0.87 mean open; so_what (instrumental) 0.00."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "brassActivity",
+      "kind": "continuous",
+      "note": "UND.5 — veto: brass + woodwinds + strings activity (EMA 0.5 s, seeded on the first sample) above 0.03→0.10 closes the voice gate. Measured: the separated vocal stem carries so_what's trumpet as strongly as a singer; brass separates them ~100× (median 0.167 vs 0.001–0.002)."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "woodwindsActivity",
+      "kind": "continuous",
+      "note": "UND.5 — part of the same family veto."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "stringsActivity",
+      "kind": "continuous",
+      "note": "UND.5 — part of the same family veto."
     }
   ]
 }

@@ -94,7 +94,7 @@ public struct UnderstoryLayout: Sendable, Equatable {
     public let seed: UInt32
     public let aspect: Float
     /// Fronds in draw order: far first, near last.
-    public let fronds: [Frond]
+    public private(set) var fronds: [Frond]
     /// The lead frond (the downbeat's, design §4.3): the open near frond.
     public let leadIndex: Int
 
@@ -126,6 +126,17 @@ public struct UnderstoryLayout: Sendable, Equatable {
         }
         fronds = ordered
         leadIndex = ordered.lastIndex { $0.layer == .near && !$0.isFiddlehead } ?? ordered.count - 1
+    }
+
+    /// This layout with every fiddlehead's curl set to `kappa`, keeping each one's direction.
+    func withFiddleheadCurl(_ kappa: Float) -> UnderstoryLayout {
+        var copy = self
+        copy.fronds = fronds.map { frond in
+            var curled = frond
+            if frond.isFiddlehead { curled.curl = (frond.curl < 0 ? -1 : 1) * kappa }
+            return curled
+        }
+        return copy
     }
 
     // MARK: Placement
@@ -168,8 +179,9 @@ public struct UnderstoryLayout: Sendable, Equatable {
             fronds[i].rotation = (x - 0.5) * 0.6 + rng.next(in: -0.15...0.15)
             fronds[i].delaySubsteps = Int((x / UnderstoryField.windSpeed * UnderstoryField.substepHz).rounded())
             if curled[i] {
-                // Provisional resting coil (UND.5 fits κ against ref 02 and uncoils it with the voice).
-                fronds[i].curl = (rng.next(in: 0...1) < 0.5 ? -1 : 1) * rng.next(in: 0.22...0.30)
+                // Resting coil κ_max, fitted at UND.5 against ref 02 (a full, tight spiral): 0.25
+                // is a half-turn crozier, 0.45 one turn with the leaflets packed inside, 0.55 a muddle.
+                fronds[i].curl = (rng.next(in: 0...1) < 0.5 ? -1 : 1) * rng.next(in: 0.40...0.48)
                 fronds[i].scale *= 0.8
             }
         }

@@ -42,9 +42,9 @@ struct UnderstoryStagedHarnessTests {
         let height: Int
 
         /// One production staged frame: tick the springs, encode every stage, capture.
-        func frame(_ features: FeatureVector) throws {
+        func frame(_ features: FeatureVector, stems: StemFeatures = .zero) throws {
             var features = features
-            field.tick(deltaTime: features.deltaTime, features: features)
+            field.tick(deltaTime: features.deltaTime, features: features, stems: stems)
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else { throw HarnessError.commandBufferFailed }
             let front = pipeline.encodeOffscreenStages(commandBuffer: cmd, features: &features, stemFeatures: .zero)
             let desc = MTLRenderPassDescriptor()
@@ -156,6 +156,9 @@ struct UnderstoryStagedHarnessTests {
         let rows = try SessionReplayHarness.loadRowsForReplay(
             root.appendingPathComponent(fixture).appendingPathComponent("features.csv"))
         try #require(!rows.isEmpty)
+        // Stems row-aligned with features (both written per analysis frame); UND.5's voice route.
+        let stems = SessionReplayHarness.loadStemsForReplay(
+            root.appendingPathComponent(fixture).appendingPathComponent("stems.csv"))
         let out = URL(fileURLWithPath: "/tmp/uzume_visual/understory_\(fixture)")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
@@ -164,7 +167,7 @@ struct UnderstoryStagedHarnessTests {
             .split(separator: "x").compactMap { Int($0) }
         let (width, height) = dims.count == 2 ? (dims[0], dims[1]) : (640, 480)
         let rig = try Self.rig(width: width, height: height)
-        var bendLog = ["frame,t,bend,direction"]
+        var bendLog = ["frame,t,bend,direction,unfurl"]
         var flashFrames: [[FlashRegionSample]] = []
         var row = 0
         for i in 0..<(20 * 60) {
@@ -174,11 +177,12 @@ struct UnderstoryStagedHarnessTests {
             f.time = t
             f.deltaTime = 1.0 / 60.0
             f.beatsPerBar = 4   // the fixtures' meter (every row: 4); the replay row does not carry it
-            try rig.frame(f)
+            try rig.frame(f, stems: row < stems.count ? stems[row] : .zero)
             guard t >= 8 else { continue }
             let n = i - 8 * 60
             let frond = rig.field.frondsForTesting()[0]
-            bendLog.append(String(format: "%d,%.4f,%.5f,%.5f", n, t, frond.bend, frond.direction))
+            bendLog.append(String(format: "%d,%.4f,%.5f,%.5f,%.4f", n, t, frond.bend, frond.direction,
+                                  rig.field.unfurlForTesting))
             if n % 90 == 0 || (300...303).contains(n), ProcessInfo.processInfo.environment["UNDERSTORY_ATLAS"] == "1",
                let atlas = rig.pipeline.stagedTexture(named: "fronds") {
                 try Self.writePNG(Self.atlasGray(atlas), width: atlas.width, height: atlas.height,
@@ -267,6 +271,33 @@ struct UnderstoryStagedHarnessTests {
             }
         }
         return out
+    }
+
+    // MARK: κ fitting
+
+    /// UNDERSTORY_KAPPA=1 — the fiddleheads at silence for each candidate κ, written as the
+    /// atlas (where each coil sits alone in its tile) for comparison with ref 02 (UND.5).
+    @Test("fiddlehead coils at candidate curls")
+    func kappaCoils() throws {
+        guard ProcessInfo.processInfo.environment["UNDERSTORY_KAPPA"] == "1" else { return }
+        let out = URL(fileURLWithPath: "/tmp/uzume_visual/understory_kappa")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        for kappa: Float in [0.25, 0.35, 0.45, 0.55] {
+            let rig = try Self.rig(width: 1920, height: 1080)
+            rig.field.setFiddleheadCurlForTesting(kappa)
+            for i in 0..<150 {
+                var f = HarnessTemplateCore.silenceFeature(frame: i)
+                f.aspectRatio = 1920.0 / 1080.0
+                try rig.frame(f)
+            }
+            guard let atlas = rig.pipeline.stagedTexture(named: "fronds") else { continue }
+            try Self.writePNG(Self.atlasGray(atlas), width: atlas.width, height: atlas.height,
+                              to: out.appendingPathComponent(String(format: "kappa_%.2f.png", kappa)))
+        }
+        let layout = try Self.rig(width: 1920, height: 1080).field.layoutForTesting
+        print("[understory-kappa] fiddlehead tiles: " + layout.fronds.filter(\.isFiddlehead).map {
+            String(format: "(%.3f,%.3f,%.3f,%.3f)", $0.tile.x, $0.tile.y, $0.tile.z, $0.tile.w)
+        }.joined(separator: " "))
     }
 
     private static func writePNG(_ bgra: [UInt8], width: Int, height: Int, to url: URL) throws {

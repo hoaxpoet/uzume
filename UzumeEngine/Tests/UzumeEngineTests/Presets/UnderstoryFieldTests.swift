@@ -124,6 +124,53 @@ struct UnderstoryFieldTests {
                 && intense <= UnderstoryField.trailDecayIntense + 1e-4)
     }
 
+    private static func stems(voice: Float, brass: Float) -> StemFeatures {
+        var stems = StemFeatures.zero
+        stems.vocalsEnergyRel = voice
+        stems.vocalsEnergy = 0.3; stems.drumsEnergy = 0.2; stems.bassEnergy = 0.2; stems.otherEnergy = 0.2
+        stems.brassActivity = brass
+        return stems
+    }
+
+    @Test("a sung line uncoils the fiddleheads; the same energy from a horn does not")
+    func voiceUncoils() throws {
+        func unfurl(voice: Float, brass: Float, seconds: Float) throws -> Float {
+            let field = try Self.field()
+            for _ in 0..<Int(seconds * 60) {
+                field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01),
+                           stems: Self.stems(voice: voice, brass: brass))
+            }
+            return field.unfurlForTesting
+        }
+        let sung = try unfurl(voice: 0.5, brass: 0.001, seconds: 1.5)
+        #expect(abs(sung - (1 - exp(-1))) < 0.05, "one attack time → ~63 % open (\(sung))")
+        #expect(try unfurl(voice: 0.5, brass: 0.2, seconds: 10) < 0.01, "a horn in the vocal stem is vetoed")
+        #expect(try unfurl(voice: 0.0, brass: 0.0, seconds: 10) < 0.01, "no voice, no unfurl")
+    }
+
+    @Test("silence after a sung line lets them coil back over the release")
+    func voiceRelease() throws {
+        let field = try Self.field()
+        for _ in 0..<(20 * 60) {
+            field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01),
+                       stems: Self.stems(voice: 0.5, brass: 0))
+        }
+        let open = field.unfurlForTesting
+        for _ in 0..<(5 * 60) {
+            field.tick(deltaTime: 1 / 60, features: Self.features(bass: 0.3, treble: 0.01),
+                       stems: Self.stems(voice: 0, brass: 0))
+        }
+        #expect(open > 0.99 && abs(field.unfurlForTesting - exp(-1)) < 0.05, "\(open) → \(field.unfurlForTesting)")
+    }
+
+    @Test("the fiddleheads open in a wave, left to right, and fully at the top of the envelope")
+    func openingStagger() {
+        let mid = (0..<4).map { UnderstoryVoice.opening(order: $0, unfurl: 0.5) }
+        #expect(mid == mid.sorted(by: >), "left opens first: \(mid)")
+        #expect((0..<4).allSatisfy { UnderstoryVoice.opening(order: $0, unfurl: 1) == 1 })
+        #expect((0..<4).allSatisfy { UnderstoryVoice.opening(order: $0, unfurl: 0) == 0 })
+    }
+
     @Test("the springs integrate at 60 Hz whatever the render rate")
     func substepsAreRateIndependent() throws {
         func bend(after seconds: Float, at hz: Float) throws -> Float {

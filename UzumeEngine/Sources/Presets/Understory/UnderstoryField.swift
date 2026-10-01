@@ -23,6 +23,9 @@
 // field left to right and neighbours drift out of phase. A small idle breeze rides the drive
 // so silence reads as still air, not a frozen frame (design §6.2).
 //
+// UND.5 — the voice uncoils the fiddleheads (design §4.4): curl = κ_max · (1 − opening), the
+// opening following `UnderstoryVoice`'s voice-presence envelope.
+//
 // UND.3 — colour and trails (design §4.5). The palette rotates with HARMONY, never a clock:
 // `tonalPhaseFifths` circular-EMA'd as a unit vector (~0.8 s, wrap-safe — the Nacre TONAL.3
 // recipe), gated by `tonalConsonance` so silence / percussion / noise HOLD the last harmonic
@@ -163,6 +166,7 @@ public final class UnderstoryField: @unchecked Sendable {
     private var arousal: Float = 0
     private var frameIndex: Float = 0
     private var clearPending = false
+    private var voice = UnderstoryVoice()
     private var shimmer: UnderstoryShimmer
     private var onsets: [Float]
     private var events: [UnderstoryShimmer.Event] = []
@@ -224,6 +228,7 @@ public final class UnderstoryField: @unchecked Sendable {
                 }
             }
             let frame = min(max(deltaTime, 0), 0.25)
+            voice.step(stems, dt: frame)
             let input = UnderstoryShimmer.Frame(
                 clock: clock,
                 dt: frame,
@@ -290,7 +295,7 @@ public final class UnderstoryField: @unchecked Sendable {
             let fronds = (base + MemoryLayout<Header>.stride).assumingMemoryBound(to: Frond.self)
             for (i, spring) in springs.enumerated() {
                 let frond = layout.fronds[i]
-                let bend = (spring.bend.isFinite ? spring.bend : 0) + frond.curl
+                let bend = (spring.bend.isFinite ? spring.bend : 0) + openedCurl(i)
                 fronds[i] = Frond(
                     tile: frond.tile,
                     crop: frond.crop,
@@ -304,11 +309,19 @@ public final class UnderstoryField: @unchecked Sendable {
 
     // MARK: Test seams
 
-    /// Per-frond `(bend, direction)` as published (resting curl included).
+    /// Frond `i`'s curl as published: its resting κ, opened by the voice (lock held).
+    private func openedCurl(_ i: Int) -> Float {
+        let frond = layout.fronds[i]
+        guard frond.isFiddlehead else { return 0 }
+        let order = layout.fronds.filter { $0.isFiddlehead && $0.root.x < frond.root.x }.count
+        return frond.curl * (1 - UnderstoryVoice.opening(order: order, unfurl: voice.unfurl))
+    }
+
+    /// Per-frond `(bend, direction)` as published (opened curl included).
     public func frondsForTesting() -> [(bend: Float, direction: Float)] {
         lock.withLock {
-            zip(springs, layout.fronds).map { spring, frond in
-                let bend = spring.bend + frond.curl
+            springs.indices.map { i in
+                let bend = springs[i].bend + openedCurl(i)
                 return (bend, -5 * bend)
             }
         }
@@ -327,6 +340,14 @@ public final class UnderstoryField: @unchecked Sendable {
 
     /// The field's clock (seconds of substeps run).
     public var clockForTesting: Float { lock.withLock { clock } }
+
+    /// The voice envelope (0 coiled … 1 open), for the vocal-route evidence.
+    public var unfurlForTesting: Float { lock.withLock { voice.unfurl } }
+
+    /// Force every fiddlehead's resting curl magnitude (κ fitting, UND.5).
+    func setFiddleheadCurlForTesting(_ kappa: Float) {
+        lock.withLock { layout = layout.withFiddleheadCurl(kappa) }
+    }
 
     /// The current layout.
     public var layoutForTesting: UnderstoryLayout { lock.withLock { layout } }
