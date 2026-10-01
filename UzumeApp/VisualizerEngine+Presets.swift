@@ -89,13 +89,11 @@ extension VisualizerEngine {
     /// `currentSkeinSeed()` derives the reseed from it (call after `applyLocalFileTrackState`
     /// on the LF path).
     func resetPerTrackPresetState() {
-        // UND.2 (design §4.1): a new track grows a new field — re-seed the layout and clear the
-        // persistent frond atlas so every frond regrows from its seed instead of jumping to its
-        // new place. No-op unless Understory is active.
-        if let understoryField {
-            understoryField.reseed(currentSkeinSeed())
-            pipeline.resetStagedPersistentState()
-        }
+        // UND.2 (design §4.1): a new track grows a new field — re-seed the layout; the field tells
+        // the `fronds` stage to clear its atlas so every frond regrows from its seed instead of
+        // jumping to its new place. The cached forest (`backdrop`) is the same place for every
+        // track and is kept. No-op unless Understory is active.
+        understoryField?.reseed(currentSkeinSeed())
         // NB.4: settle Nimbus into the new track. Zeroing the bloom follower shrinks/dims the
         // body to its floor and the flow phase re-seeds; the dim settle-in masks the gas re-seed
         // so the body blooms back UP into the new track rather than popping (DESIGN §1.5).

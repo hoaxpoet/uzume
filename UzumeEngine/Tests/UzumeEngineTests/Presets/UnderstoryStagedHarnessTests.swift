@@ -177,10 +177,13 @@ struct UnderstoryStagedHarnessTests {
             let n = i - 8 * 60
             let frond = rig.field.frondsForTesting()[0]
             bendLog.append(String(format: "%d,%.4f,%.5f,%.5f", n, t, frond.bend, frond.direction))
-            if n % 90 == 0, ProcessInfo.processInfo.environment["UNDERSTORY_ATLAS"] == "1",
+            if n % 90 == 0 || (300...303).contains(n), ProcessInfo.processInfo.environment["UNDERSTORY_ATLAS"] == "1",
                let atlas = rig.pipeline.stagedTexture(named: "fronds") {
                 try Self.writePNG(Self.atlasGray(atlas), width: atlas.width, height: atlas.height,
                                   to: out.appendingPathComponent(String(format: "atlas_%05d.png", n)))
+                try Self.writePNG(Self.atlasGray(atlas, age: true), width: atlas.width, height: atlas.height,
+                                  to: out.appendingPathComponent(String(format: "atlas_age_%05d.png", n)))
+                try Self.atlasRaw(atlas).write(to: out.appendingPathComponent(String(format: "atlas_%05d.f16", n)))
             }
             try Self.writePNG(rig.pixels, width: width, height: height,
                               to: out.appendingPathComponent(String(format: "understory_seq_%05d.png", n)))
@@ -220,14 +223,23 @@ struct UnderstoryStagedHarnessTests {
         }
     }
 
-    /// The `fronds` atlas density as an opaque grey BGRA image (diagnostics).
-    private static func atlasGray(_ tex: MTLTexture) -> [UInt8] {
+    /// The raw `fronds` atlas (rgba16Float bytes) for offline stamp analysis.
+    private static func atlasRaw(_ tex: MTLTexture) -> Data {
+        Data(HarnessTemplateCore.readHalf(tex, width: tex.width, height: tex.height))
+    }
+
+    /// The `fronds` atlas as an opaque grey BGRA image (diagnostics): density, or with `age`
+    /// the path length G/R in generations over 64 (black where there is no frond).
+    private static func atlasGray(_ tex: MTLTexture, age: Bool = false) -> [UInt8] {
         let bytes = HarnessTemplateCore.readHalf(tex, width: tex.width, height: tex.height)
         var out = [UInt8](repeating: 255, count: tex.width * tex.height * 4)
         bytes.withUnsafeBytes { raw in
             let halves = raw.bindMemory(to: UInt16.self)
             for i in 0..<(tex.width * tex.height) {
-                let v = UInt8(max(0, min(255, HarnessTemplateCore.halfToFloat(halves[i * 4]) * 255)))
+                let density = HarnessTemplateCore.halfToFloat(halves[i * 4])
+                let path = HarnessTemplateCore.halfToFloat(halves[i * 4 + 1]) / max(density, 1e-3)
+                let value = age ? (density > 0.05 ? path / 64 : 0) : density
+                let v = UInt8(max(0, min(255, value * 255)))
                 out[i * 4] = v; out[i * 4 + 1] = v; out[i * 4 + 2] = v
             }
         }

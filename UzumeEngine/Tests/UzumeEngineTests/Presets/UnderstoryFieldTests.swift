@@ -97,6 +97,33 @@ struct UnderstoryFieldTests {
                 "left felt it at frame \(leftFrame), right at \(rightFrame); delay gap \(expected) substeps")
     }
 
+    @Test("GPU layout: a 32 B header and 80 B fronds, as Understory.metal declares them")
+    func gpuLayout() {
+        // The shader's frond array is float4-aligned: it starts at 32 only if the header is 32.
+        #expect(MemoryLayout<UnderstoryField.Header>.stride == 32)
+        #expect(MemoryLayout<UnderstoryField.Frond>.stride == 80)
+    }
+
+    @Test("palette follows harmony and holds when atonal; trails lengthen with arousal")
+    func colourRoutes() throws {
+        func run(fifths: Float, consonance: Float, arousal: Float) throws -> (Float, Float) {
+            let field = try Self.field()
+            var f = Self.features(bass: 0.3, treble: 0.01)
+            f.tonalPhaseFifths = fifths; f.tonalConsonance = consonance; f.arousal = arousal
+            for _ in 0..<1200 { field.tick(deltaTime: 1 / 60, features: f) }
+            let colour = field.colourForTesting()
+            return (colour.rotation, colour.trailDecay)
+        }
+        let tonal = try run(fifths: .pi / 2, consonance: 0.5, arousal: 0)
+        #expect(abs(tonal.0 - 0.25) < 0.01, "fifths at π/2 → a quarter turn (\(tonal.0))")
+        let atonal = try run(fifths: .pi / 2, consonance: 0.0, arousal: 0)
+        #expect(abs(atonal.0) < 1e-4, "atonal music holds the palette (\(atonal.0))")
+        let calm = try run(fifths: 0, consonance: 0, arousal: -0.4).1
+        let intense = try run(fifths: 0, consonance: 0, arousal: 0.7).1
+        #expect(calm < intense && calm >= UnderstoryField.trailDecayCalm - 1e-4
+                && intense <= UnderstoryField.trailDecayIntense + 1e-4)
+    }
+
     @Test("the springs integrate at 60 Hz whatever the render rate")
     func substepsAreRateIndependent() throws {
         func bend(after seconds: Float, at hz: Float) throws -> Float {

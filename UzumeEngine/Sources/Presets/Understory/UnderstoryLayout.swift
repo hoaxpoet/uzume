@@ -44,6 +44,10 @@ public struct UnderstoryLayout: Sendable, Equatable {
         public var stiffness: Float
         /// Gust delay in 60 Hz substeps: root x over the wind speed (design §4.2).
         public var delaySubsteps: Int
+        /// This frond's place on the palette wheel, in turns (design §4.5).
+        public var hueOffset: Float
+        /// Colour saturation; the far layer is paler so depth survives the saturation.
+        public var saturation: Float
         public var isFiddlehead: Bool { curl != 0 }
     }
 
@@ -73,13 +77,14 @@ public struct UnderstoryLayout: Sendable, Equatable {
         let scale: ClosedRange<Float>
         let rootY: ClosedRange<Float>
         let brightness: Float
+        let saturation: Float
     }
 
     static func style(_ layer: Layer) -> Style {
         switch layer {
-        case .far: Style(scale: 0.55...0.70, rootY: 0.72...0.82, brightness: 0.45)
-        case .mid: Style(scale: 0.95...1.15, rootY: 0.94...1.00, brightness: 0.70)
-        case .near: Style(scale: 1.45...1.75, rootY: 1.04...1.10, brightness: 1.00)
+        case .far: Style(scale: 0.55...0.70, rootY: 0.72...0.82, brightness: 0.45, saturation: 0.60)
+        case .mid: Style(scale: 0.95...1.15, rootY: 0.94...1.00, brightness: 0.70, saturation: 0.85)
+        case .near: Style(scale: 1.45...1.75, rootY: 1.04...1.10, brightness: 1.00, saturation: 0.95)
         }
     }
 
@@ -132,6 +137,7 @@ public struct UnderstoryLayout: Sendable, Equatable {
         let rootY = rng.next(in: style.rootY)
         let scale = rng.next(in: style.scale)
         let stiffness = rng.next(in: 0.85...1.15)
+        let hueOffset = rng.next(in: 0...1)
         return Frond(
             tile: tile,
             crop: crop,
@@ -142,7 +148,9 @@ public struct UnderstoryLayout: Sendable, Equatable {
             brightness: style.brightness,
             curl: 0,
             stiffness: stiffness,
-            delaySubsteps: 0
+            delaySubsteps: 0,
+            hueOffset: hueOffset,
+            saturation: style.saturation
         )
     }
 

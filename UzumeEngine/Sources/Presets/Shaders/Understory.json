@@ -1,7 +1,7 @@
 {
   "name": "Understory",
   "family": "fractal",
-  "description": "A field of fourteen fern fronds rising from the bottom of the frame on a dark blue-black ground, in three depths with dark ground between them: ten open fronds and four fiddleheads, young fronds held curled into croziers. Each frond is Flexi's feedback fractal, ported verbatim: every frame it is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels: each frond feels the drive later the further right it is rooted, about 1.7 s across the screen, and each has slightly different springs, so neighbours drift out of phase. Far fronds are smaller, dimmer and bluer; colour is one flat pale tint per depth for now. A new track grows a new field from its seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
+  "description": "A dim green forest floor with a field of fourteen glowing fern fronds among still ones: big furrowed trunks receding into green haze, a moss-covered fallen log across the middle distance, and a dense carpet of still sword ferns in depth rows. That forest is drawn once and held, the same place for every track. The fourteen moving fronds (ten open, four fiddleheads held curled into croziers) are Flexi's feedback fractal, ported verbatim: every frame each is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Each glows in saturated rainbow bands running up the stem and out across its leaflets, every frond at its own place on the colour wheel, and the whole field's colours turn with the harmony (the circle-of-fifths position, smoothed, held when the music is atonal or silent; never on a timer). Each moving frond's light spills onto the forest around its root. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels left to right, about 1.7 s across the screen, and each frond has slightly different springs, so neighbours drift out of phase. Moving fronds leave a short afterglow trail, longer when the music is more intense (arousal). A new track grows a new field of moving fronds from their seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
   "author": "Uzume engine",
   "inspired_by": {
     "milkdrop_filename": "flexi - fractal seafood",
@@ -10,8 +10,15 @@
     "source_form": "butterchurn pre-converted JSON, presets/converted/flexi - fractal seafood.json; the .milk (projectM presets-milkdrop-original) was read for comments only; neither file is committed (D-116 bullet 4)",
     "sha256": "d0ca386c74a4be1ebacfc451cf48e3e7c6a3aac94ddf705d116ad5ebccd627d9"
   },
-  "passes": ["staged"],
+  "passes": [
+    "staged"
+  ],
   "stages": [
+    {
+      "name": "backdrop",
+      "fragment_function": "understory_backdrop_fragment",
+      "persistent": true
+    },
     {
       "name": "fronds",
       "fragment_function": "understory_fronds_fragment",
@@ -20,12 +27,18 @@
     {
       "name": "bed",
       "fragment_function": "understory_bed_fragment",
-      "samples": ["fronds"]
+      "samples": [
+        "fronds"
+      ],
+      "persistent": true
     },
     {
       "name": "present",
       "fragment_function": "understory_present_fragment",
-      "samples": ["bed"]
+      "samples": [
+        "bed",
+        "backdrop"
+      ]
     }
   ],
   "vertex_function": "fullscreen_vertex",
@@ -33,11 +46,23 @@
   "duration": 60,
   "visual_density": 0.4,
   "motion_intensity": 0.4,
-  "color_temperature_range": [0.3, 0.7],
+  "color_temperature_range": [
+    0.3,
+    0.7
+  ],
   "fatigue_risk": "low",
-  "transition_affordances": ["crossfade"],
-  "section_suitability": ["ambient", "comedown", "bridge"],
-  "complexity_cost": { "tier1": 3.0, "tier2": 1.5 },
+  "transition_affordances": [
+    "crossfade"
+  ],
+  "section_suitability": [
+    "ambient",
+    "comedown",
+    "bridge"
+  ],
+  "complexity_cost": {
+    "tier1": 3.0,
+    "tier2": 1.5
+  },
   "certified": false,
   "rubric_profile": "lightweight",
   "audio_routes": [
@@ -52,6 +77,24 @@
       "primitive": "treble",
       "kind": "continuous",
       "note": "UND.1 — treble half of the same balance, same normalisation. One visual layer, one balance: a bass swell leans the frond one way, a treble swell the other. bassDev − trebDev (trebDev ~100× below bassDev) and the BandDeviationTracker ratio (~21 s average, one-sided lean) were measured on the fixtures and rejected."
+    },
+    {
+      "route": "palette_from_harmony",
+      "primitive": "tonalPhaseFifths",
+      "kind": "continuous",
+      "note": "UND.3 — the whole field's palette rotation: tonalPhaseFifths circular-EMA'd as a unit vector (0.025 per 1/60 s, ~0.8 s; the Nacre TONAL.3 recipe), so modulations glide and wrap safely. Never a wall clock (design §4.5)."
+    },
+    {
+      "route": "palette_from_harmony",
+      "primitive": "tonalConsonance",
+      "kind": "continuous",
+      "note": "UND.3 — gates the harmony steering (Nacre's analyzer floor, (c − 0.05)/0.03): atonal or silent passages HOLD the last harmonic position."
+    },
+    {
+      "route": "afterglow_length",
+      "primitive": "arousal",
+      "kind": "continuous",
+      "note": "UND.3 — trail decay per 1/60 s from arousal (EMA ~2 s), 0.50 calm → 0.82 intense: a ghost falls to 10 % in ~3 frames calm, ~12 intense. One slow route, its own layer (FA #67)."
     }
   ]
 }

@@ -23,10 +23,22 @@
 // field left to right and neighbours drift out of phase. A small idle breeze rides the drive
 // so silence reads as still air, not a frozen frame (design §6.2).
 //
-// GPU layout (buffer(6)): `Header` (16 B) followed by `maxFronds` × `Frond` (64 B).
+// UND.3 — colour and trails (design §4.5). The palette rotates with HARMONY, never a clock:
+// `tonalPhaseFifths` circular-EMA'd as a unit vector (~0.8 s, wrap-safe — the Nacre TONAL.3
+// recipe), gated by `tonalConsonance` so silence / percussion / noise HOLD the last harmonic
+// position instead of steering. Afterglow length follows `arousal` (EMA ~2 s): calm → a short,
+// clean trail, intense → a long Milkdrop smear.
+//
+// The backdrop (Matt, 2026-10-01: "a beautiful background — they are just floating in space",
+// then his reference: a dim green redwood floor, a mossy fallen log, a carpet of ferns "not all
+// of which are moving") is a cached `backdrop` stage — one forest for every track. The header
+// paces its build and tells the `fronds` stage when to clear for a new track.
+//
+// GPU layout (buffer(6)): `Header` (32 B) followed by `maxFronds` × `Frond` (80 B).
 
 import Foundation
 import Metal
+import simd
 import Shared
 import os.log
 
@@ -70,9 +82,32 @@ public final class UnderstoryField: @unchecked Sendable {
     /// Buffer header. `frondCount` fronds follow.
     struct Header {
         var frondCount: UInt32
-        var pad0: UInt32 = 0
-        var pad1: UInt32 = 0
-        var pad2: UInt32 = 0
+        /// Palette rotation in turns, from harmony.
+        var paletteRotation: Float = 0
+        /// Afterglow decay per 1/60 s, from arousal.
+        var trailDecay: Float = 0
+        /// Frames published so far: paces the backdrop's progressive build.
+        var frameIndex: Float = 0
+        /// 1 for the frame(s) after `reseed`: the `fronds` stage clears its atlas so a new
+        /// track's field regrows from its seeds, while the cached forest is kept.
+        var clearFronds: Float = 0
+        // Scalars only: the header must stay 8 × 4 B = 32 B so the shader's float4-aligned
+        // frond array starts where Swift's does.
+        var pad0: Float = 0
+        var pad1: Float = 0
+        var pad2: Float = 0
+    }
+
+    /// Afterglow decay per 1/60 s at calm and at intense arousal (design §4.5): a ghost falls
+    /// to 10 % in ~3 frames (50 ms) calm, ~12 frames (200 ms) intense. The first UND.3 range
+    /// (0.80–0.94) smeared every leaflet into motion blur on a moderate track (so_what).
+    public static let trailDecayCalm: Float = 0.50
+    public static let trailDecayIntense: Float = 0.82
+
+    /// Arousal mapped onto the trail range. The fixtures span about −0.4 … 0.65.
+    static func trailDecay(arousal: Float) -> Float {
+        let unit = min(max((arousal + 0.2) / 0.8, 0), 1)
+        return trailDecayCalm + (trailDecayIntense - trailDecayCalm) * unit
     }
 
     /// One frond as the shader reads it.
@@ -87,6 +122,8 @@ public final class UnderstoryField: @unchecked Sendable {
         /// Flexi's `ww` (bend + resting curl), Flexi's `w` (heading − 5·ww), depth layer
         /// (0 far … 2 near), brightness.
         var look: SIMD4<Float>
+        /// Hue offset (turns), saturation, and two slots UND.4's shimmer will use.
+        var colour: SIMD4<Float>
     }
 
     /// Two-spring state for one frond (Flexi's `y1 v1 y2 v2`).
@@ -121,6 +158,11 @@ public final class UnderstoryField: @unchecked Sendable {
     private var tt: Float = 0
     private var levels = MilkdropLevels()
     private var pending: Float = 0
+    private var fifths = SIMD2<Float>(1, 0)
+    private var paletteRotation: Float = 0
+    private var arousal: Float = 0
+    private var frameIndex: Float = 0
+    private var clearPending = false
 
     // MARK: Init
 
@@ -140,7 +182,10 @@ public final class UnderstoryField: @unchecked Sendable {
     /// New track: a new field (design §4.1 "re-seeded at track change"). The springs keep
     /// moving — the wind does not stop because the song changed.
     public func reseed(_ seed: UInt32) {
-        lock.withLock { layout = UnderstoryLayout(seed: seed, aspect: layout.aspect) }
+        lock.withLock {
+            layout = UnderstoryLayout(seed: seed, aspect: layout.aspect)
+            clearPending = true
+        }
         writeToGPU()
     }
 
@@ -149,6 +194,7 @@ public final class UnderstoryField: @unchecked Sendable {
     /// Advance the springs by `deltaTime` in fixed 1/60 s substeps and publish the field.
     public func tick(deltaTime: Float, features: FeatureVector) {
         lock.withLock {
+            frameIndex = frameIndex >= 1_000_000 ? 0 : frameIndex + 1
             if features.aspectRatio > 0, abs(features.aspectRatio - layout.aspect) > 1e-3 {
                 layout = UnderstoryLayout(seed: layout.seed, aspect: features.aspectRatio)
             }
@@ -162,6 +208,7 @@ public final class UnderstoryField: @unchecked Sendable {
                 tt = 0.97 * tt + 0.04 * level.treble
                 historyHead = (historyHead + 1) % history.count
                 history[historyHead] = Self.driveGain * (bb - tt) + Self.idleBreeze(at: clock)
+                stepColour(features)
                 for i in springs.indices {
                     let frond = layout.fronds[i]
                     let back = (historyHead - frond.delaySubsteps + history.count) % history.count
@@ -170,6 +217,17 @@ public final class UnderstoryField: @unchecked Sendable {
             }
         }
         writeToGPU()
+        lock.withLock { clearPending = false }   // published once by this tick: consumed
+    }
+
+    /// One 60 Hz step of the palette and trail state (design §4.5).
+    private func stepColour(_ features: FeatureVector) {
+        // Consonance gate (the Nacre analyzer floor): atonal or silent → hold, don't steer.
+        let gate = min(max((features.tonalConsonance - 0.05) / 0.03, 0), 1)
+        let target = SIMD2<Float>(cos(features.tonalPhaseFifths), sin(features.tonalPhaseFifths))
+        if features.tonalPhaseFifths.isFinite { fifths += (target - fifths) * (0.025 * gate) }
+        if simd_length(fifths) > 1e-3 { paletteRotation = atan2(fifths.y, fifths.x) / (2 * .pi) }
+        if features.arousal.isFinite { arousal += (features.arousal - arousal) * (1 / (2 * Self.substepHz)) }
     }
 
     /// butterchurn `AudioLevels.updateAudioLevels`, the `val` half, for bass and treble at the
@@ -202,7 +260,12 @@ public final class UnderstoryField: @unchecked Sendable {
     private func writeToGPU() {
         lock.withLock {
             let base = buffer.contents()
-            base.storeBytes(of: Header(frondCount: UInt32(springs.count)), as: Header.self)
+            let header = Header(frondCount: UInt32(springs.count),
+                                paletteRotation: paletteRotation,
+                                trailDecay: Self.trailDecay(arousal: arousal),
+                                frameIndex: frameIndex,
+                                clearFronds: clearPending ? 1 : 0)
+            base.storeBytes(of: header, as: Header.self)
             let fronds = (base + MemoryLayout<Header>.stride).assumingMemoryBound(to: Frond.self)
             for (i, spring) in springs.enumerated() {
                 let frond = layout.fronds[i]
@@ -211,7 +274,8 @@ public final class UnderstoryField: @unchecked Sendable {
                     tile: frond.tile,
                     crop: frond.crop,
                     place: SIMD4(frond.root.x, frond.root.y, frond.scale, frond.rotation),
-                    look: SIMD4(bend, -5 * bend, Float(frond.layer.rawValue), frond.brightness)
+                    look: SIMD4(bend, -5 * bend, Float(frond.layer.rawValue), frond.brightness),
+                    colour: SIMD4(frond.hueOffset, frond.saturation, 0, 0)
                 )
             }
         }
@@ -231,6 +295,11 @@ public final class UnderstoryField: @unchecked Sendable {
 
     /// The spring bend alone (no resting curl), per frond.
     public func swayForTesting() -> [Float] { lock.withLock { springs.map(\.bend) } }
+
+    /// `(palette rotation in turns, trail decay per 1/60 s)` as published.
+    public func colourForTesting() -> (rotation: Float, trailDecay: Float) {
+        lock.withLock { (paletteRotation, Self.trailDecay(arousal: arousal)) }
+    }
 
     /// The current layout.
     public var layoutForTesting: UnderstoryLayout { lock.withLock { layout } }
