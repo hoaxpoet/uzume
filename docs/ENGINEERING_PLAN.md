@@ -1742,6 +1742,14 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 
 ## Recently Completed
 
+### Increment NACRE.7 — Nacre's colour stops jumping on an unclear key (BUG-179) ⏳ pending live M7 (2026-10-01)
+
+**Delivered.** `NacreHueState` (`RenderPipeline+Nacre.swift`) replaces the TONAL.3 inline hue math and the
+`nacreFifthsVec` / `nacrePaletteDrift` pair. The fifths mean steers the palette only as its length ramps 0.15 → 0.4,
+and the palette is slewed at 0.25 turns/s along the shortest arc of `nacrePalette`'s true period (2π/0.437). This is
+the same recipe as Understory's UND.5 fix. love_rehab replay: largest step 0.377 → 0.0058 turns. Gate:
+`NacreHueStateTests`. **Done when:** Matt's live M7 passes on Nacre (a hazy-key song and a clear-key song).
+
 ### Increment PROMO.1 — the LinkedIn launch cut from the REC.2 takes ✅ (2026-09-30)
 
 **Delivered.** `tools/promo/cut_promo.py` + `edit.json` rebuild
