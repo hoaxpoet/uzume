@@ -485,3 +485,27 @@ Map (one line per new Swift file, D-168 gate), `docs/CREDITS.md` §Milkdrop-insp
   background is low overall."* Offered a photographic plate (a CC0 candidate was found); he chose
   **keep it drawn, push detail**, and keep searching for references closer to his photo. The
   honest ceiling was stated: drawn reads as illustration, not photograph.
+
+#### UND.3b — the forest, ray-marched (2026-10-01)
+
+- **Why 3D.** The 2D layers read low-fidelity for structural reasons (no light transport, no
+  contact shading, no depth of field, aliased edges), and the preset-session rule is that
+  environments are rendered, not implied. Because the `backdrop` stage is cached, it can afford
+  what a live frame cannot: a ray-marched scene rendered once. Low camera (1.3 m, pitch −0.10,
+  52° vertical FOV) on a hillside rising away (cheap 2-octave terrain); redwoods on a jittered
+  4.5 m grid (shallow irregular fluting, root flare, ridged warped bark with dark crevices, grey-green
+  lichen, moss at the foot); the fallen log as a capsule resting on the slope across the middle
+  distance (Worley plates, domed, wide cracks; moss cushions on the upper side); a sword-fern
+  carpet of alpha-tested frond cards found by a 2D DDA over a 0.9 m ground grid; overcast green
+  skylight + floor bounce + a soft key from the upper left, 3-tap AO, exponential haze; 3 jittered
+  samples per pixel through a small lens (anti-aliasing + shallow depth of field, focus 5 m).
+- **Build cost — the coherence lesson.** The first ray-marched build took **2.9 s per frame** at
+  1080p (Release). The per-PIXEL build turn put one live pixel in nearly every 32-wide GPU group
+  every frame, so the whole screen paid the full forest cost each build frame. Turns per **8×8
+  tile** fixed it; with cheaper terrain, a per-ray log, 2×2 trunk cells, 128 steps, 3 AO taps and
+  3 spp, a build frame is **7.7 ms** median at 1080p over 96 frames (~1.6 s dissolve-in), the
+  turn count scaled by pixel count so 4K spends the same per frame. Steady state unchanged:
+  **2.58 ms @1080p**.
+- **Iterations on Matt's photo A:** upside-down camera (sign) fixed; log moved close and across
+  the middle; bark from stage-curtain flutes to ridged, warped furrows with lichen; haze thinned
+  and exposure lifted so texture reads. Preview 4 sent for his eye before further forest tuning.

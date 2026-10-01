@@ -10,6 +10,23 @@ Design: [`docs/presets/UNDERSTORY_DESIGN.md`](../../presets/UNDERSTORY_DESIGN.md
 **Composition (Matt, 2026-10-01, design §10-3):** a *field* of ferns swaying in the wind, a mix of
 open fronds and closed fiddleheads, with dark ground between them. Not a solid blanket of fronds.
 
+**The setting (Matt, 2026-10-01):** *"We need a beautiful background for these ferns - they are just
+floating in space."* Then, of three photos he sent: *"The first image would be close to what I'm
+envisioning. A fallen tree, covered in moss with a bunch of ferns in the foreground, not all of which
+are moving - only a subset would move to the beat."* His picks: the moving ferns keep their
+**psychedelic glow**; the forest is **dim green daylight**. On the first drawn pass: *"the fidelity of
+the background is low overall"* — he chose to keep it drawn and push detail.
+
+**Matt's own photos (shown in chat 2026-10-01, NOT in this folder — no files and no licence on
+hand):** (A, the target) a dark redwood forest: huge furrowed trunks filling the top half, a long
+grey fallen log with plated bark lying diagonally across the middle, a dense carpet of sword ferns
+over the whole floor, low-key green light, no sky. (B) a close dark bed of bracken: deep green, a
+few orange-brown dead fronds, one pale frond catching the light. (C) a mossy temperate rainforest:
+trunks and limbs furred in moss, a carpet of sword ferns in front. **Mandatory from A:** the
+composition (trunks above, log across, ferns below), the darkness, the plated grey log. **From B:**
+the darkness and the occasional dead or pale frond for variety. **From C:** moss as a thick fur, not
+a stain.
+
 ## Reference images
 
 Per D-065(c) each row states the mandatory traits, the decorative ones, and what to actively disregard.
@@ -22,6 +39,11 @@ Per D-065(c) each row states the mandatory traits, the decorative ones, and what
 | `04_palette_uv_fluorescent.jpg` | **The palette register:** fully saturated, self-luminous colours (acid green, hot orange, magenta, electric blue, red) glowing out of near-black, many different hues side by side, each patch its own colour. That is "psychedelic, not a realistic fern". | The rock shapes | The specimen-tray grid layout. |
 | `05_anti_realistic_green_fern.jpg` | **NOT this:** a realistic green fern in daylight. Chlorophyll green, matte leaf, natural light. That register belongs to Goldengrove. | — | — |
 | `06_anti_barnsley_fern.png` | **NOT this:** the textbook Barnsley fern, one static, symmetric, green fractal on a flat ground. Our frond is a different IFS (Flexi's three maps). It is never alone and never still, and it is never green-on-white. | — | — |
+| `07_macro_trunks_fading_into_fog.jpg` | **Depth:** many trunks at many distances, contrast and darkness falling into the haze with distance; straight trunks of varied widths; a fern floor. | The fog's density | Its bright, open daylight and the pale mist: Matt's forest is darker (photo A). |
+| `08_lighting_moon_through_trees.jpg` | Superseded by Matt's daylight pick: kept for the light falling through a canopy gap onto trunks and a slope. | The moon | Night, the moon, the painted look. |
+| `09_atmosphere_night_mist_band.jpg` | Superseded (night). Kept for a soft low haze band hugging the ground. | — | The water, the blue palette. |
+| `10_lighting_moonlit_silhouettes.jpg` | Dark trunk silhouettes against a brighter gap behind them; a very dark floor with faint texture. | — | Monochrome; night. |
+| `11_micro_moss_floor_texture.jpg` | Moss as a soft lumpy cushion against needle litter (value and form only). | The sprouts | The bright daylight green. |
 
 ## Stylization contract
 
@@ -59,6 +81,11 @@ Curated by: Claude, UND.0 (2026-10-01). Matt's review pending.
 | `04_palette_uv_fluorescent.jpg` | [Fluorescent minerals hg.jpg](https://commons.wikimedia.org/wiki/File:Fluorescent_minerals_hg.jpg) | Hannes Grobe / AWI | CC BY-SA 2.5 |
 | `05_anti_realistic_green_fern.jpg` | [Ferns on forest floor.JPG](https://commons.wikimedia.org/wiki/File:Ferns_on_forest_floor.JPG) | Haanofonua | CC BY-SA 4.0 |
 | `06_anti_barnsley_fern.png` | [Barnsley fern 1024x1024.png](https://commons.wikimedia.org/wiki/File:Barnsley_fern_1024x1024.png) | Farry | CC0 |
+| `07_macro_trunks_fading_into_fog.jpg` | [Foggy-woods-trunks.jpg](https://commons.wikimedia.org/wiki/File:Foggy-woods-trunks.jpg) | Klevsand | CC BY-SA 3.0 |
+| `08_lighting_moon_through_trees.jpg` | [Julius von Klever - A moonlit night in the forest.jpg](https://commons.wikimedia.org/wiki/File:Julius_von_Klever_-_A_moonlit_night_in_the_forest.jpg) | Julius Sergius von Klever | Public domain |
+| `09_atmosphere_night_mist_band.jpg` | [Misty night in Finland.jpg](https://commons.wikimedia.org/wiki/File:Misty_night_in_Finland.jpg) | yrjö jyske | CC BY 4.0 |
+| `10_lighting_moonlit_silhouettes.jpg` | [Night in a Moonlit Forest (51144052194).jpg](https://commons.wikimedia.org/wiki/File:Night_in_a_Moonlit_Forest_(51144052194).jpg) | Tero Karppinen | CC BY 2.0 |
+| `11_micro_moss_floor_texture.jpg` | [Moss (Bryophyta) on the forest floor in Broken Bow, Oklahoma.jpg](https://commons.wikimedia.org/wiki/File:Moss_(Bryophyta)_on_the_forest_floor_in_Broken_Bow,_Oklahoma.jpg) | Matthew T Rader | CC BY-SA 4.0 |
 
 All Wikimedia images are downscaled to 1200 px wide (06: 600 px) and recompressed. None are AI-generated.
 The source oracle films (12 s × 3 fixtures, full and rooted variants) live outside git at
