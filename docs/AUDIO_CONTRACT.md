@@ -264,6 +264,10 @@ real but the named cause is wrong.
   A confident vocal (confidence ≥ 0.7) drives hue from log-scale pitch over 80 Hz–1 kHz;
   below 0.5 it falls back to `valence`. The glide is τ≈3 s (~9 s to complete) — deliberate,
   and the reason the caption should not promise a *quick* colour response.
+  **Matt, live (build 10, 2026-10-01), Superstition:** *"did not see sky color following the
+  vocal line"*. The drift is real but too slow to read as "following", and a gritty voice over a busy
+  mix rarely clears the confidence gate. The sidecar now says "drifts slowly with the register";
+  the site's "the vocal line moves the aurora's color" overpromises the same way.
 
 ### 4.2 Skein
 
