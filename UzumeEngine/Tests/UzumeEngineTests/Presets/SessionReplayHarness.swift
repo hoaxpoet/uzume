@@ -136,7 +136,9 @@ struct SessionReplayHarness {
             // the session logs bar phase in PERMILLE
             r.barPhase01 = get(f, "barPhase01_permille") / 1000.0
             r.bassDev = get(f, "bassDev")
-            r.trebRel = get(f, "trebRel")
+            // UND.1 — the CSV spells it `treb_rel`; reading "trebRel" fed every replay ZERO
+            // while ReplayHarnessRouteCoverageTests listed it as carried.
+            r.trebRel = get(f, "treb_rel")
             r.bassRel = get(f, "bassRel")
             r.pulseAmp01 = get(f, "pulse_amp01")
             r.pulsePhase01 = get(f, "pulse_phase01")
