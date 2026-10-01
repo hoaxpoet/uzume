@@ -368,6 +368,8 @@ extension VisualizerEngine: LocalFilePreparing {
 
         let nextURL = urls[nextIdx]
         let nextIdentity = tracks[nextIdx]
+        // BUG-178: if the walk has not reached this song, it prepares it next (a no-op otherwise).
+        sessionManager.prioritizeLocalPreparation(at: nextIdx)
         lfLogger.info(
             "[LF.5] advance: \(currentIdx) → \(nextIdx), next='\(nextURL.lastPathComponent, privacy: .public)'"
         )
@@ -497,10 +499,13 @@ extension VisualizerEngine: LocalFilePreparing {
     /// Seconds into the current local-file track and its length, for the transport's track bar;
     /// nil outside a local-file session or before the track's length is known. The position is the
     /// track clock everything else reads (`mir.elapsedSeconds`), so the bar shows what the scenes see.
+    /// The length is the playing file's own (BUG-178): a song the preparation walk has not reached
+    /// has a placeholder identity with no duration, and the bar — and seek — used to read zero.
     @MainActor
     var localFileTrackProgress: (position: TimeInterval, duration: TimeInterval)? {
-        guard sessionManager.currentSource?.isLocalFile == true,
-              let duration = lastResolvedTrackIdentity?.duration, duration > 0 else { return nil }
+        guard sessionManager.currentSource?.isLocalFile == true else { return nil }
+        let fileSeconds = (router as? AudioInputRouter)?.currentLocalFileProvider?.fileDurationSeconds
+        guard let duration = fileSeconds ?? lastResolvedTrackIdentity?.duration, duration > 0 else { return nil }
         // A single-file queue loops, and the clock runs on across the loop.
         return (mirPipeline.elapsedSeconds.truncatingRemainder(dividingBy: duration), duration)
     }

@@ -50,6 +50,19 @@ struct LocalFileSeekTests {
         #expect(heard >= 2.8, "the queue advanced \(heard) s into a 3 s remainder — the tail was cut")
     }
 
+    @Test("BUG-178: the provider reports the file's own length, so an unprepared song's track bar has one")
+    func fileDurationIsTheFilesLength() throws {
+        guard let url = Self.fixture() else { return }
+        let file = try AVAudioFile(forReading: url)
+        let provider = LocalFilePlaybackProvider(url: url)
+        #expect(provider.fileDurationSeconds == nil, "no length before the file is opened")
+        try provider.start()
+        defer { provider.stop() }
+        let seconds = try #require(provider.fileDurationSeconds)
+        #expect(abs(seconds - Double(file.length) / file.processingFormat.sampleRate) < 0.001)
+        #expect(seconds > 10)
+    }
+
     @Test("seeking while paused stays paused")
     func pausedStaysPaused() throws {
         guard let url = Self.fixture() else { return }

@@ -348,6 +348,8 @@ public final class SessionPreparer: ObservableObject {
         // still walked by `_runLocalFilePreparation` below.
         trackStatuses = Dictionary(placeholders.map { ($0, .queued) }, uniquingKeysWith: { first, _ in first })
         orderedLocalTracks = placeholders
+        localWalkedIndices = []
+        localWalkPriority = nil
         trackProfiles = [:]
         progress = (0, urls.count)
         networkFailedTracks = []
@@ -405,6 +407,11 @@ public final class SessionPreparer: ObservableObject {
     /// Set by `SessionManager` when the session reaches `.playing`. Gates
     /// `pacingRate` — before playback the walk is the wait, so it does not pace.
     public var isPlaybackActive: Bool = false
+
+    /// BUG-178 — queue positions the local walk has started, and the one the listener just
+    /// landed on unprepared (`prioritizeLocalFile`). Reset per `prepareLocalFiles`.
+    var localWalkedIndices: Set<Int> = []
+    var localWalkPriority: Int?
 
     /// PREP.2 — the local-file queue's identities in playlist order, seeded with
     /// the placeholders `prepareLocalFiles` was handed and replaced slot by slot
@@ -771,18 +778,27 @@ extension SessionPreparer {
         delegate: (any LocalFilePreparing)?
     ) async -> SessionPreparationResult {
         var outcomes = PrepOutcomes()
+        var last: Int?
 
-        for (index, pair) in zip(urls, placeholders).enumerated() {
+        // BUG-178: playlist order, except that a song the listener lands on unprepared goes
+        // next, and the walk carries on from there (wrapping back for anything it skipped).
+        while let index = Self.nextLocalWalkIndex(
+            after: last, priority: localWalkPriority, walked: localWalkedIndices, count: urls.count
+        ) {
             if Task.isCancelled { break }
-            let (url, placeholder) = pair
+            localWalkedIndices.insert(index)
+            last = index
+            let (url, placeholder) = (urls[index], placeholders[index])
 
             trackStatuses[placeholder] = .analyzing(stage: .stemSeparation)
             let fileStart = Date()
-            // PREP.3 — read the NEXT file while this one analyses (one file ahead, as
-            // streaming's `prefetchWindow` does for downloads). Analysis, completion and
-            // publication below stay in playlist order; pacing still gates when the next
-            // analysis starts, so the lookahead cannot let the walk outrun `pacingRate`.
-            if index + 1 < urls.count { await delegate?.prefetchLocalFile(url: urls[index + 1]) }
+            // PREP.3 — read the file the walk will take next while this one analyses (one
+            // file ahead, as streaming's `prefetchWindow` does for downloads). Pacing still
+            // gates when the next analysis starts, so the lookahead cannot let the walk outrun
+            // `pacingRate`. A priority that arrives meanwhile just leaves this read unclaimed.
+            if let ahead = Self.nextLocalWalkIndex(
+                after: index, priority: localWalkPriority, walked: localWalkedIndices, count: urls.count
+            ) { await delegate?.prefetchLocalFile(url: urls[ahead]) }
             let result: LocalFilePrepResult? = await (delegate?.prepareLocalFile(url: url))
             if Task.isCancelled { break }
 
@@ -819,7 +835,35 @@ extension SessionPreparer {
         sessionRecorder?.log(doneMsg)
         logger.info("\(doneMsg, privacy: .public)")
 
-        return outcomes.result(cache: cache)
+        // BUG-178: the walk may run out of playlist order; the plan must not (BUG-068).
+        // `orderedLocalTracks` is slotted by queue position — prepared identities and placeholders.
+        return SessionPreparationResult(
+            cachedTracks: outcomes.cached,
+            failedTracks: outcomes.failed,
+            orderedTracks: orderedLocalTracks,
+            cache: cache
+        )
+    }
+
+    /// BUG-178 — the listener landed on queue position `index` before the walk reached it:
+    /// prepare it next. Ignored for a position already started or out of range.
+    public func prioritizeLocalFile(at index: Int) {
+        guard index >= 0, index < orderedLocalTracks.count, !localWalkedIndices.contains(index) else { return }
+        localWalkPriority = index
+    }
+
+    /// A prioritized position the walk has not started yet.
+    var hasPendingLocalPriority: Bool {
+        localWalkPriority.map { !localWalkedIndices.contains($0) } ?? false
+    }
+
+    /// The next queue position the local walk prepares: an unstarted `priority`, else the first
+    /// unstarted position after `last`, else the first unstarted one before it. `nil` when every
+    /// position has been started. Pure, so the order is testable without running a walk.
+    static func nextLocalWalkIndex(after last: Int?, priority: Int?, walked: Set<Int>, count: Int) -> Int? {
+        if let priority, (0..<count).contains(priority), !walked.contains(priority) { return priority }
+        let start = min((last ?? -1) + 1, count)
+        return (start..<count).first { !walked.contains($0) } ?? (0..<start).first { !walked.contains($0) }
     }
 
     /// PREP.2 — hold the walk back to `pacingRate` x realtime while the music
@@ -839,7 +883,12 @@ extension SessionPreparer {
             spent: Date().timeIntervalSince(fileStart)
         )
         guard idle > 0 else { return }
-        try? await Task.sleep(nanoseconds: UInt64(idle * 1_000_000_000))
+        // BUG-178: a listener who lands on an unprepared song ends the idle — that song is next.
+        let until = Date().addingTimeInterval(idle)
+        while Date() < until, !hasPendingLocalPriority {
+            if Task.isCancelled { return }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
     }
 
     /// How long the walk should idle after preparing a track, to hold itself to
