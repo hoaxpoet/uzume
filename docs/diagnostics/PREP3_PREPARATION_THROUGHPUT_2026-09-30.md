@@ -225,9 +225,16 @@ under TSan (`Scripts/tsan_stress.sh`: TSAN CLEAN).
 | *Fully prepared* — 40 × 4 min (projected, 0.0251 s per audio-s) | 686 s | **241 s** | ≤ 300 s ✅ **yes** |
 | `--concurrency 2`, reference only (not shipped) | — | 41.4 s album (0.018 s/audio-s → 171 s for 40 × 4 min), footprint 4.3 GB | |
 
+**Measured, not only projected: the 37-track task-7 playlist** (`PREP3/task7_live_37_tracks.m3u`:
+Fever Ray, Portishead, *!!!*, *Blue Lines*; 189.6 min of audio, more than 40 × 4 min, two of the four
+albums 48 kHz) **prepares in 276.0 s** headless (Release, cold, flat out; first three tracks ready at
+18.3 s; peak footprint 2.9 GB; `PREP3/task7-headless-37/`).
+
 **The 300 s question: yes**, on this machine, in Release, serial, without Option 2. The margin is
-about 20 %. A slower machine, longer tracks or a cold first-run graph compile will eat into it.
-Task 7's live run is the real number.
+about 8 % on that playlist and 20 % on the 40 × 4 min projection. A slower machine or longer tracks
+will eat into it. In the app, once the listener presses Start now, the walk deliberately paces at
+2× realtime (PREP.2), so *fully prepared* during a playing session is set by pacing, not by this
+speed. Task 7's live run is the real-world check.
 
 ---
 

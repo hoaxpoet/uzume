@@ -234,7 +234,8 @@ artifacts `docs/diagnostics/PREP3/`. Branch `claude/prep-3-prompt-0fff0b`, unpus
 
 **Delivered (Release, Mac mini M2 Pro, cold; Bowie *Low*, 11 tracks): 166.6 s → 58.5 s; peak
 footprint 12.9 → 2.6 GB.** 40 × 4 min projects to **241 s — inside D-242's 300 s *fully prepared***,
-without Option 2. Start now: 31.0 → 11.3 s on *Low*.
+without Option 2. Start now: 31.0 → 11.3 s on *Low*. The 37-track task-7 playlist (189.6 min)
+prepares in **276.0 s** headless, flat out.
 - **Memory (BUG-177).** BR.MEM (#345) drained each separation's pool; PREP.3 measured the per-length
   curve (11.9 GB → 1.2 GB on a 339 s track) and added pre-allocated model outputs plus Beat This! /
   PANNs pools. `--concurrency 4` now completes at 3.1 GB.
