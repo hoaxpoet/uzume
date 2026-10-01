@@ -1276,7 +1276,6 @@ struct LocalFileEarlyStartTests {
         }
         manager.startNow()
         manager.beginPlayback()
-        let startedBefore = prepareStarts(stub).count
         manager.prioritizeLocalPreparation(at: 5)
         let asked = Date()
         for _ in 0..<400 where !prepareStarts(stub).contains("t6.flac") {
@@ -1286,8 +1285,10 @@ struct LocalFileEarlyStartTests {
         preparer.cancelPreparation()
         await walk.value
 
-        #expect(prepareStarts(stub).dropFirst(startedBefore).first == "t6.flac",
-                "after the priority the walk prepared \(prepareStarts(stub)) (had started \(startedBefore))")
+        // A track the walk had already picked may finish first; t6 must still beat t5.
+        let order = prepareStarts(stub)
+        let t6 = order.firstIndex(of: "t6.flac"), t5 = order.firstIndex(of: "t5.flac")
+        #expect(t6 != nil && (t5 == nil || t6! < t5!), "after the priority the walk prepared \(order)")
         #expect(waited < 1.5, "t6 started \(waited) s after the priority — the 12.5 s pacing idle was not cut")
     }
 }

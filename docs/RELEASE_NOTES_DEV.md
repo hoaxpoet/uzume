@@ -10,6 +10,13 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-01-204615] BUG149.1 — the key readout names the song's key, not F♯ minor (BUG-149)
+
+- **Most songs read F♯ minor; now they read their key.** The old estimate came from a spectrum too coarse to tell neighbouring notes apart, so the music's overall tilt decided it — pink noise read F♯ minor too. On clean chord progressions it was right in 3 of 24 keys; the new one is right in all 24.
+- On a thousand songs from Matt's library the readout now spreads the way keys in popular music do (D, G, C, A, E major most often) instead of piling a third of them on F♯ minor. Speech, comedy and noise-based tracks show no key rather than a guess.
+- Only the stored key (the preparation readout) changes. The live tonal visuals and mood are untouched.
+- Cached songs re-prepare once (cache v18) so they pick up the new key.
+
 ### [dev-2026-10-01-195907] BUG178.1 — skipping ahead in a local playlist keeps the track bar and seek (BUG-178)
 
 - **Seek works on every song.** A song preparation had not reached showed a zero-length track bar and ignored seek. The bar now takes the length from the file itself, prepared or not.

@@ -35,7 +35,6 @@ belongs in the second table, not the first.
 | BUG-175 | P2 | preset.fidelity / Kagura · dsp.beat | Kagura sways for a song's first ~16 s instead of dancing when the intro's beat grid is uneven. It reads as warm-up exercises, out of sync. | Measure how many songs it hits (cached grids), then Matt's call on the fix direction. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
-| BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
 | BUG-084 | P3 | dsp.stem | Stem deviation spikes to 35 against a ~3.4 ceiling. The one consumer is soft-kneed, so there is no visible effect. | After the beta. |
 | BUG-065 | P3 | dsp.beat | Beat-locked visuals drift 11 ms → 50–70 ms off the beat over a track. Parked (D-206). | After the beta. |
 | BUG-076 | P2 | dsp.beat | The prep grid's tempo depends on which 30 s window it reads, on one dense song (Bleed). | After the beta (beat-sync tail). |
@@ -59,6 +58,7 @@ passes, the entry moves to §Resolved (recent).
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
 | BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
+| BUG-149 | P3 | dsp.mir / key | The stored key read F♯ minor on 35 % of songs: the live chroma's coarse spectrum read the spectral tilt, not the notes. Preparation now runs `KeyEstimator` (BUG149.1); the census pilot spreads across D/G/C/A/E major, no attractor. | Matt: do the preparation readout's keys look right on songs he knows? (Needs a re-prepare: cache v18.) |
 | BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. **Fixed (BUG178.1, `a042e84d`).** | Matt re-runs a skip-ahead past the prepared songs and seeks on each. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
@@ -347,9 +347,27 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 
 > **Reconciled 2026-09-30 (BR.KI ledger pass).** BUG-054 (key detection resolution-limited) closed as a duplicate of this entry.
 
-**Severity:** P3 (display-only today) · **Domain:** `dsp.mir` (`ChromaExtractor` Krumhansl–Schmuckler) · **Failure class:** not yet assigned · **Status:** Open, not diagnosed · **Related:** CENSUS.3 §4 (`docs/diagnostics/CENSUS_PILOT_REPORT.md`), BUG-146, TONAL phase (D-178)
+**Severity:** P3 (display-only today) · **Domain:** `dsp.mir` (`ChromaExtractor` Krumhansl–Schmuckler) · **Failure class:** `algorithm` (resolution) · **Status:** Fixed (BUG149.1) — pending Matt's look at the readout · **Related:** CENSUS.3 §4 (`docs/diagnostics/CENSUS_PILOT_REPORT.md`), BUG-146, TONAL phase (D-178)
 
 **Evidence.** The app's cache on the beta playlist (2026-09-26, schema v16, MIR at 44.1 kHz) stores F# minor on 7/10 songs; Teardrop reads A minor, Moonlight I C major and Warszawa F major. The CENSUS.3 pilot found the same attractor at scale: F# minor on **347 of 993** tracks (35 %), next C major at 176, with a median K-S confidence of 0.53. The source comment already calls the estimator "unreliable". No per-song ground truth is in the repo yet (Essentia is not installed; `tools/essentia_ground_truth.py` exists), so accuracy per song is unmeasured. The attractor is established statistically. **Consumers:** the preparation row, `DebugOverlayView`, and `VisualizerEngine+Capture`; the scorer and planner do not read key. **Matt's call (2026-09-26):** keep it visible and make it accurate. Hiding it was declined.
+
+**Diagnosis (BUG149.1, 2026-10-01).** The stored key was `MIRPipeline.stableKey`: Krumhansl–Schmuckler over the live
+`ChromaExtractor`'s 1024-point FFT (47 Hz bins), folded only above 500 Hz. That is too coarse to separate
+semitones, and the only notes it hears are harmonics. Measured on synthetic I–IV–V–I / i–iv–V–i progressions in all
+24 keys: **3 / 24 correct**, mostly a fifth off (C major → G major). **Pink noise read F♯ minor** — the spectral
+tilt alone produces the attractor. Root cause confirmed; no ground-truth per song needed to see it.
+**Fix.** `Session/KeyEstimator`, run once per song at preparation on the decoded audio: an 8192-point FFT (5.4 Hz
+bins at 44.1 kHz) over 55–1760 Hz, spectral peaks with parabolic frequency, each frame's semitones whitened against
+the surrounding octave and weighted equally; no key when the profile's contrast (std/mean) is under 0.2 or the
+correlation under 0.3. The live chroma (tonal visuals, mood features) is untouched. Cache schema 17 → 18 so cached
+songs re-analyse.
+**Evidence.** Synthetic: 24 / 24; pink noise → no key (contrast 0.08 against ≥ 1.13 for the progressions).
+Census pilot (997 readable tracks, `/Volumes/Extreme SSD/phosphene_census/key_ab.csv`): old F♯ minor 346, C major
+176; new D major 104, G 86, C 85, A 73, E minor 64, E major 64, A minor 53 — the usual spread of keys in popular
+music, no attractor. The 14 tracks under the contrast gate are speech, comedy, free jazz, Ives, Nancarrow and
+Autechre. No file in the pilot carried a key tag, so per-song accuracy on real music is still unscored.
+**Tests:** `KeyEstimatorTests` — 24 keys, pink noise, short/silent. The old estimator fails the first two (3 / 24;
+F♯ minor).
 
 ### BUG-135 — the grid's bar position cannot be confirmed to be the true musical downbeat (2026-09-14)
 
@@ -1577,6 +1595,7 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 | `StemSeparationPerformanceTests.test_separate_1SecondAudio_performance` | Same shape; MPSGraph submit under parallel load | Re-run in isolation to confirm before treating as a regression |
 | `PlayheadAnalysisClockTests` — "A stalled or paused playhead delivers silence, not the last frame forever" | Asserts an **exact** delivered-tick count (`delivered.count == stallFlushTicks - 20`) on a timer-driven dispatch source; under parallel load the clock over-delivers (observed 106 vs 100, and some frames not yet flushed to zero). Not a GPU submit — a counting assumption. Observed 1/5 full runs, BUG139.1, 2026-09-23 | Re-run in isolation. **The real fix is to drop the exact-count assumption**, per the deterministic-over-budget-widening rule (CLEAN.7.9–7.14) — assert the flush *reaches* silence, not how many ticks it took |
 | `StagedPersistenceTests` — "the watchdog probe's cost is set by the block, not by the texture" | Asserts a cost-growth **ratio** (`growth < 2.0`; observed 2.32) under the full parallel suite. Observed 1/5 full runs, BUG139.1, 2026-09-23 | Re-run in isolation. Same remedy shape as the rows above: take a min over warm samples rather than a single contended measurement |
+| `AnalysisRateGateTests` — "Deliveries land in distinct render windows" | Asserts an observed delivery rate ≥ 50 Hz (`floorHz`); read 48.5 Hz once under the full parallel suite (BUG149.1 run, 2026-10-01), passes in isolation. Not deflaked — a wall-clock floor, the TESTFLAKE shape | Re-run in isolation to confirm before treating as a regression |
 
 *(The three perf rows were added at RECON.2, 2026-08-03. They were declared "confirmed flake" during the BUG-080 investigation but never reached this table — so each run re-litigated them from scratch. **These are the known-flaky *shape*** — a single wall-clock sample around a GPU submit — that CLEAN.7.9→7.14 fixed elsewhere by asserting the **minimum of N warm samples** rather than one sample, or by removing the timing assumption entirely. Per the deterministic-over-budget-widening rule these three should get the same treatment rather than staying in this table; that is a small, well-precedented increment, not a mystery. Until then: a failure here is not evidence of a regression on its own.)*
 
