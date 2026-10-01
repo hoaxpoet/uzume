@@ -5,5 +5,5 @@
 // build number is never reused. Do not edit it by hand, and keep both on their
 // own lines in this exact form — the script parses them.
 
-MARKETING_VERSION = 0.9.0
-CURRENT_PROJECT_VERSION = 9
+MARKETING_VERSION = 0.9.1
+CURRENT_PROJECT_VERSION = 10
