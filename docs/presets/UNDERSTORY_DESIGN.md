@@ -509,3 +509,26 @@ Map (one line per new Swift file, D-168 gate), `docs/CREDITS.md` §Milkdrop-insp
 - **Iterations on Matt's photo A:** upside-down camera (sign) fixed; log moved close and across
   the middle; bark from stage-curtain flutes to ridged, warped furrows with lichen; haze thinned
   and exposure lifted so texture reads. Preview 4 sent for his eye before further forest tuning.
+
+### UND.4 — the shimmer sequencer (2026-10-01)
+
+- `UnderstoryShimmer`: a `barPhase01` wrap → the lead frond; a `beatPhase01` wrap → its place in
+  the bar, **round(barPhase01 · beatsPerBar)**, → that slot of an N−1 mid-layer set played left to
+  right, the set advancing every 4 bars. Wraps sub-frame interpolated (the Fireflies precedent).
+  First built with a beat COUNTER: on there_there the grid skips a bar wrap while re-anchoring
+  (~15.6 s), the count ran to 5 and 6 and two beats went silent; reading the place from the bar
+  phase fixed it. Grid trust: nothing until the bar phase has wrapped once and 4 s have passed.
+  No grid live (no bar wrap for 6 s, §10-2 default): `drumsEnergyDev` rising past 0.30, ≥ 0.35 s
+  apart, on a random mid frond.
+- Shader: a white-hot band (palette turned half a turn under it) at path AGE `front = 40 · t`
+  generations, width 1.6, so it climbs the stem and runs out into every leaflet (~0.3 s base →
+  tip), a 30 % afterglow behind it, gone by 0.9 s. One frond, a travelling band (D-157).
+- **Replay evidence** (`UNDERSTORY_SEQUENCE`, `shimmer.csv` vs each fixture's own grid wraps,
+  t 4–20 s): love_rehab 31/31 beats, so_what 36/36, there_there 34/34 — **101/101**; **0** shimmers
+  off the grid; **0** before 4 s; downbeats **25/25** on the lead frond. Synthetic gates
+  (`UnderstoryShimmerTests`): one per beat, 0.5 s apart at 120 BPM; left-to-right sets that repeat
+  then rotate; 3/4 → two per bar; no grid → only drum peaks ≥ 0.35 s apart.
+- **Photosensitivity** on the production frames of all three replays (`FlashAnalyzer`, regional
+  + red): **0.00 flashes/s**.
+- Look: the band is visible as white beads lighting from the base and a pale band climbing; its
+  brightness, speed and width are the M7 eye call (plan: "tuned by eye").
