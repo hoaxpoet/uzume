@@ -247,6 +247,11 @@ struct SessionReplayHarness {
             s.brassActivityDev = g("brassActivityDev")
             s.woodwindsActivityDev = g("woodwindsActivityDev")
             s.percussionActivityDev = g("percussionActivityDev")
+            // UND.5 — the family LEVELS too (Understory's voice veto reads them). Only the
+            // deviations were carried, so a replay saw no brass at all and a trumpet track
+            // uncoiled the fiddleheads as if it were sung.
+            s.stringsActivity = g("stringsActivity");     s.brassActivity = g("brassActivity")
+            s.woodwindsActivity = g("woodwindsActivity"); s.percussionActivity = g("percussionActivity")
             // BC.1 — a capture older than the column says nothing about the beat: replay it
             // as UNKNOWN, never as the 0 (= irregular) a missing cell would otherwise give.
             s.beatClarity01 = index["beatClarity01"] == nil
