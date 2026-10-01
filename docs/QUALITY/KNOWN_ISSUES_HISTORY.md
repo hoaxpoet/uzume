@@ -4,6 +4,120 @@ Resolved entries rotated out of [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §Resolved 
 
 ---
 
+### BUG-134 — cached BeatGrids carry two tempo octaves; `computeBPM` averages them (2026-09-14)
+
+**Resolved 2026-10-01 — Matt's live check (listening session 1, build 10): closed on his call.** On *Ready to Start* the opening scene was not beat-locked, so the first ~9 s showed nothing; the beat-locked scene after it "synced well with the music". Whether the song's cache was cleared first was not recorded.
+
+**Severity:** P2 · **Domain:** `dsp.beat` · **Failure class:** grid octave inconsistency · **Related:** BUG-132 (ruled out, below), D-079, D-206
+**Reopened by Matt 2026-09-14:** *"reopen BUG-134 — the rate divergence is a changed premise."* Investigating it **falsified the original framing and found a different, larger defect.** Both are recorded; the original title is kept in git history.
+
+#### The original framing was wrong
+
+BUG-134 was first filed as *"`beatPhase01` advances faster than its own installed grid tempo"* — 163.3 BPM measured against an installed grid of 154.311 on *Ready to Start*. **`beatPhase01` is innocent.** `LiveBeatDriftTracker.computePhase` computes `(time − beats[idx]) / timing.period`, and `BeatGrid.localTiming` returns `beats[idx+1] − beats[idx]` — the grid's REAL local inter-beat interval. The phase faithfully tracks whatever spacing the grid has. The comparison was against `grid.bpm`, a **summary field**, and the summary is what is wrong.
+
+Also ruled out rather than assumed: **this is not BUG-132** (*a plan rebuild installs the wrong track's BeatGrid*), filed the same day and the obvious candidate. In session `2026-09-14T17-28-08Z` `grid_bpm` is correct and constant within every track (117.882 ×3232 frames, 154.311 ×6552, 122.669 ×1011, 82.906 ×3519 — no reversion to the first track's value) and the log carries exactly one pre-fire, for the correct track. The RIGHT grid was installed.
+
+#### What is actually wrong
+
+**A cached BeatGrid can contain two tempo octaves inside one track.** *Ready to Start*'s inter-beat intervals form two clean clusters:
+
+```
+320 ms (187 BPM) x249      640 ms ( 94 BPM) x 80
+300 ms (200 BPM) x135      620 ms ( 97 BPM) x 73
+short cluster: 402 intervals, mean 314 ms = 191 BPM
+long  cluster: 198 intervals, mean 637 ms =  94 BPM      ratio 2.03x
+```
+
+A scene locked to that grid fires every third strike twice as late. **That is the symptom Matt reported**, on that track and no other:
+
+| track | Matt's M7 verdict | grid.bpm | its own beats | octave-mixed |
+|---|---|---|---|---|
+| The Suburbs | *"synced closely"* | 117.9 | 118.1 | no |
+| **Ready to Start** | ***"actually out of phase"*** | 154.3 | **142.9** | **YES — 33 %** |
+| Modern Man | *"looser"* | 122.7 | 122.9 | no |
+| Rococo | (measured clean) | 82.9 | 83.2 | no |
+
+**Two faults hide each other.**
+
+1. **`BeatGridResolver.computeBPM` averages ACROSS octaves.** Its inlier window is `[median*0.5, median*2.0]` — a full octave wide. Verified on the real artifact: median 320 ms → window [160, 640] ms, the 637 ms cluster squeaks **inside** the 640 ms ceiling, 126 slow intervals are admitted, and the mean returns **154.31 — matching the cached `grid.bpm` to the decimal.** Matt already ruled on this class at PR.12 (*"you should not be averaging BPM / tempo"*); the meter computation was fixed then and this one was not.
+2. **`halvingOctaveCorrected()` gates on `bpm > 175`.** Ready to Start's summary is 154.31, so the gate never opens — while two thirds of its beats run at 191 BPM, exactly what that gate exists to catch. **The bad summary suppresses the correction for the bad grid.** Its doc comment also asserts the offline path "does not need this because longer context produces reliable beat-level detection"; the corpus contradicts that.
+
+**Corpus prevalence** (50 cached grids, local stem cache): **8 genuinely bimodal; 32 carry at least one isolated dropped beat; 201 beats recoverable; 18 untouched.** `grid.bpm` error reaches **+53.7 %** (Sprawl I: 169.3 claimed, 110.1 actual).
+
+#### Fixed at BUG134.1 — the unambiguous half only
+
+`BeatGrid+OctaveConsistency.octaveUnified()` fills **isolated** 2× gaps: one beat missing between two the model kept, restored at the midpoint. Wired at the prepared-cache install seam behind `UZUME_GRID_OCTAVE_FIX` (default ON). 201 beats restored across 32 grids; 18 grids byte-identical.
+
+#### BUG134.2 — the contiguous case, fixed with the audio (2026-09-15)
+
+**Matt's M7, 2026-09-15** (session `2026-09-15T13-03-13Z`, chain verdict `clean`): *"appeared synced in the beginning but quickly drifted out of sync. still too loose."*
+
+Confirmed as the real test — the install logged `bimodal=true, filled=15, clusteredLong=26, dominant=191.1 bpm, summary=154.3 bpm`.
+
+**Measured against real onsets from the session's own tap:**
+
+| elapsed | median error | beats within 60 ms |
+|---|---|---|
+| 0–5 s | 17 ms | 100 % |
+| 5–10 s | 31 ms | 100 % |
+| 10–15 s | 43 ms | 93 % |
+| 15–20 s | 49 ms | **62 %** |
+
+*(Two further windows initially read 4.4 s and 9.5 s — an artefact, not drift: the tap is 30 s and beat-elapsed 20 s maps past its end, so there were no onsets to match. Discarded. A circular-phase measure also read R = 0.02–0.05 and is **invalid here** — it assumes one beat period and this grid has two.)*
+
+**It is not clock drift.** The audio's OWN autocorrelation peaks at **314 ms (190.9 BPM, strength 1.00)** and **629 ms (95.5 BPM, 0.94)** — exactly the grid's two clusters. Every beat is on a real pulse. The grid changes octave under a song that does not, and each switch throws the alignment.
+
+**And the intro genuinely IS half-time**, which is why the global unification BUG134.1 cut would have been wrong:
+
+| window | fast pulse (314 ms) | slow pulse (629 ms) |
+|---|---|---|
+| 0–9 s | **0.02–0.18** (absent) | 0.61–0.68 (strong) |
+| 9–30 s | **0.56–0.61** (strong) | 0.42–0.51 |
+
+**Fixed:** `BeatGrid+AudioOctave.audioOctaveCorrected` asks the audio per ~3 s window and subdivides a half-time gap **only** where the fast pulse is present. Validated on this session's real tap against the real cached grid: verdicts `slow` for 0–9 s (intro preserved) and `fast` for 9–30 s, **irregularity 20.5 % → 14.6 %, +4 beats, intro untouched.**
+
+⚠ **The rule is a FLOOR, not a ratio, and the first version got this wrong.** If a fast pulse is present the SLOW lag correlates too — every other fast beat lands on it — so autocorrelation at 2× a real pulse is always high and "fast beats slow by N×" is never true. The discriminator is whether the fast lag correlates **at all**: 0.02–0.18 vs 0.56–0.61, with the 0.30 floor sitting in the empty space between the two populations rather than fitted to either edge.
+
+**Retracted claim, recorded because it was briefly in this file.** An earlier revision of this entry stated that BUG-129 had recurred here — that `peakDBFS: 0` was wrong because the tap's real peak was −0.89 dBFS with no full-scale samples. **That was my measurement error, not a defect.** `ChainAnalyzer.peakScan` scans each channel separately; I had measured the MONO DOWNMIX, which averaged a genuine full-scale sample on the left channel (1.000000, exactly one sample) against a right-channel peak of 0.896 down to 0.903. The reported `peakDBFS: 0` and `maxFullScaleRun: 1` are both **correct**, and `clean` is the right verdict — one isolated sample touching full scale is not clipping, which is exactly the distinction BUG129.1 added. Nothing to fix. The lesson is the same one BUG129.1 recorded: check the per-channel data before calling a chain-health number wrong.
+
+⚠ **Runs at PREP time** (it needs the samples), so **existing cached grids do not benefit until re-prepared** — clear the local-file cache for an album to re-analyse it. BUG134.1's gap-fill runs at install and does apply to the existing cache.
+
+**BeatBench, five suites, `UZUME_AUDIO_OCTAVE` off → on:** suites 1–4 **byte-identical on all 8 fixtures**. Suite 5 `clair_de_lune` moves: F 0.14 → 0.16, Cemgil 0.08 → 0.09, **AMLt 0.02 → 0.01 (a regression, reported)**, CMLt 0.00 either way. That is the true-rubato case which has no stable grid at all, and where D-205's target is declining honestly rather than F — adding beats there is mildly against the grain, though the magnitude is noise-level. **As at BUG134.1, the benchmark does not contain this failure mode**; its fixtures lack the model-drops-to-half-time-under-a-fast-song pattern, so the evidence is the Ready to Start session, not the suite.
+
+#### Residual
+
+14.6 % irregularity remains over the tapped span. Whether that is still audible is an M7 question, not an offline one.
+
+### OBS-DS4-1 — The detailed preparation view shows a suspiciously uniform readout on a real playlist (2026-09-02, DS.4 live run)
+
+**Resolved 2026-09-30 — Matt's live check (listening session 1, build 9): "As expected."** BPM and energy vary song to song; key reads mostly F♯ minor, which is BUG-149 (open, display-only).
+
+**Status: observed, recorded not fixed.** Found during DS.4's task 10 timing runs. **P3.**
+
+**What was seen.** On Tunes Club TC 29 (40 tracks — ambient, techno, downtempo), the detailed
+view's first ten heard tracks read **132–138 BPM** and **nine of ten read "bright"** (the happy
+quadrant). A genuine spread across that playlist would show it. Evidence:
+`docs/reviews/DS.4/after/live-mid-detailed.png`, `live-early-detailed.png`.
+
+**What it is not.** Not a DS.4 rendering defect: `PreparationTrackRow` prints `TrackProfile.bpm`
+and `TrackProfile.mood.quadrant` verbatim, and those come from `SessionPreparer+Analysis` — the
+same 30 s-preview MIR the Orchestrator has always planned from. DS.4 made it legible for the first
+time; that is the whole finding.
+
+**No root cause asserted** (BUG-061 rule). Two candidates worth *measuring*, not assuming: the mood
+scaler's valence behaviour after DYN.6.2 (BUG-066 records the flux residual; DYN.6.2 narrowed
+valence spread), and the preview-window tempo instability BUG-076 documents. A third possibility is
+that the playlist really is this uniform at the preview excerpt — which is why this is an
+observation, not a bug.
+
+**Why it matters for DS.4.** The detailed view's proposition is *"what Uzume heard."* If what it
+heard is mostly one word and one tempo, the readout stops being interesting, and the mysterious
+view's `PreparationCharacter` (mood spread, rate) has less to work with than the design assumed.
+Worth its own increment before the detailed view reaches beta listeners.
+
+---
+
+
 ### BUG-147 — a planner seed does not reproduce its plan across processes (2026-09-25)
 
 **Severity:** P3 · **Domain:** `orchestrator` · **Failure class:** `algorithm` · **Status:** Fixed (BUG147.1, `05f5331b`), merged #286 (`c6369035`) · **Numbering:** filed as BUG-146, renumbered to 147 because #285 takes 144–146. The older commits `fae0b0b7` / `63a8aac4` / `1908a561` that say BUG147.x are a different defect, now BUG-143, so `git log --grep BUG147` returns both · **Related:** D-047 (seeded Regenerate), BUG-133 (near-tie sampling), BUG-144 (the measurement that surfaced it)
