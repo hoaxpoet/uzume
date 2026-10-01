@@ -208,14 +208,18 @@ struct UnderstoryStagedHarnessTests {
         for (width, height) in [(1920, 1080), (3840, 2160)] {
             let rig = try Self.rig(width: width, height: height)
             var millis: [Double] = []
+            var build: [Double] = []
             for i in 0..<240 {
                 var f = HarnessTemplateCore.silenceFeature(frame: i)
                 f.aspectRatio = Float(width) / Float(height)
                 f.bass = 0.3 + 0.2 * sin(Float(i) * 0.3)
                 f.treble = 0.01
                 let gpu = try rig.timedFrame(f)
-                if i >= 60 { millis.append(gpu * 1000) }
+                if i >= 60 { millis.append(gpu * 1000) } else if i < 48 { build.append(gpu * 1000) }
             }
+            build.sort()
+            print(String(format: "[understory-perf] %dx%d BUILD frames (forest dissolving in) GPU ms: median %.3f  max %.3f",
+                         width, height, build[build.count / 2], build.last ?? 0))
             millis.sort()
             print(String(format: "[understory-perf] %dx%d GPU ms: median %.3f  p90 %.3f  max %.3f",
                          width, height, millis[millis.count / 2], millis[millis.count * 9 / 10],
