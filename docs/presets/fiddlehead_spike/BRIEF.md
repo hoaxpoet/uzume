@@ -75,3 +75,18 @@ for legibility. Open problems:
 - `fiddlehead.swift`: FH.3 2D raster. `fiddlehead_ifs.swift`: FH.1 IFS.
 - Films and renders: `~/Documents/uzume_spikes/fiddlehead/`.
 - The branch is cut from LOCAL `main`, which includes the unpushed Understory merge. Rebase onto `origin/main` before any engine work.
+
+## FH.5 state (2026-10-05, branch `claude/fiddlehead-fh1`, local only)
+
+- `fiddlehead3d.swift` now: rule fitted to the traced reference; terminal elements are per-pixel log-spiral
+  croziers (child + grandchild curls); OPAQUE depth-tested surfaces (weighted-blended OIT averaged the coil
+  core into paste — proven by ablation); ~6–8 ms/frame at 1080p. Defaults = the last fits.
+- Off-screen verdict: fractal structure passes (~3 curl levels, density ≥ reference everywhere, coil reads as
+  a chambered nautilus); visible bugs fixed. NOT reached: the GLASS read (5 rounds "matte illustration" —
+  a technique limit of the opaque model) and the closed-disc silhouette (~20 radiating arms remain).
+- Next: real layered glass (2-layer depth peel or screen-space transmission) without re-muddying the core;
+  then the open-frond state against Matt's 2nd reference (ask him to save it to VISUAL_REFERENCES).
+- `tools/`: the instruments (copy into a venv dir with numpy/pillow/scipy; run next to `ref.png` = the
+  reference as PNG). `curls.py` = whorl counter (Poincaré index, negative-controlled); `density.py` =
+  one-sided density gate; `regionhue.py` = colour BY REGION (whole-image hue let orange flood everything);
+  `searchmat7.py` = the latest joint fit. Lessons: gate every search on density; never mix orange+green.
