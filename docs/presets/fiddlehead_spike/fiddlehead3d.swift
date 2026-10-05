@@ -49,7 +49,8 @@ struct U {
     float4 glass2;     // core-light cap, crozier body alpha, wide-bloom gain, 0
     float4 stem2;      // chamber-wall darkening, 0, 0, 0
     float4 hue;        // warm→orange transition (start, end), 0, 0
-    float4 glass3;     // glint cells per world unit, glint fraction, crozier fresnel gain, 0
+    float4 glass3;     // glint cells per world unit, glint fraction, crozier fresnel gain, leaflet light floor
+    float4 peel;       // pass-2 flag, transmission tint strength, depth epsilon, refraction
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -126,7 +127,7 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
 // Glass shading (FH.5 look pass). The reference is coloured GLASS lit from inside the coil: bodies are
 // dark, the light lives in the rims (~2–3 px, warm white-gold), colour stays saturated. Surfaces are
 // OPAQUE (nearest wins): glass is faked by shading — blended transparency averaged the coil into paste.
-struct FOut { float4 c [[color(0)]]; };
+struct FOut { float4 c [[color(0)]]; float4 t [[color(1)]]; };   // colour (+coverage), transmission colour
 
 static float2 hash22(float2 p) { p = float2(dot(p, float2(127.1, 311.7)), dot(p, float2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
 static float cellEdge(float2 p) {                 // distance to the nearest Voronoi cell wall
@@ -139,10 +140,20 @@ static float cellEdge(float2 p) {                 // distance to the nearest Vor
 }
 
 static FOut opq(float3 c, float cov, float3 emit) {    // opaque: nearest surface wins; cov → MSAA alpha-to-coverage
-    FOut o; o.c = float4(c + emit, cov); return o;
+    FOut o; o.c = float4(c + emit, cov); o.t = float4(0.0); return o;
+}
+// Glass, 2-layer depth peeling: this surface keeps g of its own light and passes (1−g) of the layer behind,
+// tinted by its body colour. Only the nearest TWO surfaces ever mix (full blending averaged the core to paste).
+static FOut glassOut(float3 C, float g, float3 tint, float cov, float3 emit, constant U& u) {
+    float3 tn = tint / max(max(tint.r, tint.g), max(tint.b, 1e-4));
+    FOut o; o.c = float4(C * g + emit, cov); o.t = float4((1.0 - g) * mix(float3(1.0), tn, u.peel.y), 0.0); return o;
+}
+static bool peeled(float4 pos, depth2d<float> pd, constant U& u) {    // pass 2: keep only what lies behind the front surface
+    return u.peel.x > 0.5 && pos.z <= pd.read(uint2(pos.xy)) + u.peel.z;
 }
 
-fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
+fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]], depth2d<float> pd [[texture(0)]]) {
+    if (peeled(in.pos, pd, u)) { discard_fragment(); }
     float t = u.eye.w;
     float3 n = normalize(in.nrm);
     float3 V = normalize(u.eye.xyz - in.wpos);
@@ -197,7 +208,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
         float3 rimC = mix(rimCool * u.look.y * 0.5, rimWarm * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
         float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres) + spec;
-        return opq(C * mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres)), cov, float3(0.0));
+        return glassOut(C, mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres)), tint, cov, float3(0.0), u);
     }
     // ---- Stem / tube.
     if (in.q.z > 0.5) {                                 // hair: a thin lit filament (emissive only)
@@ -229,7 +240,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
     float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), float3(0.75, 0.95, 1.0), coilBand), rimWarm * u.mat.y * 1.3, warm * lit);   // band edge: white-cyan, not a magenta stripe
     float3 C = (body + rimC * rim * 1.6 + spec + sparkC * sparkle * coilBand * u.glass.w * 3.0) * wallDk * (inside ? 0.25 : 1.0);
-    return opq(C * mix(u.glass.x * 1.4, 1.0, rim), 1.0, float3(0.0));
+    return glassOut(C, inside ? 1.0 : mix(u.glass.x * 1.4, 1.0, rim), tint, 1.0, float3(0.0), u);
 }
 
 
@@ -284,7 +295,8 @@ static SD crozier(float2 p, float R, float S, float T, float minR, float CB, flo
     return r;
 }
 
-fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
+fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]], depth2d<float> pd [[texture(0)]]) {
+    if (peeled(in.pos, pd, u)) { discard_fragment(); }
     float R = in.fr.x, S = in.fr.y, T = in.fr.z, psi = in.fr.w;
     float px = max(length(fwidth(in.lp)) * 0.7071, 1e-6);      // world units per pixel here
     float minR = 1.2 * px;
@@ -377,7 +389,7 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 glint = (g1 * u.keyDir.w * float3(1.0) + g2 * u.backDir.w * float3(0.6, 0.85, 1.0)) * u.glass.w * 4.0;   // white/cyan glints
     float3 C = body + rimC * (u.tex.w * rim + u.glass3.z * fres) + glint;
     if (cov <= 0.0) { return opq(float3(0.0), beadCov, emit); }
-    return opq(C * mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres)), max(cov, beadCov), emit);
+    return glassOut(C, mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres)), tint, max(cov, beadCov), emit, u);
 }
 
 
@@ -401,7 +413,7 @@ fragment FOut bead_fragment(BOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float d = length(in.uv);
     float core = exp(-d * d * 9.0) + 0.25 * exp(-d * d * 2.0);      // pearl + soft halo
     float tw = 0.65 + 0.35 * sin(u.eye.w * (1.5 + 2.0 * fract(in.c.a * 7.1)) + in.c.a * 40.0);
-    FOut o; o.c = float4(in.c.rgb * core * u.look.z * tw, 0.0); return o;
+    FOut o; o.c = float4(in.c.rgb * core * u.look.z * tw, 0.0); o.t = float4(0.0); return o;
 }
 
 // MARK: present: background, fern, bloom, tone
@@ -437,6 +449,20 @@ static float3 bokehLayer(float2 p, float cellSize, float soft, float seed, float
     return hue * (disc * rimLift + glow) * mix(0.35, 1.0, fract(h0 * 7.77));
 }
 static float3 aces(float3 x) { return saturate((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)); }
+
+// Compose the two peeled layers: the front's own light + the back layer seen through the front's glass.
+kernel void compose(texture2d<float> front [[texture(0)]], texture2d<float> trans [[texture(1)]],
+                    texture2d<float> back [[texture(2)]], texture2d<float, access::write> out [[texture(3)]],
+                    constant U& u [[buffer(0)]], uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
+    float4 f = front.read(gid), t = trans.read(gid);
+    // a touch of refraction: look up the back layer a little displaced by the front's transmission gradient
+    int2 o = int2(round(float2(trans.read(gid + uint2(1, 0)).g - t.g, trans.read(gid + uint2(0, 1)).g - t.g) * u.peel.w));
+    float4 b = back.read(uint2(clamp(int2(gid) + o, int2(0), int2(out.get_width() - 1, out.get_height() - 1))));
+    float tl = dot(t.rgb, float3(0.3333));
+    float bgw = (1.0 - f.a) + tl * (1.0 - b.a);                  // how much of the background still shows
+    out.write(float4(f.rgb + t.rgb * b.rgb, 1.0 - bgw), gid);
+}
 
 kernel void present(texture2d<float> hdr [[texture(0)]],
                     texture2d<float, access::write> out [[texture(1)]],
@@ -497,7 +523,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>; var glass3: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>; var glass3: SIMD4<Float>; var peel: SIMD4<Float> = [0, 0, 0, 0]
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -520,6 +546,8 @@ func renderPSO(_ v: String, _ f: String, additive: Bool) -> MTLRenderPipelineSta
     // (FH.5 tried weighted blended OIT: 5+ overlapping glass layers averaged the coil core into flat paste.)
     let c = d.colorAttachments[0]!
     c.pixelFormat = .rgba16Float
+    d.colorAttachments[1].pixelFormat = .rgba16Float
+    if additive { d.colorAttachments[1].writeMask = [] }
     if additive {
         c.isBlendingEnabled = true
         c.sourceRGBBlendFactor = .one; c.destinationRGBBlendFactor = .one
@@ -556,6 +584,15 @@ func tex(_ w: Int, _ h: Int, _ fmt: MTLPixelFormat, mips: Bool = false, samples:
 let colorMS = tex(outW, outH, .rgba16Float, samples: msaa)
 let depthMS = tex(outW, outH, .depth32Float, samples: msaa)
 let hdrTex = tex(outW, outH, .rgba16Float, mips: true)
+let transMS = tex(outW, outH, .rgba16Float, samples: msaa)
+let frontTex = tex(outW, outH, .rgba16Float), transTex = tex(outW, outH, .rgba16Float), backTex = tex(outW, outH, .rgba16Float)
+func depthTex(_ w: Int, _ h: Int) -> MTLTexture {
+    let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .depth32Float, width: w, height: h, mipmapped: false)
+    d.usage = [.shaderRead, .renderTarget]; d.storageMode = .private
+    return device.makeTexture(descriptor: d)!
+}
+let frontDepth = depthTex(outW, outH), dummyDepth = depthTex(1, 1)
+let composePSO = try! device.makeComputePipelineState(function: library.makeFunction(name: "compose")!)
 let outTex = tex(outW, outH, .rgba8Unorm)
 let readback = device.makeBuffer(length: outW * outH * 4, options: .storageModeShared)!
 let maxLeaves = 400_000, maxTubes = 200_000, maxBeads = 100_000
@@ -853,35 +890,57 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
     let cb = queue.makeCommandBuffer()!
-    let rp = MTLRenderPassDescriptor()
-    rp.colorAttachments[0].texture = colorMS; rp.colorAttachments[0].resolveTexture = hdrTex
-    rp.colorAttachments[0].loadAction = .clear; rp.colorAttachments[0].storeAction = .multisampleResolve
-    rp.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-    rp.depthAttachment.texture = depthMS
-    rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1; rp.depthAttachment.storeAction = .dontCare
-    let re = cb.makeRenderCommandEncoder(descriptor: rp)!
-    re.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
-    re.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
-    re.setDepthStencilState(depthOn)
-    re.setCullMode(.none)
-    if nTubes > 0 {
-        re.setRenderPipelineState(tubePSO); re.setVertexBuffer(tubeBuf, offset: 0, index: 0)
-        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 16 * 6, instanceCount: nTubes)
+    var u2 = u; u2.peel = [1, envF("PEELT", 0.6), envF("PEELEPS", 2e-5), envF("REFR", 6)]
+    u.peel = [0, envF("PEELT", 0.6), envF("PEELEPS", 2e-5), envF("REFR", 6)]
+    // Pass 1: nearest surface (+ its transmission colour, + resolved depth for the peel). Pass 2: the next one.
+    for pass in 0..<2 {
+        let rp = MTLRenderPassDescriptor()
+        rp.colorAttachments[0].texture = colorMS; rp.colorAttachments[0].resolveTexture = pass == 0 ? frontTex : backTex
+        rp.colorAttachments[0].loadAction = .clear; rp.colorAttachments[0].storeAction = .multisampleResolve
+        rp.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        rp.colorAttachments[1].texture = transMS; rp.colorAttachments[1].loadAction = .clear
+        rp.colorAttachments[1].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        if pass == 0 { rp.colorAttachments[1].resolveTexture = transTex; rp.colorAttachments[1].storeAction = .multisampleResolve }
+        else { rp.colorAttachments[1].storeAction = .dontCare }
+        rp.depthAttachment.texture = depthMS
+        rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1
+        if pass == 0 { rp.depthAttachment.resolveTexture = frontDepth; rp.depthAttachment.storeAction = .multisampleResolve; rp.depthAttachment.depthResolveFilter = .min }
+        else { rp.depthAttachment.storeAction = .dontCare }
+        let re = cb.makeRenderCommandEncoder(descriptor: rp)!
+        if pass == 0 {
+            re.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1); re.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
+            re.setFragmentTexture(dummyDepth, index: 0)
+        } else {
+            re.setVertexBytes(&u2, length: MemoryLayout<Uniforms>.stride, index: 1); re.setFragmentBytes(&u2, length: MemoryLayout<Uniforms>.stride, index: 1)
+            re.setFragmentTexture(frontDepth, index: 0)
+        }
+        re.setDepthStencilState(depthOn)
+        re.setCullMode(.none)
+        if nTubes > 0 {
+            re.setRenderPipelineState(tubePSO); re.setVertexBuffer(tubeBuf, offset: 0, index: 0)
+            re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 16 * 6, instanceCount: nTubes)
+        }
+        if nLeaves > 0 {
+            re.setRenderPipelineState(leafPSO); re.setVertexBuffer(leafBuf, offset: 0, index: 0)
+            re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 10 * 8 * 6, instanceCount: nLeaves)
+        }
+        if nCurls > 0 {
+            re.setRenderPipelineState(curlPSO); re.setVertexBuffer(curlBuf, offset: 0, index: 0)
+            re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nCurls)
+        }
+        if nBeads > 0 && pass == 0 {
+            re.setDepthStencilState(depthRead)
+            re.setRenderPipelineState(beadPSO); re.setVertexBuffer(beadBuf, offset: 0, index: 0)
+            re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nBeads)
+        }
+        re.endEncoding()
     }
-    if nLeaves > 0 {
-        re.setRenderPipelineState(leafPSO); re.setVertexBuffer(leafBuf, offset: 0, index: 0)
-        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 10 * 8 * 6, instanceCount: nLeaves)
-    }
-    if nCurls > 0 {
-        re.setRenderPipelineState(curlPSO); re.setVertexBuffer(curlBuf, offset: 0, index: 0)
-        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nCurls)
-    }
-    if nBeads > 0 {
-        re.setDepthStencilState(depthRead)
-        re.setRenderPipelineState(beadPSO); re.setVertexBuffer(beadBuf, offset: 0, index: 0)
-        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nBeads)
-    }
-    re.endEncoding()
+    let cc = cb.makeComputeCommandEncoder()!
+    cc.setComputePipelineState(composePSO)
+    cc.setTexture(frontTex, index: 0); cc.setTexture(transTex, index: 1); cc.setTexture(backTex, index: 2); cc.setTexture(hdrTex, index: 3)
+    cc.setBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 0)
+    cc.dispatchThreads(MTLSize(width: outW, height: outH, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
+    cc.endEncoding()
     let mb = cb.makeBlitCommandEncoder()!; mb.generateMipmaps(for: hdrTex); mb.endEncoding()
     let ce = cb.makeComputeCommandEncoder()!
     ce.setComputePipelineState(presentPSO)
