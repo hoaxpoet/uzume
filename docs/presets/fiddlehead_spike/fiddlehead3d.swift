@@ -569,14 +569,14 @@ struct Rule {
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var curlPx = envF("CURLPX", 127.6)
-    var coreT = envF("CORET", 3.0)
-    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.2), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.2)
-    var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.65)
+    var coreT = envF("CORET", 1.384)
+    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.8), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.2)
+    var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.996)
     var baseTurn1 = envF("BT1", 0.10), alpha1 = envF("ALPHA1", 0.7)
-    var curlBOpen = envF("BOPEN", 0.25), curlW = envF("CURLW", 1), curlOn2 = envF("CURLON2", 0.172)  // open tissue's spiral b; blade boost
+    var curlBOpen = envF("BOPEN", 0.25), curlW = envF("CURLW", 0.933), curlOn2 = envF("CURLON2", 0.172)  // open tissue's spiral b; blade boost
     var curlB = envF("CURLB", 0.25), kapMin = envF("KAPMIN", 1.0)   // terminal crozier: spiral b, min curled fraction (1 = curls from the base)   // pinna arc per link; pinnule angle
     var sigS1 = envF("SIGS1", 0.188), curlMin = envF("CURLMIN", 2.24)   // crozier radius floor (px)
-    var curlOn = envF("CURLON", -1), curlLen = envF("CURLLEN", 1.0), curlT = envF("CURLT", 0.3), curlPsi = envF("CURLPSI", 0.433)
+    var curlOn = envF("CURLON", -1), curlLen = envF("CURLLEN", 1.0), curlT = envF("CURLT", 0.377), curlPsi = envF("CURLPSI", 0.433)
     var hookR = envF("HOOKR", 0.149)              // open lobes: tip crozier radius ÷ lobe length
     var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
@@ -797,21 +797,21 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     lastVP = vp
     let coilPos = eyePos + SIMD3<Float>(0, 0, -envF("LZ", 0.06))
     var u = Uniforms(viewProj: vp, eye: SIMD4(cam, time),
-                     coil: SIMD4(coilPos, envF("LI", 1.842) * (1 - 0.5 * unfurl)),
-                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.15) * (1 + unfurl)),
+                     coil: SIMD4(coilPos, envF("LI", 3.178) * (1 - 0.5 * unfurl)),
+                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.169) * (1 + unfurl)),
                      keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.422)),
                      backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
-                     look: [envF("BODY", 0.667), envF("IRID", 1.376), envF("BEAD", 7.719), envF("DBG", 0)],
-                     mat: [envF("TRANS", 1.152), envF("RIMG", 1.174), envF("WARMK", 0.532), envF("TALB", 0.314)],
-                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.25), envF("BLOOM2", 0.18), envF("EXPO", 1.6)],
-                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 0.879)],
+                     look: [envF("BODY", 0.916), envF("IRID", 1.608), envF("BEAD", 7.548), envF("DBG", 0)],
+                     mat: [envF("TRANS", 0.5), envF("RIMG", 1.857), envF("WARMK", 0.245), envF("TALB", 0.67)],
+                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.5), envF("BLOOM2", 0.238), envF("EXPO", 1.913)],
+                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.329)],
                      warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, 0],
-                     glass: [envF("GA", 0.35), envF("FILMB", 0.5), envF("RIMPX", 2.2), envF("GLINT", 1.0)],
+                     glass: [envF("GA", 0.374), envF("FILMB", 0.067), envF("RIMPX", 2.522), envF("GLINT", 2.0)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
                      curl: [envF("CDU", 0.8), envF("CBEAD", 1.5), envF("CHILDT", 0.656), rule.curlB],
-                     curl2: [envF("GPSI", 0.6), envF("GDU", 0.9), envF("GT", 0.12), 0],
+                     curl2: [envF("GPSI", 0.52), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
-                     glass2: [envF("CORECAP", 0.6), envF("CURLA", 0.85), envF("BLOOMW", 0.35), 0],
+                     glass2: [envF("CORECAP", 1.768), envF("CURLA", 0.592), envF("BLOOMW", 0.127), 0],
                      stem2: [envF("WALL", 0.8), 0, 0, 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
