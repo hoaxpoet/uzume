@@ -387,6 +387,18 @@ Branch `claude/understory-development-2c507d`.
 | **UND.5** fiddleheads + vocals | ✅ built 2026-10-01 — live path pending (M7) | κ_max 0.45 (fitted to ref 02); voice = vocalsEnergyRel vetoed by brass/woodwind/string activity (the vocal stem carries trumpet); replay: sung 0.83 / 0.87 open, instrumental 0.00. Phrase timing + streaming path: cannot verify offline (design §12) |
 | **UND.6 / UND.7** M7 + certification | ⏸ | Matt's M7 PASS; NEW_PRESET_CHECKLIST §4 gates; 10-minute soak, watchdog silent |
 
+### Lane · Inari — the relit shrine drawing (D-263)
+
+Matt's night-shrine drawing, supplied twice (moonlit / every light burning); only the light changes.
+Design [`docs/presets/INARI_DESIGN.md`](presets/INARI_DESIGN.md). Branch
+`claude/shrine-music-reactive-preset-b9e2b2`.
+
+| ID | Status | Done-when |
+|---|---|---|
+| **INARI.1** built into the app | ✅ 2026-10-05 — `certified: false` | `Inari.metal` + `InariState` (drawings at texture 9–11 via the new `setDirectPresetFragmentTextures`, per-light levels at slot 6 ticked from stems: eyes ← vocals, lanterns ← bass, shrine ← drums); light map from `tools/inari/prep.swift` (26 sources); `InariTests`: classification, routing isolation, the bass climb, level 0 = moonlit drawing (MAD 0.0), level 1 within 3 % of the lit drawing's mean brightness, non-black unbound fallback |
+| **INARI.2** music-sync tuning | ⏸ next | Matt's live sessions, local + streaming; replace the absolute `vocalsEnergy` term; flash measurement |
+| **INARI.3** M7 + certification | ⏸ | NEW_PRESET_CHECKLIST §4 |
+
 ### Lane · SCAN — Spotify playlists from the screen (D-260)
 
 Spotify's February 2026 Web API rules cap the paste-a-link connector at 5 users, so Spotify playlists are
