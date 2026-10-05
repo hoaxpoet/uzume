@@ -361,7 +361,7 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]], d
     float3 V = normalize(u.eye.xyz - in.wpos);
     if (dot(n, V) < 0.0) { n = -n; }
     float cosv = saturate(dot(n, V)), fres = pow(1.0 - cosv, 3.0);
-    float rim = exp(-max(-best.d, 0.0) / (u.glass.z * px));
+    float rim = exp(-max(-best.d, 0.0) / (min(u.glass.z, 0.3 * best.h / px) * px));   // rim width scales with the lobe (small lobes were all rim = cream)
     float3 Lc = u.coil.xyz - in.wpos; float dc = length(Lc);
     float att = min(u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0), u.glass2.x);   // capped: backlight, not a white-hot disc
     float warm = saturate(att / (att + u.mat.z));
@@ -389,7 +389,7 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]], d
     float3 glint = (g1 * u.keyDir.w * float3(1.0) + g2 * u.backDir.w * float3(0.6, 0.85, 1.0)) * u.glass.w * 4.0;   // white/cyan glints
     float3 C = body + rimC * (u.tex.w * rim + u.glass3.z * fres) + glint;
     if (cov <= 0.0) { return opq(float3(0.0), beadCov, emit); }
-    return glassOut(C, mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres)), tint, max(cov, beadCov), emit, u);
+    return glassOut(C, mix(u.glass2.y, 1.0, saturate(rim)), tint, max(cov, beadCov), emit, u);   // opacity from the rim only: the body is see-through
 }
 
 
@@ -458,7 +458,9 @@ kernel void compose(texture2d<float> front [[texture(0)]], texture2d<float> tran
     float4 f = front.read(gid), t = trans.read(gid);
     // a touch of refraction: look up the back layer a little displaced by the front's transmission gradient
     int2 o = int2(round(float2(trans.read(gid + uint2(1, 0)).g - t.g, trans.read(gid + uint2(0, 1)).g - t.g) * u.peel.w));
-    float4 b = back.read(uint2(clamp(int2(gid) + o, int2(0), int2(out.get_width() - 1, out.get_height() - 1))));
+    int2 mx = int2(out.get_width() - 1, out.get_height() - 1), c0 = int2(gid) + o;
+    float4 b = 0.4 * back.read(uint2(clamp(c0, int2(0), mx)));            // seen through glass: slightly softened
+    for (int k = 0; k < 4; k++) { int2 dd = int2(k == 0 ? 2 : (k == 1 ? -2 : 0), k == 2 ? 2 : (k == 3 ? -2 : 0)); b += 0.15 * back.read(uint2(clamp(c0 + dd, int2(0), mx))); }
     float tl = dot(t.rgb, float3(0.3333));
     float bgw = (1.0 - f.a) + tl * (1.0 - b.a);                  // how much of the background still shows
     out.write(float4(f.rgb + t.rgb * b.rgb, 1.0 - bgw), gid);
@@ -877,12 +879,12 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.138), envF("BLOOM2", 0.16), envF("EXPO", 3.427)],
                      tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.673)],
                      warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, envF("RIMCW", 0.438)],
-                     glass: [envF("GA", 0.648), envF("FILMB", 0.0), envF("RIMPX", 1.66), envF("GLINT", 0.54)],
+                     glass: [envF("GA", 0.35), envF("FILMB", 0.0), envF("RIMPX", 1.66), envF("GLINT", 0.54)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
                      curl: [envF("CDU", 0.8), envF("CBEAD", 6.0), envF("CHILDT", 0.656), rule.curlB],
                      curl2: [envF("GPSI", 0.52), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
-                     glass2: [envF("CORECAP", 1.816), envF("CURLA", 0.784), envF("BLOOMW", 0.029), envF("TEAL", 0.195)],
+                     glass2: [envF("CORECAP", 1.816), envF("CURLA", 0.35), envF("BLOOMW", 0.029), envF("TEAL", 0.195)],
                      stem2: [envF("WALL", 0.7), 0, 0, 0],
                      hue: [envF("HUEA", 0.701), envF("HUEB", 0.873), envF("SATB", 1.727), envF("LIME", 0.332)],
                      glass3: [envF("GLCELL", 138.177), envF("GLFRAC", 0.508), envF("CFRES", 0.135), envF("VELL", 0.5)])
@@ -890,8 +892,8 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
     let cb = queue.makeCommandBuffer()!
-    var u2 = u; u2.peel = [1, envF("PEELT", 0.6), envF("PEELEPS", 2e-5), envF("REFR", 6)]
-    u.peel = [0, envF("PEELT", 0.6), envF("PEELEPS", 2e-5), envF("REFR", 6)]
+    var u2 = u; u2.peel = [1, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
+    u.peel = [0, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
     // Pass 1: nearest surface (+ its transmission colour, + resolved depth for the peel). Pass 2: the next one.
     for pass in 0..<2 {
         let rp = MTLRenderPassDescriptor()
