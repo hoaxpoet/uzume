@@ -115,7 +115,7 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float3 s1 = normalize(cross(ax, t.n.xyz)), s2 = cross(s1, ax);
     float r = mix(t.a.w, t.b.w, along);                              // continuous radius (an end bulge made notches)
     float3 radial = s1 * cos(ang) + s2 * sin(ang);
-    float3 p = mix(a, b + ax * t.b.w * 0.1, along) + radial * r;      // tiny overlap only (a ½-radius overshoot jutted at bends)
+    float3 p = mix(a - ax * t.a.w * 0.2, b + ax * t.b.w * 0.2, along) + radial * r;   // small overlap at BOTH ends: no gaps on the outside of bends, no jut
     VOut o;
     o.pos = u.viewProj * float4(p, 1.0);
     o.wpos = p; o.nrm = radial; o.tng = ax;
