@@ -49,6 +49,7 @@ struct U {
     float4 glass2;     // core-light cap, crozier body alpha, wide-bloom gain, 0
     float4 stem2;      // chamber-wall darkening, 0, 0, 0
     float4 hue;        // warm→orange transition (start, end), 0, 0
+    float4 glass3;     // glint cells per world unit, glint fraction, crozier fresnel gain, 0
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -179,6 +180,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         float cells = 1.0 - smoothstep(0.0, 0.08, cellEdge(cuv));
         cells *= saturate(1.0 - 3.0 * fwidth(cuv.x));                  // fade where cells would alias
         float curled = saturate(in.q.z / max(u.warmc.z, 1e-3) - 0.4);   // curled lobes: green glass; open: orange vellum
+        float vellum = in.q.x > 1.5 ? 1.0 : 0.0;                          // the sunburst leaflets are lit through
         float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
         green = mix(green, float3(0.05, 0.42, 0.36), u.glass2.w * (0.5 + 0.5 * sin(in.q.y * 37.0)));     // teal variety
         green = mix(green, float3(0.48, 0.72, 0.08), u.hue.w);                                     // reference greens are lime/chartreuse
@@ -186,7 +188,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         // Hue by PLACE, never an average of complementary hues (orange + green = the beige we had): green
         // glass (teal/violet film far from the core), orange vellum where the core light is strong.
         float3 glassC = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
-        float3 tint = mix(glassC, float3(1.0, 0.50, 0.15) * 1.2, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled));
+        float3 tint = mix(glassC, float3(1.0, 0.50, 0.15) * 1.2, max(vellum, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled)));
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
         float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x) * tint;   // fill takes the tint: dim glass stays saturated
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
@@ -201,7 +203,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float ang = in.uv.y * 6.2831853;
     float wallDk = in.q.z < -0.5 ? 1.0 - u.stem2.x * (1.0 - smoothstep(0.0, 0.35, in.uv.x)) : 1.0;   // dark chamber wall
     float edgeV = 1.0 - cosv;
-    float rim = pow(edgeV, 2.5);
+    float rim = pow(edgeV, 2.5) * smoothstep(0.0, 0.15, cosv);         // the exact silhouette aliases: ease off
     // Helical cyan/magenta striping (reference outer band) where the stem faces away from the core;
     // fine fibre lines along the stem everywhere, faded where they would alias.
     float helix = ang * u.stem.x + dot(in.wpos, float3(9.0, 7.0, 0.0)) * u.stem.y + in.q.x * 31.0;
@@ -209,9 +211,11 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float fa = ang * u.stem.z;
     float fib = pow(0.5 + 0.5 * cos(fa), 10.0) * saturate(1.0 - 1.5 * fwidth(fa));
     float3 band = mix(float3(0.10, 0.70, 1.00), float3(0.80, 0.18, 0.85), stripe);
+    float spk = hash22(floor(in.wpos.xy * u.glass3.x) + floor(ang * 3.0)).x;       // broken glints, not a ribbon
+    band *= 0.35 + 0.65 * step(1.0 - u.glass3.y, spk);
     float3 green = mix(float3(0.10, 0.40, 0.06), float3(0.35, 0.60, 0.10), in.q.w);
     green = mix(green, float3(0.48, 0.72, 0.08), u.hue.w);
-    float coilBand = in.q.y < 0.5 ? smoothstep(0.5, 1.0, in.q.w) : 0.0;   // cyan/violet bands: the coil's turns only, not the stalk
+    float coilBand = in.q.y < 0.99 ? fract(in.q.y) / 0.49 : 0.0;     // cyan/violet bands fade in along the coil (CPU: smooth in turn)
     float3 tint = mix(green * 2.0, band * 1.6, u.stem.w * (1.0 - warm) * coilBand);
     float3 body = (amber * u.mat.x * 0.5 + 0.08 * u.look.x) * tint * (1.0 + 1.2 * fib);
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
@@ -359,7 +363,10 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
         body *= 1.0 + fade * (u.vein.z * mid - u.vein.w * sec * (1.0 - mid));
     }
     float3 rimC = mix(mix(float3(0.80, 0.90, 1.0), float3(1.0, u.warmc.x, u.warmc.y), u.warmc.w) * u.look.y * 0.5, float3(1.0, u.warmc.x, u.warmc.y) * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
-    float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres);
+    float3 L1 = normalize(u.keyDir.xyz), L2 = normalize(u.backDir.xyz);
+    float g1 = pow(saturate(dot(n, normalize(L1 + V))), 160.0), g2 = pow(saturate(dot(n, normalize(L2 + V))), 80.0);
+    float3 glint = (g1 * u.keyDir.w * float3(1.0) + g2 * u.backDir.w * float3(0.6, 0.85, 1.0)) * u.glass.w * 4.0;   // white/cyan glints
+    float3 C = body + rimC * (u.tex.w * rim + u.glass3.z * fres) + glint;
     if (cov <= 0.0) { return opq(float3(0.0), beadCov, emit); }
     return opq(C * mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres)), max(cov, beadCov), emit);
 }
@@ -481,7 +488,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>; var glass3: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -579,6 +586,7 @@ struct Rule {
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var curlPx = envF("CURLPX", 127.6)
+    var vary = envF("VARY", 0.4)
     var coreT = envF("CORET", 1.384)
     var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.8), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.879)
     var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.996)
@@ -633,8 +641,9 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                 return
             }
             if nCurls < maxCurls {
-                curls[nCurls] = Curl(o: SIMD4(p0, L * kap / arc), d: SIMD4(d0, L * (1 - kap)), n: SIMD4(n, rule.curlT),
-                                     q: [young0, hash, rule.curlPsi, handed], e: [cb, rule.curlW, 0, 0]); nCurls += 1
+                let jr = 1 + rule.vary * (hashf(hash * 5.3) - 0.5), jb = 1 + rule.vary * (hashf(hash * 9.1) - 0.5)   // no two lobes alike
+                curls[nCurls] = Curl(o: SIMD4(p0, L * kap / arc * jr), d: SIMD4(d0, L * (1 - kap)), n: SIMD4(n, rule.curlT),
+                                     q: [young0, hash, rule.curlPsi, handed], e: [cb * jb, rule.curlW, 0, 0]); nCurls += 1
             }
             return
         }
@@ -690,7 +699,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                 let t = Float(j) / 4, q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
                 let rr = rA + (rB - rA) * t
                 let wall: Float = (j == 1 && level == 0 && turnAcc > 6.2832) ? 1 : 0   // chamber walls: inner turns only
-                tubes[nTubes] = Tube(a: SIMD4(q0, r0), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level), -wall, 0])
+                let bandW: Float = level == 0 ? 0.49 * smooth(0.5, 3.5, turnAcc) : 0       // no seam: bands ramp in over ~½ turn
+                tubes[nTubes] = Tube(a: SIMD4(q0, r0), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level) + bandW, -wall, 0])
                 nTubes += 1; q0 = q; r0 = rr
             }
             prevRmid = rB
@@ -729,7 +739,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                     // (the reference's orange "sunburst": midrib, 6–8 vein pairs, serrated), set just behind the turn.
                     let L = S * rule.sunL
                     leaves[nLeaves] = Leaf(o: SIMD4(at - N * (0.02 * L), L), d: SIMD4(bd, L * rule.sunW), n: SIMD4(N, 0.15),
-                                           q: [0.3, bh, 0, 0]); nLeaves += 1
+                                           q: [2.0, bh, 0, 0]); nLeaves += 1   // young 2 = backlit vellum flag
                     continue
                 }
                 chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side,
@@ -826,7 +836,8 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
                      glass2: [envF("CORECAP", 2.0), envF("CURLA", 0.61), envF("BLOOMW", 0.025), envF("TEAL", 0.207)],
                      stem2: [envF("WALL", 0.656), 0, 0, 0],
-                     hue: [envF("HUEA", 0.774), envF("HUEB", 0.864), envF("SATB", 1.598), envF("LIME", 0.26)])
+                     hue: [envF("HUEA", 0.774), envF("HUEB", 0.864), envF("SATB", 1.598), envF("LIME", 0.26)],
+                     glass3: [envF("GLCELL", 60), envF("GLFRAC", 0.35), envF("CFRES", 0.25), 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
