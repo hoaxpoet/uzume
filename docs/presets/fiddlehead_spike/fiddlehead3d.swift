@@ -705,8 +705,9 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             // radius continuous across joints; a branch tapers in from its junction (no cap)
             let rA = k == 0 ? (level >= 1 ? r * 0.4 : r) : prevRmid, rB = r * (1 + (rule.sig - 1) * 0.5)
             var r0 = rA
-            for j in 1...4 where nTubes < maxTubes {
-                let t = Float(j) / 4, q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
+            let nSub = r > 6 * pxWorld ? 8 : 4                                   // thick tubes: finer arcs (outer-edge notches)
+            for j in 1...nSub where nTubes < maxTubes {
+                let t = Float(j) / Float(nSub), q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
                 let rr = rA + (rB - rA) * t
                 let wall: Float = (j == 1 && level == 0 && turnAcc > 6.2832) ? 1 : 0   // chamber walls: inner turns only
                 let bandW: Float = level == 0 ? 0.49 * smooth(0.5, 3.5, turnAcc) : 0       // no seam: bands ramp in over ~½ turn
