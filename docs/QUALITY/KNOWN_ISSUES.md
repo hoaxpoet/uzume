@@ -25,6 +25,7 @@ belongs in the second table, not the first.
 
 | ID | Sev | Domain | What happens | Next step |
 |---|---|---|---|---|
+| BUG-180 | P3 | preset.understory / scene-fidelity | A clear vertical seam down the middle of Understory's forest backdrop, live. Uncertified preset. | Diagnose in UND.8 (design §12, 2026-10-05). |
 | BUG-085 | P1 | renderer / app.hang | The app freezes and needs a force-quit, minutes into a session. The cause is unknown. The 08-05 capture came from a Debug build under Xcode, and it shows the whole process stopping, not only the renderer (audit D2). | A long Release session launched from Finder. On a freeze, note whether the music kept playing. From testers: BR.5's Report a Problem. |
 | BUG-081 | P2 | app.hang | A beachball about 78 s into one session (2026-08-03), with no stack. One instance: the "08-04 ×2" formerly listed here were BUG-085's. Probably the same defect as BUG-085. | With BUG-085. |
 | BUG-060 | P3 | renderer / app.hang | The render loop died on a switch to Gossamer (2026-06-18). It recurred once, undated. No stack. | With BUG-085. |
@@ -87,6 +88,19 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-180 — a vertical seam down the middle of Understory's forest backdrop (2026-10-05)
+
+**Severity:** P3 (uncertified preset, `certified: false`) · **Domain:** `preset.understory` (`Understory.metal`
+`backdrop` stage / `understory_forest`) · **Failure class:** `scene-fidelity` · **Status:** Open · **Found by:**
+Matt, UND.6 live round 1, 2026-10-05 (*"a clear, obvious seam in the middle of the background layer, running
+vertically down the middle"*)
+
+**Actual.** Developer-ID build of local `main` `d7fb461c`: the cached forest backdrop shows a vertical seam at
+the screen's horizontal centre. Not visible in the offline 1080p replay films, so it may depend on the live
+drawable size. **Next:** capture the live drawable size, reproduce in `UnderstoryStagedHarnessTests` at that
+size, then check the 8×8 tile build, the forest placement grid at x = 0, and the lens/sample jitter
+(`docs/presets/UNDERSTORY_DESIGN.md` §12, 2026-10-05). Folded into UND.8 (simplify to one fiddlehead).
 
 ### BUG-178 — skipping ahead of preparation leaves a local song with no length and no seek (2026-10-01)
 
