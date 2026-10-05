@@ -30,13 +30,12 @@ belongs in the second table, not the first.
 | BUG-081 | P2 | app.hang | A beachball about 78 s into one session (2026-08-03), with no stack. One instance: the "08-04 ×2" formerly listed here were BUG-085's. Probably the same defect as BUG-085. | With BUG-085. |
 | BUG-060 | P3 | renderer / app.hang | The render loop died on a switch to Gossamer (2026-06-18). It recurred once, undated. No stack. | With BUG-085. |
 | BUG-091 | P1 | app.session / pipeline-wiring | One local file selected: preparation finishes and nothing ever plays; every audio field is 0. One instance (2026-08-17). Instrumented. | One reproduction: listening session 1, "start a single file a few times". |
-| BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. |
+| BUG-058 | P3 | audio.capture | Rare: an output-device swap froze the streaming visuals once (2026-06-17); 12 of 12 swaps recovered since. It may have been BUG-139. | Watch in listening session 2. **Session 2 (2026-10-01):** 10 of 10 swaps recovered; BUG-139 closed. |
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
 | BUG-175 | P2 | preset.fidelity / Kagura · dsp.beat | Kagura sways for a song's first ~16 s instead of dancing when the intro's beat grid is uneven. It reads as warm-up exercises, out of sync. | Measure how many songs it hits (cached grids), then Matt's call on the fix direction. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
-| BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
 | BUG-084 | P3 | dsp.stem | Stem deviation spikes to 35 against a ~3.4 ceiling. The one consumer is soft-kneed, so there is no visible effect. | After the beta. |
 | BUG-065 | P3 | dsp.beat | Beat-locked visuals drift 11 ms → 50–70 ms off the beat over a track. Parked (D-206). | After the beta. |
 | BUG-076 | P2 | dsp.beat | The prep grid's tempo depends on which 30 s window it reads, on one dense song (Bleed). | After the beta (beat-sync tail). |
@@ -59,25 +58,15 @@ passes, the entry moves to §Resolved (recent).
 
 | ID | Sev | Domain | What was fixed | Live check |
 |---|---|---|---|---|
+| BUG-179 | P2 | preset.fidelity / Nacre | Nacre's colour jumped up to 0.38 of a turn in one frame when the key was unclear (289 jumps in love_rehab's 30 s). Its colour now trusts the key only when the key is clear, and moves at most a quarter-turn a second (NACRE.7). | Matt's live M7 on Nacre: love_rehab, plus one clear-key song to confirm its colours are unchanged. |
 | BUG-177 | P1 | ml.stem / memory | Local-file preparation grew memory with song length — 23 GB for a 9-minute song, 34 GB in a session, until the Mac ran out of memory and the app hung. Each separation now frees its GPU objects: 1.4 GB (BR.MEM). | Session 1 again from the start, on build 10. |
-| BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. | The fix increment; Matt re-runs the skip-ahead. |
-| BUG-176 | P1 | renderer / photosensitivity | Membrane and Waveform flashed in a ninth of the screen at fast tempos (4.0 and 5.0 /s against WCAG's 3). Membrane's strike contrast is 0.8; Waveform's bars fall over 0.6 s (BR.20). | Session 1: Membrane on a fast song, and the launch screen with music playing — both still read as before. |
+| BUG-149 | P3 | dsp.mir / key | The stored key read F♯ minor on 35 % of songs: the live chroma's coarse spectrum read the spectral tilt, not the notes. Preparation now runs `KeyEstimator` (BUG149.1); the census pilot spreads across D/G/C/A/E major, no attractor. | Matt: do the preparation readout's keys look right on songs he knows? (Needs a re-prepare: cache v18.) |
+| BUG-178 | P2 | session.lf / transport | A local-file listener who skips ahead of preparation lands on an unprepared song: the track bar reads zero and seek does nothing (Next still works). Matt chose **A** (2026-10-01): seek always works from the file's own length, and the walk prepares the song being played next. **Fixed (BUG178.1, `a042e84d`).** | Matt re-runs a skip-ahead past the prepared songs and seeks on each. |
 | BUG-152 | P2 | session / preview | 8 % of streaming tracks were analysed as a different song. Every track now goes through the verified lookup: ScanBench 11 → 0 wrong, 125 → 129 right (BR.19). | Session 2: on an Apple Music playlist, the preparation readout names the listed songs. |
 | BUG-056 | P3 | audio.localfile | Changing the output device restarted the local song from the top. It now resumes at the playhead and keeps a pause (BR.13). | Session 1: swap AirPods and speakers mid-song, then while paused. |
 | BUG-151 | P2 | audio.localfile | The local queue cut the last second off every song. | Session 1: listen to four or five song endings. |
-| BUG-156 | P3 | audio.localfile | The test flake is fixed. The product half is an unobserved risk: Next, Stop or seek could stall while preparation runs. | Session 1: press Next and seek repeatedly while preparation is running. |
 | BUG-163 | P1 | app / accessibility | Reduce Motion and Dim Flashing Lights weren't honoured at launch. | Session 1: launch with each one on. |
-| BUG-117 | P1 | dsp.beat | On a grid with no meter, every beat counted as a downbeat. | Session 1: a bar-locked scene on a meterless song. |
-| BUG-134 | P2 | dsp.beat | Grids carrying two tempo octaves loosened sync. | Session 1: *Ready to Start* after clearing its cache. |
-| BUG-141 | P2 | dsp.stem | Stem analysis read 44.1 kHz stems at the file's rate. | Session 1 (optional): Ferrofluid Ocean on a 96 kHz file. |
-| BUG-148 | P2 | orchestrator | Scene choice now follows measured energy instead of the mood model (D-259, NRG.1–4). | Session 1: do the scenes suit the songs? |
-| BUG-133 | P2 | orchestrator | The same few scenes cycled. The entry's measurement predates NRG.3. | Session 1: count distinct scenes on the current scorer, plus the felt check. |
-| BUG-144 | P2 | dsp.mir | A song's stored mood was its fade-out. Scoring no longer reads mood (NRG.3); only Kagura does. | Session 1, or close on Matt's call. |
-| BUG-139 | P2 | audio.capture | Tap teardown could deadlock against its own IO callback. | Session 2: start and stop twice, then three to five output swaps. |
-| BUG-070 | P2 | audio.capture | A failed tap reinstall left the capture state untruthful. The residual race (ending a session during silence) is fixed too: BR.12 G2, TSan-clean. | Session 2: output swaps; pause 30 s, then end and restart. |
-| BUG-173 | P1 | audio / session | Pausing Spotify or Music for more than ~2 s counted as a new song and reset the scene (BR.11). | Session 2: pause 30 s or more, then resume. |
 | BUG-106 | P2 | ml.stem | At 4K, stems ran a period late. The timing was measured live ✅; the felt half remains. | Session 2: stem-driven scenes, fullscreen at 4K. |
-| BUG-171 | P1 | session / dsp.stem | Background preparation jolted the live visuals' drivers. | Session 2: *Start now* on a long playlist; watch the first minutes. |
 | BUG-162 | P1 | app / session | The display slept and the Mac locked mid-session. | Session 2: on battery, past the display-off interval; run `pmset -g assertions`. |
 | BUG-168 | P1 | renderer / performance | Retina and 5K displays rendered 2.5–7× the budgeted pixels. Tier-1 Macs are now capped. | BR.6 measurement: the M4 MacBook Pro (battery, Low Power Mode) and the 4K display. |
 | BUG-055 | P2 | app / permission | After an update, streaming said "ready" but the tap was silent (stale Screen Recording grant). | Session 3: install the DMG, stream, install an update build, stream again. |
@@ -102,12 +91,28 @@ drawable size. **Next:** capture the live drawable size, reproduce in `Understor
 size, then check the 8×8 tile build, the forest placement grid at x = 0, and the lens/sample jitter
 (`docs/presets/UNDERSTORY_DESIGN.md` §12, 2026-10-05). Folded into UND.8 (simplify to one fiddlehead).
 
+### BUG-179 — Nacre's colour jumped when the song's key was unclear (2026-10-01)
+
+**Severity:** P2 (a certified scene breaks its own anti-reference, "hue never strobes") · **Domain:** `preset.fidelity` (Nacre, TONAL.3 hue ← harmony) · **Failure class:** `algorithm` (the angle of a collapsed circular mean) · **Status:** Fixed 2026-10-01 (NACRE.7) — pending Matt's live M7 · **Found by:** replay, from the same recipe's pop in Understory (UND.5); not yet seen live
+
+**Expected.** Nacre's palette phase moves smoothly: it holds while a key holds, glides on a key change, and never steps by a visible amount in one frame.
+
+**Actual.** Replaying `route_coverage/love_rehab/features.csv` through the TONAL.3 math (`harmonyAnchor * tonalGate + nacrePaletteDrift`): the largest single-frame step is **0.377 turns** (t = 28.49 s), with **289 of 1,287 frames** stepping more than 0.02 turns. so_what: 0.033 max, 35 frames. there_there: 0.043, 6 frames. The palette colours the core seed, which the zoom carries outward, so on screen this should read as a colour break at the centre spreading into mismatched rings (inferred from the shader; not rendered).
+
+**Root cause.** Just above the consonance gate (consonance 0.09–0.11), `tonal_phase_fifths` is near-random frame to frame. Its ~0.8 s circular mean collapses (|v| 0.004–0.03, against ~1 for a held key), and `atan2` of a near-zero vector swings freely. 284 of the 289 jumps are that swing; 4 are the gate itself switching.
+
+**Fix (NACRE.7).** `NacreHueState` (`RenderPipeline+Nacre.swift`). The key sets the colour only as |v| ramps 0.15 → 0.4 (an unclear key falls back to the atonal rest state, Nacre's design intent), and the palette is slewed at 0.25 turns/s along the shortest arc. Saturation is untouched. Replay: largest step **0.0058 turns** on all three fixtures, zero frames over 0.02. so_what and there_there move under 0.015 turns from today on average; love_rehab 0.08 (the coherence gate rejects 74 % of its tonal frames). A held clear key settles within ~5° of the pre-fix colour.
+
+**Gate.** `NacreHueStateTests` — love_rehab replay never steps faster than the slew, with the pre-fix formula replayed alongside as the negative control (0.378 turns, must exceed 0.2); a held key lands on the pre-fix colour.
+
+**Live check.** Matt's M7 on Nacre: love_rehab (or any song with a hazy key), plus one clear-key song to confirm its colours are unchanged.
+
 ### BUG-178 — skipping ahead of preparation leaves a local song with no length and no seek (2026-10-01)
 
 **Severity:** P2 (transport looks broken on the songs a listener chose to jump to; music and Next still
 work) · **Domain:** `session.lf` / transport (`advanceLocalFileQueue`, the LF.1 no-cache fallthrough,
-`SessionPreparer` walk order) · **Failure class:** `pipeline-wiring` · **Status:** Open — **decision made, not
-fixed** · **Found by:** Matt, PREP.3 task 7 live run, 2026-10-01 (*"from Push Downstairs onwards I cannot seek
+`SessionPreparer` walk order) · **Failure class:** `pipeline-wiring` · **Status:** Fixed (BUG178.1, `a042e84d`) — pending Matt's live
+skip-ahead · **Found by:** Matt, PREP.3 task 7 live run, 2026-10-01 (*"from Push Downstairs onwards I cannot seek
 (time is zeroed out), but I can advance to the next song"*)
 
 **Actual.** Session `2026-10-01T13-48-05Z` (PREP.3 Developer-ID diagnostic build, `PREP3_task7_B_tracks.m3u`,
@@ -127,6 +132,17 @@ stay live-reactive, as now. Rejected: B (seek only; walk stays in order — long
 far jump) and C (leave it).
 **Not PREP.3.** PREP.3 made the walk faster; pacing (PREP.2) still caps it at 2× realtime once music plays, and
 any listener who skips faster than that outruns it.
+**Fix (BUG178.1, `a042e84d`, 2026-10-01).** Cause confirmed in code: `localFileTrackProgress` read the length only
+from `lastResolvedTrackIdentity`, a placeholder with duration 0 until the walk prepares the song.
+(1) `LocalFilePlaybackProvider.fileDurationSeconds` gives the playing file's own length, and the track bar reads it
+first. (2) `advanceLocalFileQueue` calls `SessionManager.prioritizeLocalPreparation(at:)`; the walk
+(`SessionPreparer.nextLocalWalkIndex`) takes an unstarted priority next, carries on after it, then wraps back. A
+pending priority ends the PREP.2 pacing idle (checked every 250 ms). The walk now runs out of playlist order, so
+the final plan comes from the slotted `orderedLocalTracks`, not the walk-order outcomes (BUG-068).
+**Tests:** `LocalFileEarlyStartTests` — walk-order policy; priority reorders the walk and keeps the plan in queue
+order; a priority cuts a 12.5 s pacing idle short. `LocalFileSeekTests` — the provider reports the file's length.
+**Negative controls:** `prioritizeLocalFile` as a no-op fails the reorder and pacing tests; pacing without the
+interrupt fails the pacing test (2.5 s vs the 1.5 s bound).
 **Verification (written before the fix):** a test that a song with no prepared entry exposes its file duration
 to the track bar; a test that landing on unprepared song k makes k the next prepared track; Matt re-runs a
 skip-ahead past the prepared prefix and can seek on every song.
@@ -199,19 +215,6 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Fix direction (audit K8):** keep the cells breathing through the hold (a slow phase drift or membrane motion), or shorten it. The choice is a look decision for Matt.
 
 
-### BUG-176 — Membrane and Waveform flashed in part of the screen at fast tempos (2026-09-30)
-
-*(Numbering: filed as BUG-175 on `br-20`; renumbered to BUG-176 when #342 merged first with its own BUG-175.)*
-
-**Severity:** P1 (photosensitivity) · **Domain:** renderer / photosensitivity · **Failure class:** `render-state` · **Status:** Fixed 2026-09-30 (BR.20) — pending the felt check in listening session 1 · **Found by:** the flash check v2 (BR.20 / audit I8)
-
-**Expected.** No region of the frame the size of WCAG's small-safe area (a ninth of the screen) flashes more than three times a second, under the 270 BPM worst-case beat train the gate uses.
-**Actual.** The whole-frame check (v1) passed both; the new regional check did not. **Membrane** (certified) — 4.0 regional flashes/s: each strike ring's bright crest and dark trough sweeping across a patch of skin. **Waveform** (uncertified, but the launch screen and the fallback) — 5.0: its 64 bars read the raw spectrum, so a kick's bars jumped to full and dropped straight back.
-**Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
-**Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
-**Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
-
-
 ### BUG-177 — local-file preparation ran the Mac out of memory on long songs (2026-09-30)
 
 **Severity:** P1 (hangs the app and the Mac) · **Domain:** `ml.stem` / memory · **Failure class:** `resource-management` · **Status:** Fixed 2026-09-30 (BR.MEM) — pending a re-run of listening session 1 · **Found by:** Matt, listening session 1 (build 9)
@@ -222,42 +225,6 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Gates.** `StemSeparatorMemoryTests` — batches of 20 separations on one background thread: 2 MB growth fixed, 646 MB unfixed (bound 150 MB). The footprint is process-wide, so concurrent suites added 170–327 MB of noise in a filtered parallel run; the gate takes the minimum over up to 3 batches (stops at the first clean one). Negative control with the pool removed: [642, 639, 708] MB — fails; filtered parallel run 5/5 green.
 **Open.** Whether BR.13's device-change restart behaved in that session is unknown (its log lines were flooded out); it stays in session 1.
 **PREP.3 addition (2026-09-30).** The per-length curve, Release, one Bowie *Low* track per process (`docs/diagnostics/PREP3/scaling-*/scaling.csv`): peak footprint **2.78 → 11.93 GB** (113 s → 339 s) before BR.MEM, **1.18 → 1.42 GB** after it, **1.10 → 1.24 GB** with PREP.3's two additions — `StemModelEngine.predict()` now writes its four outputs into pre-allocated buffers through `resultsDictionary` (no per-call result tensors, no `readBytes` copy; the `StemFFT+GPU` pattern), and the Beat This! and PANNs per-call bodies drain their own pools (whole-track grid tiling and the family sweep are the same long synchronous loops). The residue grows ~0.5 MB per second of audio, about three copies of the track's decoded mono PCM — the track's own data, not a per-call leak (estimate; not attributed allocation by allocation). Four tracks at once (`--concurrency 4`), killed at 23–45 GB in PREP.1, now completes at a **3.1 GB** peak. Stem series and a sweep window's stems are **bit-identical** to goldens captured before either change. ⚠ `StemSeparatorMemoryTests` reads process-wide footprint, so it fails intermittently when other suites run in the same process (170 MB in a filtered parallel run on unmodified main); it passes alone every time. Deflaked in #346 (minimum growth over up to three batches; bound unchanged).
-
-### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
-
-**Severity:** P3 (test flake; the product risk below is open and unobserved) · **Domain:** `test-infra` / `audio.playback` · **Failure class:** `concurrency` (a wall-clock deadline on a callback delivered through a starved pool) · **Status:** Fixed (BUG156.1, `35abbcf1`) · **Introduced:** LFSEEK.1 (`2639294d`, 2026-09-28 09:08), which switched the queue-advance completion to `.dataPlayedBack`. The flake first appeared eight hours later. · **Related:** BUG-103 (the same suite's other face), BUG-151 (why `.dataPlayedBack`), BUG-154 (same fix shape)
-
-**Expected:** `SessionLifecycleChurnTests.onFileEnded_queueAdvanceChurn_neverHangs` passes however loaded the test process is. A missing `onFileEnded` still fails it.
-**Actual:** it failed once in a full engine run on `ff-5` (`b706c315`, 2026-09-28 17:09): *"failed after 10.317 seconds with 1 issue"*. It then passed 5/5 alone (~2.75 s each), and the next full run was 2107/2107. Reproduced first-hand on 2026-09-28 with a probe in the test: **2 of 2 full runs stalled at advance 0.** A peer session's engine suite was running at the same time, so this is not a clean "no peer" repro; the mechanism below does not depend on it.
-
-**What the stall looks like** (probe snapshot at the 5 s timeout): engine running, player playing, playhead at sample 219 957 of an 11 025-frame file (0.25 s of audio, played 20 times over), no stale reschedule, no config change, and **AVFAudio's completion handler never invoked.** The playhead kept advancing in real time. The callback arrived **late, not lost:** after 20.0 s in run 1 and 14.9 s in run 2.
-
-**Mechanism (established).**
-1. A `sample` of the test process taken during the stall shows no thread running AVFAudio's played-back timer. `LocalFileSeekTests.seekMovesThePlayhead` sat the whole 2 s in `-[AVAudioPlayerNode stop]` → `StopImpl` → `AVAEDispatchQueueTimer::CancelTimer()` → `semaphore_wait`. About eight of the ten `com.apple.root.default-qos.cooperative` threads were busy in CPU-bound synchronous tests (Mitosis, Skein, Witchlight luma loops).
-2. A controlled experiment in one process (a 0.25 s file, 2 × ncpu spinner blocks for 8 s) isolates it:
-
-   | spinners at | `.dataPlayedBack` latency | `.dataConsumed` latency |
-   |---|---|---|
-   | none | 0.317 s | 0.007 s |
-   | background / utility | 0.316 / 0.315 s | — |
-   | **default / userInitiated** | **8.50 / 8.55 s** (released with the spinners) | 0.002–0.010 s |
-
-   The caller's QoS doesn't matter: `play()` from a userInteractive, userInitiated or default thread all waited ~8.3–8.5 s. With the spinners never released, the completion never came, and the `player.stop()` after it blocked in `CancelTimer` for **14 h** (sampled, then killed).
-
-So `.dataPlayedBack` completions are delivered from a timer in the process's constrained default-QoS dispatch pool. The parallel suite fills that pool with Swift Testing's synchronous CPU-bound tests; in one run it stayed saturated for **212 s**. A 5 s deadline on the callback was measuring the neighbours. External CPU load (`yes` × 20, plus audio churn in another process) did **not** reproduce it, 15/15 green: the pool is per process. `.dataConsumed`, the type before LFSEEK.1, doesn't go through it, which is why the suite was quiet until 2026-09-28.
-
-**Reproduction.** A full `swift test --package-path UzumeEngine` with a probe logging the provider state at the timeout; or the in-process spinner experiment above, which is deterministic.
-
-**Fix (test-only).** `awaitPlayedBackEnd` (`Tests/UzumeEngineTests/Audio/PlayedBackWait.swift`) replaces the bare `wait(5 s)` in the churn test and in `LocalFileSeekTests.seekMovesThePlayhead`, the sibling caught in the stall sample. After the 5 s budget it queues a canary on the default-QoS pool, behind the overdue completion. While the canary is pending, the pool hasn't had its turn, so a callback that lands then passes the moment it lands. Once the canary has run, the completion has been dequeued; the callback gets the same 5 s again, and missing it means lost. The verdict is an ordering. **No timeout was widened.** A lost callback still fails, 5 s after the pool proves it has had its turn. `LocalFilePlaybackProvider` is unchanged.
-
-**Verification.**
-1. ✅ Deterministic gate: `PlayedBackWaitTests`. A suspended queue stands in for the starved pool, and a callback landing at 4× the budget passes; with a live pool, a callback that never comes fails. **Negative control:** the bare `wait(budget)` fails the first test (run 2026-09-29).
-2. ✅ Three consecutive full engine runs on the fixed tree (a temporary late-path log line added for evidence, removed before commit): **runs 2 and 3 green, 2117/2117.** In run 1 the churn test passed through the late path in 13.1 s, where the old wait would have failed at 5 s. Run 1 went red on `StemSeparatorConcurrencyTests` (see *Sibling* below): same mechanism, not this change.
-3. Manual: none (test-only change).
-
-**Sibling, same mechanism (fixed separately as BUG-157, BUG157.1).** `StemSeparatorConcurrencyTests.concurrentSeparations_returnPerCallerOwnStems` dispatches its eight separations to a private concurrent queue at default QoS, the pool above, and asserts a fixed `group.wait(timeout: 180 s)`. In run 1 of this increment's verification that wait timed out (198 s), and all three assertions after it failed on the empty collector. It was in the BUG-156 stall sample too, blocked at line 101. The remedy has the same shape: its work is not stuck, it is queued. Its wait could be ordered the same way, or the queue given a QoS above the saturated band.
-
-**Open — product risk, not observed.** The app depends on the same pool. With `onFileEnded` set, the local-file queue advance waits for that completion, and `stop()` (Next, Stop, a seek) calls `player.stop()`, which waits in `CancelTimer` while a played-back timer is pending. If the process's default-and-above pool is saturated during local-file playback, a track advance would be late, and a MainActor `stop()` could stall for as long as the saturation lasts. `SessionPreparer` runs its analysis as `Task.detached(priority: .userInitiated)`, a band the experiment shows delays the completion just as much. **Not established:** whether preparation ever overlaps local-file playback with enough parallel CPU work to saturate the pool, and no app session has shown a late advance or a Next-press stall. Evidence needed before any provider change: a live local-file session with preparation running, timing `onFileEnded` against the file's end and `stop()` on the MainActor.
 
 ### BUG-152 — the streaming preview lookup lands on another song for 8 % of rows (2026-09-28)
 
@@ -349,18 +316,6 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 
 **Gates.** `Tier1RenderBudgetTests`: the sizing math (Air 13", 5K, 4K, ≤ budget untouched); the cap only when set; in a real 3840×2160 offscreen window the drawable is capped **and** the render pipeline's `drawableSizeWillChange` receives the capped size; Alfvén excluded on tier 1 and kept on tier 2.
 
-### BUG-171 — background preparation disturbed the live visuals' drivers (2026-09-29)
-
-*(Numbering: filed as BUG-167 on `br-9`; renumbered to BUG-171 behind BR.6a, BR.6b, BR.7 and BR.8.)*
-
-**Severity:** P1 (the primary visual drivers jump during normal streaming sessions) · **Domain:** session / `dsp.stem` · **Failure class:** `concurrency` (shared mutable analysis state) · **Status:** Fixed 2026-09-29 (BR.9). Visibility was never measured live; see the listening note below.
-
-**Actual** (audit C3/G3, re-verified ✔︎). `makeSessionManager` handed the engine's live `StemAnalyzer` and `MoodClassifier` to `SessionPreparer`, "to avoid double-loading the ML weights". Neither object has weights. Preparation runs about 430 `analyze` frames and about 1,300 `classify` calls per track on them, with no reset. That happens behind playback every few seconds, for minutes. So the live AGC level was ~97 % replaced and the deviation EMA moved ~38 %: live `bass` / `drums` energy and the `*Dev` drivers jumped or flattened for 1–2 s, and live mood snapped to the other song.
-
-**Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
-
-**Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
-
 ### BUG-172 — declining "control Spotify / Music" froze the session on one scene (2026-09-29)
 
 *(Numbering: filed as BUG-168 on `br-10`; renumbered to BUG-172 behind BR.6b, BR.7, BR.8 and BR.9.)*
@@ -383,24 +338,6 @@ So `.dataPlayedBack` completions are delivered from a timer in the process's con
 - `NSAppleEventsUsageDescription` is reworded to say what declining costs.
 
 **Gates.** `NowPlayingPermissionTests` (denial reported once per observation, again after restart, ordered on poll count; which apps are asked; local-file modes don't poll); `PlaylistConnectorTests` (−1743 case); `AppleMusicConnectionViewModelTests` (→ `.permissionDenied`, no retry loop); `NowPlayingDenialWiringTests` (reactive fallback, toast, clearing on every path; source shape); `UserFacingErrorTests` (30 cases).
-
-### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
-
-*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
-
-**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
-
-**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
-- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
-- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
-- cut the song's first planned scene back in;
-- restarted the track clock at 0, so every later planned change landed offset.
-
-A single failed poll mid-song did the same.
-
-**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
-
-**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
 
 ### DIST-LIM — what the notarized build has not been shown to run on (2026-09-29)
 
@@ -437,332 +374,31 @@ A single failed poll mid-song did the same.
 1. ✅ Automated: `LocalFileSeekTests.seekMovesThePlayhead` requires the end ≥ 2.8 s into a 3 s remainder; the old code measured 2.0 s. `SessionLifecycleChurnTests` (the BUG-021/059/078 completion-race net) passes unchanged.
 2. Manual: in a multi-song local session, the last second of a song is heard before the next starts.
 
-### BUG-148 — stored valence is negative on every beta-playlist song (2026-09-26)
-
-**Severity:** P2 · **Domain:** `ml.mood` → `orchestrator` · **Failure class:** `algorithm` (a model that does not generalise beyond its 12 training songs) · **Status:** Fixed by replacement (D-259, NRG.1–3, 2026-09-27); Matt's live check pending · **Found by:** Matt's BUG-144 check, 2026-09-26: *"all of the moods were listed as 'restless'"* · **Related:** BUG-144, BUG-149, OBS-DS4-1, BUG-066, DYN.6.2
-
-**Expected:** stored valence spreads with the music: cheerful songs (Penny Lane) positive, dark ones negative. **Actual:** the app's own cache after the BUG-144/145/146 build (schema v16, 2026-09-26 14:48–14:59) stores negative valence on **10/10** songs: Dance Yrself Clean −0.41, B.O.B. −0.34, Superstition −0.37, Teen Spirit −0.83, Penny Lane −0.25, Take Five −0.22, Pyramid Song −0.03, Teardrop −0.27, Moonlight I −0.02, Warszawa −0.03. The label is only a quadrant (`EmotionalState.quadrant`: negative valence with positive arousal reads "restless", negative with negative reads "wistful"). By these values Penny Lane and Moonlight I should read "wistful".
-
-**Consumers:** `PresetScorer.moodSubScore`. Valence → colour-temperature target (0.5 + 0.4·v), half of the mood term, which is 40 % of each score. Also the preparation view's mood word.
-
-**First facts (diagnosis in progress; no root cause asserted).**
-- The shipping model was trained at `d586e57` (2026-04-07) on **818 frames from 12 hand-labelled songs** (`~/phosphene_features_annotated.csv`), recorded from the live path at the time.
-- At the scaler's mean feature vector the model outputs valence **−0.42**, arousal +0.41. An "average" input reads restless.
-- Replayed on its own training features, it still separates valence: Love Shack +0.45, Love Rehab +0.68, No Surprises +0.22, Pyramid Song −0.50. With the pre-DYN.6.2 flux scaler those read +0.66 / +0.71 / +0.43, so the corpus flux re-fit trims valence by 0.1–0.2 without flipping it.
-- The open question is what differs in the features preparation feeds the model today (post BUG-066 / DYN.4–7 / BUG-146).
-
-**Diagnosis (2026-09-26).** Evidence is in `~/Documents/uzume_spikes/bug148/`: the Python replica `mood_mlp.py`, `loso.py`, the per-frame inputs `feat/`, and the uncommitted recorder patch.
-1. **Instrument.** `PrepTimingRunner` with a recording classifier captured every frame's 10 inputs and output on the ten songs (Release, shipping pipeline). A Python replica of the model, parsed from `MoodClassifier+Weights.swift` and the scaler, reproduces the app's per-frame state to **3×10⁻⁵** on all ten.
-2. **Input shift.** Against the 12 training songs, today's preparation inputs sit within ±0.3 training σ on bands and centroid. Flux sits **+2.5 σ** (median 0.75 vs 0.23; beta max 1.71 vs training max 0.43), and both key correlations sit about **−0.75 σ**.
-3. **No single input explains it.** Resetting one input group to its typical-training value swings valence erratically in both directions: flux takes Dance Yrself Clean −0.42 → +0.59 but Penny Lane −0.25 → −0.42. The typical-training input vector itself reads −0.56.
-4. **The model does not generalise.** Leave-one-song-out with the exact `train_mood_from_live.py` recipe, 3 seeds, 12 held-out songs. Valence sign agreement is **42 %** (chance 50 %), Pearson r **−0.30**, MAE 0.62. Arousal sign agreement is **50 %**, r −0.04, MAE 0.50. The seed spread is small (0.13). The shipping recipe's validation split shuffles frames, so its validation frames came from the training songs; the `d586e57` "✓ per-track accuracy" measured memorisation.
-5. **Library scale** (census proxy: the model applied to each track's mean inputs, `full_results.csv`, n = 27,638): median valence **−0.15**, 61.5 % negative. Labels would read restless 43.5 %, bright 33.0 %, wistful 18.1 %, calm 5.5 %.
-
-**Root cause:** the valence (and arousal) the model outputs on unseen music is not better than chance. It was trained on 818 frames of 12 hand-labelled songs, validated on frames of those same songs, and today's flux runs far outside the range it saw. The beta playlist's 10/10 negative valence and the library's 61.5 % are that model's bias, not a measurement. A 12-song held-out test is itself small, so the chance-level result is a floor on the evidence, not a precise estimate.
-
-**Verification criteria for any fix (written before the fix).**
-1. Automated: leave-one-song-out (or a held-out-artist split) on the training set, reporting sign agreement and r against their chance levels. It must clearly beat chance: valence sign ≥ 70 %, r ≥ 0.5.
-2. Beta playlist: Penny Lane reads positive valence; Teen Spirit and Pyramid Song read negative.
-3. Library proxy: the quadrant split is reported, not asserted.
-4. Manual: Matt's mood check on the beta playlist.
-
-**Resolution (D-259, 2026-09-27).** Matt judged the mood taxonomy itself unusable and chose a measured energy value instead. Nothing was retrained, and valence and arousal left scene choice:
-- NRG.1 (#290) measures each song's energy curve.
-- NRG.2 (#292) puts it on a library-calibrated 1–10 scale in the preparation view.
-- NRG.3 makes the planner score scenes and transitions against the energy of each stretch, and removes the mood-driven live override. Reactive mode stops scoring mood.
-
-**Still reading the model:** the live classifier's `valence` / `arousal` inside about a dozen certified scenes, and Lumen Mosaic's palette pick (Matt: *"leave the certified scenes alone for now"*). The verification criteria above for a retrained model no longer apply to scene choice.
-
 ### BUG-149 — the key estimate reads F# minor far too often (2026-09-26)
 
 > **Reconciled 2026-09-30 (BR.KI ledger pass).** BUG-054 (key detection resolution-limited) closed as a duplicate of this entry.
 
-**Severity:** P3 (display-only today) · **Domain:** `dsp.mir` (`ChromaExtractor` Krumhansl–Schmuckler) · **Failure class:** not yet assigned · **Status:** Open, not diagnosed · **Related:** CENSUS.3 §4 (`docs/diagnostics/CENSUS_PILOT_REPORT.md`), BUG-146, TONAL phase (D-178)
+**Severity:** P3 (display-only today) · **Domain:** `dsp.mir` (`ChromaExtractor` Krumhansl–Schmuckler) · **Failure class:** `algorithm` (resolution) · **Status:** Fixed (BUG149.1) — pending Matt's look at the readout · **Related:** CENSUS.3 §4 (`docs/diagnostics/CENSUS_PILOT_REPORT.md`), BUG-146, TONAL phase (D-178)
 
 **Evidence.** The app's cache on the beta playlist (2026-09-26, schema v16, MIR at 44.1 kHz) stores F# minor on 7/10 songs; Teardrop reads A minor, Moonlight I C major and Warszawa F major. The CENSUS.3 pilot found the same attractor at scale: F# minor on **347 of 993** tracks (35 %), next C major at 176, with a median K-S confidence of 0.53. The source comment already calls the estimator "unreliable". No per-song ground truth is in the repo yet (Essentia is not installed; `tools/essentia_ground_truth.py` exists), so accuracy per song is unmeasured. The attractor is established statistically. **Consumers:** the preparation row, `DebugOverlayView`, and `VisualizerEngine+Capture`; the scorer and planner do not read key. **Matt's call (2026-09-26):** keep it visible and make it accurate. Hiding it was declined.
 
-### BUG-144 — a track's stored mood is its last one or two seconds, not the song (2026-09-25)
-
-> **Reconciled 2026-09-30 (BR.KI ledger pass).** Scoring no longer reads mood: NRG.3 made measured energy the top weight (`PresetScorer.weightEnergy` 0.30). The only remaining consumer of `mood.arousal` is Kagura. Whether this needs its felt check or can close is Matt's call.
-
-**Severity:** P2 · **Domain:** `dsp.mir` → `orchestrator` · **Failure class:** `algorithm` · **Status:** Fixed (BUG144.2, Matt's option A); the manual feel check (criterion 4) is outstanding · **Found by:** KAG.3 (branch `kag-3`) · **Related:** OBS-DS4-1, BUG-145, BUG-146, DYN.7
-
-**Expected:** `TrackProfile.mood` describes the song. That means the song as a whole on the local-file path, and the whole 30 s preview on streaming, because the planner uses it to choose scenes for the entire track.
-**Actual:** it describes roughly the **last 1–2 s** of the analysed audio. `SessionPreparer+Analysis.swift` `analyzeMIR` classifies every frame and then returns `classifier.currentState` after the loop. That state is an EMA with `MoodClassifier.outputTau` = 0.7 s (DYN.7), fed by `MoodFeatureAccumulator`'s ~1.67 s feature EMA. On the local path the stored mood is therefore the fade-out, and on streaming it is the last seconds of the preview.
-
-**Reproduction.** A temporary recording `MoodClassifying` wrapper was injected into `PrepTimingRunner`'s worker (not committed). The shipping `LocalFilePreparationPipeline` was run over the ten `tools/data/beta_test_playlist.m3u` songs, Release, one process per song. The streaming proxy was `--preview-seconds 30` over the KAG.0g 20/50/80 % windows (`~/Documents/uzume_spikes/kagura/beta_windows/`). The last recorded frame equals the cached `trackProfile.mood.arousal` on **10/10** songs. Outputs are in `~/Documents/uzume_spikes/bug143/` (per-frame CSVs, `manifest.tsv`, `plan_diff3_*.txt`), and the uncommitted harness is in `harness/` there (the runner patch plus the env-gated `MoodStatisticPlanDiffTests.swift`).
-
-| Song | Stored arousal (last frame) | Song median (after first ⅙) | 3-window median | Production chain (KAG.0g §10) |
-|---|---|---|---|---|
-| Dance Yrself Clean | +0.43 | +0.61 | +0.60 | +0.69 |
-| B.O.B. | +0.55 | +0.57 | +0.53 | +0.67 |
-| Superstition | +0.24 | +0.21 ⚠ BUG-146 | +0.50 | +0.51 |
-| Smells Like Teen Spirit | +0.61 | +0.60 | +0.46 | +0.54 |
-| Penny Lane | −0.11 | −0.43 | −0.41 | −0.04 |
-| Take Five | **−0.38** | +0.33 | +0.12 | +0.48 |
-| Pyramid Song | **−0.29** | +0.33 | +0.30 | +0.45 |
-| Teardrop | **−0.42** | +0.48 | +0.47 | +0.43 |
-| Moonlight I | −0.01 | −0.35 | −0.41 | −0.28 |
-| Warszawa | −0.29 | +0.04 | +0.06 | +0.19 |
-
-Spearman ρ against the production-chain medians: stored value **0.59**, song median **0.85**, 3-window median 0.89. The stored value on the 50 % window alone scores 0.82, because a 30 s window is more homogeneous than a whole song. Streaming is still exposed, though. Inside single windows the last frame differs from the window's own median by up to 0.65: Take Five at 80 % is +0.64 vs −0.01, Penny Lane at 50 % is −0.50 vs +0.02, and Moonlight at 50 % is −0.55 vs −0.12. Valence is stored the same way and moves as much. Moonlight's stored valence is **+0.68** (the warm end), while its song median is −0.02.
-
-**Consumers.** `PresetScorer.moodSubScore` reads valence (colour temperature) and arousal (density). Since D-170 every segment has `section: nil`, so the scorer renormalises and mood is **0.30 / 0.75 = 40 %** of every score (`PresetScorer.swift:155-158`), not the 30 % its doc states. Other consumers: `SessionPlanner.buildTransition` energy (`:206`), `VisualizerEngine+Stems.swift:857`, `PreparationAperture.swift:101` and `PreparationTrackRow` (the mood word the listener sees), and `DebugOverlayView`.
-
-**Measured effect on scene choice** (production scorer + `DefaultSessionPlanner`, same cached profiles with only `mood` swapped, tier 2, certified only, D-154 `beatIrregular` resolved as the app does):
-- *Per song, empty history* (the cleanest measure, with no cascade): the top-scored scene changes on **8/10** songs (local) and **5/10** (50 % window). **Control:** nudging every stored mood by +0.02 changes **0/10**. Examples (local, stored → song median): Teardrop Stave → Cytokinesis; Take Five Stave → Cytokinesis; Pyramid Song Stave → Fractal Tree; Moonlight I Dragon Bloom → Stave. In words, three songs that play energetic were being planned as calm, and Moonlight was planned warm.
-- *Whole 10-song session over 10 seeds:* 90/100 track openers differ (75/100 for the 50 % window). **This number is not evidence.** The same +0.02 control already changes 55/100 openers, and a different seed changes 88/100. Fatigue and family-repeat history carry one early change into every later track, so session-level diffs cannot attribute anything to the statistic. *(Re-run 2026-09-26 with BUG-147's fixed seeds, identical in two processes; `~/Documents/uzume_spikes/bug143/plan_diff_fixedseed.txt`. The first run's 85 / 64 / 91 came from per-process random seeds and moved between runs, e.g. the control read 64 in one run and 45 in the next. The per-song measure above used no seed and did not change.)*
-- *Golden session plans:* **none would change.** `GoldenSessionTests` builds its profiles by hand with literal valence/arousal (`makeProfile`) and never runs `analyzeMIR`. That also means no golden covers the analysis → mood path. There is nothing to regenerate.
-
-**Residual gap, not diagnosed.** Offline per-frame medians on the same 44.1 kHz windows still disagree with the production-chain captures in 4 of 30 windows: Penny Lane 20 % (−0.51 vs −0.04) and 80 % (−0.41 vs −0.05), Take Five 80 % (−0.01 vs +0.48), and Warszawa 20 % (−0.26 vs +0.13). The other 26 agree within ~0.16. KAG.3's "Superstition 0.22 vs 0.51" does **not** reproduce on the windows (0.50 / 0.51 / 0.50 vs 0.47 / 0.53 / 0.51). Its 0.22 is the whole 96 kHz file, which is BUG-146. What the production chain does differently on Penny Lane is unknown.
-
-**Lead, not asserted.** In the app, preparation uses the **same `MoodClassifier` instance** as the live audio path (`VisualizerEngine+InitHelpers.swift:314`, `+LocalFilePlayback.swift:55`, live `classify` at `+Audio.swift:322`). A track prepared during playback may therefore end its loop on a state that live frames last wrote. The runner has no live path, so this was not measured.
-
-**Verification criteria (written before any fix).**
-1. Automated: an `analyzePreview` test whose clip is a loud body followed by a 2 s quiet tail must store the **body's** arousal. It fails on current code.
-2. Automated: on the beta playlist (env-gated, like `PlanRankingDumpTests`), Spearman ρ of stored arousal vs the production-chain medians is ≥ 0.85 (0.59 today).
-3. Cache schema bump, so stored profiles are re-derived.
-4. Manual (musical feel): Matt runs a local session of the beta playlist and judges whether the opening scenes for Teardrop, Take Five, Pyramid Song and Moonlight I suit the songs.
-
-**Fix (BUG144.2, Matt's option A: "go with A").** `analyzeMIR` keeps each frame's classified state. `TrackProfile.mood` is now `SessionPreparer.songMood(_:)`, the median valence and median arousal after the first sixth, or `.neutral` if no frame was classified. This is the same rule as KAG.3's `songArousal`; the KAG.3 owner has agreed to read `mood.arousal` and drop that field. `PersistentStemCache` schema 15 → 16. The live classifier path is untouched, and so is the shared-instance lead above, which is still unmeasured.
-**Verification.**
-1. ✅ `SongMoodTests`: a scripted classifier ends on a contrasting 2 s tail. It **failed** on the old line (stored = the tail, −0.6/−0.5) and passes on the fix (stored = the body).
-2. ✅ `SongMoodBetaPlaylistTests` (env-gated `BETA_MOOD_CACHE`), run over fresh Release `PrepTimingRunner` caches of the ten songs. The pre-fix cache gives ρ **0.588** and fails; the post-fix cache gives ρ **0.855** and passes. Stored arousal equals the diagnosis's offline song medians to three decimals (Take Five +0.327, Teardrop +0.479, Pyramid Song +0.334). The margin is thin, and Superstition (0.206, BUG-146) is its largest miss.
-3. ✅ Cache schema v16.
-4. ⏳ Manual feel check (2026-09-26): Matt, *"mood is merely ok"*, not a pass. What remains is BUG-148: valence reads negative on all ten beta songs, so every one is labelled "restless" or "wistful" and asks for cool colours.
-
-### BUG-141 — the stem analyzers read 44.1 kHz stems at the file's sample rate (2026-09-25)
-
-**Severity:** P2 · **Domain:** `dsp.stem` / `orchestrator` · **Failure class:** `sample-rate` · **Status:** Fixed (BUG141.1, `3fc96385` + `f46a67f1`), merged #271 (`9fee33ae`) · **Related:** BUG-116 (the same class in the stem series' slicing, v11), BUG-140 (the same class in the drums grid, v14 on `claude/bug140-2`)
-
-Found while fixing BUG140.2. `StemSeparator.separate` resamples its input to 44.1 kHz, so the stems it returns are always 44.1 kHz. BUG-116 fixed where the stem series *slices* them; two consumers still described them at the file's rate:
-
-1. **Stem series (local files; what shaders read).** `LocalFilePreparationPipeline.analyzeStemSeriesForLocalFile` built `StemAnalyzer(sampleRate: preview.sampleRate)`. The analyzer uses that rate to turn FFT bins into Hz: band edges, the YIN pitch tracker, the rich-metadata centroids. At 48 kHz every frequency it reported was ×1.088; at 96 kHz ×2.18.
-2. **`stemEnergyBalance` snapshot (both paths).** `analyzePreview` passed `preview.sampleRate` to `warmUpAndAnalyze`, which derives `fps = rate / 1024` for the analyzer's smoothing and AGC while stepping through 44.1 kHz stems. At 48 kHz that is 46.9 fps against a true 43.1. The analyzer itself was the engine's shared 44.1 kHz instance, so only the time constants were wrong here, not the Hz map. Streaming previews go through the same code, but they are normally 44.1 kHz, so they are unaffected in practice (not verified).
-
-**Expected:** the stems' features do not depend on the rate the file was encoded at.
-**Actual (A/B, Release `PrepTimingRunner` on real files, before = `main` 8f7928e9, after = fix; scratch caches):**
-
-| track (rate) | snapshot `*EnergyDev`, before → after | series: vocal pitch mean | series: band splits (mean abs change) | series: stem `*Energy` |
-|---|---|---|---|---|
-| Lion in a Coma (44.1k, control) | identical | identical | identical | identical |
-| Brother (48k) | −0.003 … −0.004 | 72.5 → 67.0 Hz | `vocalsBand0` 6 %, `otherBand1` 17 % | ≤ 1.3 %, r = 1.000 |
-| Pieces Of A Man (48k) | −0.009 … −0.010 | 114.8 → 106.4 Hz | 8 %, 17 % | ≤ 1.5 % |
-| Six Days (48k) | −0.004 … −0.007 | 66.3 → 61.5 Hz | 4 %, 18 % | ≤ 1.3 % |
-| Long Time Gone (96k) | vocals 0.323 → 0.250, bass 0.485 → 0.425 | 210.7 → 104.7 Hz | `bassBand0` 0.062 → 0.179, `drumsBand0` 0.078 → 0.188 | 16–22 %, r 0.80–0.89 |
-
-**Product impact.** The scorer's stem-affinity input (weight 0.25) moves by ≤ 0.01 on 48 kHz tracks, so ≤ 0.0025 on the total score, which is negligible for planning. The 96 kHz shift is up to 0.07, or 0.018 on the total. The preparation screen's "led by" label (`PreparationTrackRow.leadingStem`) did not change on any of the five tracks. What changes is what 48/96 kHz local-file scenes **receive** from the stem series. `vocals_pitch_hz` read about 1.5 semitones sharp at 48 kHz and an octave high at 96 kHz; it feeds `aurora_palette_phase` (AUDIO_CONTRACT row 45; Ferrofluid Ocean's aurora sky). The per-stem band splits were drawn at the wrong frequencies. On 96 kHz files the whole stem series was materially wrong.
-
-**Fix.** Both sites use `separator.outputSampleRate ?? preview.sampleRate`, which falls back the same way BUG-116's slicing does. **Cache schema v13 → v14**, because the scaled values are baked into `stem_series.bin` and `metadata.json`. BUG-140 (BUG140.2) followed at v15.
-
-**Verification.**
-1. ✅ Automated: `StemFeatureSeriesTests.localFileSweep_analyzerUsesSeparatorRate` (a 220 Hz tone at 48 kHz must read 220 ± 5 Hz; it read 239.5 before the fix) and `analyzePreview_warmupUsesSeparatorRate` (warmup fps must be 44100/1024; it was 46.875). Both were confirmed to **fail** on the unfixed code.
-2. ✅ Real-file A/B above: the 44.1 kHz control is bit-identical and the 48/96 kHz shifts are in the predicted direction.
-3. ⏳ Manual (optional; low expected visibility at 48 kHz): a Ferrofluid Ocean session on a 96 kHz local file. Its reflected aurora sky is the one reader of `aurora_palette_phase` (AUDIO_CONTRACT §Ferrofluid Ocean), so its hue should follow the vocal line rather than a pitch an octave high.
-
-### BUG-139 — `SystemAudioCapture` tap teardown deadlocks against its own IO callback; the suite hangs forever (2026-09-23)
-
-**Severity:** P2 · **Domain tag:** audio.capture · **Status:** **RESOLVED 2026-09-23 (BUG139.1,
-`bf7c73fe`)** — root-caused from source, not inferred, and the lock-held teardown is gone. Found while running BUG-103's 5×
-verification streak; unrelated to that fix (BUG103.1 touches `LocalFilePlaybackProvider` only —
-`SystemAudioCapture.swift` is not in its diff).
-
-⚠ **Domain tag corrected.** Filed as `audio.capture / test-infrastructure` because it was first seen
-killing a test run. That was wrong: the deadlocking code is the **shipped** tap teardown, reached by
-`stopCapture()`, `performReinstall()` and `deinit`. The test suite is where it was *observed*, not
-where it lives.
-
-#### Expected behavior
-
-`swift test --package-path UzumeEngine` terminates. A capture teardown completes or fails; it does not
-block forever.
-
-#### Actual behavior
-
-The suite hangs **indefinitely** — no timeout, no failing test, no crash report. Killed manually after
-12+ minutes on a run whose predecessor had completed in 259 s. Presents as a wedged CI/gate run rather
-than a failure, which is the worst shape: BUG-103's SIGABRT at least left an `.ips`.
-
-#### The stack (captured, `sample`)
-
-Main thread, blocked:
-
-```
-FerrofluidLiveAudioTests.testLiveDSPPipeline()   FerrofluidLiveAudioTests.swift:76
-  SystemAudioCapture.stopCapture()               SystemAudioCapture.swift:283
-    SystemAudioCapture.cleanup()                 SystemAudioCapture.swift:485
-      SystemAudioCapture.teardownTapResources()  SystemAudioCapture.swift:407
-        _pthread_mutex_firstfit_lock_wait
-          __psynch_mutexwait
-```
-
-Concurrently, a tap IO-callback thread sits in `caulk::semaphore::timed_wait` inside the
-`AudioTimeStamp`/`AudioBufferList` callback thunk.
-
-#### Root cause — an exact ABBA, readable in the source (BUG139.1)
-
-`SystemAudioCapture.swift:407` — the line the sample is parked on — is `AudioDeviceStop(agg, proc)`,
-and `stateLock` has been held since line 401:
-
-```swift
-private func teardownTapResources() {
-    stateLock.lock()                       // 401
-    ...
-    if agg != 0 {
-        AudioDeviceStop(agg, proc)         // 407  ← BLOCKS until the IO proc drains
-```
-
-The other side is the IO proc block created in `createIOProc` (line ~243). It runs on the CoreAudio
-**real-time HAL thread** and calls `self?.probeInstallRMS(...)`, whose body is
-`stateLock.withLock { … }` (line 459).
-
-So:
-
-| Thread | Holds | Waits for |
-|---|---|---|
-| teardown (`stopCapture` / `performReinstall` / `deinit`) | `stateLock` | the IO proc to stop, inside `AudioDeviceStop` |
-| CoreAudio IO proc (real-time) | its HAL cycle | `stateLock`, inside `probeInstallRMS` |
-
-Neither can advance and `AudioDeviceStop` never returns. Both halves of the captured sample are
-accounted for, which is why this is recorded as proven rather than hypothesised.
-
-**This is BUG-021's lesson in a second place.** BUG-021 was *"no AVFoundation teardown under the
-provider lock"* in `LocalFilePlaybackProvider`; this is CoreAudio teardown under `stateLock` in the
-tap path. The doc comment above `probeInstallRMS` asserts *"the uncontended per-buffer stateLock"* —
-that word is the whole defect. The lock is uncontended per buffer and fatally contended at teardown.
-A secondary smell, not fixed here: an RT audio callback should not take a mutex at all (cf. BUG-036).
-
-#### Verification criteria (written before the fix)
-
-- [x] Automated: `SystemAudioCaptureTeardownTests` (4 tests) — claim returns the handles and clears
-      them in one locked step; a second claim yields nothing (no double-destroy); the lock is free the
-      moment claim returns; teardown and lock-taking callers interleave without wedging. As written,
-      this pins the **structure**, not the deadlock: reproducing the deadlock needs a real aggregate
-      device (hardware + Screen Recording) and is out of reach in the suite — the same honesty posture
-      BUG-103 took. **Negative control was run:** reintroducing the lock-held return wedged the suite,
-      the exact signature BUG-139 produces, so the gate demonstrably bites.
-- [x] Automated: full engine suite — see the closeout evidence block.
-      ⚠ `FerrofluidLiveAudioTests` in isolation is **not** a reproduction attempt worth anything: all
-      three of its tests **skip** (two after a ~10 s wait for a tap that a permissionless run never
-      gets). They exercise the teardown path via cleanup, which is how the deadlock was reached, but
-      they never take a live capture. Stated so nobody later reads "green in isolation" as evidence
-      the race was exercised.
-- [ ] **Manual: NOT DONE — the one gap in this fix.** This is the **shipped** streaming path, and the
-      automated gate cannot touch a real aggregate device. Outstanding: one app-level streaming
-      session (start capture, let audio flow, stop) plus one output-device change to exercise
-      `performReinstall`. Needs Screen Recording on a real Mac. Until that runs, the fix is
-      *structurally* proven and *not* live-validated.
-
-#### Suspected failure class
-
-`concurrency` — ABBA between the teardown path and the IO callback. Same *shape* as BUG-021 (which was
-the provider's `NSLock` vs. the `scheduleFile` completion callback) but a different lock, a different
-path, and the tap rather than the local-file provider. Related but distinct from BUG-058, which reaches
-`teardownTapResources()` via a device-change `performReinstall` rather than an ordinary `stopCapture()`.
-
-#### Reproduction
-
-Not reproduced on demand. Observed once: run 2 of 5 consecutive `swift test --package-path UzumeEngine`
-runs, run 1 green. `swift test --filter FerrofluidLiveAudio` in isolation was not attempted — doing that
-first is the obvious next step, since isolation-passes/parallel-hangs would match BUG-103's profile.
-
-#### Session artifacts
-
-`docs/diagnostics/BUG139_TEARDOWN_HANG_2026-09-23.txt` — the full `sample` output, committed so the
-stack survives the session. To capture a fresh one while hung: `sample <xctest-pid> 3`.
-
-#### Why it was filed rather than fixed at the time
-
-Found during another defect's verification. Fixing an audio-teardown lock ordering on one observation,
-inside an unrelated increment, is how BUG-021 and BUG-078 got their long tails. Evidence first — and
-the evidence, read the next day, turned out to be conclusive from the source alone.
-
----
-
-
----
-
-### BUG-134 — cached BeatGrids carry two tempo octaves; `computeBPM` averages them (2026-09-14)
-
-**Severity:** P2 · **Domain:** `dsp.beat` · **Failure class:** grid octave inconsistency · **Related:** BUG-132 (ruled out, below), D-079, D-206
-**Reopened by Matt 2026-09-14:** *"reopen BUG-134 — the rate divergence is a changed premise."* Investigating it **falsified the original framing and found a different, larger defect.** Both are recorded; the original title is kept in git history.
-
-#### The original framing was wrong
-
-BUG-134 was first filed as *"`beatPhase01` advances faster than its own installed grid tempo"* — 163.3 BPM measured against an installed grid of 154.311 on *Ready to Start*. **`beatPhase01` is innocent.** `LiveBeatDriftTracker.computePhase` computes `(time − beats[idx]) / timing.period`, and `BeatGrid.localTiming` returns `beats[idx+1] − beats[idx]` — the grid's REAL local inter-beat interval. The phase faithfully tracks whatever spacing the grid has. The comparison was against `grid.bpm`, a **summary field**, and the summary is what is wrong.
-
-Also ruled out rather than assumed: **this is not BUG-132** (*a plan rebuild installs the wrong track's BeatGrid*), filed the same day and the obvious candidate. In session `2026-09-14T17-28-08Z` `grid_bpm` is correct and constant within every track (117.882 ×3232 frames, 154.311 ×6552, 122.669 ×1011, 82.906 ×3519 — no reversion to the first track's value) and the log carries exactly one pre-fire, for the correct track. The RIGHT grid was installed.
-
-#### What is actually wrong
-
-**A cached BeatGrid can contain two tempo octaves inside one track.** *Ready to Start*'s inter-beat intervals form two clean clusters:
-
-```
-320 ms (187 BPM) x249      640 ms ( 94 BPM) x 80
-300 ms (200 BPM) x135      620 ms ( 97 BPM) x 73
-short cluster: 402 intervals, mean 314 ms = 191 BPM
-long  cluster: 198 intervals, mean 637 ms =  94 BPM      ratio 2.03x
-```
-
-A scene locked to that grid fires every third strike twice as late. **That is the symptom Matt reported**, on that track and no other:
-
-| track | Matt's M7 verdict | grid.bpm | its own beats | octave-mixed |
-|---|---|---|---|---|
-| The Suburbs | *"synced closely"* | 117.9 | 118.1 | no |
-| **Ready to Start** | ***"actually out of phase"*** | 154.3 | **142.9** | **YES — 33 %** |
-| Modern Man | *"looser"* | 122.7 | 122.9 | no |
-| Rococo | (measured clean) | 82.9 | 83.2 | no |
-
-**Two faults hide each other.**
-
-1. **`BeatGridResolver.computeBPM` averages ACROSS octaves.** Its inlier window is `[median*0.5, median*2.0]` — a full octave wide. Verified on the real artifact: median 320 ms → window [160, 640] ms, the 637 ms cluster squeaks **inside** the 640 ms ceiling, 126 slow intervals are admitted, and the mean returns **154.31 — matching the cached `grid.bpm` to the decimal.** Matt already ruled on this class at PR.12 (*"you should not be averaging BPM / tempo"*); the meter computation was fixed then and this one was not.
-2. **`halvingOctaveCorrected()` gates on `bpm > 175`.** Ready to Start's summary is 154.31, so the gate never opens — while two thirds of its beats run at 191 BPM, exactly what that gate exists to catch. **The bad summary suppresses the correction for the bad grid.** Its doc comment also asserts the offline path "does not need this because longer context produces reliable beat-level detection"; the corpus contradicts that.
-
-**Corpus prevalence** (50 cached grids, local stem cache): **8 genuinely bimodal; 32 carry at least one isolated dropped beat; 201 beats recoverable; 18 untouched.** `grid.bpm` error reaches **+53.7 %** (Sprawl I: 169.3 claimed, 110.1 actual).
-
-#### Fixed at BUG134.1 — the unambiguous half only
-
-`BeatGrid+OctaveConsistency.octaveUnified()` fills **isolated** 2× gaps: one beat missing between two the model kept, restored at the midpoint. Wired at the prepared-cache install seam behind `UZUME_GRID_OCTAVE_FIX` (default ON). 201 beats restored across 32 grids; 18 grids byte-identical.
-
-#### BUG134.2 — the contiguous case, fixed with the audio (2026-09-15)
-
-**Matt's M7, 2026-09-15** (session `2026-09-15T13-03-13Z`, chain verdict `clean`): *"appeared synced in the beginning but quickly drifted out of sync. still too loose."*
-
-Confirmed as the real test — the install logged `bimodal=true, filled=15, clusteredLong=26, dominant=191.1 bpm, summary=154.3 bpm`.
-
-**Measured against real onsets from the session's own tap:**
-
-| elapsed | median error | beats within 60 ms |
-|---|---|---|
-| 0–5 s | 17 ms | 100 % |
-| 5–10 s | 31 ms | 100 % |
-| 10–15 s | 43 ms | 93 % |
-| 15–20 s | 49 ms | **62 %** |
-
-*(Two further windows initially read 4.4 s and 9.5 s — an artefact, not drift: the tap is 30 s and beat-elapsed 20 s maps past its end, so there were no onsets to match. Discarded. A circular-phase measure also read R = 0.02–0.05 and is **invalid here** — it assumes one beat period and this grid has two.)*
-
-**It is not clock drift.** The audio's OWN autocorrelation peaks at **314 ms (190.9 BPM, strength 1.00)** and **629 ms (95.5 BPM, 0.94)** — exactly the grid's two clusters. Every beat is on a real pulse. The grid changes octave under a song that does not, and each switch throws the alignment.
-
-**And the intro genuinely IS half-time**, which is why the global unification BUG134.1 cut would have been wrong:
-
-| window | fast pulse (314 ms) | slow pulse (629 ms) |
-|---|---|---|
-| 0–9 s | **0.02–0.18** (absent) | 0.61–0.68 (strong) |
-| 9–30 s | **0.56–0.61** (strong) | 0.42–0.51 |
-
-**Fixed:** `BeatGrid+AudioOctave.audioOctaveCorrected` asks the audio per ~3 s window and subdivides a half-time gap **only** where the fast pulse is present. Validated on this session's real tap against the real cached grid: verdicts `slow` for 0–9 s (intro preserved) and `fast` for 9–30 s, **irregularity 20.5 % → 14.6 %, +4 beats, intro untouched.**
-
-⚠ **The rule is a FLOOR, not a ratio, and the first version got this wrong.** If a fast pulse is present the SLOW lag correlates too — every other fast beat lands on it — so autocorrelation at 2× a real pulse is always high and "fast beats slow by N×" is never true. The discriminator is whether the fast lag correlates **at all**: 0.02–0.18 vs 0.56–0.61, with the 0.30 floor sitting in the empty space between the two populations rather than fitted to either edge.
-
-**Retracted claim, recorded because it was briefly in this file.** An earlier revision of this entry stated that BUG-129 had recurred here — that `peakDBFS: 0` was wrong because the tap's real peak was −0.89 dBFS with no full-scale samples. **That was my measurement error, not a defect.** `ChainAnalyzer.peakScan` scans each channel separately; I had measured the MONO DOWNMIX, which averaged a genuine full-scale sample on the left channel (1.000000, exactly one sample) against a right-channel peak of 0.896 down to 0.903. The reported `peakDBFS: 0` and `maxFullScaleRun: 1` are both **correct**, and `clean` is the right verdict — one isolated sample touching full scale is not clipping, which is exactly the distinction BUG129.1 added. Nothing to fix. The lesson is the same one BUG129.1 recorded: check the per-channel data before calling a chain-health number wrong.
-
-⚠ **Runs at PREP time** (it needs the samples), so **existing cached grids do not benefit until re-prepared** — clear the local-file cache for an album to re-analyse it. BUG134.1's gap-fill runs at install and does apply to the existing cache.
-
-**BeatBench, five suites, `UZUME_AUDIO_OCTAVE` off → on:** suites 1–4 **byte-identical on all 8 fixtures**. Suite 5 `clair_de_lune` moves: F 0.14 → 0.16, Cemgil 0.08 → 0.09, **AMLt 0.02 → 0.01 (a regression, reported)**, CMLt 0.00 either way. That is the true-rubato case which has no stable grid at all, and where D-205's target is declining honestly rather than F — adding beats there is mildly against the grain, though the magnitude is noise-level. **As at BUG134.1, the benchmark does not contain this failure mode**; its fixtures lack the model-drops-to-half-time-under-a-fast-song pattern, so the evidence is the Ready to Start session, not the suite.
-
-#### Residual
-
-14.6 % irregularity remains over the tapped span. Whether that is still audible is an M7 question, not an offline one.
+**Diagnosis (BUG149.1, 2026-10-01).** The stored key was `MIRPipeline.stableKey`: Krumhansl–Schmuckler over the live
+`ChromaExtractor`'s 1024-point FFT (47 Hz bins), folded only above 500 Hz. That is too coarse to separate
+semitones, and the only notes it hears are harmonics. Measured on synthetic I–IV–V–I / i–iv–V–i progressions in all
+24 keys: **3 / 24 correct**, mostly a fifth off (C major → G major). **Pink noise read F♯ minor** — the spectral
+tilt alone produces the attractor. Root cause confirmed; no ground-truth per song needed to see it.
+**Fix.** `Session/KeyEstimator`, run once per song at preparation on the decoded audio: an 8192-point FFT (5.4 Hz
+bins at 44.1 kHz) over 55–1760 Hz, spectral peaks with parabolic frequency, each frame's semitones whitened against
+the surrounding octave and weighted equally; no key when the profile's contrast (std/mean) is under 0.2 or the
+correlation under 0.3. The live chroma (tonal visuals, mood features) is untouched. Cache schema 17 → 18 so cached
+songs re-analyse.
+**Evidence.** Synthetic: 24 / 24; pink noise → no key (contrast 0.08 against ≥ 1.13 for the progressions).
+Census pilot (997 readable tracks, `/Volumes/Extreme SSD/phosphene_census/key_ab.csv`): old F♯ minor 346, C major
+176; new D major 104, G 86, C 85, A 73, E minor 64, E major 64, A minor 53 — the usual spread of keys in popular
+music, no attractor. The 14 tracks under the contrast gate are speech, comedy, free jazz, Ives, Nancarrow and
+Autechre. No file in the pilot carried a key tag, so per-song accuracy on real music is still unscored.
+**Tests:** `KeyEstimatorTests` — 24 keys, pink noise, short/silent. The old estimator fails the first two (3 / 24;
+F♯ minor).
 
 ### BUG-135 — the grid's bar position cannot be confirmed to be the true musical downbeat (2026-09-14)
 
@@ -796,245 +432,6 @@ every four beats with a medium one between, displaced but structurally intact. M
 2026-09-14, presented with this measurement: **leave it** — the scene reads correctly and the
 alignment is not worth reopening retired work for. Recorded so a later session does not "fix" a
 displacement it cannot measure.
-### BUG-133 — scene selection cycles a short fixed list instead of drawing on the roster (2026-09-14)
-
-> **Reconciled 2026-09-30 (BR.KI ledger pass).** The measurement below was taken against the scorer NRG.3 replaced (D-259), and its list of newly seen scenes includes Plasma, since removed. Re-count distinct scenes on the current scorer in listening session 1.
-
-**Severity:** P2 · **Domain tag:** `orchestrator` / selection · **Reported by Matt** during PREP.2's
-live validation: *"the same scenes are being selected and cycled through for the tracks I played -
-Uzume did not take advantage of all the certified scenes."*
-
-#### Measured on `2026-09-14T13-49-57Z`
-
-- **50 selections, 13 distinct.** Cytokinesis took **11 of 50** (22 %).
-- **14 of the 24 certified scenes never appeared**: Alfvén, Aurora Veil, Dragon Bloom, Fata Morgana,
-  Gossamer, Lumen Mosaic, Mitosis, Murmuration, Nacre, Nebula, Nimbus, Skein, Volumetric Lithograph,
-  Witchlight.
-- Three **uncertified** scenes did appear — Membrane (7), Plasma, Waveform — so the pool is not
-  gated on `certified`.
-- Within track 4 an eight-scene sequence repeats **verbatim, twice**: Cytokinesis → Glaze → Fractal
-  Tree → Stave → Cytokinesis → Cymatic Resonance → Membrane → Ricercar. Selections change every
-  ~17–24 s.
-
-#### Not the same defect as BUG-132
-
-The cycle repeats inside a single track with no plan rebuild between the two passes, so it is not the
-rebuild resetting the plan. They were found in the same session and must not be conflated.
-
-#### Root cause — ★ both anti-repetition levers are FAMILY-scoped, so a family gets one slot and its argmax keeps it
-
-Diagnosed 2026-09-14 after Matt raised it a second time (*"getting REALLY tired of cytokinesis"*) on
-session `2026-09-14T14-34-41Z`: 59 selections, **10 distinct**, Cytokinesis ×14.
-
-`PresetScorer` has exactly two levers against repetition and **neither is per-scene**:
-`familyRepeatMultiplier` (0.2× when the candidate shares the CURRENT scene's family) and
-`fatigueMultiplier` (smoothstep cooldown since that FAMILY was last used). So a family behaves as a
-single rotation slot, and the slot goes to whichever member scores highest on the material. Its
-siblings are not competing with the rest of the catalog — they are competing with each other for one
-turn, and they lose it every time.
-
-**The prediction and the data agree, per family:**
-
-| family | members | scenes that ever appeared |
-|---|---|---|
-| particles | **6** | **1** — Cytokinesis ×14 (Nebula, Witchlight, Murmuration, Mitosis, Filigree: never) |
-| hypnotic | **9** | 3 — Dragon Bloom ×7, Floret ×2, Fata Morgana ×1 (Alfvén, Aurora Veil, Glaze, Meniscus, Nacre, Plasma: never) — Plasma removed 2026-09-24 (BETA.0, D-253) |
-| geometric | 4 | 1 — Cymatic Resonance ×8 |
-| painterly | 2 | 1 — Ricercar ×3 |
-| waveform | 2 | 2 — Stave ×8, Waveform ×1 |
-| fractal / reaction (singletons) | 1 | 1 each — Fractal Tree ×7, Membrane ×8 |
-
-**A singleton family is a guaranteed private slot; a nine-member family hides eight scenes.**
-Frequency is set by family size and cooldown, not by fit.
-
-**Why Cytokinesis specifically, and more often than the singletons.** Its `fatigue_risk` is `low` →
-a **60 s** cooldown, the shortest of the three (`low` 60 / `medium` 120 / `high` 300). Segments run
-~17–24 s, so it is eligible again after roughly three of them, and as the particles argmax it takes
-the slot every time it is. Low risk + sole family winner is the whole of it.
-
-**Budget is NOT the cause** — measured against the 16.6 ms tier budget, only Volumetric Lithograph
-(24.0/18.0 ms) is excluded. Every other catalog scene fits.
-
-⚠ **The fix is not a stronger repetition penalty** — Matt's standing call is best SET per song, no
-same-concept / back-to-back penalties. Note the irony this diagnosis turns up: the *existing*
-family-scoped penalty is what suppresses variety, because it treats nine distinct certified scenes
-as one thing.
-
-#### Fix (BUG133.1) — Matt's call: *"cool down the scene, not the family"*
-
-`fatigueMultiplier` matches `recentHistory` on `presetID` instead of `family`. One line of behaviour;
-`PresetHistoryEntry` already carried `presetID`, so nothing upstream changed.
-
-**Adjacency is still handled, deliberately by a different lever.** `familyRepeatMultiplier` (0.2×
-against the CURRENT scene's family) is untouched, so two similar looks still do not land back to
-back — while the rest of the family becomes reachable one segment later instead of never. Splitting
-the two was the point: back-to-back similarity is a real visual concern; a shared multi-minute
-cooldown was a same-concept penalty in all but name.
-
-**Cooldown windows unchanged** (`low` 60 / `medium` 120 / `high` 300 s). They were calibrated against
-family scope, so the same numbers now gate a narrower thing — conservative (a scene waits at least
-as long as it did), but worth re-checking live rather than assuming still right.
-
-★ **The adversarial A/B reproduces Matt's complaint in a unit test.** Four consecutive picks from a
-six-member family, scored against identical material: on the shipped code `Set(chosen).count == 1`
-— the *same scene four times*, which is Cytokinesis in miniature. On the fix, four different
-scenes. Four tests in `FatigueCooldownScopeTests`; two of them fail on the pre-fix code, and the
-two that pass on both are there to pin what must NOT change (the scene itself is still cooled, and
-its window still expires on schedule).
-
-★ **Correction — one existing test DID catch it, and I claimed otherwise.** The first write-up of
-this fix said *"nothing in the existing suite caught the change — 45 scorer/planner tests passed
-against both scopings."* That was measured with `--filter "PresetScorer|SessionPlanner"`, and the
-suite that catches it is named **`GoldenSessionFixtures`**, so the filter never ran it. The full
-closeout run failed on `GoldenSessionTests` "Session A: scene IDs match golden sequence". **A
-filtered test run is not evidence about the suite.**
-
-★ **And that golden had BUG-133 written into it four months before it was filed.** Its expectation
-was `[VL, Membrane, Membrane, Membrane, Membrane]` — 2 distinct scenes over 5 tracks — above a
-2026-05-13 comment reading: *"Membrane is the only `reaction` scene in the catalog, so once
-selected it has no family-repeat competitor and gets picked across remaining slots… This reveals a
-real catalog clustering symptom (4 of 12 aesthetic scenes share `geometric`); the orchestrator's
-behavior is correct given the inputs."* The symptom was seen, described accurately, judged correct
-and pinned as a golden. It was the inputs that were wrong.
-
-Regenerated to `[VL, VL, Fractal Tree, Fractal Tree, Ferrofluid Ocean]` — **3 distinct, monopoly
-gone** — with the trace the file requires. Sessions B, C and D are unchanged, including *"Session C:
-genre diversity produces ≥3 distinct scene families"*, so the change is narrow to the case the old
-comment flagged. ⚠ Adjacent repeats persist at TRACK granularity and are a different thing: those
-are track-first segments 180 s apart against 60/120/300 s windows, so a scene legitimately recovers
-inside one track.
-
-#### ★ Live check FAILED — the prediction was wrong, and the real cause is upstream of the cooldown
-
-Matt, on `2026-09-14T15-16-36Z` running the fixed build (verified: binary built 10:16:33 from
-`704606c7`, committed 10:09:28): *"it's the same scenes as before for Arcade Fire's Suburbs album.
-I'm not seeing different scenes I haven't seen before."*
-
-**BUG133.1 is correct and stays** — a family was one rotation slot, the unit A/B and the regenerated
-golden both prove the scoping change — **but it was never going to fix this, and I said it would.**
-Predicting the hidden scenes would surface required them to be competitive once uncooled. They are
-not.
-
-**Measured with the production scorer** (`PlanRankingDumpTests`, real cached profiles from Matt's own
-album). Ranking on *The Suburbs*, all 26 eligible scenes: **0.612 (Cytokinesis) → 0.459 (Nebula)**,
-with the top twelve inside 0.05 of each other. Nebula must wait for the fifteen scenes above it to
-be cooled simultaneously — no cooldown window achieves that, so its rank is effectively permanent.
-
-★ **Half the scoring weight discriminates nothing.** Read the per-scene breakdowns: within a track,
-`aff` is **identical for every scene** (0.06 on *The Suburbs*, 0.02 on *Deep Blue*, 0.34 on *City
-With No Children*, 0.56 on *Wasted Hours*) and `sect` is 1.00 for all. Stem affinity is 25 % of the
-weight and **19 of the 24 certified scenes declare no `stem_affinity` at all** — only Dragon Bloom,
-Fata Morgana, Gossamer, Lumen Mosaic and Volumetric Lithograph do — so the rest all receive the same
-track-mean number. A quarter of the score is a per-track constant for 79 % of the roster.
-
-What is left to separate scenes is mood (30 %) + tempo (20 %), and across one album those barely
-move: the top three over four Suburbs tracks are drawn from {Membrane, Cytokinesis, Glaze, Dragon
-Bloom, Cymatic Resonance, Stave, Floret} — precisely the set Matt keeps seeing. The seeded-noise
-histogram agrees: over 12 seeds the planner's first pick is only ever one of four scenes.
-
-**So the roster is not being rationed by fatigue. It is being ranked by half a scorer, and the
-bottom fourteen are unreachable at any cooldown setting.**
-
-#### ★ And declaring the missing `stem_affinity` cannot fix it — checked before writing any
-
-Matt chose "give the 19 scenes real stem affinities". Derived from each scene's own `audio_routes`
-manifest (the artifact that records which primitives it actually reads), rather than from an
-impression of what each scene feels like:
-
-| what the routes say | scenes |
-|---|---|
-| reads **all four** stems into ONE route (`division_pace`, `energy_env`, `energy_swell`, `stem_mix_gate`, …) | Cytokinesis, Mitosis, Murmuration, Nacre, Nimbus, Skein, Floret, Filigree, Glaze |
-| reads **no stem primitive at all** — band/spectral driven | Alfvén, Aurora Veil, Ferrofluid Ocean, Fractal Tree, Meniscus, Nebula, Ricercar, Stave, Witchlight |
-| reads a **single** stem | Cymatic Resonance (drums → `beat_burst`) |
-
-**Declaring all four stems scores identically to declaring none** — `stemAffinitySubScore` averages
-the declared stems' deviations, and the undeclared default already averages all four. So a truthful
-declaration for nine of them is a no-op, a truthful declaration for nine more is *no declaration*,
-and only Cymatic Resonance would move. Making this dimension discriminate would mean declaring
-couplings the shaders do not have, which fabricates the QG.1 manifest and builds to an invented
-metaphor (the KSRETIRE.1 / D-188 failure).
-
-★ **The roster is not stem-selective, and that is D-004 working as designed.** Continuous energy is
-the mandated primary driver, so scenes are band-driven; where they do read stems they sum all four
-into one envelope. A scorer that spends **25 % of its weight** on stem selectivity is measuring a
-dimension the catalog deliberately does not vary on. Not a metadata gap — a mismatch between the
-scorer's model and the audio doctrine.
-
-**The measurement the fix is built on:** the seeded noise is **±0.02** (`SessionPlanner.seededNoise`)
-against a top-twelve spread of 0.05 and a full-catalog spread of 0.153 — which is why the 12-seed
-first-pick histogram only ever yielded four distinct scenes. The ranking's precision (three decimal
-places) far exceeds its accuracy; a 0.003 gap between Cytokinesis and Dragon Bloom is not a musical
-preference.
-
-#### Fix (BUG133.2) — Matt's call: near-tie sampling
-
-`selectPreset` now picks **uniformly among the scenes within `nearTieBandWidth` (0.05) of the best
-score** instead of taking `max(by:)`. Uniform on purpose: inside the band the differences are exactly
-what is being called noise, so weighting by them would re-import the precision being discarded.
-
-- **Deterministic**, keyed on `(seed, trackIndex, elapsedSessionTime, candidate ids)` — a plan grown
-  3 → 6 → 12 stays byte-identical to one planned at once, which `PartialPlanTests` pins and PREP.2
-  depends on every time the walk extends a live plan.
-- **`seed == 0` stays pure argmax**, so the unseeded golden fixtures still pin scorer behaviour
-  rather than a sample. That also means the goldens do **not** cover this path.
-- **A band, not a lottery.** A scene 0.15 below the best still never plays — that gap is a real
-  preference; a band wide enough to admit it would replace the planner with a shuffle.
-
-**Measured effect, production scorer on Matt's own cached profile** (*The Suburbs*): planner first
-pick over 12 seeds went from **4 distinct scenes** (Cytokinesis 5, Membrane 3, Cymatic 2, Dragon
-Bloom 2) to **10 distinct** (Cytokinesis 3, then Nacre, Membrane, Cymatic, Glaze, Floret, Fractal
-Tree, Ferrofluid Ocean, Plasma, Dragon Bloom one each).
-
-★ **The first version of the regression test passed with the fix removed.** Its fixture scenes all
-sat within 0.016 of each other — inside the scorer's own ±0.02 noise — so the pre-existing noise
-already shuffled them and the test proved nothing. Caught by reverting. The fixture now carries
-`MidBand`, deliberately placed ~0.04 below the best from measured scores: outside the noise, inside
-the band. It appears in 0 of 24 seeds without sampling and reliably with it. **Second time in this
-session a source of variety made a gate look green** — the check is to remove the fix and re-run,
-every time.
-
-**Live check — measured on `2026-09-14T15-52-43Z`** (same Suburbs folder, Release from `919cfd6c`,
-87 selections over ~30 min). Compared over the **same first 59 selections** as the pre-fix baseline
-`2026-09-14T14-34-41Z`, so the windows are identical:
-
-| | pre-fix | post-fix |
-|---|---|---|
-| distinct scenes | 10 | **16** |
-| Cytokinesis | 14 | **7** |
-| top-3 share | 51 % | **33 %** |
-| most-frequent scene | Cytokinesis 24 % | Stave 13 % |
-
-**Six scenes appeared that never had:** Alfvén (its first live appearance since certification),
-Ferrofluid Ocean, Glaze, Mitosis, Nacre, Plasma.
-
-★ **Eleven certified scenes still never appear, and that is the band working as specified, not a
-residual defect.** Aurora Veil, Filigree, Gossamer, Lumen Mosaic, Meniscus, Murmuration, Nebula,
-Nimbus, Skein, Volumetric Lithograph, Witchlight. Checked against the scorer dump: on this material
-they score **0.459–0.532**, and the band admits ≥ 0.562 (best 0.612 − 0.05). They are not hidden by a
-mechanism any more — they are rated lower, and the band deliberately does not reach a scene the
-scorer genuinely prefers against. Whether they *should* be reachable on this album is the next
-product question, and it points back at the scorer's discrimination (mood + tempo only), not at the
-sampling.
-
-**BUG-132 held across the long session:** 8 `grid_bpm` changes for 1 opener + 7 track changes, none
-mid-track. `chain_health` clean, peak −0.07 dBFS, `maxFullScaleRun` 0 (BUG129.1's field reporting on
-a real capture).
-
-**Golden fixture re-checked on the real roster (GOLDEN.1, 2026-09-24).** BETA.0's
-`GoldenSessionTests` Session A had regressed to `[VL, Membrane ×4]`, which looked like the monopoly
-coming back. It was the fixture: a stale 10-scene hand mirror. Loading the shipped sidecars,
-Membrane never appears. At seed 0 (argmax, test-only) the track-firsts still repeat, e.g. Cymatic
-Resonance ×5, each track cycling the same 3 scenes. That is the track-granularity repeat noted
-above, not a single-scene monopoly. On the seeded production path the same session draws 7–11
-distinct scenes over 15–16 segments (seeds 1…24).
-
-⚠ **Matt's felt verdict is still outstanding** — the automated question was "do more scenes
-appear", and the answer is yes; the question only he can answer is whether any of the newly-admitted
-scenes is *wrong for the song*. That is the failure mode of widening the band, and no count detects
-it.
-
----
-
 ### OBS-DS6-1 — Ferrofluid Ocean blacked out mid-track during the DS.6 M7 (2026-09-03, recorded not chased)
 
 **Severity:** P3 · **Domain:** `preset.fidelity` / Ferrofluid Ocean · **Failure class:** unknown (unverified)
@@ -1612,18 +1009,6 @@ withholds a drawable from a client holding none.
 
 ---
 
-### BUG-070 — Failed tap reinstall leaves untruthful capture state; engine detectors starved (2026-07-12)
-
-**P2 · audio.capture / resource-management.** From the 2026-07-11 ultra review (concurrency + audio dimensions); root cause verified in code at PUB.6.
-
-**Expected:** after a failed device-change reinstall, the capture object's state reflects reality (not capturing), engine-side health classification can still fire, and a recovery restart can proceed.
-**Actual (pre-fix):** `performReinstall`'s catch did nothing — its comment claimed "the create steps already tore down + stopped the monitor on failure," which was false on both counts. End state: `_isCapturing=true`, monitor running, zero IO callbacks → `SignalHealthMonitor.evaluate` (sample-driven, `ingest` window boundaries) never runs so `deadTap` never confirms; the router's `.silent` recovery is likewise callback-starved; `startCapture` recovery blocked by the alreadyCapturing guard. Only the app-layer Mode-B stall card (1 Hz poll on the tap frame count, ~10 s dwell) surfaced it — detection existed, engine truth and recovery did not.
-**Fix (landed, PUB.6):** catch clears `_isCapturing` (unblocks stopCapture+startCapture recovery), monitor deliberately left running as a diagnostic beacon (later fires land in the SKIP branch and breadcrumb), comment corrected.
-**Verification criteria:** automated — engine builds; audio suites green (a real failed reinstall cannot be staged headless: Core Audio create-step failures need a live device transition). Manual (pending): a live device-swap session confirming normal reinstalls still work (the G1 12/12 behaviour), and — if a reinstall failure can be provoked — the stall card appears AND a subsequent session restart recovers cleanly.
-**Residual (documented, deliberately open):** the 3-queue lifecycle interleave (device-change reinstall vs silence-recovery reinstall vs user stop) is real but static-only evidence; the per-step breadcrumbs + install-generation probes are the instrumentation. Serialize ONLY on a reproduced interleave artifact — restructuring the G1-live-validated path on theory is the BUG-063 class.
-
----
-
 ### BUG-077 — `BeatGridResolver.snapToBeats` diverges from the Beat This! reference post-processor (2026-07-30)
 
 **P3 · dsp.beat / api-contract.** Found at DBN.1 while auditing the resolver against the paper it implements.
@@ -1863,28 +1248,6 @@ Run it *during* the beachball, before force-quitting. Without a blocked stack th
 **Why PR.5.4 missed it.** Its success metric was `nearWhite` (all channels ≥ 235). Pale cream is 170–230 in the low channel. The metric measured the thing that was fixed and could not see the thing that remained — record this alongside the span artifact and the track-averaged `nearWhite`.
 
 **Where to look if reopened.** Our accumulator runs roughly twice the reference field's brightness on the same material (ours 0.75 field luma at the drop vs the reference display 0.20 → field ≈ 0.8 inverted… measure it directly, do not infer). Candidates not yet tested: the strand ink stored as HDR (`hi` up to 2.0 in a float target; the reference clamps at 1.0 on write — probe F tested only nearWhite, not luma), and the ×4 boost the oracle applies before analysis (our stem energies are not boosted the same way). One increment, one comparable number, hard stop.
-
-### BUG-117 — a declined bar estimate says "every beat is a downbeat" (2026-09-07)
-
-**Severity:** P1. It reaches every scene that consumes bar position, on every track where the estimator declines.
-**Domain tag:** `dsp.beat` · failure class **`api-contract`**.
-**Status:** **Fixed 2026-09-08** — pending Matt's live confirm. `BeatGrid.hasBarInformation` makes the state expressible; bar phase holds and `isDownbeat` stays false without it. ⚠ **Shipped once with a hole:** the predicate was `!downbeats.isEmpty || beatsPerBar > 1`, and non-empty downbeats do NOT mean the bars are known — the over-firing head fills that array precisely when it knows least. Matt's session `2026-09-08T13-58-15Z` proved it in the field: 2,549 frames correctly claimed no downbeat while bar phase still ramped to 0.99 on every one of them. Corrected to `beatsPerBar > 1` — the meter is the whole test.
-**Introduced:** the encoding dates to FT.4 (`applyBarLineEstimate`); PR.17 (2026-09-05) made it reachable by default on local files.
-**Resolved:** —
-
-**Reported.** Matt, 2026-09-07, after one session on the 2026-09-05 build: *"Ferrofluid Ocean … the beat sync is worse not better. Fractal Tree is too animated. Witchlight has no pulse. The pulse of Aurora Veil is no longer in sync with music. Everything is worse."*
-
-**Expected.** A grid that found no bar structure reports that it has none, and a scene reading bar position gets nothing to fire on.
-
-**Actual.** It reports `beatsPerBar = 1` with an empty `downbeats` array. `BeatGrid.beatsSinceDownbeat` then falls back to `idx % max(beatsPerBar, 1)`, which is **0 for every beat** — so `beatInBar` is always 1 and `isDownbeat` is always true. A bar-locked event fires on every beat instead of every fourth; a bar-phase reader gets a constant.
-
-Session `2026-09-06T00-17-00Z`: **`beatsPerBar == 1` on 18,040 of 19,833 frames (91 %)**, **`is_downbeat == 1` on 18,559 (94 %)**.
-
-**The mechanism it rode in on is not the defect.** The windowed estimator decodes take_five as 5/4 across 11 of 11 windows and money as 7/4 — cases four previous levers failed on — with 20 correct and 0 incorrect over 68 labelled windows. What it also does, far more often than the model's downbeat head did, is DECLINE. The decline encoding was rare enough to go unnoticed before and became the common case after.
-
-**Why the review did not catch it.** `beatsPerBar = 1` was observed in session `2026-09-05T18-17-12Z` during the BUG-116 investigation, noted, and not followed up. The PR.17 commit message asserts a declined track is *"the same shape a track with no detected bars already produces, so consumers need no new case"* — that claim was never checked against `beatsSinceDownbeat`, and it is false.
-
-**A fix has to decide what "no bars" means on the wire.** `beatsPerBar = 0` with the modulo fallback removed, or an explicit optionality on `BeatGrid`, or `beatsSinceDownbeat` returning nil when `downbeats` is empty. All three touch every consumer, which is why this is its own increment and not a patch to the revert.
 
 ### BUG-084 — `StemAnalyzer` deviation reaches 35 where the primitive's real ceiling is ~3.4 (suspected EMA divide-by-tiny) (2026-08-03)
 
@@ -2263,6 +1626,7 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 | `StemSeparationPerformanceTests.test_separate_1SecondAudio_performance` | Same shape; MPSGraph submit under parallel load | Re-run in isolation to confirm before treating as a regression |
 | `PlayheadAnalysisClockTests` — "A stalled or paused playhead delivers silence, not the last frame forever" | Asserts an **exact** delivered-tick count (`delivered.count == stallFlushTicks - 20`) on a timer-driven dispatch source; under parallel load the clock over-delivers (observed 106 vs 100, and some frames not yet flushed to zero). Not a GPU submit — a counting assumption. Observed 1/5 full runs, BUG139.1, 2026-09-23 | Re-run in isolation. **The real fix is to drop the exact-count assumption**, per the deterministic-over-budget-widening rule (CLEAN.7.9–7.14) — assert the flush *reaches* silence, not how many ticks it took |
 | `StagedPersistenceTests` — "the watchdog probe's cost is set by the block, not by the texture" | Asserts a cost-growth **ratio** (`growth < 2.0`; observed 2.32) under the full parallel suite. Observed 1/5 full runs, BUG139.1, 2026-09-23 | Re-run in isolation. Same remedy shape as the rows above: take a min over warm samples rather than a single contended measurement |
+| `AnalysisRateGateTests` — "Deliveries land in distinct render windows" | Asserts an observed delivery rate ≥ 50 Hz (`floorHz`); read 48.5 Hz once under the full parallel suite (BUG149.1 run, 2026-10-01), passes in isolation. Not deflaked — a wall-clock floor, the TESTFLAKE shape | Re-run in isolation to confirm before treating as a regression |
 
 *(The three perf rows were added at RECON.2, 2026-08-03. They were declared "confirmed flake" during the BUG-080 investigation but never reached this table — so each run re-litigated them from scratch. **These are the known-flaky *shape*** — a single wall-clock sample around a GPU submit — that CLEAN.7.9→7.14 fixed elsewhere by asserting the **minimum of N warm samples** rather than one sample, or by removing the timing assumption entirely. Per the deterministic-over-budget-widening rule these three should get the same treatment rather than staying in this table; that is a small, well-precedented increment, not a mystery. Until then: a failure here is not evidence of a regression on its own.)*
 
@@ -2288,34 +1652,129 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 
 ## Resolved (recent)
 
-### OBS-DS4-1 — The detailed preparation view shows a suspiciously uniform readout on a real playlist (2026-09-02, DS.4 live run)
+### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
 
-**Resolved 2026-09-30 — Matt's live check (listening session 1, build 9): "As expected."** BPM and energy vary song to song; key reads mostly F♯ minor, which is BUG-149 (open, display-only).
+**Resolved 2026-10-01 — live check passed (build 10 and the PREP.3 build, Matt):** Next and seek while preparation ran never stalled.
 
-**Status: observed, recorded not fixed.** Found during DS.4's task 10 timing runs. **P3.**
+**Severity:** P3 (test flake; the product risk below is open and unobserved) · **Domain:** `test-infra` / `audio.playback` · **Failure class:** `concurrency` (a wall-clock deadline on a callback delivered through a starved pool) · **Status:** Fixed (BUG156.1, `35abbcf1`) · **Introduced:** LFSEEK.1 (`2639294d`, 2026-09-28 09:08), which switched the queue-advance completion to `.dataPlayedBack`. The flake first appeared eight hours later. · **Related:** BUG-103 (the same suite's other face), BUG-151 (why `.dataPlayedBack`), BUG-154 (same fix shape)
 
-**What was seen.** On Tunes Club TC 29 (40 tracks — ambient, techno, downtempo), the detailed
-view's first ten heard tracks read **132–138 BPM** and **nine of ten read "bright"** (the happy
-quadrant). A genuine spread across that playlist would show it. Evidence:
-`docs/reviews/DS.4/after/live-mid-detailed.png`, `live-early-detailed.png`.
+**Expected:** `SessionLifecycleChurnTests.onFileEnded_queueAdvanceChurn_neverHangs` passes however loaded the test process is. A missing `onFileEnded` still fails it.
+**Actual:** it failed once in a full engine run on `ff-5` (`b706c315`, 2026-09-28 17:09): *"failed after 10.317 seconds with 1 issue"*. It then passed 5/5 alone (~2.75 s each), and the next full run was 2107/2107. Reproduced first-hand on 2026-09-28 with a probe in the test: **2 of 2 full runs stalled at advance 0.** A peer session's engine suite was running at the same time, so this is not a clean "no peer" repro; the mechanism below does not depend on it.
 
-**What it is not.** Not a DS.4 rendering defect: `PreparationTrackRow` prints `TrackProfile.bpm`
-and `TrackProfile.mood.quadrant` verbatim, and those come from `SessionPreparer+Analysis` — the
-same 30 s-preview MIR the Orchestrator has always planned from. DS.4 made it legible for the first
-time; that is the whole finding.
+**What the stall looks like** (probe snapshot at the 5 s timeout): engine running, player playing, playhead at sample 219 957 of an 11 025-frame file (0.25 s of audio, played 20 times over), no stale reschedule, no config change, and **AVFAudio's completion handler never invoked.** The playhead kept advancing in real time. The callback arrived **late, not lost:** after 20.0 s in run 1 and 14.9 s in run 2.
 
-**No root cause asserted** (BUG-061 rule). Two candidates worth *measuring*, not assuming: the mood
-scaler's valence behaviour after DYN.6.2 (BUG-066 records the flux residual; DYN.6.2 narrowed
-valence spread), and the preview-window tempo instability BUG-076 documents. A third possibility is
-that the playlist really is this uniform at the preview excerpt — which is why this is an
-observation, not a bug.
+**Mechanism (established).**
+1. A `sample` of the test process taken during the stall shows no thread running AVFAudio's played-back timer. `LocalFileSeekTests.seekMovesThePlayhead` sat the whole 2 s in `-[AVAudioPlayerNode stop]` → `StopImpl` → `AVAEDispatchQueueTimer::CancelTimer()` → `semaphore_wait`. About eight of the ten `com.apple.root.default-qos.cooperative` threads were busy in CPU-bound synchronous tests (Mitosis, Skein, Witchlight luma loops).
+2. A controlled experiment in one process (a 0.25 s file, 2 × ncpu spinner blocks for 8 s) isolates it:
 
-**Why it matters for DS.4.** The detailed view's proposition is *"what Uzume heard."* If what it
-heard is mostly one word and one tempo, the readout stops being interesting, and the mysterious
-view's `PreparationCharacter` (mood spread, rate) has less to work with than the design assumed.
-Worth its own increment before the detailed view reaches beta listeners.
+   | spinners at | `.dataPlayedBack` latency | `.dataConsumed` latency |
+   |---|---|---|
+   | none | 0.317 s | 0.007 s |
+   | background / utility | 0.316 / 0.315 s | — |
+   | **default / userInitiated** | **8.50 / 8.55 s** (released with the spinners) | 0.002–0.010 s |
 
----
+   The caller's QoS doesn't matter: `play()` from a userInteractive, userInitiated or default thread all waited ~8.3–8.5 s. With the spinners never released, the completion never came, and the `player.stop()` after it blocked in `CancelTimer` for **14 h** (sampled, then killed).
+
+So `.dataPlayedBack` completions are delivered from a timer in the process's constrained default-QoS dispatch pool. The parallel suite fills that pool with Swift Testing's synchronous CPU-bound tests; in one run it stayed saturated for **212 s**. A 5 s deadline on the callback was measuring the neighbours. External CPU load (`yes` × 20, plus audio churn in another process) did **not** reproduce it, 15/15 green: the pool is per process. `.dataConsumed`, the type before LFSEEK.1, doesn't go through it, which is why the suite was quiet until 2026-09-28.
+
+**Reproduction.** A full `swift test --package-path UzumeEngine` with a probe logging the provider state at the timeout; or the in-process spinner experiment above, which is deterministic.
+
+**Fix (test-only).** `awaitPlayedBackEnd` (`Tests/UzumeEngineTests/Audio/PlayedBackWait.swift`) replaces the bare `wait(5 s)` in the churn test and in `LocalFileSeekTests.seekMovesThePlayhead`, the sibling caught in the stall sample. After the 5 s budget it queues a canary on the default-QoS pool, behind the overdue completion. While the canary is pending, the pool hasn't had its turn, so a callback that lands then passes the moment it lands. Once the canary has run, the completion has been dequeued; the callback gets the same 5 s again, and missing it means lost. The verdict is an ordering. **No timeout was widened.** A lost callback still fails, 5 s after the pool proves it has had its turn. `LocalFilePlaybackProvider` is unchanged.
+
+**Verification.**
+1. ✅ Deterministic gate: `PlayedBackWaitTests`. A suspended queue stands in for the starved pool, and a callback landing at 4× the budget passes; with a live pool, a callback that never comes fails. **Negative control:** the bare `wait(budget)` fails the first test (run 2026-09-29).
+2. ✅ Three consecutive full engine runs on the fixed tree (a temporary late-path log line added for evidence, removed before commit): **runs 2 and 3 green, 2117/2117.** In run 1 the churn test passed through the late path in 13.1 s, where the old wait would have failed at 5 s. Run 1 went red on `StemSeparatorConcurrencyTests` (see *Sibling* below): same mechanism, not this change.
+3. Manual: none (test-only change).
+
+**Sibling, same mechanism (fixed separately as BUG-157, BUG157.1).** `StemSeparatorConcurrencyTests.concurrentSeparations_returnPerCallerOwnStems` dispatches its eight separations to a private concurrent queue at default QoS, the pool above, and asserts a fixed `group.wait(timeout: 180 s)`. In run 1 of this increment's verification that wait timed out (198 s), and all three assertions after it failed on the empty collector. It was in the BUG-156 stall sample too, blocked at line 101. The remedy has the same shape: its work is not stuck, it is queued. Its wait could be ordered the same way, or the queue given a QoS above the saturated band.
+
+**Open — product risk, not observed.** The app depends on the same pool. With `onFileEnded` set, the local-file queue advance waits for that completion, and `stop()` (Next, Stop, a seek) calls `player.stop()`, which waits in `CancelTimer` while a played-back timer is pending. If the process's default-and-above pool is saturated during local-file playback, a track advance would be late, and a MainActor `stop()` could stall for as long as the saturation lasts. `SessionPreparer` runs its analysis as `Task.detached(priority: .userInitiated)`, a band the experiment shows delays the completion just as much. **Not established:** whether preparation ever overlaps local-file playback with enough parallel CPU work to saturate the pool, and no app session has shown a late advance or a Next-press stall. Evidence needed before any provider change: a live local-file session with preparation running, timing `onFileEnded` against the file's end and `stop()` on the MainActor.
+
+### BUG-148 — stored valence is negative on every beta-playlist song (2026-09-26)
+
+**Resolved 2026-10-01 — live check passed (build 10, Matt):** scene choice *"Looks good. Good variety overall."*
+
+**Severity:** P2 · **Domain:** `ml.mood` → `orchestrator` · **Failure class:** `algorithm` (a model that does not generalise beyond its 12 training songs) · **Status:** Fixed by replacement (D-259, NRG.1–3, 2026-09-27); Matt's live check pending · **Found by:** Matt's BUG-144 check, 2026-09-26: *"all of the moods were listed as 'restless'"* · **Related:** BUG-144, BUG-149, OBS-DS4-1, BUG-066, DYN.6.2
+
+**Expected:** stored valence spreads with the music: cheerful songs (Penny Lane) positive, dark ones negative. **Actual:** the app's own cache after the BUG-144/145/146 build (schema v16, 2026-09-26 14:48–14:59) stores negative valence on **10/10** songs: Dance Yrself Clean −0.41, B.O.B. −0.34, Superstition −0.37, Teen Spirit −0.83, Penny Lane −0.25, Take Five −0.22, Pyramid Song −0.03, Teardrop −0.27, Moonlight I −0.02, Warszawa −0.03. The label is only a quadrant (`EmotionalState.quadrant`: negative valence with positive arousal reads "restless", negative with negative reads "wistful"). By these values Penny Lane and Moonlight I should read "wistful".
+
+**Consumers:** `PresetScorer.moodSubScore`. Valence → colour-temperature target (0.5 + 0.4·v), half of the mood term, which is 40 % of each score. Also the preparation view's mood word.
+
+**First facts (diagnosis in progress; no root cause asserted).**
+- The shipping model was trained at `d586e57` (2026-04-07) on **818 frames from 12 hand-labelled songs** (`~/phosphene_features_annotated.csv`), recorded from the live path at the time.
+- At the scaler's mean feature vector the model outputs valence **−0.42**, arousal +0.41. An "average" input reads restless.
+- Replayed on its own training features, it still separates valence: Love Shack +0.45, Love Rehab +0.68, No Surprises +0.22, Pyramid Song −0.50. With the pre-DYN.6.2 flux scaler those read +0.66 / +0.71 / +0.43, so the corpus flux re-fit trims valence by 0.1–0.2 without flipping it.
+- The open question is what differs in the features preparation feeds the model today (post BUG-066 / DYN.4–7 / BUG-146).
+
+**Diagnosis (2026-09-26).** Evidence is in `~/Documents/uzume_spikes/bug148/`: the Python replica `mood_mlp.py`, `loso.py`, the per-frame inputs `feat/`, and the uncommitted recorder patch.
+1. **Instrument.** `PrepTimingRunner` with a recording classifier captured every frame's 10 inputs and output on the ten songs (Release, shipping pipeline). A Python replica of the model, parsed from `MoodClassifier+Weights.swift` and the scaler, reproduces the app's per-frame state to **3×10⁻⁵** on all ten.
+2. **Input shift.** Against the 12 training songs, today's preparation inputs sit within ±0.3 training σ on bands and centroid. Flux sits **+2.5 σ** (median 0.75 vs 0.23; beta max 1.71 vs training max 0.43), and both key correlations sit about **−0.75 σ**.
+3. **No single input explains it.** Resetting one input group to its typical-training value swings valence erratically in both directions: flux takes Dance Yrself Clean −0.42 → +0.59 but Penny Lane −0.25 → −0.42. The typical-training input vector itself reads −0.56.
+4. **The model does not generalise.** Leave-one-song-out with the exact `train_mood_from_live.py` recipe, 3 seeds, 12 held-out songs. Valence sign agreement is **42 %** (chance 50 %), Pearson r **−0.30**, MAE 0.62. Arousal sign agreement is **50 %**, r −0.04, MAE 0.50. The seed spread is small (0.13). The shipping recipe's validation split shuffles frames, so its validation frames came from the training songs; the `d586e57` "✓ per-track accuracy" measured memorisation.
+5. **Library scale** (census proxy: the model applied to each track's mean inputs, `full_results.csv`, n = 27,638): median valence **−0.15**, 61.5 % negative. Labels would read restless 43.5 %, bright 33.0 %, wistful 18.1 %, calm 5.5 %.
+
+**Root cause:** the valence (and arousal) the model outputs on unseen music is not better than chance. It was trained on 818 frames of 12 hand-labelled songs, validated on frames of those same songs, and today's flux runs far outside the range it saw. The beta playlist's 10/10 negative valence and the library's 61.5 % are that model's bias, not a measurement. A 12-song held-out test is itself small, so the chance-level result is a floor on the evidence, not a precise estimate.
+
+**Verification criteria for any fix (written before the fix).**
+1. Automated: leave-one-song-out (or a held-out-artist split) on the training set, reporting sign agreement and r against their chance levels. It must clearly beat chance: valence sign ≥ 70 %, r ≥ 0.5.
+2. Beta playlist: Penny Lane reads positive valence; Teen Spirit and Pyramid Song read negative.
+3. Library proxy: the quadrant split is reported, not asserted.
+4. Manual: Matt's mood check on the beta playlist.
+
+**Resolution (D-259, 2026-09-27).** Matt judged the mood taxonomy itself unusable and chose a measured energy value instead. Nothing was retrained, and valence and arousal left scene choice:
+- NRG.1 (#290) measures each song's energy curve.
+- NRG.2 (#292) puts it on a library-calibrated 1–10 scale in the preparation view.
+- NRG.3 makes the planner score scenes and transitions against the energy of each stretch, and removes the mood-driven live override. Reactive mode stops scoring mood.
+
+**Still reading the model:** the live classifier's `valence` / `arousal` inside about a dozen certified scenes, and Lumen Mosaic's palette pick (Matt: *"leave the certified scenes alone for now"*). The verification criteria above for a retrained model no longer apply to scene choice.
+
+### BUG-176 — Membrane and Waveform flashed in part of the screen at fast tempos (2026-09-30)
+
+**Resolved 2026-10-01 — both halves passed live (build 10).** Membrane on B.O.B. (session 1), Matt: *"No flickers."* Waveform for 23 s with music in session `2026-10-01T18-05-22Z` (from 18:13:12Z), Matt: *"Waveform did not flicker."*
+
+*(Numbering: filed as BUG-175 on `br-20`; renumbered to BUG-176 when #342 merged first with its own BUG-175.)*
+
+**Severity:** P1 (photosensitivity) · **Domain:** renderer / photosensitivity · **Failure class:** `render-state` · **Status:** Fixed 2026-09-30 (BR.20) — pending the felt check in listening session 1 · **Found by:** the flash check v2 (BR.20 / audit I8)
+
+**Expected.** No region of the frame the size of WCAG's small-safe area (a ninth of the screen) flashes more than three times a second, under the 270 BPM worst-case beat train the gate uses.
+**Actual.** The whole-frame check (v1) passed both; the new regional check did not. **Membrane** (certified) — 4.0 regional flashes/s: each strike ring's bright crest and dark trough sweeping across a patch of skin. **Waveform** (uncertified, but the launch screen and the fallback) — 5.0: its 64 bars read the raw spectrum, so a kick's bars jumped to full and dropped straight back.
+**Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
+**Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
+**Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
+
+### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** A 44 s Spotify pause (18:10:01–18:10:45Z) resumed on the same song with no track change; the next change (18:11:31Z) was the real next song.
+
+*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
+
+**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
+
+**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
+- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
+- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
+- cut the song's first planned scene back in;
+- restarted the track clock at 0, so every later planned change landed offset.
+
+A single failed poll mid-song did the same.
+
+**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
+
+**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
+
+### BUG-171 — background preparation disturbed the live visuals' drivers (2026-09-29)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** *Start now* with 7 of 40 songs prepared; the other 33 finished behind playback. Matt saw no twitch as songs finished preparing.
+
+*(Numbering: filed as BUG-167 on `br-9`; renumbered to BUG-171 behind BR.6a, BR.6b, BR.7 and BR.8.)*
+
+**Severity:** P1 (the primary visual drivers jump during normal streaming sessions) · **Domain:** session / `dsp.stem` · **Failure class:** `concurrency` (shared mutable analysis state) · **Status:** Fixed 2026-09-29 (BR.9). Visibility was never measured live; see the listening note below.
+
+**Actual** (audit C3/G3, re-verified ✔︎). `makeSessionManager` handed the engine's live `StemAnalyzer` and `MoodClassifier` to `SessionPreparer`, "to avoid double-loading the ML weights". Neither object has weights. Preparation runs about 430 `analyze` frames and about 1,300 `classify` calls per track on them, with no reset. That happens behind playback every few seconds, for minutes. So the live AGC level was ~97 % replaced and the deviation EMA moved ~38 %: live `bass` / `drums` energy and the `*Dev` drivers jumped or flattened for 1–2 s, and live mood snapped to the other song.
+
+**Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
+
+**Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
 
 ### BUG-157 — the StemSeparator concurrency test waited on a thread pool the suite keeps busy (2026-09-29)
 
@@ -2515,110 +1974,6 @@ Worth its own increment before the detailed view reaches beta listeners.
 **Verification.**
 1. ✅ Automated: with 500 ms of latency injected into both mock connectors, both suites pass 16/16 (before the fix, 3/4 OAuth tests failed). Full app suite 476/476; SwiftLint strict clean.
 2. Manual: none required (test-only change; the VM's behaviour is unchanged).
-
----
-
-### BUG-142 — a Now Playing poll in flight at `stopObserving()` fires a stale track change (2026-09-25)
-
-**Severity:** P2 · **Domain:** `audio` (streaming metadata) · **Failure class:** `concurrency` · **Status:** Fixed (BUG142.1, `86ba965e` + `d9500a41`), merged #277 (`5f4d421e`) · **Related:** BUG-024 (the same stale-surface-across-a-session-boundary class, CLAUDE.md §What NOT To Do)
-
-**Symptom.** CI fast-gate run 36162100751 (PR #275, attempt 1) failed `StreamingMetadataTests.trackChange_secondTrack_hasPrevious` at line 115: `events.value.count → 3`, expected 2. `main` passes it normally. The same log shows the test took **0.698 s** against its ~0.45 s of sleeps, so the runner was starved. Only the count expectation failed: `events[1]` was correctly A → B, so the extra event came after the second one, with the track unchanged.
-
-**Expected:** after `stopObserving()` returns, no `onTrackChange` fires and `currentTrack` stays `nil` until the next `startObserving()`.
-**Actual:** `stopObserving()` cancels `pollingTask` and clears `_currentTrack` / `lastTrackIdentity` under `lock`, but `pollNowPlaying()` did not re-check anything after `await reader()` returned. A poll parked in the reader when stop ran resumed, saw `identity != lastTrackIdentity` (now `nil`), wrote `_currentTrack` back, and fired `onTrackChange(previous: nil, current: …)`. In the CI case that was the third event.
-
-**Production impact.** `AudioInputRouter.stop()` calls `stopObserving()`, and the real reader is an AppleScript query to Music/Spotify that can take hundreds of ms, so the window there is wider than in the test. The router forwards the late event to the app as a fresh track change after the session ended. A restart had the same hole: `startObserving()` calls `stopObserving()` first, and the old task's in-flight poll could fire into the new session. Not observed live; found through the CI flake.
-
-**Reproduction (deterministic).** `stopObserving_whilePollInFlight_firesNoEvent`: the reader parks on a continuation, the test waits until it is parked, calls `stopObserving()`, releases the reader and awaits the polling task. On the unfixed code it fails every time in 0.002 s: 1 event (expected 0) and `currentTrack` = Track A (expected `nil`). No sleeps.
-
-**Fix.** `StreamingMetadata` keeps a `generation` counter. `stopObserving()` increments it under `lock`, and `startObserving()` passes the current value to its polling task. Both of a poll's locked state writes (the nil-info clear and the compare-and-fire) do nothing unless the poll's generation is still current. The check is inside the same lock as the stop's clear, so the ordering is fixed: either the poll's write lands before the stop (and the stop clears it), or it sees the new generation and drops its result. A `Task.isCancelled` check alone would leave a window between the check and the lock. **Remaining ceiling:** `onTrackChange` is called outside the lock (calling it inside could deadlock a callback that calls stop). A poll that passed the locked compare *before* the stop can still deliver its event while the stop is running. That event describes a change detected before the stop, and `currentTrack` is still left `nil` after the stop.
-
-**Verification.**
-1. ✅ Automated: `stopObserving_whilePollInFlight_firesNoEvent`. It **failed** on the unfixed code (both expectations) and passes after the fix. The rest of the `StreamingMetadata` suite (8 tests) passes, and so does SwiftLint strict.
-2. The existing `trackChange_secondTrack_hasPrevious` is unchanged; its sleep budget was **not** widened. The late third event it caught can no longer happen. It still relies on sleeps to see A and then B, which is a separate timing assumption that this fix does not remove.
-3. Manual: none required (no musical-feel or visual surface). A streaming session stop no longer logs a `Track change detected` line after `Stopped observing Now Playing metadata`.
-
----
-
-### BUG-143 — the app test host crashes when three DS.6 tests close an `NSWindow` they built (2026-09-25)
-
-**Severity:** P2 · **Domain:** `test-infra` (UzumeAppTests) · **Failure class:** `resource-management` (an Objective-C over-release) · **Status:** Fixed (BUG143.1, `63a8aac4`; diagnosis `fae0b0b7`), merged #282 (`7c60f5da`) · **Related:** BUG-072 (another way the app test host dies, exit 65) · **Renumbered** from BUG-147 before merge (Matt, 2026-09-26): the commits `fae0b0b7` / `63a8aac4` / `1908a561` say BUG-147 / BUG147.x. The two unmerged branches that also claimed 143 have renumbered: `happy-agnesi`'s three defects are BUG-144–146 (#285), and `great-franklin`'s planner-seed defect is BUG-147
-
-**Symptom.** Step 2 of `Scripts/closeout_evidence.sh` (`xcodebuild -scheme UzumeApp -destination 'platform=macOS' test`) sometimes exits 65 when it runs straight after step 1 (the full engine suite). The xcresult reports `Crash: Uzume at <external symbol>` against every test in flight (123 of them in the 17:19 run). The retry then prints `Test run with 0 tests in 35 suites`. Run on its own straight afterwards, the same command passes 474/474. It reproduced at `1949f207` (before FF.2) and at `f0b10018` (branch `ff-2`).
-
-**Expected:** the test host runs every app test and exits 0, whatever ran before it.
-**Actual:** `EXC_BAD_ACCESS (SIGSEGV)`, `KERN_INVALID_ADDRESS`, main thread: `objc_release` ← `AutoreleasePoolPage::releaseUntil` ← `objc_autoreleasePoolPop` ← `swift::runJobInEstablishedExecutorContext` ← `_dispatch_main_queue_drain`, under `XCTWaiter` waiting on the main run loop for the Swift Testing run. In other words, a main-actor job's autorelease pool drained an object that had already been freed. Crash reports: `~/Library/Logs/DiagnosticReports/Uzume-2026-09-25-144026.ips` (crashed 5.9 s after launch), `Uzume-2026-09-25-171929.ips` (5.2 s after launch). No app frames are on the crashing stack.
-
-**Which test.** The 17:19 xcresult (`DerivedData/UzumeApp-…/Logs/Test/Test-UzumeApp-2026.09.25_17-19-15--0500.xcresult`, exported with `xcresulttool export diagnostics`) has the host's stdout. The last line pid 83756 printed before the crash is `✔ Suite "PerformanceToast layout" passed after 1.725 seconds.` That suite's one test (`PerformanceToastLayoutTests.toast_doesNotStretchToProposedHeight`) builds an `NSWindow` in code and closes it in a `defer`.
-
-**Root cause.** An `NSWindow` created in code has `isReleasedWhenClosed == true`. That is a pre-ARC convention: `close()` releases the window once more on the caller's behalf. Swift's ARC also owns the window and releases it when the local goes out of scope, so the window gets one release too many. Three DS.6 tests use this pattern: `PerformanceToastLayoutTests`, `PlaybackChromeReducedMotionTests`, and `ReviewCaptureHarness.render` (which only renders when `UZUME_CAPTURE=1`). The freed window only crashes when something still touches it after the pool drains and its memory has been reused. That depends on timing and on the allocator's state, which is why the crash needs a loaded, memory-churned machine (straight after the engine suite) and never showed up in isolation.
-
-**Evidence that the pattern over-releases** (a standalone AppKit probe, `NSZombieEnabled=YES`, the same constructor, `contentView = nil` then `close()`):
-- unfixed: `isReleasedWhenClosed true` → `*** -[NSWindow release]: message sent to deallocated instance`, exit 133, at the pool drain;
-- with `isReleasedWhenClosed = false` before `close()`: the window stays alive through `close()`, is freed normally when the last reference goes, exit 0.
-Inside the test host, the same test run alone with `TEST_RUNNER_NSZombieEnabled=YES` passed. AppKit and SwiftUI hold references of their own there, and they change when the last release lands. This is the same timing dependence as the original crash, so a passing isolated run proves nothing either way.
-
-**Verification criteria (written before the fix).**
-1. Automated, deterministic: a test builds a window through the shared offscreen-window helper, closes it inside an `autoreleasepool` while still holding it, and asserts the window is still alive afterwards (a `weak` reference is non-nil). It must **fail** when the helper leaves `isReleasedWhenClosed` at its default.
-2. Automated, a guard against copying the pattern again: no `UzumeAppTests` file may both call the raw `NSWindow(` initializer and `close()`; such tests use the helper instead.
-3. The reproduction passes: step 1 (`swift test --package-path UzumeEngine`) then step 2 (`xcodebuild … test`), back to back, exit 0. **No timeout is widened.**
-4. Manual: none (test infrastructure only; no product surface).
-
-**Fix.** `UzumeAppTests/OffscreenWindow.swift` adds `NSWindow.offscreen(_:)`, which builds the borderless dark window those tests used and sets `isReleasedWhenClosed = false`. `PerformanceToastLayoutTests`, `PlaybackChromeReducedMotionTests` and `ReviewCaptureHarness` build their windows through it. The raw `NSWindow()` uses in `FullscreenObserverTests`, `EscBehaviorTests` and `SettingsStoreEnvironmentRegressionTests` never `close()`, so they cannot over-release and are unchanged.
-
-**Verification (results).**
-1. ✅ `OffscreenWindowTests.close_doesNotFreeAHeldWindow`. With the helper's `isReleasedWhenClosed = false` commented out it **crashed the host 3/3** with the identical BUG-143 frames (`Uzume-2026-09-25-203719/203738/203757.ips`), and the retry printed `0 tests`, exactly as in the closeout failure. A `#require` on the flag now makes a regression fail cleanly rather than crash. Fixed: 3/3 pass, together with the two converted tests.
-2. ✅ `OffscreenWindowTests.noRawWindowIsClosed` listed exactly the three DS.6 files before they were converted, and passes after.
-3. ✅ Back to back: `swift test --package-path UzumeEngine` then `xcodebuild -scheme UzumeApp -destination platform=macOS test` → **476/476, exit 0**. Note that one unfixed back-to-back run (with `TEST_RUNNER_NSZombieEnabled=YES`) also passed 474/474. The crash is intermittent in the full suite, so criterion 1, not this run, is the gate that proves the fix. SwiftLint strict: 0 violations. No timeout widened.
-
----
-
-### BUG-145 — `TrackProfile.bpm` reads 130–143 on every song (2026-09-25)
-
-> **Reconciled 2026-09-30 (BR.KI ledger pass).** Resolved 2026-09-26: criterion 4 passed ("the BPMs look right"). The "outstanding" status line is stale.
-
-**Severity:** P2 · **Domain:** `dsp.mir` → `orchestrator` · **Failure class:** `pipeline-wiring` (the profile stores a saturated estimator while the trusted grid tempo sits beside it) · **Status:** Fixed (BUG145.2); the manual preparation-view check (criterion 4) is outstanding · **Related:** OBS-DS4-1, BUG-076, D-073, D-075
-
-**Expected:** a song's BPM. **Actual:** on the beta playlist (local path, Release), every value falls between 130.6 and 143.3:
-
-| Song | `TrackProfile.bpm` | Cached grid BPM | Drums grid BPM |
-|---|---|---|---|
-| Dance Yrself Clean | 132.8 | 98.0 | 98.1 |
-| B.O.B. | 130.6 | 153.8 | 154.2 |
-| Superstition | 143.3 (134.6 resampled to 44.1 kHz) | 101.4 | 97.0 |
-| Smells Like Teen Spirit | 135.8 | 117.3 | 118.0 |
-| Penny Lane | 136.2 | 113.3 | 162.7 |
-| Take Five | 136.0 | 171.4 | 170.7 |
-| Pyramid Song | 130.9 | 95.2 | 72.6 |
-| Teardrop | 132.7 | 78.8 | 88.2 |
-| Moonlight I | 135.8 | 44.5 | 76.1 |
-| Warszawa | 133.5 | 75.2 | — |
-
-`analyzeMIR` stores `MIRPipeline.stableBPM`, which is the legacy `BeatDetector` IOI-histogram tempo. The Beat This! grid is computed in the same `analyzePreview` call and cached beside it. Nothing on the local path overrides the profile value. The streaming path was not measured, and `MusicKitBridge.swift:92` can set `profile.bpm` from catalog metadata. **Consumers:** `PresetScorer.tempoMotionSubScore` (0.20 / 0.75 = 27 % of every score; its 110→0.5, 140→0.7 anchors put every song at 0.63–0.71 motion), `PreparationTrackRow` / `PreparationAperture` (the BPM the listener sees), and `DebugOverlayView`.
-
-**Diagnosis (2026-09-26).** `TempoDumpRunner` frames audio exactly as `analyzeMIR` does (1024-sample hops at the file's rate) and logs every sub-bass onset through the existing `BEATDETECTOR_DUMP_HIST` gate. Release, ten songs, whole files. Its final `stableBPM` reproduces every stored value (133 / 131 / 143 / 136 / 136 / 136 / 131 / 133 / 136 / 133). On **every** song, Moonlight I (solo piano, no kick) included:
-
-- sub-bass onsets fire **2.2–2.4 times per second**;
-- the median inter-onset interval is **0.441 s**, which is the 400 ms sub-bass cooldown (`BeatDetector.bandCooldowns[0]`) rounded up to the next 23.2 ms frame, plus one frame;
-- **44–79 %** of intervals sit at that floor or one frame above it.
-
-The 96 kHz Superstition file sits highest (143) because its 10.7 ms frames reach the floor sooner (0.405 s). The detector fires as soon as its cooldown allows, so the trimmed-mean IOI (D-073) returns 60 / 0.43–0.46 s ≈ 130–143 BPM whatever the music. Streaming is affected the same way: `MusicKitBridge.fetchBPM` always returns `nil`, and on the 30 s beta windows the same detector reads 133–138 (IOI 0.441 s on 9/10). Evidence: `~/Documents/uzume_spikes/bug144/b01–b10.txt` (whole files) and `w01–w10.txt` (50 % windows).
-
-**Not asserted:** *why* sub-bass flux crosses its adaptive threshold that often. That is `BeatDetector` onset tuning (D-075 territory), and the fix does not need it. The prepared profile can read the Beat This! grid that the same `analyzePreview` call already computes (`beatGrid.bpm`: DYC 98.0, B.O.B. 153.8, Superstition 101.4, Take Five 171.4, Teardrop 78.8). **Lead, not measured:** the live `BeatDetector` runs at ~51 Hz frames with the same cooldown, so the live `stableBPM` (which sets the BeatPredictor refractory, among other uses) may be saturated the same way.
-
-**Verification criteria (before the fix).**
-1. Automated: an `analyzePreview` test whose grid analyzer returns a known 90 BPM grid over a signal that saturates the sub-bass detector must store 90, not ~135. It fails on current code.
-2. Automated, on the beta playlist: the stored BPM equals the cached grid BPM (or is nil where Matt's call says so), and the spread across the ten songs exceeds 60 BPM (12.7 today).
-3. Cache schema bump.
-4. Manual: the preparation view on the beta playlist shows distinct BPMs.
-
-**Fix (BUG145.2, Matt's call, 2026-09-26: "No BPM for beatless songs").** `analyzePreview` stores `octaveFoldedTempoBPM(beats: beatGrid.beats)`, which is new. It takes the mean of the octave-folded intervals within ±15 % of their median; `octaveFoldedMedianBPM` alone landed on Beat This!'s 20 ms beat grid and read B.O.B. as 150.0 against a 153.8 grid. When `assessBeatIrregularity(grid:drums:)` returns `true`, the stored BPM is `nil`, which the scorer treats as neutral 0.5 and the preparation view does not show. `MIRAnalysisResult.bpm` and its `stableBPM` read are gone; `BeatDetector` is untouched (no behavioural change to beat sync: the grid, the live detector and the gate are unchanged). Folded into this branch's cache schema v16. **Removed with it:** the BUG-008.2 / DSP.4 `session.log` warnings (`WARN: BPM mismatch` / `WARN: BPM 3-way`), their detectors and `BPMMismatchCheckTests`. They compared this MIR tempo with the grids, so they measured the cooldown, and after the fix the field they read is the grid's own tempo, which would have logged the grid as `mir_bpm`. No tool or doc greps for those lines.
-**Verification.**
-1. ✅ `ProfileTempoTests`: a stub 90 BPM grid over noise that saturates the detector stores 90, and a 90 / 117 disagreement stores nil. Both **failed** on the old code, which stored **139.7**. A 20 ms-quantised B.O.B.-shaped grid with a half-time stretch reads 153.8.
-2. ✅ `SongMoodBetaPlaylistTests.tempoFollowsTheGrid` over fresh Release caches. Pre-fix: fails (spread 12.7; Pyramid Song and Moonlight I stored 130.9 / 135.8). Post-fix: passes. Stored values: Superstition 101.4, Penny Lane 113.3, Dance Yrself Clean 98.0, Warszawa 77.2, Take Five 171.6, B.O.B. 153.8, Teen Spirit 117.4, Teardrop 77.0; Pyramid Song and Moonlight I store nil. Spread 94.6.
-3. ✅ Cache schema v16 (same bump as BUG-144).
-4. ✅ Manual (2026-09-26): Matt, *"the BPMs look right in the preparation view"*.
-**Consequence to expect.** The tempo sub-score (27 % of every score) now separates songs. Previously every song targeted 0.63–0.71 motion; now Teardrop targets ~0.27 and Take Five ~0.80, so scene choices shift on most songs.
 
 ---
 

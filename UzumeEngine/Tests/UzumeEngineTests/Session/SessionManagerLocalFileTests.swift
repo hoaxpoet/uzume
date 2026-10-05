@@ -1219,4 +1219,76 @@ struct LocalFileEarlyStartTests {
                 trigger change bought nothing — check computeReadiness.
                 """)
     }
+
+    // MARK: BUG-178 — the walk prepares the song the listener landed on
+
+    private func prepareStarts(_ stub: PrefetchRecordingLocalFilePreparer) -> [String] {
+        stub.events.compactMap { if case .prepareStart(let name) = $0 { return name } else { return nil } }
+    }
+
+    @Test("walk order: playlist order, a priority next, then on from there, then back for the rest")
+    func walkOrderPolicy() {
+        let next = SessionPreparer.nextLocalWalkIndex
+        #expect(next(nil, nil, [], 4) == 0)
+        #expect(next(0, nil, [0], 4) == 1)
+        #expect(next(0, 2, [0], 4) == 2, "an unstarted priority goes next")
+        #expect(next(2, nil, [0, 2], 4) == 3, "the walk carries on from the priority")
+        #expect(next(3, nil, [0, 2, 3], 4) == 1, "then wraps back for what it skipped")
+        #expect(next(1, 0, [0, 1], 4) == 2, "a priority already started is ignored")
+        #expect(next(3, nil, [0, 1, 2, 3], 4) == nil)
+    }
+
+    @Test("landing on an unprepared song makes it the next one prepared; the plan stays in queue order")
+    func priorityReordersTheWalkNotThePlan() async throws {
+        let names = (1...8).map { "t\($0).flac" }
+        let (manager, preparer) = try makeLFManagerWithPreparer()
+        let stub = PrefetchRecordingLocalFilePreparer(results: results(names), preparationDelayMs: 20)
+        manager.localFilePreparer = stub
+
+        let walk = Task { await manager.startLocalFiles(at: urls(names), origin: .localFiles(urls(names))) }
+        for _ in 0..<400 where !prepareStarts(stub).contains("t1.flac") {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        manager.prioritizeLocalPreparation(at: 5)
+        await walk.value
+
+        #expect(prepareStarts(stub) == ["t1", "t6", "t7", "t8", "t2", "t3", "t4", "t5"].map { $0 + ".flac" },
+                "prepare order: \(prepareStarts(stub))")
+        let identities = names.compactMap { results(names)[$0]?.identity }
+        #expect(manager.currentPlan?.tracks == identities, "the plan must stay in queue order (BUG-068)")
+        #expect(preparer.orderedLocalTracks == identities)
+    }
+
+    /// The pacing idle can be minutes on a long song; a listener who lands on an unprepared song
+    /// must not wait it out. Pacing here is 12.5 s per track — the test would time out without
+    /// the interrupt.
+    @Test("a priority cuts short the pacing idle")
+    func priorityInterruptsPacing() async throws {
+        let names = (1...6).map { "t\($0).flac" }
+        let (manager, preparer) = try makeLFManagerWithPreparer()
+        let stub = PrefetchRecordingLocalFilePreparer(results: results(names), preparationDelayMs: 5)
+        manager.localFilePreparer = stub
+        preparer.pacingRate = 1
+
+        let walk = Task { await manager.startLocalFiles(at: urls(names), origin: .localFiles(urls(names))) }
+        for _ in 0..<400 where manager.progressiveReadinessLevel < .readyForFirstTracks {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        manager.startNow()
+        manager.beginPlayback()
+        manager.prioritizeLocalPreparation(at: 5)
+        let asked = Date()
+        for _ in 0..<400 where !prepareStarts(stub).contains("t6.flac") {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        let waited = Date().timeIntervalSince(asked)
+        preparer.cancelPreparation()
+        await walk.value
+
+        // A track the walk had already picked may finish first; t6 must still beat t5.
+        let order = prepareStarts(stub)
+        let t6 = order.firstIndex(of: "t6.flac"), t5 = order.firstIndex(of: "t5.flac")
+        #expect(t6 != nil && (t5 == nil || t6! < t5!), "after the priority the walk prepared \(order)")
+        #expect(waited < 1.5, "t6 started \(waited) s after the priority — the 12.5 s pacing idle was not cut")
+    }
 }

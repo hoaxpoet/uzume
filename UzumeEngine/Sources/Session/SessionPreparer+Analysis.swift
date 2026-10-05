@@ -347,7 +347,7 @@ extension SessionPreparer {
         // StructuralAnalyzer for diagnostics, unread.)
 
         return MIRAnalysisResult(
-            key: mir.stableKey,
+            key: KeyEstimator.estimate(samples: samples, sampleRate: sampleRate),   // BUG-149
             mood: songMood(moodTrace),
             centroidAvg: centroidAvg,
             sectionCount: sectionCount,
