@@ -143,7 +143,8 @@ struct PresetLoaderCompileFailureTest {
     /// 31 → 32 when KAG.2 and FF.1 merged: each branch counted 30 → 31 on its own; with both
     /// presets in the roster the gate counts 32.
     /// 32 → 33 at UND.1 (Understory, the `staged` feedback-IFS fern field; certified: false).
-    static let expectedProductionPresetCount = 33
+    /// 33 → 34 at INARI.1 (Inari, the relit shrine drawing; `direct`, certified: false).
+    static let expectedProductionPresetCount = 34
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

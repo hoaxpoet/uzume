@@ -250,6 +250,9 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// BR.20 — Waveform's held bars (instant rise, ~0.15 s fall). Same lifecycle as `nebulaState`.
     var waveformState: WaveformState?
 
+    /// INARI.1 — Inari's drawings and per-light levels. Same lifecycle as `nebulaState`.
+    var inariState: InariState?
+
     /// Nimbus Energy bloom follower + gas flow-phase state — allocated when the
     /// Nimbus preset is active, nil otherwise. Tick closure and stateBuffer are
     /// wired via `setMeshPresetTick` / `setDirectPresetFragmentBuffer` in

@@ -183,6 +183,7 @@ extension VisualizerEngine {
         understoryField = nil
         nebulaState = nil
         waveformState = nil
+        inariState = nil
         nimbusState = nil
         skeinState = nil
         lumenPatternEngine = nil
@@ -193,6 +194,7 @@ extension VisualizerEngine {
         pipeline.setDirectPresetFragmentBuffer(nil)
         pipeline.setDirectPresetFragmentBuffer2(nil)
         pipeline.setDirectPresetFragmentBuffer3(nil)
+        pipeline.setDirectPresetFragmentTextures([])
         pipeline.setDirectRenderScale(1.0)   // NB.8: full-res unless a preset opts into half-res below
         pipeline.setRayMarchPresetHeightTexture(nil)
         pipeline.setPostProcessChain(nil)
@@ -591,6 +593,7 @@ extension VisualizerEngine {
         case "Kagura":      bindKaguraRuntime(desc)
         case "Fireflies":   bindFirefliesRuntime(desc)
         case "Understory":  bindUnderstoryRuntime(desc)
+        case "Inari":       bindInariRuntime(desc)
         // Cymatic Resonance (CR.2) is a `feedback+particles` preset — its runtime is
         // the CymaticSandGeometry, wired via the `.particles` pass through
         // resolveParticleGeometry, not a slot-6 state binding.
@@ -787,6 +790,22 @@ extension VisualizerEngine {
             state.tick(deltaTime: features.deltaTime,
                        magnitudes: base,
                        binCount: FFTProcessor.binCount)
+        }
+    }
+
+    private func bindInariRuntime(_ desc: PresetDescriptor) {
+        // INARI.1 — the drawings and light map at texture 9/10/11, per-light levels at slot 6. The
+        // tick turns this frame's stems into those levels (eyes ← vocals, lanterns ← bass, the
+        // shrine ← drums); the Nebula pattern, fed by stems instead of the spectrum.
+        guard let state = InariState(device: context.device) else {
+            logger.error("InariState: failed to load drawings for preset '\(desc.name)'")
+            return
+        }
+        inariState = state
+        pipeline.setDirectPresetFragmentBuffer(state.levelBuffer)
+        pipeline.setDirectPresetFragmentTextures(state.textures)
+        pipeline.setMeshPresetTick { [weak state] features, stems in
+            state?.tick(deltaTime: features.deltaTime, stems: stems)
         }
     }
 

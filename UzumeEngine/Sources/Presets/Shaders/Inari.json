@@ -1,0 +1,55 @@
+{
+  "name": "Inari",
+  "family": "painterly",
+  "duration": 60,
+  "description": "A night shrine, drawn: a stone stair climbing through ivy and mossy walls to a lantern-lit hall under a red torii, guarded by two stone foxes in red capes, a pagoda on the hill and a thin moon behind the clouds. The picture never moves; only its light changes. The artist drew the scene twice, once lit only by the moon and once with every lantern, window and fox eye burning, and each light brightens its own part of the moonlit drawing toward the lit one, along the falloff the artist drew, so lamplight creeps over the stone, the steps and the foxes rather than glowing on top of them. The lanterns follow the bass: they swell and fall with it, and a lantern higher up the stair follows a little later, so a swell in the bass climbs the stairs toward the hall. The shrine follows the drums: the hall's lamps and the pagoda's windows kick on each hit and fall back. The foxes' eyes follow the voice: dark stone when no one sings, kindling as the vocal comes in and lingering after it. In silence the shrine is the moonlit drawing, never black.",
+  "author": "Matt",
+  "passes": [
+    "direct"
+  ],
+  "fragment_function": "inari_fragment",
+  "vertex_function": "fullscreen_vertex",
+  "beat_sensitivity": 0.6,
+  "visual_density": 0.6,
+  "motion_intensity": 0.1,
+  "color_temperature_range": [
+    0.2,
+    0.6
+  ],
+  "fatigue_risk": "low",
+  "transition_affordances": [
+    "crossfade"
+  ],
+  "section_suitability": [
+    "ambient",
+    "comedown",
+    "bridge",
+    "buildup"
+  ],
+  "complexity_cost": {
+    "tier1": 0.4,
+    "tier2": 0.3
+  },
+  "rubric_profile": "lightweight",
+  "audio_routes": [
+    {
+      "route": "lantern_bass",
+      "primitive": "bassEnergyRel",
+      "kind": "continuous",
+      "note": "INARI.1 — every lantern's level follows bassEnergyRel (0.35 + 1.4·rel, clamped), smoothed 60 ms attack / 450 ms release; a lantern higher up the stair reads the bass up to 0.35 s later, so a swell climbs toward the hall. Provisional — tuning before certification."
+    },
+    {
+      "route": "shrine_drums",
+      "primitive": "drumsEnergyDev",
+      "kind": "accent",
+      "note": "INARI.1 — the hall's lamp clusters and the pagoda's windows: 0.2 + an envelope of 1.6·drumsEnergyDev, 15 ms attack / 220 ms release. Provisional."
+    },
+    {
+      "route": "eyes_vocals",
+      "primitive": "vocalsEnergyDev",
+      "kind": "continuous",
+      "note": "INARI.1 — the foxes' eyes: presence from vocalsEnergy ((x − 0.15) / 0.45) plus 0.8·vocalsEnergyDev, 120 ms attack / 900 ms release; dark below ~0.15. vocalsEnergy itself is an absolute AGC level (FA #31 hazard) — the dev term is the declared route; replacing the level term is part of tuning."
+    }
+  ],
+  "certified": false
+}

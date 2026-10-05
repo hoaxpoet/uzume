@@ -218,6 +218,9 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Understory":           false,   // UND.1 look-spike — lightweight; the wind is CPU-side
                                      // (UnderstoryField's springs at slot 6) and the MSL reads no audio,
                                      // so the source heuristic sees no coupling (the Kagura precedent).
+    "Inari":                false,   // INARI.1 — lightweight; a relit drawing: the light levels are
+                                     // CPU-side (InariState, stems → slot 6) and the MSL reads no
+                                     // audio, so the source heuristic sees no coupling (Kagura precedent).
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
     "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
                                      // surface, not a certification candidate. Reads no audio at all
