@@ -191,7 +191,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]], d
         float sec = smoothstep(0.80, 1.0, 1.0 - abs(fract(in.uv.x * 7.0 - abs(in.uv.y) * 1.4) - 0.5) * 2.0) * (1.0 - edge);
         float2 cuv = float2(in.uv.x * 7.0, in.uv.y * 2.5) + in.q.y * 17.0;
         float cells = 1.0 - smoothstep(0.0, 0.08, cellEdge(cuv));
-        cells *= saturate(1.0 - 3.0 * fwidth(cuv.x));                  // fade where cells would alias
+        cells *= saturate(1.0 - 3.0 * fwidth(cuv.x)) * (in.q.x > 1.5 ? 0.0 : 1.0);   // fade where cells would alias; none on leaflets (speckle)
         float curled = saturate(in.q.z / max(u.warmc.z, 1e-3) - 0.4);   // curled lobes: green glass; open: orange vellum
         float vellum = in.q.x > 1.5 ? 1.0 : 0.0;                          // the sunburst leaflets are lit through
         float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
@@ -202,8 +202,8 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]], d
         // glass (teal/violet film far from the core), orange vellum where the core light is strong.
         float3 glassC = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
         float hot = max(vellum, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled));
-        float3 tint = mix(glassC, float3(1.0, 0.70, 0.42) * 1.2, hot);        // peach vellum (ref ≈ 245,170,100)
-        amber = mix(amber, max(att, u.coil.w * u.glass3.w * vellum) * float3(1.0, 0.9, 0.75), hot);   // lit THROUGH (leaflets get a light floor)
+        float3 tint = mix(glassC, mix(float3(1.0, 0.70, 0.42), float3(1.0, 0.82, 0.62), vellum) * 1.2, hot);   // peach vellum (whiter: the grade saturates it)
+        amber = mix(amber, max(att, u.coil.w * u.glass3.w * vellum * (1.25 - 0.85 * in.uv.x)) * float3(1.0, 0.9, 0.75), hot);   // lit THROUGH; leaflets glow from the base (toward the core) outward
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
         float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x + u.peel2.x) * tint;   // fill takes the tint; + glass glow
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
@@ -370,6 +370,8 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]], d
     green = mix(green, float3(0.05, 0.42, 0.36), u.glass2.w * (0.5 + 0.5 * sin(in.q.y * 37.0)));
     green = mix(green, float3(0.48, 0.72, 0.08), u.hue.w);
     float3 film = irid(cosv * 1.1 + best.u * 0.15 + in.q.y * 0.35 + u.eye.w * 0.02);
+    float vary = fract(in.q.y * 13.7);
+    green = mix(green, mix(float3(0.55, 0.80, 0.55), float3(0.02, 0.45, 0.20), vary), u.peel2.y);   // clear ↔ emerald variety
     float3 tint = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
     float hot = smoothstep(u.hue.x, u.hue.y, warm);
     tint = mix(tint, float3(1.0, 0.70, 0.42) * 1.2, hot);
@@ -883,12 +885,12 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.138), envF("BLOOM2", 0.16), envF("EXPO", 3.427)],
                      tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.673)],
                      warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, envF("RIMCW", 0.438)],
-                     glass: [envF("GA", 0.35), envF("FILMB", 0.0), envF("RIMPX", 1.66), envF("GLINT", 0.54)],
+                     glass: [envF("GA", 0.35), envF("FILMB", 0.0), envF("RIMPX", 1.66), envF("GLINT", 1.2)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
                      curl: [envF("CDU", 0.8), envF("CBEAD", 6.0), envF("CHILDT", 0.656), rule.curlB],
                      curl2: [envF("GPSI", 0.52), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
-                     glass2: [envF("CORECAP", 1.816), envF("CURLA", 0.35), envF("BLOOMW", 0.029), envF("TEAL", 0.195)],
+                     glass2: [envF("CORECAP", 1.816), envF("CURLA", 0.5), envF("BLOOMW", 0.029), envF("TEAL", 0.195)],
                      stem2: [envF("WALL", 0.7), 0, 0, 0],
                      hue: [envF("HUEA", 0.701), envF("HUEB", 0.873), envF("SATB", 1.727), envF("LIME", 0.332)],
                      glass3: [envF("GLCELL", 138.177), envF("GLFRAC", 0.508), envF("CFRES", 0.135), envF("VELL", 0.5)])
@@ -898,7 +900,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let cb = queue.makeCommandBuffer()!
     var u2 = u; u2.peel = [1, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
     u.peel = [0, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
-    u.peel2 = [envF("GFILL", 0.15), 0, 0, 0]; u2.peel2 = u.peel2
+    u.peel2 = [envF("GFILL", 0.15), envF("GVAR", 0.35), 0, 0]; u2.peel2 = u.peel2
     // Pass 1: nearest surface (+ its transmission colour, + resolved depth for the peel). Pass 2: the next one.
     for pass in 0..<2 {
         let rp = MTLRenderPassDescriptor()
