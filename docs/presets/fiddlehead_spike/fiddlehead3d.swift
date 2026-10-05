@@ -39,6 +39,8 @@ struct U {
     float4 look;       // body, iridescence, bead gain, debug
     float4 mat;        // transmission gain, gold rim gain, warm/cool rim split, transmission tint by albedo
     float4 bgk;        // coil haze on the background, 0, 0, 0
+    float4 tex;        // scallops per lobe, fibre gain, hair gain, rim-line gain
+    float4 warmc;      // gold rim colour (g, b; r = 1)
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -66,8 +68,8 @@ static float3 irid(float t) {
 
 constant int NU = 10, NV = 4;                     // leaf grid (along × across halves)
 
-static float leafProfile(float u) {               // broadest ~40 % out, pointed tip
-    return pow(max(sin(3.14159 * pow(clamp(u, 0.0, 1.0), 0.8)), 0.0), 0.8);
+static float leafProfile(float u) {               // reference pinnules: rounded oblong glass lobes, blunt tip
+    return pow(max(sin(3.14159 * pow(clamp(u, 0.0, 1.0), 0.7)), 0.0), 0.45);
 }
 
 vertex VOut leaf_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -81,8 +83,9 @@ vertex VOut leaf_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float3 d = l.d.xyz, n = l.n.xyz, w = normalize(cross(d, n));
     float len = l.o.w, wid = l.d.w * leafProfile(uu), cup = l.n.w, bend = l.q.z;
     // Shape: cupped across (a shallow U), bent along (tip curls toward the normal).
-    float3 p = l.o.xyz + d * (uu * len) + w * (vv * wid) + n * (cup * vv * vv * wid + bend * uu * uu * len);
-    float3 dpdu = d * len + n * (2.0 * bend * uu * len);
+    float hook = l.q.w;                            // signed in-plane hook toward the parent's tip
+    float3 p = l.o.xyz + d * (uu * len) + w * (vv * wid + hook * uu * uu * len) + n * (cup * vv * vv * wid + bend * uu * uu * len);
+    float3 dpdu = d * len + n * (2.0 * bend * uu * len) + w * (2.0 * hook * uu * len);
     float3 dpdv = w * wid + n * (2.0 * cup * vv * wid);
     VOut o;
     o.pos = u.viewProj * float4(p, 1.0);
@@ -107,7 +110,7 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     VOut o;
     o.pos = u.viewProj * float4(p, 1.0);
     o.wpos = p; o.nrm = radial; o.tng = ax;
-    o.uv = float2(along, cos(ang)); o.q = float4(t.q.x, t.q.y, 0, t.n.w); o.kind = 0.0;
+    o.uv = float2(along, cos(ang)); o.q = float4(t.q.x, t.q.y, t.q.z, t.n.w); o.kind = 0.0;
     return o;
 }
 
@@ -117,19 +120,28 @@ fragment float4 fern_fragment(VOut in [[stage_in]], bool front [[front_facing]],
     float young, hashv;
     float3 n = normalize(in.nrm);
     float3 V = normalize(u.eye.xyz - in.wpos);
-    float margin = 0.0, vein = 0.0, midrib = 0.0;
+    float margin = 0.0, vein = 0.0, midrib = 0.0, rimLine = 0.0, stripe = -1.0;
     if (in.kind > 0.5) {
         float prof = leafProfile(in.uv.x);
-        // Serrated margin: teeth pointing toward the tip.
-        float serr = 1.0 - 0.10 * pow(fract(in.uv.x * 9.0), 1.6);
+        // Scalloped margin (rounded notches), as on the reference's lobes.
+        float serr = 0.80 + 0.20 * sqrt(abs(sin(3.14159 * in.uv.x * u.tex.x)));
         float edge = abs(in.uv.y) / max(serr, 1e-3);
         if (edge > 1.0 || prof < 0.02) { discard_fragment(); }
         margin = smoothstep(0.72, 1.0, edge);
+        // Thick-glass edge: a crisp line ~1.5 px wide whatever the lobe's size on screen.
+        rimLine = exp(-(1.0 - edge) / max(fwidth(edge), 1e-4) / 1.3);
         midrib = 1.0 - smoothstep(0.0, 0.10, abs(in.uv.y));
         vein = smoothstep(0.85, 1.0, 1.0 - abs(fract(in.uv.x * 7.0 - abs(in.uv.y) * 1.4) - 0.5) * 2.0) * (1.0 - edge);
+        // Fine fibres along the blade (the reference's long parallel veins / glass striations).
+        vein += u.tex.y * pow(0.5 + 0.5 * sin(in.uv.y * 23.0 + 1.5 * sin(in.uv.x * 5.0 + in.q.y * 9.0)), 6.0);
         young = in.q.x; hashv = in.q.y;
     } else {
         young = in.q.w; hashv = in.q.x;
+        margin = 0.6 * pow(1.0 - abs(dot(n, V)), 2.0);   // glass stem: the lit edge carries the light
+        // Striated glass: streaks running along the stem, alternating cyan / magenta (reference outer band).
+        stripe = 0.5 + 0.5 * sin(acos(clamp(in.uv.y, -1.0, 1.0)) * 7.0 + hashv * 31.0);
+        vein = u.tex.y * pow(stripe, 5.0);
+        if (in.q.z > 0.5) { return float4(float3(1.0, 0.55, 0.18) * u.tex.z, 1.0); }   // hair: thin lit filament
     }
     if (dot(n, V) < 0.0) { n = -n; }               // two-sided
     // Base colour by age: young tissue paler/warmer, opened tissue deeper green.
@@ -165,8 +177,9 @@ fragment float4 fern_fragment(VOut in [[stage_in]], bool front [[front_facing]],
     float3 film = irid(cosv * 1.3 + hashv * 0.35 + t * 0.02);
     float grazing = pow(1.0 - cosv, 2.0);
     float warm = saturate(att / (att + u.mat.z));
-    float3 rimCol = mix(film * u.look.y, float3(1.0, 0.62, 0.22) * u.mat.y, warm);
-    col += rimCol * (0.35 * grazing + 1.1 * margin) * (0.6 + 0.4 * saturate(att));
+    if (stripe >= 0.0) { film = mix(float3(0.15, 0.75, 1.0), float3(0.85, 0.20, 0.90), smoothstep(0.3, 0.7, stripe)); }
+    float3 rimCol = mix(film * u.look.y, float3(1.0, u.warmc.x, u.warmc.y) * u.mat.y, warm);
+    col += rimCol * (0.35 * grazing + 1.1 * margin + u.tex.w * rimLine) * (0.6 + 0.4 * saturate(att));
     if (int(u.look.w) == 1) { col = n * 0.5 + 0.5; }
     return float4(col, 1.0);
 }
@@ -279,7 +292,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -355,15 +368,19 @@ struct Rule {
     var pRamp = envF("PRAMP", 0.077)               // pinnae shrink toward immature over this much length below the front
     var tilt = envF("TILT", 0.45)                 // pinna planes tip out of the frond plane (rad)
     var stemR: [Float] = [envF("SR0", 0.18), envF("SR1", 0.30)]   // stem radius × link length
-    var leafLen = envF("LEAFLEN", 1.0), leafW = envF("LEAFW", 0.40), leafCup = envF("CUP", 0.35)
+    var leafLen = envF("LEAFLEN", 1.0), leafW = envF("LEAFW", 0.327), leafCup = envF("CUP", 0.35)
     var leafBend = envF("LBEND", 0.25), leafJitter = envF("LJIT", 0.35)
     var minPx = envF("MINPX", 0.5)
     var beadSize = envF("BEADSZ", 0.10)
     var beadP = envF("BEADP", 0.45)               // fraction of lobes carrying a tip bead
-    var leafPx = envF("LEAFPX", 40)            // a chain shorter than this many pixels becomes one leaf
-    var pinOpen = envF("PINOPEN", 0.35)        // even in the coil a pinna's base is open; only its tip curls
+    var leafPx = envF("LEAFPX", 60)            // a chain shorter than this many pixels becomes one leaf
+    var pinOpen = envF("PINOPEN", 0.10)        // even in the coil a pinna's base is open; only its tip curls
     var pinFront = envF("PINF", 0.46)          // a mature pinna's own unfurl front (its tip crozier starts here)
-    var alt = envF("ALT", 0.79)                 // left/right pinnae alternate by this fraction of a link
+    var alt = envF("ALT", 0.79)
+    var rampP = envF("RAMPP", 0.35)             // pinna curl ramps in over this much of its length (curls more toward the tip)
+    var outS = envF("OUTS", 0.6), inS = envF("INS", 1.4)   // coil: outer-side / inner-side pinna size
+    var hook = envF("HOOK", 0.25)
+    var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
 var dump: [String] = []
 let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "dump"                        // "dump" mode: level-0/1 skeletons in image px
@@ -380,7 +397,7 @@ func rotate(_ v: SIMD3<Float>, about a: SIMD3<Float>, _ ang: Float) -> SIMD3<Flo
 /// One chain in its own plane (normal N): walk links, emitting a tube per link, branching on both
 /// sides; level 2 (pinnules) is emitted as single curved leaf blades.
 func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, link S0: Float, front: Float,
-           level: Int, hash: Float, young0: Float) {
+           level: Int, hash: Float, young0: Float, side: Float = 0) {
     let total = 1 / (1 - rule.sig)
     // Fractal depth is set by the screen, not a fixed level: a branch keeps branching (the same rule)
     // while it is big enough to show its own sub-branches; below that it is drawn as one leaf blade.
@@ -393,8 +410,20 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let n = rotate(N0, about: d0, jit)
         let d = rotate(d0, about: N0, -0.35 * curled)
         leaves[nLeaves] = Leaf(o: SIMD4(p0, len), d: SIMD4(d, len * rule.leafW), n: SIMD4(n, rule.leafCup),
-                               q: [young0, hash, rule.leafBend * (0.4 + curled), Float(level)])
+                               q: [young0, hash, rule.leafBend * (0.4 + curled), -side * rule.hook])
         nLeaves += 1
+        if hashf(hash * 5.9) < rule.hairP && nTubes + 3 < maxTubes {
+            // A hair: a fine filament curling off the lobe margin, catching the orange light.
+            let hu = 0.3 + 0.6 * hashf(hash * 8.1), hs: Float = hashf(hash * 2.7) > 0.5 ? 1 : -1
+            let w = normalize(cross(d, n))
+            var hp = p0 + d * (hu * len) + w * (hs * len * rule.leafW * 0.9)
+            var hd = normalize(w * hs + d * 0.6), hl = len * rule.hairL / 3
+            for _ in 0..<3 {
+                let hq = hp + hd * hl
+                tubes[nTubes] = Tube(a: SIMD4(hp, 0.5 * pxWorld), b: SIMD4(hq, 0.4 * pxWorld), n: SIMD4(n, young0), q: [hash, Float(level), 1, 0])
+                nTubes += 1; hp = hq; hd = rotate(hd, about: n, 0.7 * hs); hl *= 0.8
+            }
+        }
         if hashf(hash * 3.3) < rule.beadP && nBeads < maxBeads {           // a bead on some leaf tips
             let tip = p0 + d * len * 0.97 + n * (rule.leafBend * (0.4 + curled) * len * 0.9)
             beads[nBeads] = Bead(p: SIMD4(tip, max(len * rule.beadSize, 1.6 * pxWorld)), c: [1.0, 0.85, 0.6, hash])
@@ -402,37 +431,48 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         }
         return
     }
-    var p = p0, d = d0, N = N0, S = S0
+    var p = p0, d = d0, N = N0, S = S0, prev = p0
     var k = 0
     while total * S > rule.minPx * pxWorld && k < 300 && nTubes < maxTubes {
         let f = 1 - pow(rule.sig, Float(k))
-        let c = smooth(front, front + rule.ramp, f)
+        let c = smooth(front, front + (level == 0 ? rule.ramp : rule.rampP), f)
         let young = min(1, young0 * 0.5 + c)
         let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1)
         let p1 = p + d * S
         if level <= 1 && dumping { dump.append("\(level) \(hash) \(p.x) \(p.y) \(p.z) \(S)") }
-        if r > 0.3 * pxWorld {
+        if r > 1.5 * pxWorld {
+            // Thick stems: a smooth quadratic through the link midpoints (no kinks at the joints).
+            let a0 = k == 0 ? p : (prev + p) * 0.5, a2 = (p + p1) * 0.5, ctrl = k == 0 ? (a0 + a2) * 0.5 : p
+            var q0 = a0
+            for j in 1...4 where nTubes < maxTubes {
+                let t = Float(j) / 4, q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
+                let rr = r * (1 + (rule.sig - 1) * t)
+                tubes[nTubes] = Tube(a: SIMD4(q0, rr / (1 + (rule.sig - 1) / 4)), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level), 0, 0])
+                nTubes += 1; q0 = q
+            }
+        } else if r > 0.3 * pxWorld {
             tubes[nTubes] = Tube(a: SIMD4(p, r), b: SIMD4(p1, r * rule.sig), n: SIMD4(N, young), q: [hash, Float(level), 0, 0])
             nTubes += 1
         }
         // Branches: same rule one level down; immature (smaller) where the chain is still coiled;
         // each starts unrolling only once this chain's front has passed the junction.
         let mature = 1 - smooth(front - rule.pRamp, front + rule.ramp, f)
-        let bS = S * rule.sigS * (rule.immature + (1 - rule.immature) * mature)
-        if total * bS > rule.minPx * pxWorld {
+        let bS0 = S * rule.sigS * (rule.immature + (1 - rule.immature) * mature)
+        if total * bS0 > rule.minPx * pxWorld {
             let passed = min(1, max(0, (front - f) / max(rule.delay, 1e-3)))
             for side: Float in [-1, 1] {
                 let at = p + d * (S * (0.5 + 0.5 * side * rule.alt))
+                let bS = bS0 * (1 + ((side < 0 ? rule.outS : rule.inS) - 1) * c * (level == 0 ? 1 : 0))
                 let ang = rule.alpha * (1 - 0.25 * c)
                 let bd = rotate(d, about: N, -side * ang)                 // in-plane: right is −about N
                 let bN = rotate(N, about: bd, side * rule.tilt * (level == 0 ? 1 : 0.4))
                 let bh = (hash * 7.31 + Float(k) * 0.618 + (side > 0 ? 0.29 : 0.71)).truncatingRemainder(dividingBy: 1)
-                chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young)
+                chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side)
             }
         }
         let turn = rule.baseTurn * (1 - c) + rule.maxTurn * c
         d = rotate(d, about: N, -turn)                                  // curl clockwise seen from +N
-        p = p1
+        prev = p; p = p1
         S *= rule.sig
         k += 1
     }
@@ -489,13 +529,15 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     lastVP = vp
     let coilPos = eyePos + SIMD3<Float>(0, 0, -envF("LZ", 0.06))
     var u = Uniforms(viewProj: vp, eye: SIMD4(cam, time),
-                     coil: SIMD4(coilPos, envF("LI", 1.81) * (1 - 0.5 * unfurl)),
-                     coilCol: SIMD4(1.0, 0.42, 0.08, envF("LR", 0.32) * (1 + unfurl)),
-                     keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.44)),
-                     backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.49)),
-                     look: [envF("BODY", 0.75), envF("IRID", 2.0), envF("BEAD", 6.5), envF("DBG", 0)],
-                     mat: [envF("TRANS", 1.0), envF("RIMG", 1.04), envF("WARMK", 0.42), envF("TALB", 0.32)],
-                     bgk: [envF("HAZE", 0.31), 0, 0, 0])
+                     coil: SIMD4(coilPos, envF("LI", 1.842) * (1 - 0.5 * unfurl)),
+                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.295) * (1 + unfurl)),
+                     keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.422)),
+                     backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
+                     look: [envF("BODY", 0.667), envF("IRID", 1.376), envF("BEAD", 7.719), envF("DBG", 0)],
+                     mat: [envF("TRANS", 1.152), envF("RIMG", 1.174), envF("WARMK", 0.532), envF("TALB", 0.314)],
+                     bgk: [envF("HAZE", 0.03), 0, 0, 0],
+                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 0.879)],
+                     warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), 0, 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
