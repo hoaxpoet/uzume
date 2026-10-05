@@ -539,18 +539,19 @@ struct Rule {
     var minPx = envF("MINPX", 0.5)
     var beadSize = envF("BEADSZ", 0.10)
     var beadP = envF("BEADP", 0.45)               // fraction of lobes carrying a tip bead
-    var leafPx = envF("LEAFPX", 30)            // a chain shorter than this many pixels becomes one leaf
+    var leafPx = envF("LEAFPX", 31.5)            // a chain shorter than this many pixels becomes one leaf
     var pinOpen = envF("PINOPEN", 0.10)        // even in the coil a pinna's base is open; only its tip curls
     var pinFront = envF("PINF", 0.46)          // a mature pinna's own unfurl front (its tip crozier starts here)
     var alt = envF("ALT", 0.79)
-    var rampP = envF("RAMPP", 0.8)             // pinna curl ramps in over this much of its length (curls more toward the tip)
+    var rampP = envF("RAMPP", 0.726)             // pinna curl ramps in over this much of its length (curls more toward the tip)
     var outS = envF("OUTS", 0.6), inS = envF("INS", 1.4)   // coil: outer-side / inner-side pinna size
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
-    var curlPx = envF("CURLPX", 100)
-    var sigS1 = envF("SIGS1", 0.30), curlMin = envF("CURLMIN", 2.0)   // crozier radius floor (px)
-    var curlOn = envF("CURLON", 0.3), curlLen = envF("CURLLEN", 1.0), curlT = envF("CURLT", 0.16), curlPsi = envF("CURLPSI", 0.35)
-    var hookR = envF("HOOKR", 0.12)              // open lobes: tip crozier radius ÷ lobe length
+    var curlPx = envF("CURLPX", 84.4)
+    var mirror = envF("MIRROR", 0)
+    var sigS1 = envF("SIGS1", 0.196), curlMin = envF("CURLMIN", 3.42)   // crozier radius floor (px)
+    var curlOn = envF("CURLON", 0.347), curlLen = envF("CURLLEN", 1.0), curlT = envF("CURLT", 0.179), curlPsi = envF("CURLPSI", 0.3)
+    var hookR = envF("HOOKR", 0.31)              // open lobes: tip crozier radius ÷ lobe length
     var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
 var dump: [String] = []
@@ -569,7 +570,7 @@ func rotate(_ v: SIMD3<Float>, about a: SIMD3<Float>, _ ang: Float) -> SIMD3<Flo
 /// One chain in its own plane (normal N): walk links, emitting a tube per link, branching on both
 /// sides; level 2 (pinnules) is emitted as single curved leaf blades.
 func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, link S0: Float, front: Float,
-           level: Int, hash: Float, young0: Float, side: Float = 0) {
+           level: Int, hash: Float, young0: Float, side: Float = 0, handed: Float = 1) {
     let total = 1 / (1 - rule.sig)
     // Fractal depth is set by the screen, not a fixed level: a branch keeps branching (the same rule)
     // while it is big enough to show its own sub-branches; below that it is drawn as one leaf blade.
@@ -597,7 +598,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             }
             if nCurls < maxCurls {
                 curls[nCurls] = Curl(o: SIMD4(p0, L * kap / arc), d: SIMD4(d0, L * (1 - kap)), n: SIMD4(n, rule.curlT),
-                                     q: [young0, hash, rule.curlPsi, 1]); nCurls += 1
+                                     q: [young0, hash, rule.curlPsi, handed]); nCurls += 1
             }
             return
         }
@@ -671,17 +672,18 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             let passed = min(1, max(0, (front - f) / max(rule.delay, 1e-3)))
             for side: Float in [-1, 1] {
                 let atC = p + d * (S * (0.5 + 0.5 * side * rule.alt))
-                let bS = bS0 * (1 + ((side < 0 ? rule.outS : rule.inS) - 1) * c * (level == 0 ? 1 : 0))
+                let bS = bS0 * (1 + ((side * handed < 0 ? rule.outS : rule.inS) - 1) * c * (level == 0 ? 1 : 0))
                 let ang = rule.alpha * (1 - 0.25 * c)
                 let bd = rotate(d, about: N, -side * ang)                 // in-plane: right is −about N
                 let bN = rotate(N, about: bd, side * rule.tilt * (level == 0 ? 1 : 0.4))
                 let bh = (hash * 7.31 + Float(k) * 0.618 + (side > 0 ? 0.29 : 0.71)).truncatingRemainder(dividingBy: 1)
                 let at = atC + normalize(bd - d * dot(bd, d)) * (r * 0.9)      // emerge from the tube's surface
-                chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side)
+                chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side,
+                      handed: handed * (rule.mirror > 0.5 ? side : 1))      // bilateral symmetry: sides curl mirrored
             }
         }
         let turn = rule.baseTurn * (1 - c) + rule.maxTurn * c
-        d = rotate(d, about: N, -turn)                                  // curl clockwise seen from +N
+        d = rotate(d, about: N, -turn * handed)                         // curl clockwise seen from +N (× handedness)
         prev = p; p = p1
         S *= rule.sig
         k += 1
@@ -762,7 +764,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, 0],
                      glass: [envF("GA", 0.35), envF("FILMB", 0.5), envF("RIMPX", 2.2), envF("GLINT", 1.0)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
-                     curl: [envF("CDU", 0.55), envF("CBEAD", 1.5), envF("CHILDT", 0.6), 0])
+                     curl: [envF("CDU", 0.539), envF("CBEAD", 1.5), envF("CHILDT", 0.897), 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
