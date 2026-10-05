@@ -115,7 +115,7 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float3 s1 = normalize(cross(ax, t.n.xyz)), s2 = cross(s1, ax);
     float r = mix(t.a.w, t.b.w, along);                              // continuous radius (an end bulge made notches)
     float3 radial = s1 * cos(ang) + s2 * sin(ang);
-    float3 p = mix(a, b + ax * t.b.w * 0.5, along) + radial * r;
+    float3 p = mix(a, b + ax * t.b.w * 0.1, along) + radial * r;      // tiny overlap only (a ½-radius overshoot jutted at bends)
     VOut o;
     o.pos = u.viewProj * float4(p, 1.0);
     o.wpos = p; o.nrm = radial; o.tng = ax;
@@ -188,7 +188,9 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         // Hue by PLACE, never an average of complementary hues (orange + green = the beige we had): green
         // glass (teal/violet film far from the core), orange vellum where the core light is strong.
         float3 glassC = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
-        float3 tint = mix(glassC, float3(1.0, 0.50, 0.15) * 1.2, max(vellum, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled)));
+        float hot = max(vellum, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled));
+        float3 tint = mix(glassC, float3(1.0, 0.70, 0.42) * 1.2, hot);        // peach vellum (ref ≈ 245,170,100)
+        amber = mix(amber, att * float3(1.0, 0.9, 0.75), hot);                 // lit THROUGH: the light's own hue, not orange × orange = red
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
         float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x) * tint;   // fill takes the tint: dim glass stays saturated
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
@@ -211,16 +213,18 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float fa = ang * u.stem.z;
     float fib = pow(0.5 + 0.5 * cos(fa), 10.0) * saturate(1.0 - 1.5 * fwidth(fa));
     float3 band = mix(float3(0.10, 0.70, 1.00), float3(0.80, 0.18, 0.85), stripe);
-    float spk = hash22(floor(in.wpos.xy * u.glass3.x) + floor(ang * 3.0)).x;       // broken glints, not a ribbon
-    band *= 0.35 + 0.65 * step(1.0 - u.glass3.y, spk);
+    // Cyan/violet SPARKLE: small round dots in random cells (a whole-cell mask read as a checkerboard).
+    float2 gp = in.wpos.xy * u.glass3.x, gf = fract(gp) - 0.5, gh = hash22(floor(gp));
+    float sparkle = step(1.0 - u.glass3.y, gh.x) * exp(-dot(gf, gf) * 40.0);
+    float3 sparkC = mix(float3(0.2, 0.85, 1.0), float3(0.75, 0.3, 1.0), gh.y);
     float3 green = mix(float3(0.10, 0.40, 0.06), float3(0.35, 0.60, 0.10), in.q.w);
     green = mix(green, float3(0.48, 0.72, 0.08), u.hue.w);
     float coilBand = in.q.y < 0.99 ? fract(in.q.y) / 0.49 : 0.0;     // cyan/violet bands fade in along the coil (CPU: smooth in turn)
     float3 tint = mix(green * 2.0, band * 1.6, u.stem.w * (1.0 - warm) * coilBand);
     float3 body = (amber * u.mat.x * 0.5 + 0.08 * u.look.x) * tint * (1.0 + 1.2 * fib);
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
-    float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w), rimWarm * u.mat.y * 1.3, warm * lit);
-    float3 C = (body + rimC * rim * 1.6 + spec) * wallDk;
+    float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w * coilBand), rimWarm * u.mat.y * 1.3, warm * lit);
+    float3 C = (body + rimC * rim * 1.6 + spec + sparkC * sparkle * coilBand * u.glass.w * 3.0) * wallDk;
     return opq(C * mix(u.glass.x * 1.4, 1.0, rim), 1.0, float3(0.0));
 }
 
@@ -350,8 +354,9 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     green = mix(green, float3(0.48, 0.72, 0.08), u.hue.w);
     float3 film = irid(cosv * 1.1 + best.u * 0.15 + in.q.y * 0.35 + u.eye.w * 0.02);
     float3 tint = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
-    tint = mix(tint, float3(1.0, 0.50, 0.15) * 1.2, smoothstep(u.hue.x, u.hue.y, warm));
-    float3 body = (u.coilCol.rgb * att * u.mat.x + 0.08 * u.look.x) * tint;
+    float hot = smoothstep(u.hue.x, u.hue.y, warm);
+    tint = mix(tint, float3(1.0, 0.70, 0.42) * 1.2, hot);
+    float3 body = (mix(u.coilCol.rgb * att, att * float3(1.0, 0.9, 0.75), hot) * u.mat.x + 0.08 * u.look.x) * tint;
     // Veins where the lobe is wide enough to show them (reference leaflets: bright midrib, darker
     // secondaries angled toward the tip). In the lobe's own (along u, across a) coordinates, AA'd by fwidth.
     float wpx = best.h / px;
@@ -821,7 +826,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let coilPos = eyePos + SIMD3<Float>(0, 0, -envF("LZ", 0.06))
     var u = Uniforms(viewProj: vp, eye: SIMD4(cam, time),
                      coil: SIMD4(coilPos, envF("LI", 2.583) * (1 - 0.5 * unfurl)),
-                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.244) * (1 + unfurl)),
+                     coilCol: SIMD4(1.0, envF("LCG", 0.55), envF("LCB", 0.25), envF("LR", 0.244) * (1 + unfurl)),
                      keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.422)),
                      backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
                      look: [envF("BODY", 1.06), envF("IRID", 1.858), envF("BEAD", 5.703), envF("DBG", 0)],
