@@ -43,6 +43,7 @@ struct U {
     float4 warmc;      // gold rim colour (g, b; r = 1), LBEND
     float4 glass;      // body alpha, film on cool bodies, rim width px, glint gain
     float4 stem;       // helix stripes around, helix pitch, fibre lines around, band strength
+    float4 curl;       // child spacing (rad of spiral), bead gain, 0, 0
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -214,6 +215,115 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     return oit(C * alpha, alpha, zview, u.eye.z, float3(0.0));
 }
 
+
+// ---- Croziers below the geometry cut-off: the SAME rule, continued per pixel (FH.5 fractal pass).
+// A terminal element is a quad; its fragment draws a stem + log spiral (the coil law: growth ≈2.7×/turn)
+// carrying a row of child spirals on its outer edge, and a bead string between them — so every element
+// at every scale is a curl, down to ~2 px. Closed-form spiral distance: O(1) per level (no tree walk).
+// Curl: o = origin + R (outer spiral radius), d = dir + S (stem length), n = plane normal + T (tube ½-width ÷ r),
+//       q = (young, hash, child scale ψ, handedness ±1)
+struct Curl { float4 o; float4 d; float4 n; float4 q; };
+struct COut { float4 pos [[position]]; float3 wpos; float2 lp; float4 q [[flat]]; float4 fr [[flat]];
+              float3 X [[flat]]; float3 Y [[flat]]; float3 N [[flat]]; };
+constant float CB = 0.158;                                     // log-spiral b (fitted coil growth)
+constant float TWO_PI = 6.2831853;
+
+vertex COut curl_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                        const device Curl* C [[buffer(0)]], constant U& u [[buffer(1)]]) {
+    Curl c = C[iid];
+    float R = c.o.w, S = c.d.w, T = c.n.w, psi = c.q.z;
+    float3 X = normalize(c.d.xyz), N = normalize(c.n.xyz), Y = c.q.w * normalize(cross(X, N));
+    float m = R * (2.6 * psi + T + 0.15);
+    const float2 cs[6] = { float2(0,0), float2(1,0), float2(1,1), float2(0,0), float2(1,1), float2(0,1) };
+    float2 lo = float2(-m, -T * R - m), hi = float2(S + R + m, 2.0 * R + m);
+    float2 lp = mix(lo, hi, cs[vid]);
+    float3 p = c.o.xyz + X * lp.x + Y * lp.y;
+    COut o; o.pos = u.viewProj * float4(p, 1.0); o.wpos = p; o.lp = lp; o.q = c.q;
+    o.fr = float4(R, S, T, psi); o.X = X; o.Y = Y; o.N = N; return o;
+}
+
+struct SD { float d; float h; float a; float2 radial; float u; };   // distance to edge, ½-width, across ∈[-1,1]
+// Stem (0,0)→(S,0) then a spiral centred (S,R) starting at angle −π/2, winding counter-clockwise inward.
+static SD crozier(float2 p, float R, float S, float T, float minR) {
+    SD r; r.d = 1e9; r.h = T * R; r.a = 0; r.radial = float2(0, -1); r.u = 0;
+    {   // stem (S = 0 leaves a round cap at the spiral's start)
+        float x = clamp(p.x, 0.0, S); float dy = p.y; float dd = length(float2(p.x - x, dy));
+        r.d = dd - T * R; r.a = clamp(dy / max(T * R, 1e-6), -1.0, 1.0);
+        r.radial = dy < 0.0 ? float2(0, -1) : float2(0, 1);
+    }
+    float2 q = p - float2(S, R);
+    float rho = length(q);
+    float u0 = fmod(atan2(q.y, q.x) + 1.5707963 + 2.0 * TWO_PI, TWO_PI);
+    float U = log(R / max(rho, 1e-6)) / CB;
+    float k0 = max(ceil((U - u0) / TWO_PI) - 1.0, 0.0);
+    for (int i = 0; i < 2; i++) {
+        float uk = u0 + TWO_PI * (k0 + float(i));
+        float rk = R * exp(-CB * uk);
+        if (rk < minR) { continue; }
+        float h = max(T * rk, minR * 0.35);
+        float dd = abs(rho - rk) * 0.988 - h;
+        if (dd < r.d) { r.d = dd; r.h = h; r.a = clamp((rho - rk) / h, -1.0, 1.0); r.radial = q / max(rho, 1e-6); r.u = uk; }
+    }
+    return r;
+}
+
+fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
+    float R = in.fr.x, S = in.fr.y, T = in.fr.z, psi = in.fr.w;
+    float px = max(length(fwidth(in.lp)) * 0.7071, 1e-6);      // world units per pixel here
+    float minR = 1.2 * px;
+    SD best = crozier(in.lp, R, S, T, minR);
+    float3 emit = float3(0.0);
+    // Children: same rule one level down, on the outer edge of the winding just inside this pixel.
+    float2 q = in.lp - float2(S, R); float rho = length(q);
+    float u0 = fmod(atan2(q.y, q.x) + 1.5707963 + 2.0 * TWO_PI, TWO_PI);
+    float U = log(R / max(rho, 1e-6)) / CB;
+    float uin = u0 + TWO_PI * max(ceil((U - u0) / TWO_PI), 0.0);
+    float DU = u.curl.x;
+    float jc = round(uin / DU);
+    float beadD = 1e9, beadR = 0.0;
+    for (int dj = -1; dj <= 1; dj++) {
+        float j = jc + float(dj); if (j < 1.0) { continue; }
+        float uj = j * DU, rj = R * exp(-CB * uj);
+        float Rc = psi * rj; if (Rc < minR) { continue; }
+        float ang = -1.5707963 + uj;
+        float2 radial = float2(cos(ang), sin(ang)), tang = float2(-sin(ang), cos(ang));
+        float2 base = float2(S, R) + radial * rj * (1.0 + T);
+        // Same handedness, sprouting outward-and-back so the child curls in open space outside the parent tube.
+        float2 cx = normalize(radial * 0.8 - tang * 0.6), cy = float2(-cx.y, cx.x);
+        float2 lp = float2(dot(in.lp - base, cx), dot(in.lp - base, cy));
+        SD c = crozier(lp, Rc, 0.35 * Rc, T * u.curl.z, minR);
+        if (c.d < best.d) { best = c; best.radial = cx * c.radial.x + cy * c.radial.y; }
+        // bead string between children, on the outer edge
+        float ub = uj + 0.5 * DU, rb = R * exp(-CB * ub);
+        float2 bp = float2(S, R) + float2(cos(-1.5707963 + ub), sin(-1.5707963 + ub)) * rb * (1.0 + 1.6 * T);
+        float bd = length(in.lp - bp); if (bd < beadD) { beadD = bd; beadR = max(rb * T * 0.8, 0.8 * px); }
+    }
+    if (beadD < 3.0 * beadR) { float x = beadD / beadR; emit += float3(1.0, 0.75, 0.45) * u.curl.y * (exp(-x * x * 2.5) + 0.08 * exp(-x * x * 0.6)); }
+    float cov = saturate(0.5 - best.d / px);
+    if (cov <= 0.0 && dot(emit, emit) == 0.0) { discard_fragment(); }
+    // Glass tube cross-section → a normal; rim = the last ~2 px inside the edge.
+    float a = best.a;
+    float3 inpl = normalize(in.X * best.radial.x + in.Y * best.radial.y) * sign(a + 1e-6);
+    float3 n = normalize(in.N * sqrt(max(1.0 - a * a, 0.0)) + inpl * abs(a));
+    float3 V = normalize(u.eye.xyz - in.wpos);
+    if (dot(n, V) < 0.0) { n = -n; }
+    float cosv = saturate(dot(n, V)), fres = pow(1.0 - cosv, 3.0);
+    float rim = exp(-max(-best.d, 0.0) / (u.glass.z * px));
+    float3 Lc = u.coil.xyz - in.wpos; float dc = length(Lc);
+    float att = u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0);
+    float warm = saturate(att / (att + u.mat.z));
+    float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
+    green = mix(green, float3(0.05, 0.42, 0.36), 0.35 * (0.5 + 0.5 * sin(in.q.y * 37.0)));
+    float3 film = irid(cosv * 1.1 + best.u * 0.15 + in.q.y * 0.35 + u.eye.w * 0.02);
+    float3 tint = mix(green * 2.0, film, u.glass.y * (1.0 - warm));
+    tint = mix(tint, float3(1.0, 0.55, 0.20), warm * u.mat.w);
+    float3 body = (u.coilCol.rgb * att * u.mat.x + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
+    float3 rimC = mix(float3(0.80, 0.90, 1.0) * u.look.y * 0.5, float3(1.0, u.warmc.x, u.warmc.y) * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
+    float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres);
+    float alpha = cov * mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres));
+    return oit(C * alpha, alpha, in.pos.w, u.eye.z, emit);
+}
+
 kernel void resolve_oit(texture2d<float> accum [[texture(0)]], texture2d<float> reveal [[texture(1)]],
                         texture2d<float> add [[texture(2)]], texture2d<float, access::write> out [[texture(3)]],
                         uint2 gid [[thread_position_in_grid]]) {
@@ -337,11 +447,12 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Bead { var p: SIMD4<Float>; var c: SIMD4<Float> }
+struct Curl { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 
 let outW = Int(envF("W", 1920)), outH = Int(envF("H", 1080))
 let device = MTLCreateSystemDefaultDevice()!
@@ -369,6 +480,11 @@ func renderPSO(_ v: String, _ f: String, additive: Bool) -> MTLRenderPipelineSta
 let leafPSO = renderPSO("leaf_vertex", "fern_fragment", additive: false)
 let tubePSO = renderPSO("tube_vertex", "fern_fragment", additive: false)
 let beadPSO = renderPSO("bead_vertex", "bead_fragment", additive: true)
+let curlPSO = renderPSO("curl_vertex", "curl_fragment", additive: false)
+let maxCurls = 200_000
+let curlBuf = device.makeBuffer(length: maxCurls * MemoryLayout<Curl>.stride, options: .storageModeShared)!
+let curls = curlBuf.contents().bindMemory(to: Curl.self, capacity: maxCurls)
+var nCurls = 0
 let presentPSO = try! device.makeComputePipelineState(function: library.makeFunction(name: "present")!)
 let depthOn: MTLDepthStencilState = {
     let d = MTLDepthStencilDescriptor(); d.depthCompareFunction = .less; d.isDepthWriteEnabled = true
@@ -423,17 +539,22 @@ struct Rule {
     var minPx = envF("MINPX", 0.5)
     var beadSize = envF("BEADSZ", 0.10)
     var beadP = envF("BEADP", 0.45)               // fraction of lobes carrying a tip bead
-    var leafPx = envF("LEAFPX", 60)            // a chain shorter than this many pixels becomes one leaf
+    var leafPx = envF("LEAFPX", 30)            // a chain shorter than this many pixels becomes one leaf
     var pinOpen = envF("PINOPEN", 0.10)        // even in the coil a pinna's base is open; only its tip curls
     var pinFront = envF("PINF", 0.46)          // a mature pinna's own unfurl front (its tip crozier starts here)
     var alt = envF("ALT", 0.79)
-    var rampP = envF("RAMPP", 0.35)             // pinna curl ramps in over this much of its length (curls more toward the tip)
+    var rampP = envF("RAMPP", 0.8)             // pinna curl ramps in over this much of its length (curls more toward the tip)
     var outS = envF("OUTS", 0.6), inS = envF("INS", 1.4)   // coil: outer-side / inner-side pinna size
     var hook = envF("HOOK", 0.25)
-    var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 0.5), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
+    var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
+    var curlPx = envF("CURLPX", 100)
+    var sigS1 = envF("SIGS1", 0.30), curlMin = envF("CURLMIN", 2.0)   // crozier radius floor (px)
+    var curlOn = envF("CURLON", 0.3), curlLen = envF("CURLLEN", 1.0), curlT = envF("CURLT", 0.16), curlPsi = envF("CURLPSI", 0.35)
+    var hookR = envF("HOOKR", 0.12)              // open lobes: tip crozier radius ÷ lobe length
     var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
 var dump: [String] = []
+let curlTest = ProcessInfo.processInfo.environment["CURLTEST"] != nil
 let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "dump"                        // "dump" mode: level-0/1 skeletons in image px
 let rule = Rule()
 var pxWorld: Float = 0.001
@@ -452,7 +573,10 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
     let total = 1 / (1 - rule.sig)
     // Fractal depth is set by the screen, not a fixed level: a branch keeps branching (the same rule)
     // while it is big enough to show its own sub-branches; below that it is drawn as one leaf blade.
-    if level >= 1 && (total * S0 < rule.leafPx * pxWorld || level >= 5) {
+    // Curled tissue hands over to the per-pixel crozier while it is still big enough to read as a spiral
+    // (test card: a shader spiral reads from R ≈ 16 px, i.e. a chain of ~100 px); open tissue recurses to LEAFPX.
+    let curledHere = 1 - (front - rule.pinOpen) / (rule.pinFront - rule.pinOpen) > rule.curlOn
+    if level >= 1 && (total * S0 < rule.leafPx * pxWorld || (curledHere && total * S0 < rule.curlPx * pxWorld) || level >= 5) {
         // A pinnule: one cupped, serrated blade, bent toward the coil while its pinna is curled.
         let len = total * S0 * rule.leafLen
         guard len * rule.leafW > rule.minPx * pxWorld, nLeaves < maxLeaves else { return }
@@ -460,9 +584,32 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let jit = (hashf(hash * 13.7) - 0.5) * 2 * rule.leafJitter
         let n = rotate(N0, about: d0, jit)
         let d = rotate(d0, about: N0, -0.35 * curled)
+        let cb: Float = 0.158, arc = sqrt(1 + cb * cb) / cb          // log-spiral path length = R · arc
+        if curled > rule.curlOn {
+            // Curled tissue: the pinnule is itself a crozier (spiral + child spirals + beads, in the shader).
+            let kap = min(1, 0.45 + 0.55 * curled), L = total * S0 * rule.curlLen
+            if L * kap / arc < rule.curlMin * pxWorld {
+                // Too small to read as a spiral: a bead (the reference's smallest level) instead of a crozier.
+                if nBeads < maxBeads && hashf(hash * 3.3) < rule.beadP {
+                    beads[nBeads] = Bead(p: SIMD4(p0 + d0 * (L * 0.3), max(L * 0.08, 1.2 * pxWorld)), c: [1.0, 0.8, 0.55, hash]); nBeads += 1
+                }
+                return
+            }
+            if nCurls < maxCurls {
+                curls[nCurls] = Curl(o: SIMD4(p0, L * kap / arc), d: SIMD4(d0, L * (1 - kap)), n: SIMD4(n, rule.curlT),
+                                     q: [young0, hash, rule.curlPsi, 1]); nCurls += 1
+            }
+            return
+        }
         leaves[nLeaves] = Leaf(o: SIMD4(p0, len), d: SIMD4(d, len * rule.leafW), n: SIMD4(n, rule.leafCup),
                                q: [young0, hash, rule.leafBend * (0.4 + curled), -side * rule.hook])
         nLeaves += 1
+        if nCurls < maxCurls && rule.hookR > 0 {
+            // Open lobe: its tip hooks into a small crozier (toward the pinna tip, like the lobe's own hook).
+            let tipDir = normalize(d - normalize(cross(d, n)) * (side * 0.6))
+            curls[nCurls] = Curl(o: SIMD4(p0 + d * (len * 0.86), len * rule.hookR), d: SIMD4(tipDir, 0), n: SIMD4(n, rule.curlT),
+                                 q: [young0, hash, rule.curlPsi, side >= 0 ? -1 : 1]); nCurls += 1
+        }
         if hashf(hash * 5.9) < rule.hairP && nTubes + 3 < maxTubes {
             // A hair: a fine filament curling off the lobe margin, catching the orange light.
             let hu = 0.3 + 0.6 * hashf(hash * 8.1), hs: Float = hashf(hash * 2.7) > 0.5 ? 1 : -1
@@ -510,7 +657,9 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         // Branches: same rule one level down; immature (smaller) where the chain is still coiled;
         // each starts unrolling only once this chain's front has passed the junction.
         let mature = 1 - smooth(front - rule.pRamp, front + rule.ramp, f)
-        let bS0 = S * rule.sigS * (rule.immature + (1 - rule.immature) * mature)
+        // Branch ratio per level: stalk→pinna is fitted (0.168); pinna→pinnule is larger so each level's curl
+        // is ~0.4× its parent's (reference ladder: coil ~500 → croziers 25–60 → hooks 10–25 → tendrils <10 px).
+        let bS0 = S * (level == 0 ? rule.sigS : rule.sigS1) * (rule.immature + (1 - rule.immature) * mature)
         if level >= 1 && c > rule.crzC {
             // In the crozier the pinnules are replaced by a string of beads on the outer edge (every link).
             if nBeads < maxBeads {
@@ -521,12 +670,13 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         } else if total * bS0 > rule.minPx * pxWorld {
             let passed = min(1, max(0, (front - f) / max(rule.delay, 1e-3)))
             for side: Float in [-1, 1] {
-                let at = p + d * (S * (0.5 + 0.5 * side * rule.alt))
+                let atC = p + d * (S * (0.5 + 0.5 * side * rule.alt))
                 let bS = bS0 * (1 + ((side < 0 ? rule.outS : rule.inS) - 1) * c * (level == 0 ? 1 : 0))
                 let ang = rule.alpha * (1 - 0.25 * c)
                 let bd = rotate(d, about: N, -side * ang)                 // in-plane: right is −about N
                 let bN = rotate(N, about: bd, side * rule.tilt * (level == 0 ? 1 : 0.4))
                 let bh = (hash * 7.31 + Float(k) * 0.618 + (side > 0 ? 0.29 : 0.71)).truncatingRemainder(dividingBy: 1)
+                let at = atC + normalize(bd - d * dot(bd, d)) * (r * 0.9)      // emerge from the tube's surface
                 chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side)
             }
         }
@@ -568,7 +718,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let tb = Date()
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
     pxWorld = 12 * viewH / Float(outH)
-    nLeaves = 0; nTubes = 0; nBeads = 0
+    nLeaves = 0; nTubes = 0; nBeads = 0; nCurls = 0
     chain(base, dir: dir0, normal: SIMD3(0, 0, 1), link: seg0, front: front, level: 0, hash: 0.37, young0: 0)
     var lo = SIMD2<Float>(repeating: .greatestFiniteMagnitude), hi = -lo
     for i in 0..<nTubes { let q = SIMD2(tubes[i].b.x, tubes[i].b.y); lo = simd_min(lo, q); hi = simd_max(hi, q) }
@@ -582,8 +732,20 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let target = SIMD3<Float>(camCX, bottom + camVH / 2, 0)
     let cam = target + SIMD3<Float>(envF("CAMX", 0.0), envF("CAMY", 0.0), camDist)
     pxWorld = camDist * 2 * tan(fov / 2) / Float(outH)
-    nLeaves = 0; nTubes = 0; nBeads = 0; dump = []
+    nLeaves = 0; nTubes = 0; nBeads = 0; nCurls = 0; dump = []
+    if curlTest {
+        // Test card: single crozier elements on a grid, radius 4…64 px, to verify the per-pixel rule in isolation.
+        for (i, rpx) in [4, 8, 16, 32, 64].enumerated() {
+            for j in 0..<3 {
+                let x = -0.95 * camVH * aspect / 2 + Float(i) * 0.38 * camVH * aspect / 2 + 0.1
+                let y = bottom + camVH * (0.18 + 0.3 * Float(j))
+                curls[nCurls] = Curl(o: SIMD4(x, y, 0, Float(rpx) * pxWorld), d: SIMD4(1, 0, 0, Float(j) * Float(rpx) * pxWorld),
+                                     n: SIMD4(0, 0, 1, rule.curlT), q: [0.5, Float(i * 3 + j) * 0.137, rule.curlPsi, 1]); nCurls += 1
+            }
+        }
+    } else {
     chain(base, dir: dir0, normal: SIMD3(0, 0, 1), link: seg0, front: front, level: 0, hash: 0.37, young0: 0)
+    }
     lastBuildMs = Date().timeIntervalSince(tb) * 1000
     let vp = perspective(fov, Float(outW) / Float(outH), 0.1, 50) * lookAt(cam, target, SIMD3(0, 1, 0))
     lastVP = vp
@@ -599,7 +761,8 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 0.879)],
                      warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, 0],
                      glass: [envF("GA", 0.35), envF("FILMB", 0.5), envF("RIMPX", 2.2), envF("GLINT", 1.0)],
-                     stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)])
+                     stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
+                     curl: [envF("CDU", 0.55), envF("CBEAD", 1.5), envF("CHILDT", 0.6), 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
@@ -624,6 +787,10 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     if nLeaves > 0 {
         re.setRenderPipelineState(leafPSO); re.setVertexBuffer(leafBuf, offset: 0, index: 0)
         re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 10 * 8 * 6, instanceCount: nLeaves)
+    }
+    if nCurls > 0 {
+        re.setRenderPipelineState(curlPSO); re.setVertexBuffer(curlBuf, offset: 0, index: 0)
+        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nCurls)
     }
     if nBeads > 0 {
         re.setDepthStencilState(depthRead)
@@ -666,8 +833,8 @@ switch args.count > 1 ? args[1] : "" {
 case "still":
     render(unfurl: Float(args[2])!, sway: 0, time: 3)
     render(unfurl: Float(args[2])!, sway: 0, time: 3)          // second run: warm timings
-    FileHandle.standardError.write(String(format: "build %.1f ms, gpu %.1f ms; tubes %d leaves %d beads %d\n",
-                                          lastBuildMs, lastGpuMs, nTubes, nLeaves, nBeads).data(using: .utf8)!)
+    FileHandle.standardError.write(String(format: "build %.1f ms, gpu %.1f ms; tubes %d leaves %d beads %d curls %d\n",
+                                          lastBuildMs, lastGpuMs, nTubes, nLeaves, nBeads, nCurls).data(using: .utf8)!)
     writePNG(args[3])
 case "film":
     let seconds = Float(args[2])!, fps: Float = 30
