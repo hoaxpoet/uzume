@@ -45,6 +45,8 @@ struct U {
     float4 stem;       // helix stripes around, helix pitch, fibre lines around, band strength
     float4 curl;       // child spacing (rad of spiral), bead gain, child T ratio, child spiral b
     float4 curl2;      // grandchild scale ψ2, spacing, T ratio, 0
+    float4 vein;       // secondary veins per radian of spiral, slant, midrib gain, secondary darkening
+    float4 glass2;     // core-light cap, crozier body alpha, wide-bloom gain, 0
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -147,7 +149,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     // Light from the core: amber, falls off with distance; 'warm' = how much this point faces the core light.
     float3 Lc = u.coil.xyz - in.wpos;
     float dc = length(Lc); Lc /= max(dc, 1e-4);
-    float att = u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0);
+    float att = min(u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0), u.glass2.x);
     float warm = saturate(att / (att + u.mat.z));
     float3 amber = u.coilCol.rgb * att;
     if (dot(n, V) < 0.0) { n = -n; }               // two-sided
@@ -334,7 +336,7 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float cosv = saturate(dot(n, V)), fres = pow(1.0 - cosv, 3.0);
     float rim = exp(-max(-best.d, 0.0) / (u.glass.z * px));
     float3 Lc = u.coil.xyz - in.wpos; float dc = length(Lc);
-    float att = u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0);
+    float att = min(u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0), u.glass2.x);   // capped: backlight, not a white-hot disc
     float warm = saturate(att / (att + u.mat.z));
     float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
     green = mix(green, float3(0.05, 0.42, 0.36), 0.35 * (0.5 + 0.5 * sin(in.q.y * 37.0)));
@@ -342,9 +344,19 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 tint = mix(green * 2.0, film, u.glass.y * (1.0 - warm));
     tint = mix(tint, float3(1.0, 0.55, 0.20), warm * u.mat.w);
     float3 body = (u.coilCol.rgb * att * u.mat.x + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
+    // Veins where the lobe is wide enough to show them (reference leaflets: bright midrib, darker
+    // secondaries angled toward the tip). In the lobe's own (along u, across a) coordinates, AA'd by fwidth.
+    float wpx = best.h / px;
+    if (wpx > 2.5) {
+        float fade = saturate((wpx - 2.5) / 3.0);
+        float mid = 1.0 - smoothstep(0.0, max(fwidth(a), 1e-4) * 1.5, abs(a));
+        float sv = best.u * u.vein.x + abs(a) * u.vein.y;
+        float sec = 1.0 - smoothstep(0.0, max(fwidth(sv), 1e-4) * 1.2, abs(fract(sv) - 0.5) - 0.5 + 0.12);
+        body *= 1.0 + fade * (u.vein.z * mid - u.vein.w * sec * (1.0 - mid));
+    }
     float3 rimC = mix(float3(0.80, 0.90, 1.0) * u.look.y * 0.5, float3(1.0, u.warmc.x, u.warmc.y) * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
     float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres);
-    float alpha = cov * mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres));
+    float alpha = cov * mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres));   // lobes near-opaque: they occlude, gaps stay dark
     return oit(C * alpha, alpha, in.pos.w, u.eye.z, emit);
 }
 
@@ -449,7 +461,7 @@ kernel void present(texture2d<float> hdr [[texture(0)]],
     float4 f = hdr.sample(lin, uv, level(0.0));
     float3 col = bg * (1.0 - f.a) + f.rgb;
     col += blur(hdr, uv, 1.0).rgb * u.bgk.y + blur(hdr, uv, 2.0).rgb * u.bgk.z
-         + blur(hdr, uv, 3.0).rgb * 0.12 + blur(hdr, uv, 5.0).rgb * 0.18 + blur(hdr, uv, 7.0).rgb * 0.15;
+         + (blur(hdr, uv, 3.0).rgb * 0.12 + blur(hdr, uv, 5.0).rgb * 0.18 + blur(hdr, uv, 7.0).rgb * 0.15) * u.glass2.z;
     float2 v = uv - 0.5; col *= 1.0 - 0.55 * dot(v, v);
     // Hue-preserving tone map (x/(1+x) on the brightest channel) so hot rims stay saturated;
     // only the very hottest cores bleach toward white.
@@ -471,7 +483,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -572,7 +584,8 @@ struct Rule {
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var curlPx = envF("CURLPX", 127.6)
-    var mirror = envF("MIRROR", 1), skip = envF("SKIP", 1)
+    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.2), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.2)
+    var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.65)
     var baseTurn1 = envF("BT1", 0.10), alpha1 = envF("ALPHA1", 0.7)
     var curlBOpen = envF("BOPEN", 0.25), curlW = envF("CURLW", 1), curlOn2 = envF("CURLON2", 0.172)  // open tissue's spiral b; blade boost
     var curlB = envF("CURLB", 0.25), kapMin = envF("KAPMIN", 1.0)   // terminal crozier: spiral b, min curled fraction (1 = curls from the base)   // pinna arc per link; pinnule angle
@@ -618,7 +631,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             let kap = min(1, rule.kapMin + (1 - rule.kapMin) * curled), L = total * S0 * rule.curlLen
             if L * kap / arc < rule.curlMin * pxWorld {
                 // Too small to read as a spiral: a bead (the reference's smallest level) instead of a crozier.
-                if nBeads < maxBeads && hashf(hash * 3.3) < rule.beadP {
+                if nBeads < maxBeads && hashf(hash * 3.3) < rule.beadP * rule.cullBead {
                     beads[nBeads] = Bead(p: SIMD4(p0 + d0 * (L * 0.3), max(L * 0.08, 1.2 * pxWorld)), c: [1.0, 0.8, 0.55, hash]); nBeads += 1
                 }
                 return
@@ -659,7 +672,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         return
     }
     var p = p0, d = d0, N = N0, S = S0, prev = p0
-    var k = 0
+    var k = 0, turnAcc: Float = 0
     while total * S > rule.minPx * pxWorld && k < 300 && nTubes < maxTubes {
         let f = 1 - pow(rule.sig, Float(k))
         let c = smooth(front, front + (level == 0 ? rule.ramp : rule.rampP), f)
@@ -687,7 +700,9 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let mature = 1 - smooth(front - rule.pRamp, front + rule.ramp, f)
         // Branch ratio per level: stalk→pinna is fitted (0.168); pinna→pinnule is larger so each level's curl
         // is ~0.4× its parent's (reference ladder: coil ~500 → croziers 25–60 → hooks 10–25 → tendrils <10 px).
-        let bS0 = S * (level == 0 ? rule.sigS : rule.sigS1) * (rule.immature + (1 - rule.immature) * mature)
+        // Coil pinnae shrink slower than the spiral (reference: turn 2 still holds 33–50 px lobes): size ∝ S^PEXP.
+        let sizeLaw: Float = level == 0 ? pow(S / S0, rule.pExp - 1) : 1
+        let bS0 = S * sizeLaw * (level == 0 ? rule.sigS : rule.sigS1) * (rule.immature + (1 - rule.immature) * mature)
         if level >= 1 && c > rule.crzC {
             // In the crozier the pinnules are replaced by a string of beads on the outer edge (every link).
             if nBeads < maxBeads {
@@ -706,6 +721,14 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                 let bN = rotate(N, about: bd, side * rule.tilt * (level == 0 ? 1 : 0.4))
                 let bh = (hash * 7.31 + Float(k) * 0.618 + (side > 0 ? 0.29 : 0.71)).truncatingRemainder(dividingBy: 1)
                 let at = atC + normalize(bd - d * dot(bd, d)) * (r * 0.9)      // emerge from the tube's surface
+                if level == 0 && c > 0.5 && turnAcc > rule.sunTurn && side * handed < 0 && nLeaves < maxLeaves {
+                    // Inner turns, outer side: a backlit lance leaflet radiating into the gap between turns
+                    // (the reference's orange "sunburst": midrib, 6–8 vein pairs, serrated), set just behind the turn.
+                    let L = S * rule.sunL
+                    leaves[nLeaves] = Leaf(o: SIMD4(at - N * (0.02 * L), L), d: SIMD4(bd, L * rule.sunW), n: SIMD4(N, 0.15),
+                                           q: [0.3, bh, 0, 0]); nLeaves += 1
+                    continue
+                }
                 chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side,
                       handed: handed * (rule.mirror > 0.5 ? side : 1))      // bilateral symmetry: sides curl mirrored
             }
@@ -714,6 +737,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         // stalk's base curvature is the fitted near-straight value.
         let turn = (level == 0 ? rule.baseTurn : rule.baseTurn1) * (1 - c) + rule.maxTurn * c
         d = rotate(d, about: N, -turn * handed)                         // curl clockwise seen from +N (× handedness)
+        turnAcc += turn
         prev = p; p = p1
         S *= rule.sig
         k += 1
@@ -784,7 +808,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let coilPos = eyePos + SIMD3<Float>(0, 0, -envF("LZ", 0.06))
     var u = Uniforms(viewProj: vp, eye: SIMD4(cam, time),
                      coil: SIMD4(coilPos, envF("LI", 1.842) * (1 - 0.5 * unfurl)),
-                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.295) * (1 + unfurl)),
+                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.15) * (1 + unfurl)),
                      keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.422)),
                      backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
                      look: [envF("BODY", 0.667), envF("IRID", 1.376), envF("BEAD", 7.719), envF("DBG", 0)],
@@ -795,7 +819,9 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      glass: [envF("GA", 0.35), envF("FILMB", 0.5), envF("RIMPX", 2.2), envF("GLINT", 1.0)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
                      curl: [envF("CDU", 0.8), envF("CBEAD", 1.5), envF("CHILDT", 0.656), rule.curlB],
-                     curl2: [envF("GPSI", 0.45), envF("GDU", 0.9), envF("GT", 0.12), 0])
+                     curl2: [envF("GPSI", 0.6), envF("GDU", 0.9), envF("GT", 0.12), 0],
+                     vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
+                     glass2: [envF("CORECAP", 0.6), envF("CURLA", 0.85), envF("BLOOMW", 0.35), 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
