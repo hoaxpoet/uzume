@@ -51,6 +51,7 @@ struct PresetStageDecodeTests {
         let deliberateUsers: Set<String> = [
             "Poisson Sandbox",   // ALFVEN.1 diagnostic — proves the surface
             "FFT Sandbox",       // ALFVEN.1c — 8-iteration butterfly stages
+            "Understory",        // UND.1 — persistent `fronds` feedback-IFS atlas (first production consumer)
         ]
         for descriptor in descriptors where !deliberateUsers.contains(descriptor.name) {
             for stage in descriptor.stages {

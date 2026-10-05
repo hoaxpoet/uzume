@@ -1,0 +1,351 @@
+// UnderstoryStagedHarnessTests — the multi-frame harness for Understory (UND.0 / UND.1),
+// copy-adapted from `PersistentStagedPathHarnessTemplate` (PRESET_SESSION_CHECKLIST Part 2:
+// the harness precedes the shader work it guards).
+//
+// Dispatch path exercised: the production staged frame — `RenderPipeline.encodeOffscreenStages`
+// (persistent `fronds` ping-pong, watchdog probe, swap commit) then `encodeStage` for the final
+// `present` stage into a capture texture (no MTKView headless). Slot 6 carries a real
+// `UnderstoryField.buffer`, ticked every frame exactly as the app's `setMeshPresetTick` does.
+//
+// GPU tests. `understoryIsFlashSafe` (the certification flash measurement) always runs; the rest
+// are env-gated (not in the default parallel run):
+//   • HARNESS_TEMPLATES=1 — 60 silence frames: the persistent frond neither blows up, decays to
+//     nothing, nor renders black.
+//   • UNDERSTORY_SEQUENCE=<fixture> — replays `route_coverage/<fixture>/features.csv` at 60 fps
+//     from t = 0 and writes frames (UNDERSTORY_SIZE=WxH, default 640×480) for t ∈ [8, 20) s to
+//     /tmp/uzume_visual/understory_<fixture>/understory_seq_*.png, plus `bend.csv` — the
+//     side-by-side input for the UND.1 GO/NO-GO against the butterchurn oracle (same window,
+//     same frame size, same 4:3 frame the source draws in).
+
+import Testing
+import Foundation
+import Metal
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
+@testable import Renderer
+@testable import Presets
+@testable import Shared
+
+// MARK: - UnderstoryStagedHarnessTests
+
+@Suite("Understory staged harness (UND.1 →; GPU, most tests env-gated)")
+@MainActor
+struct UnderstoryStagedHarnessTests {
+
+    private struct Rig {
+        let ctx: MetalContext
+        let pipeline: RenderPipeline
+        let finalSpec: StagedStageSpec
+        let capture: MTLTexture
+        let field: UnderstoryField
+        let width: Int
+        let height: Int
+
+        /// One production staged frame: tick the springs, encode every stage, capture.
+        func frame(_ features: FeatureVector, stems: StemFeatures = .zero) throws {
+            var features = features
+            field.tick(deltaTime: features.deltaTime, features: features, stems: stems)
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { throw HarnessError.commandBufferFailed }
+            let front = pipeline.encodeOffscreenStages(commandBuffer: cmd, features: &features, stemFeatures: .zero)
+            let desc = MTLRenderPassDescriptor()
+            desc.colorAttachments[0].texture = capture
+            desc.colorAttachments[0].loadAction = .clear
+            desc.colorAttachments[0].storeAction = .store
+            guard let enc = cmd.makeRenderCommandEncoder(descriptor: desc) else { throw HarnessError.encoderCreationFailed }
+            pipeline.encodeStage(stage: finalSpec, encoder: enc, features: &features, stemFeatures: .zero, textures: front)
+            enc.endEncoding()
+            cmd.commit()
+            cmd.waitUntilCompleted()
+            guard cmd.status == .completed else { throw HarnessError.renderFailed }
+        }
+
+        var pixels: [UInt8] { HarnessTemplateCore.readBGRA(capture, width: width, height: height) }
+
+        /// `frame`, returning the command buffer's GPU time in seconds.
+        func timedFrame(_ features: FeatureVector) throws -> Double {
+            var features = features
+            field.tick(deltaTime: features.deltaTime, features: features)
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { throw HarnessError.commandBufferFailed }
+            let front = pipeline.encodeOffscreenStages(commandBuffer: cmd, features: &features, stemFeatures: .zero)
+            let desc = MTLRenderPassDescriptor()
+            desc.colorAttachments[0].texture = capture
+            desc.colorAttachments[0].loadAction = .clear
+            desc.colorAttachments[0].storeAction = .store
+            guard let enc = cmd.makeRenderCommandEncoder(descriptor: desc) else { throw HarnessError.encoderCreationFailed }
+            pipeline.encodeStage(stage: finalSpec, encoder: enc, features: &features, stemFeatures: .zero, textures: front)
+            enc.endEncoding()
+            cmd.commit()
+            cmd.waitUntilCompleted()
+            return cmd.gpuEndTime - cmd.gpuStartTime
+        }
+    }
+
+    private static func rig(width: Int, height: Int) throws -> Rig {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        let loader = PresetLoader(device: ctx.device, pixelFormat: ctx.pixelFormat, loadBuiltIn: true)
+        guard let preset = loader.presets.first(where: { $0.descriptor.name == "Understory" }) else {
+            throw HarnessError.presetNotFound("Understory")
+        }
+        let buffers = try HarnessTemplateCore.makeSilenceBuffers(ctx)
+        let pipeline = try RenderPipeline(context: ctx, shaderLibrary: lib,
+                                          fftBuffer: buffers.fft, waveformBuffer: buffers.waveform)
+        let specs = preset.stages.map {
+            StagedStageSpec(name: $0.name, pipelineState: $0.pipelineState, samples: $0.samples,
+                            writesToDrawable: $0.writesToDrawable, persistent: $0.persistent,
+                            iterations: $0.iterations, pixelFormat: $0.pixelFormat)
+        }
+        guard let finalSpec = specs.last, finalSpec.writesToDrawable else {
+            throw HarnessError.setupFailed("staged final stage must write to drawable")
+        }
+        pipeline.setStagedRuntime(specs, drawableSize: CGSize(width: width, height: height))
+        guard let field = UnderstoryField(device: ctx.device) else { throw HarnessError.setupFailed("UnderstoryField") }
+        pipeline.setDirectPresetFragmentBuffer(field.buffer)
+        let capture = try HarnessTemplateCore.makeCaptureTexture(ctx, width: width, height: height,
+                                                                 pixelFormat: ctx.pixelFormat)
+        return Rig(ctx: ctx, pipeline: pipeline, finalSpec: finalSpec, capture: capture, field: field,
+                   width: width, height: height)
+    }
+
+    // MARK: Silence
+
+    @Test("at silence the persistent frond grows, holds, and never renders black")
+    func silenceIsStable() throws {
+        guard HarnessTemplateCore.isEnabled else { return }
+        let rig = try Self.rig(width: 320, height: 180)
+        var mass: [Double] = []
+        for i in 0..<60 {
+            var f = HarnessTemplateCore.silenceFeature(frame: i)
+            f.aspectRatio = 320.0 / 180.0
+            try rig.frame(f)
+            mass.append(try Self.frondMass(rig.pipeline))
+        }
+        let first = mass[0], last = mass[59]
+        print(String(format: "[understory-harness] frond mass frame 1 %.2f | frame 30 %.2f | frame 60 %.2f | watchdog %d",
+                     first, mass[29], last, rig.pipeline.stagedWatchdogTripCount))
+        #expect(mass.allSatisfy { $0.isFinite })
+        #expect(rig.pipeline.stagedWatchdogTripCount == 0)
+        #expect(first > 0, "the seed must land on frame 1")
+        #expect(last > first * 2, "the frond must grow out of the seed at silence")
+        #expect(mass[59] - mass[49] < mass[10] - mass[0], "growth must decelerate toward the attractor")
+        let px = rig.pixels
+        #expect(HarnessTemplateCore.isNonConstant(px))
+        #expect(HarnessTemplateCore.meanLuma(px) > 0.015, "silence must not render black (D-037)")
+    }
+
+    /// Sum of the `fronds` stage's density channel.
+    private static func frondMass(_ pipeline: RenderPipeline) throws -> Double {
+        guard let tex = pipeline.stagedTexture(named: "fronds") else { throw HarnessError.setupFailed("fronds") }
+        let bytes = HarnessTemplateCore.readHalf(tex, width: tex.width, height: tex.height)
+        var sum = 0.0
+        bytes.withUnsafeBytes { raw in
+            let halves = raw.bindMemory(to: UInt16.self)
+            for i in stride(from: 0, to: halves.count, by: 4) {
+                sum += Double(HarnessTemplateCore.halfToFloat(halves[i]))
+            }
+        }
+        return sum
+    }
+
+    // MARK: Fixture sequence
+
+    @Test("fixture replay writes the GO/NO-GO sequence")
+    func fixtureSequence() throws {
+        guard let fixture = ProcessInfo.processInfo.environment["UNDERSTORY_SEQUENCE"] else { return }
+        let root = try #require(Bundle.module.url(forResource: "route_coverage", withExtension: nil))
+        let rows = try SessionReplayHarness.loadRowsForReplay(
+            root.appendingPathComponent(fixture).appendingPathComponent("features.csv"))
+        try #require(!rows.isEmpty)
+        // Stems row-aligned with features (both written per analysis frame); UND.5's voice route.
+        let stems = SessionReplayHarness.loadStemsForReplay(
+            root.appendingPathComponent(fixture).appendingPathComponent("stems.csv"))
+        let out = URL(fileURLWithPath: "/tmp/uzume_visual/understory_\(fixture)")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+
+        // UNDERSTORY_SIZE=WxH (default 640x480, the oracle's frame for the UND.1 side-by-side).
+        let dims = (ProcessInfo.processInfo.environment["UNDERSTORY_SIZE"] ?? "640x480")
+            .split(separator: "x").compactMap { Int($0) }
+        let (width, height) = dims.count == 2 ? (dims[0], dims[1]) : (640, 480)
+        let rig = try Self.rig(width: width, height: height)
+        var bendLog = ["frame,t,bend,direction,unfurl"]
+        var flashFrames: [[FlashRegionSample]] = []
+        var row = 0
+        for i in 0..<(20 * 60) {
+            let t = Float(i) / 60
+            while row + 1 < rows.count && rows[row + 1].time <= t { row += 1 }
+            var f = SessionReplayHarness.featureForReplay(from: rows[row], aspect: Float(width) / Float(height))
+            f.time = t
+            f.deltaTime = 1.0 / 60.0
+            f.beatsPerBar = 4   // the fixtures' meter (every row: 4); the replay row does not carry it
+            try rig.frame(f, stems: row < stems.count ? stems[row] : .zero)
+            guard t >= 8 else { continue }
+            let n = i - 8 * 60
+            let frond = rig.field.frondsForTesting()[0]
+            bendLog.append(String(format: "%d,%.4f,%.5f,%.5f,%.4f", n, t, frond.bend, frond.direction,
+                                  rig.field.unfurlForTesting))
+            if n % 90 == 0 || (300...303).contains(n), ProcessInfo.processInfo.environment["UNDERSTORY_ATLAS"] == "1",
+               let atlas = rig.pipeline.stagedTexture(named: "fronds") {
+                try Self.writePNG(Self.atlasGray(atlas), width: atlas.width, height: atlas.height,
+                                  to: out.appendingPathComponent(String(format: "atlas_%05d.png", n)))
+                try Self.writePNG(Self.atlasGray(atlas, age: true), width: atlas.width, height: atlas.height,
+                                  to: out.appendingPathComponent(String(format: "atlas_age_%05d.png", n)))
+                try Self.atlasRaw(atlas).write(to: out.appendingPathComponent(String(format: "atlas_%05d.f16", n)))
+            }
+            let pixels = rig.pixels
+            flashFrames.append(FlashAnalyzer.regions(bgra: pixels, width: width, height: height))
+            try Self.writePNG(pixels, width: width, height: height,
+                              to: out.appendingPathComponent(String(format: "understory_seq_%05d.png", n)))
+        }
+        try (bendLog.joined(separator: "\n") + "\n").write(to: out.appendingPathComponent("bend.csv"),
+                                                          atomically: true, encoding: .utf8)
+        // UND.4 evidence: every shimmer (time on the fixture's clock, frond, why), and which frond
+        // is the lead — checked against the grid's own wraps offline.
+        let lead = rig.field.layoutForTesting.leadIndex
+        let shimmerLog = ["time,frond,kind,is_lead"] + rig.field.shimmerEventsForTesting().map {
+            String(format: "%.4f,%d,%@,%d", $0.time, $0.frond, $0.kind.rawValue, $0.frond == lead ? 1 : 0)
+        }
+        try (shimmerLog.joined(separator: "\n") + "\n").write(to: out.appendingPathComponent("shimmer.csv"),
+                                                              atomically: true, encoding: .utf8)
+        print("[understory-harness] wrote 720 frames + bend.csv to \(out.path); watchdog \(rig.pipeline.stagedWatchdogTripCount)")
+        // Photosensitivity on the production frames (the shimmer must travel, never flash).
+        let regional = FlashAnalyzer.analyzeRegional(flashFrames, fps: 60)
+        let red = FlashAnalyzer.analyzeRed(flashFrames, fps: 60)
+        // The gate must CONTAIN the hazard: count the shimmers inside the analysed window.
+        let shimmers = rig.field.shimmerEventsForTesting().filter { $0.time >= 8 }.count
+        print(String(format: "[understory-flash] %@: %d shimmers in the window; regional %.2f flashes/s (safe %@), red %.2f (safe %@)",
+                     fixture, shimmers, regional.peakFlashesPerSecond, regional.isSafe ? "yes" : "NO",
+                     red.peakFlashesPerSecond, red.isSafe ? "yes" : "NO"))
+        #expect(shimmers > 0, "a flash pass on frames without a shimmer proves nothing")
+        #expect(regional.isSafe && red.isSafe)
+        #expect(rig.pipeline.stagedWatchdogTripCount == 0)
+    }
+
+    // MARK: GPU cost
+
+    /// UNDERSTORY_PERF=1 — median GPU time of the full staged frame at 1080p and 4K, the number
+    /// behind the sidecar's `complexity_cost`. Quote it only from a Release run:
+    /// `swift test -c release --enable-testable-imports` (CLAUDE.md: Debug numbers mean nothing).
+    @Test("GPU cost of the staged frame at 1080p and 4K")
+    func gpuCost() throws {
+        guard ProcessInfo.processInfo.environment["UNDERSTORY_PERF"] == "1" else { return }
+        #if DEBUG
+        print("[understory-perf] DEBUG build — numbers below are NOT a cost (use -c release)")
+        #endif
+        for (width, height) in [(1920, 1080), (3840, 2160)] {
+            let rig = try Self.rig(width: width, height: height)
+            var millis: [Double] = []
+            var build: [Double] = []
+            for i in 0..<240 {
+                var f = HarnessTemplateCore.silenceFeature(frame: i)
+                f.aspectRatio = Float(width) / Float(height)
+                f.bass = 0.3 + 0.2 * sin(Float(i) * 0.3)
+                f.treble = 0.01
+                let gpu = try rig.timedFrame(f)
+                if i >= 60 { millis.append(gpu * 1000) } else if i < 48 { build.append(gpu * 1000) }
+            }
+            build.sort()
+            print(String(format: "[understory-perf] %dx%d BUILD frames (forest dissolving in) GPU ms: median %.3f  max %.3f",
+                         width, height, build[build.count / 2], build.last ?? 0))
+            millis.sort()
+            print(String(format: "[understory-perf] %dx%d GPU ms: median %.3f  p90 %.3f  max %.3f",
+                         width, height, millis[millis.count / 2], millis[millis.count * 9 / 10],
+                         millis.last ?? 0))
+        }
+    }
+
+    /// The raw `fronds` atlas (rgba16Float bytes) for offline stamp analysis.
+    private static func atlasRaw(_ tex: MTLTexture) -> Data {
+        Data(HarnessTemplateCore.readHalf(tex, width: tex.width, height: tex.height))
+    }
+
+    /// The `fronds` atlas as an opaque grey BGRA image (diagnostics): density, or with `age`
+    /// the path length G/R in generations over 64 (black where there is no frond).
+    private static func atlasGray(_ tex: MTLTexture, age: Bool = false) -> [UInt8] {
+        let bytes = HarnessTemplateCore.readHalf(tex, width: tex.width, height: tex.height)
+        var out = [UInt8](repeating: 255, count: tex.width * tex.height * 4)
+        bytes.withUnsafeBytes { raw in
+            let halves = raw.bindMemory(to: UInt16.self)
+            for i in 0..<(tex.width * tex.height) {
+                let density = HarnessTemplateCore.halfToFloat(halves[i * 4])
+                let path = HarnessTemplateCore.halfToFloat(halves[i * 4 + 1]) / max(density, 1e-3)
+                let value = age ? (density > 0.05 ? path / 64 : 0) : density
+                let v = UInt8(max(0, min(255, value * 255)))
+                out[i * 4] = v; out[i * 4 + 1] = v; out[i * 4 + 2] = v
+            }
+        }
+        return out
+    }
+
+    // MARK: Photosensitivity (certification measurement)
+
+    /// The certification-grade flash measurement (NEW_PRESET_CHECKLIST §4): the shared worst-case
+    /// drive — `FlashHarnessSupport`'s 4.5 Hz beat train on a 270 BPM 4/4 grid with arousal 0.85
+    /// (the longest trails), the worst harmonic motion, and the worst stem train — through the
+    /// production staged path. At 4.5 Hz a beat lands every 0.22 s, faster than a shimmer lasts,
+    /// so shimmers overlap across fronds: the scene's worst case. 10 s warm-up discarded (forest
+    /// build, grid trust), 30 s measured. Not env-gated: it is a safety gate.
+    @Test("Understory is flash-safe under the worst-case beat + stem train")
+    func understoryIsFlashSafe() throws {
+        let seconds = 40.0
+        let drive = FlashHarnessSupport.withHarmonicMotion(FlashHarnessSupport.worstCaseBeatTrain(seconds: seconds))
+        let stems = FlashHarnessSupport.worstCaseStemTrain(seconds: seconds)
+        let rig = try Self.rig(width: 320, height: 180)
+        var samples: [FlashHarnessSupport.FlashSample] = []
+        for (i, frame) in drive.enumerated() {
+            var f = frame
+            f.aspectRatio = 320.0 / 180.0
+            try rig.frame(f, stems: i < stems.count ? stems[i] : .zero)
+            if i >= 600 { samples.append(FlashHarnessSupport.sample(rig.pixels, width: 320, height: 180)) }
+        }
+        let shimmers = rig.field.shimmerEventsForTesting().filter { $0.time >= 10 }.count
+        print("[understory-flash-cert] \(shimmers) shimmers inside the measured 30 s")
+        #expect(shimmers > 100, "the measurement must CONTAIN the hazard (a shimmer per beat at 4.5 Hz)")
+        FlashHarnessSupport.assertFlashSafe(name: "Understory", samples: samples)
+    }
+
+    // MARK: κ fitting
+
+    /// UNDERSTORY_KAPPA=1 — the fiddleheads at silence for each candidate κ, written as the
+    /// atlas (where each coil sits alone in its tile) for comparison with ref 02 (UND.5).
+    @Test("fiddlehead coils at candidate curls")
+    func kappaCoils() throws {
+        guard ProcessInfo.processInfo.environment["UNDERSTORY_KAPPA"] == "1" else { return }
+        let out = URL(fileURLWithPath: "/tmp/uzume_visual/understory_kappa")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        for kappa: Float in [0.25, 0.35, 0.45, 0.55] {
+            let rig = try Self.rig(width: 1920, height: 1080)
+            rig.field.setFiddleheadCurlForTesting(kappa)
+            for i in 0..<150 {
+                var f = HarnessTemplateCore.silenceFeature(frame: i)
+                f.aspectRatio = 1920.0 / 1080.0
+                try rig.frame(f)
+            }
+            guard let atlas = rig.pipeline.stagedTexture(named: "fronds") else { continue }
+            try Self.writePNG(Self.atlasGray(atlas), width: atlas.width, height: atlas.height,
+                              to: out.appendingPathComponent(String(format: "kappa_%.2f.png", kappa)))
+        }
+        let layout = try Self.rig(width: 1920, height: 1080).field.layoutForTesting
+        print("[understory-kappa] fiddlehead tiles: " + layout.fronds.filter(\.isFiddlehead).map {
+            String(format: "(%.3f,%.3f,%.3f,%.3f)", $0.tile.x, $0.tile.y, $0.tile.z, $0.tile.w)
+        }.joined(separator: " "))
+    }
+
+    private static func writePNG(_ bgra: [UInt8], width: Int, height: Int, to url: URL) throws {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { throw HarnessError.setupFailed("sRGB") }
+        let info = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        var copy = bgra
+        let image = copy.withUnsafeMutableBytes { raw -> CGImage? in
+            guard let base = raw.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space, bitmapInfo: info) else { return nil }
+            return context.makeImage()
+        }
+        guard let image,
+              let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+            throw HarnessError.setupFailed("PNG")
+        }
+        CGImageDestinationAddImage(dest, image, nil)
+        guard CGImageDestinationFinalize(dest) else { throw HarnessError.setupFailed("PNG write") }
+    }
+}

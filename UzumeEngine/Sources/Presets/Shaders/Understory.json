@@ -1,0 +1,160 @@
+{
+  "name": "Understory",
+  "family": "fractal",
+  "description": "A dim green forest floor with a field of fourteen glowing fern fronds among still ones: big furrowed trunks receding into green haze, a moss-covered fallen log across the middle distance, and a dense carpet of still sword ferns in depth rows. That forest is drawn once and held, the same place for every track. The fourteen moving fronds (ten open, and four fiddleheads, young fronds coiled into tight spirals that uncoil while someone sings) are Flexi's feedback fractal, ported verbatim: every frame each is rebuilt from the previous frame through three maps (the main arm and two side arms), so a change at the base reaches the tip a few frames later, which is the whip. Each glows in saturated rainbow bands running up the stem and out across its leaflets, every frond at its own place on the colour wheel, and the whole field's colours turn with the harmony (the circle-of-fifths position, smoothed, held when the music is atonal or silent; never on a timer). Each moving frond's light spills onto the forest around its root. Every frond bends with Flexi's two springs, driven by the balance of bass against treble, each measured against its own average over the last few seconds; a bass swell leans the field one way and a treble swell the other, and a strong swing curls an open frond into a crozier before it snaps back. The gust travels left to right, about 1.7 s across the screen, and each frond has slightly different springs, so neighbours drift out of phase. On every beat of the song's beat grid one frond shimmers: a white-hot band, the palette turned half a turn under it, climbs from its base up the stem and out through every leaflet in about a third of a second, with a short afterglow behind it. The downbeat goes to the large lead frond in front; beats two to four go to a set of mid-distance fronds, always left to right, the same set for four bars before the next group takes over, so the eye learns where the next shimmer will land. Nothing shimmers until the grid has completed a bar and four seconds of the track have passed; with no grid, shimmers follow drum hits on a random frond, at least 0.35 s apart. The fiddleheads follow the voice: a sung line uncoils them over about a second and a half, one after another from left to right, and when the singing stops they coil back over about five seconds; the voice is the vocal stem's energy against its own average, ignored when the instrument model hears brass, woodwinds or strings (a trumpet lands in the vocal stem as strongly as a singer), so an instrumental keeps them coiled. The fronds are also the band: on every drum hit the far row flicks, a sharp twitch peaking 30 ms after the hit with neighbours flicking opposite ways; on every bass note the middle row pushes outward from the centre and lets go over about a fifth of a second; and while someone sings, the near row sways with the vocal line, leaning as the melody rises and falls. These ride on top of the wind. Moving fronds leave a short afterglow trail, longer when the music is more intense (arousal). A new track grows a new field of moving fronds from their seeds. At silence the springs settle and a faint idle breeze keeps the field barely moving.",
+  "author": "Uzume engine",
+  "inspired_by": {
+    "milkdrop_filename": "flexi - fractal seafood",
+    "original_artist": "Flexi",
+    "pack": "Milkdrop 2 original pack (via butterchurn-presets@2.4.7 presets/converted)",
+    "source_form": "butterchurn pre-converted JSON, presets/converted/flexi - fractal seafood.json; the .milk (projectM presets-milkdrop-original) was read for comments only; neither file is committed (D-116 bullet 4)",
+    "sha256": "d0ca386c74a4be1ebacfc451cf48e3e7c6a3aac94ddf705d116ad5ebccd627d9"
+  },
+  "passes": [
+    "staged"
+  ],
+  "stages": [
+    {
+      "name": "backdrop",
+      "fragment_function": "understory_backdrop_fragment",
+      "persistent": true
+    },
+    {
+      "name": "fronds",
+      "fragment_function": "understory_fronds_fragment",
+      "persistent": true
+    },
+    {
+      "name": "bed",
+      "fragment_function": "understory_bed_fragment",
+      "samples": [
+        "fronds"
+      ],
+      "persistent": true
+    },
+    {
+      "name": "present",
+      "fragment_function": "understory_present_fragment",
+      "samples": [
+        "bed",
+        "backdrop"
+      ]
+    }
+  ],
+  "vertex_function": "fullscreen_vertex",
+  "fragment_function": "understory_present_fragment",
+  "duration": 60,
+  "visual_density": 0.4,
+  "motion_intensity": 0.4,
+  "color_temperature_range": [
+    0.3,
+    0.7
+  ],
+  "fatigue_risk": "low",
+  "transition_affordances": [
+    "crossfade"
+  ],
+  "section_suitability": [
+    "ambient",
+    "comedown",
+    "bridge"
+  ],
+  "complexity_cost": {
+    "tier1": 3.0,
+    "tier2": 1.5
+  },
+  "certified": false,
+  "rubric_profile": "lightweight",
+  "audio_routes": [
+    {
+      "route": "wind_bass",
+      "primitive": "bass",
+      "kind": "continuous",
+      "note": "UND.1 — bass half of the wind. UnderstoryField ports butterchurn's AudioLevels verbatim: bass over its own ~4 s long average (scale-free, so the AGC cancels — a deviation form, not an absolute threshold, FA #31), EMA .97/.04, then drive = 0.2·(bb − tt) into Flexi's two springs at 60 Hz substeps."
+    },
+    {
+      "route": "wind_treble",
+      "primitive": "treble",
+      "kind": "continuous",
+      "note": "UND.1 — treble half of the same balance, same normalisation. One visual layer, one balance: a bass swell leans the frond one way, a treble swell the other. bassDev − trebDev (trebDev ~100× below bassDev) and the BandDeviationTracker ratio (~21 s average, one-sided lean) were measured on the fixtures and rejected."
+    },
+    {
+      "route": "palette_from_harmony",
+      "primitive": "tonalPhaseFifths",
+      "kind": "continuous",
+      "note": "UND.3 — the whole field's palette rotation: tonalPhaseFifths circular-EMA'd as a unit vector (0.025 per 1/60 s, ~0.8 s; the Nacre TONAL.3 recipe), so modulations glide and wrap safely. Never a wall clock (design §4.5)."
+    },
+    {
+      "route": "palette_from_harmony",
+      "primitive": "tonalConsonance",
+      "kind": "continuous",
+      "note": "UND.3 — gates the harmony steering (Nacre's analyzer floor, (c − 0.05)/0.03): atonal or silent passages HOLD the last harmonic position."
+    },
+    {
+      "route": "afterglow_length",
+      "primitive": "arousal",
+      "kind": "continuous",
+      "note": "UND.3 — trail decay per 1/60 s from arousal (EMA ~2 s), 0.50 calm → 0.82 intense: a ghost falls to 10 % in ~3 frames calm, ~12 intense. One slow route, its own layer (FA #67)."
+    },
+    {
+      "route": "shimmer_beat",
+      "primitive": "beatPhase01",
+      "kind": "accent",
+      "note": "UND.4 — each beatPhase01 wrap (sub-frame interpolated) is a beat; its place in the bar is round(barPhase01 · beatsPerBar), so a bar wrap the grid skips while re-anchoring cannot silence the bar. Beats 2…N → a mid-layer set left to right, rotating every 4 bars. Replay: 101/101 grid beats matched on the three fixtures, 0 off-grid, 0.00 flashes/s."
+    },
+    {
+      "route": "shimmer_downbeat",
+      "primitive": "barPhase01",
+      "kind": "accent",
+      "note": "UND.4 — each barPhase01 wrap is the downbeat → the lead frond (25/25 on the fixtures). Also the grid-trust gate: nothing fires until it has wrapped once and 4 s have passed (cold start; D-154 no-grid tracks)."
+    },
+    {
+      "route": "shimmer_no_grid",
+      "primitive": "drumsEnergyDev",
+      "kind": "accent",
+      "note": "UND.4 — only when no grid is live (no bar wrap for 6 s): a rising crossing of 0.30, at least 0.35 s apart, shimmers a random mid frond (Matt's §10-2 default)."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "vocalsEnergyRel",
+      "kind": "continuous",
+      "note": "UND.5 — voice presence: smoothstep(0.05, 0.35, vocalsEnergyRel), D-019-gated on total stem energy; envelope attack 1.5 s / release 5 s; curl = κ_max (0.40–0.48, fitted to ref 02) · (1 − opening), staggered left to right. Replay: love_rehab 0.83, there_there 0.87 mean open; so_what (instrumental) 0.00."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "brassActivity",
+      "kind": "continuous",
+      "note": "UND.5 — veto: brass + woodwinds + strings activity (EMA 0.5 s, seeded on the first sample) above 0.03→0.10 closes the voice gate. Measured: the separated vocal stem carries so_what's trumpet as strongly as a singer; brass separates them ~100× (median 0.167 vs 0.001–0.002)."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "woodwindsActivity",
+      "kind": "continuous",
+      "note": "UND.5 — part of the same family veto."
+    },
+    {
+      "route": "fiddlehead_unfurl",
+      "primitive": "stringsActivity",
+      "kind": "continuous",
+      "note": "UND.5 — part of the same family veto."
+    },
+    {
+      "route": "drum_flick",
+      "primitive": "spectralLevelRise",
+      "kind": "accent",
+      "note": "UND.6 — far row: a rising edge past 0.3 (≥ 0.1 s apart) is a drum hit; alpha pulse peaking 30 ms later, 0.06 × hit strength, neighbours opposite. Live on both paths (the drum stem is ~2.5 s late on streaming). Replay: the far frond's bend changes 2.5–3.6× more across a hit than at random moments."
+    },
+    {
+      "route": "bass_push",
+      "primitive": "bassDev",
+      "kind": "continuous",
+      "note": "UND.6 — mid row: bassDev → x/(x+0.15) → 15 ms attack / 0.18 s release, × 0.08, leaning outward from the centre. Live on both paths."
+    },
+    {
+      "route": "vocal_line",
+      "primitive": "vocalsCentroid",
+      "kind": "continuous",
+      "note": "UND.6 — near row: the vocal stem's centroid against its own 3 s average, tanh(Δ/0.06), 0.1 s smoothing, × 0.09, gated by the voice presence (vocalsEnergyRel with the brass/woodwind/string veto). Tight on local files; ~2.5 s late on streaming."
+    }
+  ]
+}
