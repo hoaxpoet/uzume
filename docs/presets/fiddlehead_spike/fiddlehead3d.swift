@@ -103,7 +103,7 @@ vertex VOut leaf_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     return o;
 }
 
-constant int NS = 8;                               // tube sides
+constant int NS = 16;                               // tube sides
 vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                         const device Tube* T [[buffer(0)]], constant U& u [[buffer(1)]]) {
     Tube t = T[iid];
@@ -227,7 +227,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 tint = mix(green * 2.0, band * 1.6, u.stem.w * (1.0 - warm) * coilBand);
     float3 body = (amber * u.mat.x * 0.5 + 0.08 * u.look.x) * tint * (1.0 + 1.2 * fib);
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
-    float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w * coilBand), rimWarm * u.mat.y * 1.3, warm * lit);
+    float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), float3(0.75, 0.95, 1.0), coilBand), rimWarm * u.mat.y * 1.3, warm * lit);   // band edge: white-cyan, not a magenta stripe
     float3 C = (body + rimC * rim * 1.6 + spec + sparkC * sparkle * coilBand * u.glass.w * 3.0) * wallDk * (inside ? 0.25 : 1.0);
     return opq(C * mix(u.glass.x * 1.4, 1.0, rim), 1.0, float3(0.0));
 }
@@ -702,7 +702,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             // Thick stems: a smooth quadratic through the link midpoints (no kinks at the joints).
             let a0 = k == 0 ? p : (prev + p) * 0.5, a2 = (p + p1) * 0.5, ctrl = k == 0 ? (a0 + a2) * 0.5 : p
             var q0 = a0
-            let rA = k == 0 ? r : prevRmid, rB = r * (1 + (rule.sig - 1) * 0.5)   // radius continuous across joints
+            // radius continuous across joints; a branch tapers in from its junction (no cap)
+            let rA = k == 0 ? (level >= 1 ? r * 0.4 : r) : prevRmid, rB = r * (1 + (rule.sig - 1) * 0.5)
             var r0 = rA
             for j in 1...4 where nTubes < maxTubes {
                 let t = Float(j) / 4, q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
@@ -742,7 +743,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                 let bd = rotate(d, about: N, -side * ang)                 // in-plane: right is −about N
                 let bN = rotate(N, about: bd, side * rule.tilt * (level == 0 ? 1 : 0.4))
                 let bh = (hash * 7.31 + Float(k) * 0.618 + (side > 0 ? 0.29 : 0.71)).truncatingRemainder(dividingBy: 1)
-                let at = atC + normalize(bd - d * dot(bd, d)) * (r * 0.9)      // emerge from the tube's surface
+                let at = atC + normalize(bd - d * dot(bd, d)) * (r * 0.8) - N * (r * 0.35)   // emerge from the tube's SIDE, a little behind (not across its front)
                 if level == 0 && c > 0.5 && turnAcc > rule.sunTurn && side * handed < 0 && nLeaves < maxLeaves {
                     // Inner turns, outer side: a backlit lance leaflet radiating into the gap between turns
                     // (the reference's orange "sunburst": midrib, 6–8 vein pairs, serrated), set just behind the turn.
@@ -864,7 +865,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     re.setCullMode(.none)
     if nTubes > 0 {
         re.setRenderPipelineState(tubePSO); re.setVertexBuffer(tubeBuf, offset: 0, index: 0)
-        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 8 * 6, instanceCount: nTubes)
+        re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 16 * 6, instanceCount: nTubes)
     }
     if nLeaves > 0 {
         re.setRenderPipelineState(leafPSO); re.setVertexBuffer(leafBuf, offset: 0, index: 0)
