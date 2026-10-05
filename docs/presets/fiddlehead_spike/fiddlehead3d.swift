@@ -653,6 +653,7 @@ struct Rule {
     var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
 var dump: [String] = []
+var skelLo = SIMD2<Float>(repeating: 0), skelHi = SIMD2<Float>(repeating: 0)
 let curlTest = ProcessInfo.processInfo.environment["CURLTEST"] != nil
 let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "dump"                        // "dump" mode: level-0/1 skeletons in image px
 let rule = Rule()
@@ -742,6 +743,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let coreFat: Float = level == 0 ? 1 + rule.coreT * c * min(1, turnAcc / 6.2832) : 1
         let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1) * (level >= 1 ? 1 + rule.crz * c : 1) * coreFat
         let p1 = p + d * S
+        if level <= 1 { skelLo = simd_min(skelLo, SIMD2(p1.x, p1.y)); skelHi = simd_max(skelHi, SIMD2(p1.x, p1.y)) }   // framing extent
         if level <= 1 && dumping { dump.append("\(level) \(hash) \(p.x) \(p.y) \(p.z) \(S)") }
         if r > 1.5 * pxWorld {
             // Thick stems: a smooth quadratic through the link midpoints (no kinks at the joints).
@@ -844,10 +846,9 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
     pxWorld = 12 * viewH / Float(outH)
     nLeaves = 0; nTubes = 0; nBeads = 0; nCurls = 0
+    skelLo = SIMD2(repeating: .greatestFiniteMagnitude); skelHi = -skelLo
     chain(base, dir: dir0, normal: SIMD3(0, 0, 1), link: seg0, front: front, level: 0, hash: 0.37, young0: 0)
-    var lo = SIMD2<Float>(repeating: .greatestFiniteMagnitude), hi = -lo
-    for i in 0..<nTubes { let q = SIMD2(tubes[i].b.x, tubes[i].b.y); lo = simd_min(lo, q); hi = simd_max(hi, q) }
-    for i in 0..<nLeaves { let q = SIMD2(leaves[i].o.x, leaves[i].o.y); lo = simd_min(lo, q); hi = simd_max(hi, q) }
+    let lo = skelLo, hi = skelHi          // stalk + pinna skeleton extent (emitted tubes miss thin far parts)
     let cx0 = envF("CX", 0.0), bottom = envF("CY", 0.0) - viewH / 2, margin = envF("FRAMEM", 0.06)
     let needH = max(viewH, hi.y + margin - bottom, (hi.x - lo.x + 2 * margin) / aspect)
     let needX = min(max(cx0, hi.x + margin - needH * aspect / 2), lo.x - margin + needH * aspect / 2)
