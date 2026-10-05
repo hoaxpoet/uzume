@@ -582,13 +582,13 @@ struct Rule {
     var pinFront = envF("PINF", 0.409)          // a mature pinna's own unfurl front (its tip crozier starts here)
     var alt = envF("ALT", 0.79)
     var rampP = envF("RAMPP", 0.572)             // pinna curl ramps in over this much of its length (curls more toward the tip)
-    var outS = envF("OUTS", 0.9), inS = envF("INS", 1.325)   // coil: outer-side / inner-side pinna size
+    var outS = envF("OUTS", 0.823), inS = envF("INS", 1.325)   // coil: outer-side / inner-side pinna size
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var curlPx = envF("CURLPX", 127.6)
-    var vary = envF("VARY", 0.4)
+    var vary = envF("VARY", 0.443)
     var coreT = envF("CORET", 1.384)
-    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.8), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.879)
+    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.8), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.772)
     var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.996)
     var baseTurn1 = envF("BT1", 0.10), alpha1 = envF("ALPHA1", 0.7)
     var curlBOpen = envF("BOPEN", 0.25), curlW = envF("CURLW", 0.933), curlOn2 = envF("CURLON2", 0.172)  // open tissue's spiral b; blade boost
@@ -820,24 +820,24 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     lastVP = vp
     let coilPos = eyePos + SIMD3<Float>(0, 0, -envF("LZ", 0.06))
     var u = Uniforms(viewProj: vp, eye: SIMD4(cam, time),
-                     coil: SIMD4(coilPos, envF("LI", 2.674) * (1 - 0.5 * unfurl)),
-                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.246) * (1 + unfurl)),
+                     coil: SIMD4(coilPos, envF("LI", 2.583) * (1 - 0.5 * unfurl)),
+                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.244) * (1 + unfurl)),
                      keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.422)),
                      backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
-                     look: [envF("BODY", 1.209), envF("IRID", 1.686), envF("BEAD", 6.551), envF("DBG", 0)],
-                     mat: [envF("TRANS", 0.5), envF("RIMG", 2.0), envF("WARMK", 0.465), envF("TALB", 0.11)],
-                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.193), envF("BLOOM2", 0.16), envF("EXPO", 2.734)],
-                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.376)],
-                     warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, envF("RIMCW", 0.22)],
-                     glass: [envF("GA", 0.634), envF("FILMB", 0.118), envF("RIMPX", 1.888), envF("GLINT", 0.774)],
+                     look: [envF("BODY", 1.06), envF("IRID", 1.858), envF("BEAD", 5.703), envF("DBG", 0)],
+                     mat: [envF("TRANS", 0.5), envF("RIMG", 1.925), envF("WARMK", 0.49), envF("TALB", 0.068)],
+                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.181), envF("BLOOM2", 0.111), envF("EXPO", 3.035)],
+                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.663)],
+                     warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, envF("RIMCW", 0.144)],
+                     glass: [envF("GA", 0.561), envF("FILMB", 0.02), envF("RIMPX", 1.982), envF("GLINT", 1.064)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
-                     curl: [envF("CDU", 0.8), envF("CBEAD", 4.338), envF("CHILDT", 0.656), rule.curlB],
+                     curl: [envF("CDU", 0.8), envF("CBEAD", 5.705), envF("CHILDT", 0.656), rule.curlB],
                      curl2: [envF("GPSI", 0.52), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
-                     glass2: [envF("CORECAP", 2.0), envF("CURLA", 0.61), envF("BLOOMW", 0.025), envF("TEAL", 0.207)],
-                     stem2: [envF("WALL", 0.656), 0, 0, 0],
-                     hue: [envF("HUEA", 0.774), envF("HUEB", 0.864), envF("SATB", 1.598), envF("LIME", 0.26)],
-                     glass3: [envF("GLCELL", 60), envF("GLFRAC", 0.35), envF("CFRES", 0.25), 0])
+                     glass2: [envF("CORECAP", 1.772), envF("CURLA", 0.655), envF("BLOOMW", 0.036), envF("TEAL", 0.241)],
+                     stem2: [envF("WALL", 0.561), 0, 0, 0],
+                     hue: [envF("HUEA", 0.728), envF("HUEB", 0.802), envF("SATB", 1.608), envF("LIME", 0.396)],
+                     glass3: [envF("GLCELL", 70.586), envF("GLFRAC", 0.531), envF("CFRES", 0.331), 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
