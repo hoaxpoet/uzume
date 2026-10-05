@@ -153,6 +153,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float att = min(u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0), u.glass2.x);
     float warm = saturate(att / (att + u.mat.z));
     float3 amber = u.coilCol.rgb * att;
+    bool inside = in.kind < 0.5 && dot(n, V) < 0.0;   // a tube's inner face, seen through an open segment end
     if (dot(n, V) < 0.0) { n = -n; }               // two-sided
     float cosv = saturate(dot(n, V));
     float fres = pow(1.0 - cosv, 3.0);
@@ -190,7 +191,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         float3 glassC = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
         float hot = max(vellum, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled));
         float3 tint = mix(glassC, float3(1.0, 0.70, 0.42) * 1.2, hot);        // peach vellum (ref ≈ 245,170,100)
-        amber = mix(amber, att * float3(1.0, 0.9, 0.75), hot);                 // lit THROUGH: the light's own hue, not orange × orange = red
+        amber = mix(amber, max(att, u.coil.w * u.glass3.w * vellum) * float3(1.0, 0.9, 0.75), hot);   // lit THROUGH (leaflets get a light floor)
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
         float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x) * tint;   // fill takes the tint: dim glass stays saturated
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
@@ -215,7 +216,10 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 band = mix(float3(0.10, 0.70, 1.00), float3(0.80, 0.18, 0.85), stripe);
     // Cyan/violet SPARKLE: small round dots in random cells (a whole-cell mask read as a checkerboard).
     float2 gp = in.wpos.xy * u.glass3.x, gf = fract(gp) - 0.5, gh = hash22(floor(gp));
-    float sparkle = step(1.0 - u.glass3.y, gh.x) * exp(-dot(gf, gf) * 40.0);
+    float2 gh2 = hash22(floor(gp) + 17.3);
+    float2 go = gf - (gh2 - 0.5) * 0.7;                                  // random position in the cell (a centred dot made a grid)
+    float sparkle = step(1.0 - u.glass3.y, gh.x) * exp(-dot(go, go) * mix(25.0, 120.0, gh2.x)) * mix(0.3, 1.0, gh2.y)
+                  * smoothstep(0.2, 0.8, dot(n, normalize(normalize(u.keyDir.xyz) + V)));   // random size/brightness, lit side only
     float3 sparkC = mix(float3(0.2, 0.85, 1.0), float3(0.75, 0.3, 1.0), gh.y);
     float3 green = mix(float3(0.10, 0.40, 0.06), float3(0.35, 0.60, 0.10), in.q.w);
     green = mix(green, float3(0.48, 0.72, 0.08), u.hue.w);
@@ -224,7 +228,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 body = (amber * u.mat.x * 0.5 + 0.08 * u.look.x) * tint * (1.0 + 1.2 * fib);
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
     float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w * coilBand), rimWarm * u.mat.y * 1.3, warm * lit);
-    float3 C = (body + rimC * rim * 1.6 + spec + sparkC * sparkle * coilBand * u.glass.w * 3.0) * wallDk;
+    float3 C = (body + rimC * rim * 1.6 + spec + sparkC * sparkle * coilBand * u.glass.w * 3.0) * wallDk * (inside ? 0.25 : 1.0);
     return opq(C * mix(u.glass.x * 1.4, 1.0, rim), 1.0, float3(0.0));
 }
 
@@ -842,7 +846,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      glass2: [envF("CORECAP", 1.816), envF("CURLA", 0.784), envF("BLOOMW", 0.029), envF("TEAL", 0.195)],
                      stem2: [envF("WALL", 0.7), 0, 0, 0],
                      hue: [envF("HUEA", 0.701), envF("HUEB", 0.873), envF("SATB", 1.727), envF("LIME", 0.332)],
-                     glass3: [envF("GLCELL", 138.177), envF("GLFRAC", 0.508), envF("CFRES", 0.135), 0])
+                     glass3: [envF("GLCELL", 138.177), envF("GLFRAC", 0.508), envF("CFRES", 0.135), envF("VELL", 0.5)])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
