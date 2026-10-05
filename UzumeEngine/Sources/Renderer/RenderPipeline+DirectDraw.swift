@@ -42,6 +42,9 @@ extension RenderPipeline {
             encoder.setFragmentBuffer(presetBuf3, offset: 0, index: 8)
         }
         bindNoiseTextures(to: encoder)
+        for (k, tex) in directPresetFragmentTexturesLock.withLock({ directPresetFragmentTextures }).enumerated() {
+            encoder.setFragmentTexture(tex, index: 9 + k)
+        }
         if let overlay = textOverlay {
             encoder.setFragmentTexture(overlay.texture, index: 12)
         }

@@ -479,6 +479,10 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// CLAUDE.md GPU Contract for the slot 6 / 7 / 8 reservation list. (D-LM-buffer-slot-8)
     var directPresetFragmentBuffer3: MTLBuffer?
     let directPresetFragmentBuffer3Lock = NSLock()
+    /// Per-preset fragment textures for the direct pass, bound at texture(9), (10), (11) in order
+    /// (INARI.1 — the first preset that draws from bundled images). See `setDirectPresetFragmentTextures`.
+    var directPresetFragmentTextures: [MTLTexture] = []
+    let directPresetFragmentTexturesLock = NSLock()
 
     // MARK: - Ray-March Preset Height Texture (texture(10))
 

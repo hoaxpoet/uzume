@@ -338,6 +338,14 @@ extension RenderPipeline {
         directPresetFragmentBuffer3Lock.withLock { directPresetFragmentBuffer3 = buffer }
     }
 
+    /// Attach up to three per-preset fragment textures for the direct pass, bound at texture(9),
+    /// (10), (11) in order — slots the direct pass otherwise leaves empty (9–11 are bound only by
+    /// the ray-march passes). First consumer: Inari's drawings and light map (INARI.1). Pass `[]`
+    /// to detach. Thread-safe — can be called from any queue.
+    public func setDirectPresetFragmentTextures(_ textures: [MTLTexture]) {
+        directPresetFragmentTexturesLock.withLock { directPresetFragmentTextures = Array(textures.prefix(3)) }
+    }
+
     /// Attach a per-preset baked height field for ray-march presets (bound at fragment texture(10)).
     ///
     /// Bound at fragment texture slot 10 of the ray-march G-buffer pass.
