@@ -206,9 +206,9 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]], d
         amber = mix(amber, max(att, u.coil.w * u.glass3.w * vellum * (1.25 - 0.85 * in.uv.x)) * float3(1.0, 0.9, 0.75), hot);   // lit THROUGH; leaflets glow from the base (toward the core) outward
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
         float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x + u.peel2.x) * tint;   // fill takes the tint; + glass glow
-        body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
+        body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - (0.45 + 0.35 * vellum) * sec);   // leaflet veins read darker
         float3 rimC = mix(rimCool * u.look.y * 0.5, rimWarm * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
-        float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres) + spec;
+        float3 C = body + rimC * (u.tex.w * rim * (1.0 + 2.0 * vellum) + 0.6 * fres) + spec;   // leaflets: blazing rim
         return glassOut(C, mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres)), tint, cov, float3(0.0), u);
     }
     // ---- Stem / tube.
@@ -893,14 +893,14 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      glass2: [envF("CORECAP", 1.816), envF("CURLA", 0.5), envF("BLOOMW", 0.029), envF("TEAL", 0.195)],
                      stem2: [envF("WALL", 0.7), 0, 0, 0],
                      hue: [envF("HUEA", 0.701), envF("HUEB", 0.873), envF("SATB", 1.727), envF("LIME", 0.332)],
-                     glass3: [envF("GLCELL", 138.177), envF("GLFRAC", 0.508), envF("CFRES", 0.135), envF("VELL", 0.5)])
+                     glass3: [envF("GLCELL", 138.177), envF("GLFRAC", 0.508), envF("CFRES", 0.135), envF("VELL", 1.0)])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
     let cb = queue.makeCommandBuffer()!
     var u2 = u; u2.peel = [1, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
     u.peel = [0, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
-    u.peel2 = [envF("GFILL", 0.15), envF("GVAR", 0.35), 0, 0]; u2.peel2 = u.peel2
+    u.peel2 = [envF("GFILL", 0.15), envF("GVAR", 0.7), 0, 0]; u2.peel2 = u.peel2
     // Pass 1: nearest surface (+ its transmission colour, + resolved depth for the peel). Pass 2: the next one.
     for pass in 0..<2 {
         let rp = MTLRenderPassDescriptor()
