@@ -187,7 +187,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         float3 glassC = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
         float3 tint = mix(glassC, float3(1.0, 0.50, 0.15) * 1.2, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled));
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
-        float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
+        float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x) * tint;   // fill takes the tint: dim glass stays saturated
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
         float3 rimC = mix(rimCool * u.look.y * 0.5, rimWarm * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
         float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres) + spec;
@@ -210,7 +210,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 band = mix(float3(0.10, 0.70, 1.00), float3(0.80, 0.18, 0.85), stripe);
     float3 green = mix(float3(0.10, 0.40, 0.06), float3(0.35, 0.60, 0.10), in.q.w);
     float3 tint = mix(green * 2.0, band * 1.6, u.stem.w * (1.0 - warm));
-    float3 body = (amber * u.mat.x * 0.5 + float3(0.05, 0.07, 0.10) * u.look.x) * tint * (1.0 + 1.2 * fib);
+    float3 body = (amber * u.mat.x * 0.5 + 0.08 * u.look.x) * tint * (1.0 + 1.2 * fib);
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
     float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w), rimWarm * u.mat.y * 1.3, warm * lit);
     float3 C = (body + rimC * rim * 1.6 + spec) * wallDk;
@@ -342,7 +342,7 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 film = irid(cosv * 1.1 + best.u * 0.15 + in.q.y * 0.35 + u.eye.w * 0.02);
     float3 tint = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
     tint = mix(tint, float3(1.0, 0.50, 0.15) * 1.2, smoothstep(u.hue.x, u.hue.y, warm));
-    float3 body = (u.coilCol.rgb * att * u.mat.x + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
+    float3 body = (u.coilCol.rgb * att * u.mat.x + 0.08 * u.look.x) * tint;
     // Veins where the lobe is wide enough to show them (reference leaflets: bright midrib, darker
     // secondaries angled toward the tip). In the lobe's own (along u, across a) coordinates, AA'd by fwidth.
     float wpx = best.h / px;
@@ -459,6 +459,8 @@ kernel void present(texture2d<float> hdr [[texture(0)]],
     float m = max(col.r, max(col.g, col.b));
     float3 tm = col * ((m / (1.0 + m)) / max(m, 1e-4));
     col = mix(tm, float3(m / (1.0 + m)), smoothstep(3.0, 12.0, m) * 0.6);
+    float lumc = dot(col, float3(0.2126, 0.7152, 0.0722));
+    col = max(lumc + (col - lumc) * u.hue.z, 0.0);               // saturation grade (HDR-art look)
     col = pow(col, float3(1.0 / 1.1));
     out.write(float4(col, 1.0), gid);
 }
@@ -567,12 +569,12 @@ struct Rule {
     var pinFront = envF("PINF", 0.409)          // a mature pinna's own unfurl front (its tip crozier starts here)
     var alt = envF("ALT", 0.79)
     var rampP = envF("RAMPP", 0.572)             // pinna curl ramps in over this much of its length (curls more toward the tip)
-    var outS = envF("OUTS", 1.3), inS = envF("INS", 1.325)   // coil: outer-side / inner-side pinna size
+    var outS = envF("OUTS", 0.785), inS = envF("INS", 1.325)   // coil: outer-side / inner-side pinna size
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var curlPx = envF("CURLPX", 127.6)
     var coreT = envF("CORET", 1.384)
-    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.8), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.2)
+    var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.8), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.103)
     var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.996)
     var baseTurn1 = envF("BT1", 0.10), alpha1 = envF("ALPHA1", 0.7)
     var curlBOpen = envF("BOPEN", 0.25), curlW = envF("CURLW", 0.933), curlOn2 = envF("CURLON2", 0.172)  // open tissue's spiral b; blade boost
@@ -802,23 +804,23 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     lastVP = vp
     let coilPos = eyePos + SIMD3<Float>(0, 0, -envF("LZ", 0.06))
     var u = Uniforms(viewProj: vp, eye: SIMD4(cam, time),
-                     coil: SIMD4(coilPos, envF("LI", 3.178) * (1 - 0.5 * unfurl)),
-                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.169) * (1 + unfurl)),
+                     coil: SIMD4(coilPos, envF("LI", 2.588) * (1 - 0.5 * unfurl)),
+                     coilCol: SIMD4(1.0, envF("LCG", 0.192), envF("LCB", 0.102), envF("LR", 0.378) * (1 + unfurl)),
                      keyDir: SIMD4(normalize(SIMD3<Float>(-0.5, 0.7, 0.6)), envF("KEY", 0.422)),
                      backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
-                     look: [envF("BODY", 0.916), envF("IRID", 1.608), envF("BEAD", 7.548), envF("DBG", 0)],
-                     mat: [envF("TRANS", 0.5), envF("RIMG", 1.857), envF("WARMK", 0.245), envF("TALB", 0.67)],
-                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.5), envF("BLOOM2", 0.238), envF("EXPO", 1.913)],
-                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.329)],
+                     look: [envF("BODY", 0.931), envF("IRID", 1.521), envF("BEAD", 11.454), envF("DBG", 0)],
+                     mat: [envF("TRANS", 0.5), envF("RIMG", 1.928), envF("WARMK", 0.351), envF("TALB", 0.277)],
+                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.421), envF("BLOOM2", 0.136), envF("EXPO", 2.257)],
+                     tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 1.928)],
                      warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, 0],
-                     glass: [envF("GA", 0.374), envF("FILMB", 0.067), envF("RIMPX", 2.522), envF("GLINT", 2.0)],
+                     glass: [envF("GA", 0.484), envF("FILMB", 0.106), envF("RIMPX", 1.401), envF("GLINT", 0.998)],
                      stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)],
-                     curl: [envF("CDU", 0.8), envF("CBEAD", 1.5), envF("CHILDT", 0.656), rule.curlB],
+                     curl: [envF("CDU", 0.8), envF("CBEAD", 5.812), envF("CHILDT", 0.656), rule.curlB],
                      curl2: [envF("GPSI", 0.52), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
-                     glass2: [envF("CORECAP", 1.768), envF("CURLA", 0.592), envF("BLOOMW", 0.127), 0],
-                     stem2: [envF("WALL", 0.8), 0, 0, 0],
-                     hue: [envF("HUEA", 0.45), envF("HUEB", 0.7), 0, 0])
+                     glass2: [envF("CORECAP", 1.468), envF("CURLA", 0.4), envF("BLOOMW", 0.0), 0],
+                     stem2: [envF("WALL", 0.511), 0, 0, 0],
+                     hue: [envF("HUEA", 0.8), envF("HUEB", 1.0), envF("SATB", 1.896), 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
