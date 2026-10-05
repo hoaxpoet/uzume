@@ -47,6 +47,7 @@ struct U {
     float4 curl2;      // grandchild scale ψ2, spacing, T ratio, 0
     float4 vein;       // secondary veins per radian of spiral, slant, midrib gain, secondary darkening
     float4 glass2;     // core-light cap, crozier body alpha, wide-bloom gain, 0
+    float4 stem2;      // chamber-wall darkening, 0, 0, 0
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -121,10 +122,9 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
 }
 
 // Glass shading (FH.5 look pass). The reference is coloured GLASS lit from inside the coil: bodies are
-// dark and see-through, the light lives in the rims (~2–3 px, warm white-gold), colour stays saturated.
-// Order-independent transparency: weighted blended OIT (McGuire & Bavoil, JCGT 2013) — attachments
-// 0 = Σ premultiplied colour·w and Σ α·w, 1 = Π(1−α) (revealage), 2 = additive emission (beads, hairs).
-struct FOut { float4 accum [[color(0)]]; float reveal [[color(1)]]; float4 add [[color(2)]]; };
+// dark, the light lives in the rims (~2–3 px, warm white-gold), colour stays saturated. Surfaces are
+// OPAQUE (nearest wins): glass is faked by shading — blended transparency averaged the coil into paste.
+struct FOut { float4 c [[color(0)]]; };
 
 static float2 hash22(float2 p) { p = float2(dot(p, float2(127.1, 311.7)), dot(p, float2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
 static float cellEdge(float2 p) {                 // distance to the nearest Voronoi cell wall
@@ -136,9 +136,8 @@ static float cellEdge(float2 p) {                 // distance to the nearest Vor
     return d2 - d1;
 }
 
-static FOut oit(float3 premul, float alpha, float zview, float camZ, float3 emit) {
-    float w = alpha * clamp(pow(camZ / max(zview, 1e-3), 12.0), 1e-3, 1e3);   // nearer layers dominate
-    FOut o; o.accum = float4(premul * w, alpha * w); o.reveal = alpha; o.add = float4(emit, 0.0); return o;
+static FOut opq(float3 c, float cov, float3 emit) {    // opaque: nearest surface wins; cov → MSAA alpha-to-coverage
+    FOut o; o.c = float4(c + emit, cov); return o;
 }
 
 fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
@@ -190,15 +189,14 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
         float3 rimC = mix(rimCool * u.look.y * 0.5, rimWarm * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
         float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres) + spec;
-        float alpha = cov * mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres));
-        return oit(C * alpha, alpha, zview, u.eye.z, float3(0.0));
+        return opq(C * mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres)), cov, float3(0.0));
     }
     // ---- Stem / tube.
     if (in.q.z > 0.5) {                                 // hair: a thin lit filament (emissive only)
-        FOut o; o.accum = float4(0.0); o.reveal = 0.0;
-        o.add = float4(mix(rimCool * 0.6, float3(1.0, 0.55, 0.18), warm) * u.tex.z, 0.0); return o;
+        return opq(mix(rimCool * 0.6, float3(1.0, 0.55, 0.18), warm) * u.tex.z, 1.0, float3(0.0));
     }
     float ang = in.uv.y * 6.2831853;
+    float wallDk = in.q.z < -0.5 ? 1.0 - u.stem2.x * (1.0 - smoothstep(0.0, 0.35, in.uv.x)) : 1.0;   // dark chamber wall
     float edgeV = 1.0 - cosv;
     float rim = pow(edgeV, 2.5);
     // Helical cyan/magenta striping (reference outer band) where the stem faces away from the core;
@@ -213,9 +211,8 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 body = (amber * u.mat.x * 0.5 + float3(0.05, 0.07, 0.10) * u.look.x) * tint * (1.0 + 1.2 * fib);
     float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
     float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w), rimWarm * u.mat.y * 1.3, warm * lit);
-    float3 C = body + rimC * rim * 1.6 + spec;
-    float alpha = mix(u.glass.x * 1.4, 1.0, rim);
-    return oit(C * alpha, alpha, zview, u.eye.z, float3(0.0));
+    float3 C = (body + rimC * rim * 1.6 + spec) * wallDk;
+    return opq(C * mix(u.glass.x * 1.4, 1.0, rim), 1.0, float3(0.0));
 }
 
 
@@ -356,18 +353,9 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     }
     float3 rimC = mix(float3(0.80, 0.90, 1.0) * u.look.y * 0.5, float3(1.0, u.warmc.x, u.warmc.y) * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
     float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres);
-    float alpha = cov * mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres));   // lobes near-opaque: they occlude, gaps stay dark
-    return oit(C * alpha, alpha, in.pos.w, u.eye.z, emit);
+    return opq(C * mix(u.glass2.y, 1.0, saturate(rim + 0.5 * fres)), cov, emit);
 }
 
-kernel void resolve_oit(texture2d<float> accum [[texture(0)]], texture2d<float> reveal [[texture(1)]],
-                        texture2d<float> add [[texture(2)]], texture2d<float, access::write> out [[texture(3)]],
-                        uint2 gid [[thread_position_in_grid]]) {
-    if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
-    float4 a = accum.read(gid); float r = reveal.read(gid).r; float3 e = add.read(gid).rgb;
-    float3 avg = a.rgb / max(a.a, 1e-5);
-    out.write(float4(avg * (1.0 - r) + e, 1.0 - r), gid);
-}
 
 // Beads: tiny bright drops (dew / guttation in the reference), drawn as additive sprites.
 struct BOut { float4 pos [[position]]; float2 uv; float4 c [[flat]]; };
@@ -389,7 +377,7 @@ fragment FOut bead_fragment(BOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float d = length(in.uv);
     float core = exp(-d * d * 9.0) + 0.25 * exp(-d * d * 2.0);      // pearl + soft halo
     float tw = 0.65 + 0.35 * sin(u.eye.w * (1.5 + 2.0 * fract(in.c.a * 7.1)) + in.c.a * 40.0);
-    FOut o; o.accum = float4(0.0); o.reveal = 0.0; o.add = float4(in.c.rgb * core * u.look.z * tw, 0.0); return o;
+    FOut o; o.c = float4(in.c.rgb * core * u.look.z * tw, 0.0); return o;
 }
 
 // MARK: present: background, fern, bloom, tone
@@ -483,7 +471,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -502,15 +490,15 @@ func renderPSO(_ v: String, _ f: String, additive: Bool) -> MTLRenderPipelineSta
     d.fragmentFunction = library.makeFunction(name: f)
     d.rasterSampleCount = msaa
     d.depthAttachmentPixelFormat = .depth32Float
-    // Weighted blended OIT: 0 accum (Σ, Σ), 1 revealage (Π 1−α), 2 additive emission.
-    for (i, fmt) in [MTLPixelFormat.rgba16Float, .r16Float, .rgba16Float].enumerated() {
-        let c = d.colorAttachments[i]!
-        c.pixelFormat = fmt; c.isBlendingEnabled = true
-        c.sourceRGBBlendFactor = i == 1 ? .zero : .one
-        c.destinationRGBBlendFactor = i == 1 ? .oneMinusSourceColor : .one
-        c.sourceAlphaBlendFactor = .one; c.destinationAlphaBlendFactor = .one
-    }
-    _ = additive
+    // Opaque, depth-tested surfaces (soft edges via alpha-to-coverage); beads/glints additive on top.
+    // (FH.5 tried weighted blended OIT: 5+ overlapping glass layers averaged the coil core into flat paste.)
+    let c = d.colorAttachments[0]!
+    c.pixelFormat = .rgba16Float
+    if additive {
+        c.isBlendingEnabled = true
+        c.sourceRGBBlendFactor = .one; c.destinationRGBBlendFactor = .one
+        c.sourceAlphaBlendFactor = .zero; c.destinationAlphaBlendFactor = .one
+    } else { d.isAlphaToCoverageEnabled = true }
     return try! device.makeRenderPipelineState(descriptor: d)
 }
 let leafPSO = renderPSO("leaf_vertex", "fern_fragment", additive: false)
@@ -540,9 +528,6 @@ func tex(_ w: Int, _ h: Int, _ fmt: MTLPixelFormat, mips: Bool = false, samples:
     return device.makeTexture(descriptor: d)!
 }
 let colorMS = tex(outW, outH, .rgba16Float, samples: msaa)
-let revealMS = tex(outW, outH, .r16Float, samples: msaa), addMS = tex(outW, outH, .rgba16Float, samples: msaa)
-let accumTex = tex(outW, outH, .rgba16Float), revealTex = tex(outW, outH, .r16Float), addTex = tex(outW, outH, .rgba16Float)
-let resolvePSO = try! device.makeComputePipelineState(function: library.makeFunction(name: "resolve_oit")!)
 let depthMS = tex(outW, outH, .depth32Float, samples: msaa)
 let hdrTex = tex(outW, outH, .rgba16Float, mips: true)
 let outTex = tex(outW, outH, .rgba8Unorm)
@@ -584,6 +569,7 @@ struct Rule {
     var hook = envF("HOOK", 0.25)
     var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 2.0), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var curlPx = envF("CURLPX", 127.6)
+    var coreT = envF("CORET", 3.0)
     var sunTurn = envF("SUNTURN", 5.0), sunL = envF("SUNL", 1.2), sunW = envF("SUNW", 0.4), cullBead = envF("CULLBEAD", 0.2)
     var mirror = envF("MIRROR", 1), skip = envF("SKIP", 2), pExp = envF("PEXP", 0.65)
     var baseTurn1 = envF("BT1", 0.10), alpha1 = envF("ALPHA1", 0.7)
@@ -678,7 +664,10 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let c = smooth(front, front + (level == 0 ? rule.ramp : rule.rampP), f)
         let young = min(1, young0 * 0.5 + c)
         // Croziers (a pinna's curled tip) are one thick tapering glass tube (reference: 8–15 px → ~3 px).
-        let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1) * (level >= 1 ? 1 + rule.crz * c : 1)
+        // The coil's inner turns are fat chambered tubes (reference: ~12–15 px wide at r ≈ 35 px, i.e. width ≈ 0.4 r):
+        // the stalk thickens as it winds inward.
+        let coreFat: Float = level == 0 ? 1 + rule.coreT * c * min(1, turnAcc / 6.2832) : 1
+        let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1) * (level >= 1 ? 1 + rule.crz * c : 1) * coreFat
         let p1 = p + d * S
         if level <= 1 && dumping { dump.append("\(level) \(hash) \(p.x) \(p.y) \(p.z) \(S)") }
         if r > 1.5 * pxWorld {
@@ -688,7 +677,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             for j in 1...4 where nTubes < maxTubes {
                 let t = Float(j) / 4, q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
                 let rr = r * (1 + (rule.sig - 1) * t)
-                tubes[nTubes] = Tube(a: SIMD4(q0, rr / (1 + (rule.sig - 1) / 4)), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level), 0, 0])
+                let wall: Float = (j == 1 && level == 0 && c > 0.5) ? 1 : 0       // chamber wall at each coil link
+                tubes[nTubes] = Tube(a: SIMD4(q0, rr / (1 + (rule.sig - 1) / 4)), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level), -wall, 0])
                 nTubes += 1; q0 = q
             }
         } else if r > 0.3 * pxWorld {
@@ -821,23 +811,22 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      curl: [envF("CDU", 0.8), envF("CBEAD", 1.5), envF("CHILDT", 0.656), rule.curlB],
                      curl2: [envF("GPSI", 0.6), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
-                     glass2: [envF("CORECAP", 0.6), envF("CURLA", 0.85), envF("BLOOMW", 0.35), 0])
+                     glass2: [envF("CORECAP", 0.6), envF("CURLA", 0.85), envF("BLOOMW", 0.35), 0],
+                     stem2: [envF("WALL", 0.8), 0, 0, 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
     let cb = queue.makeCommandBuffer()!
     let rp = MTLRenderPassDescriptor()
-    for (i, (ms, rs)) in [(colorMS, accumTex), (revealMS, revealTex), (addMS, addTex)].enumerated() {
-        rp.colorAttachments[i].texture = ms; rp.colorAttachments[i].resolveTexture = rs
-        rp.colorAttachments[i].loadAction = .clear; rp.colorAttachments[i].storeAction = .multisampleResolve
-        rp.colorAttachments[i].clearColor = i == 1 ? MTLClearColor(red: 1, green: 1, blue: 1, alpha: 1) : MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-    }
+    rp.colorAttachments[0].texture = colorMS; rp.colorAttachments[0].resolveTexture = hdrTex
+    rp.colorAttachments[0].loadAction = .clear; rp.colorAttachments[0].storeAction = .multisampleResolve
+    rp.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
     rp.depthAttachment.texture = depthMS
     rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1; rp.depthAttachment.storeAction = .dontCare
     let re = cb.makeRenderCommandEncoder(descriptor: rp)!
     re.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
     re.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
-    re.setDepthStencilState(depthRead)
+    re.setDepthStencilState(depthOn)
     re.setCullMode(.none)
     if nTubes > 0 {
         re.setRenderPipelineState(tubePSO); re.setVertexBuffer(tubeBuf, offset: 0, index: 0)
@@ -857,11 +846,6 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
         re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nBeads)
     }
     re.endEncoding()
-    let rc = cb.makeComputeCommandEncoder()!
-    rc.setComputePipelineState(resolvePSO)
-    rc.setTexture(accumTex, index: 0); rc.setTexture(revealTex, index: 1); rc.setTexture(addTex, index: 2); rc.setTexture(hdrTex, index: 3)
-    rc.dispatchThreads(MTLSize(width: outW, height: outH, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
-    rc.endEncoding()
     let mb = cb.makeBlitCommandEncoder()!; mb.generateMipmaps(for: hdrTex); mb.endEncoding()
     let ce = cb.makeComputeCommandEncoder()!
     ce.setComputePipelineState(presentPSO)
