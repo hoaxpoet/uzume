@@ -40,7 +40,9 @@ struct U {
     float4 mat;        // transmission gain, gold rim gain, warm/cool rim split, transmission tint by albedo
     float4 bgk;        // coil haze on the background, 0, 0, 0
     float4 tex;        // scallops per lobe, fibre gain, hair gain, rim-line gain
-    float4 warmc;      // gold rim colour (g, b; r = 1)
+    float4 warmc;      // gold rim colour (g, b; r = 1), LBEND
+    float4 glass;      // body alpha, film on cool bodies, rim width px, glint gain
+    float4 stem;       // helix stripes around, helix pitch, fibre lines around, band strength
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -110,78 +112,115 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     VOut o;
     o.pos = u.viewProj * float4(p, 1.0);
     o.wpos = p; o.nrm = radial; o.tng = ax;
-    o.uv = float2(along, cos(ang)); o.q = float4(t.q.x, t.q.y, t.q.z, t.n.w); o.kind = 0.0;
+    o.uv = float2(along, ang / 6.2831853); o.q = float4(t.q.x, t.q.y, t.q.z, t.n.w); o.kind = 0.0;
     return o;
 }
 
-// Thin translucent leaf / glassy stem shading, HDR.
-fragment float4 fern_fragment(VOut in [[stage_in]], bool front [[front_facing]], constant U& u [[buffer(1)]]) {
+// Glass shading (FH.5 look pass). The reference is coloured GLASS lit from inside the coil: bodies are
+// dark and see-through, the light lives in the rims (~2–3 px, warm white-gold), colour stays saturated.
+// Order-independent transparency: weighted blended OIT (McGuire & Bavoil, JCGT 2013) — attachments
+// 0 = Σ premultiplied colour·w and Σ α·w, 1 = Π(1−α) (revealage), 2 = additive emission (beads, hairs).
+struct FOut { float4 accum [[color(0)]]; float reveal [[color(1)]]; float4 add [[color(2)]]; };
+
+static float2 hash22(float2 p) { p = float2(dot(p, float2(127.1, 311.7)), dot(p, float2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
+static float cellEdge(float2 p) {                 // distance to the nearest Voronoi cell wall
+    float2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        float2 g = float2(x, y), o = hash22(i + g); float d = length(g + o - f);
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+    }
+    return d2 - d1;
+}
+
+static FOut oit(float3 premul, float alpha, float zview, float camZ, float3 emit) {
+    float w = alpha * clamp(pow(camZ / max(zview, 1e-3), 12.0), 1e-3, 1e3);   // nearer layers dominate
+    FOut o; o.accum = float4(premul * w, alpha * w); o.reveal = alpha; o.add = float4(emit, 0.0); return o;
+}
+
+fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float t = u.eye.w;
-    float young, hashv;
     float3 n = normalize(in.nrm);
     float3 V = normalize(u.eye.xyz - in.wpos);
-    float margin = 0.0, vein = 0.0, midrib = 0.0, rimLine = 0.0, stripe = -1.0;
-    if (in.kind > 0.5) {
-        float prof = leafProfile(in.uv.x);
-        // Scalloped margin (rounded notches), as on the reference's lobes.
-        float serr = 0.80 + 0.20 * sqrt(abs(sin(3.14159 * in.uv.x * u.tex.x)));
-        float edge = abs(in.uv.y) / max(serr, 1e-3);
-        if (edge > 1.0 || prof < 0.02) { discard_fragment(); }
-        margin = smoothstep(0.72, 1.0, edge);
-        // Thick-glass edge: a crisp line ~1.5 px wide whatever the lobe's size on screen.
-        rimLine = exp(-(1.0 - edge) / max(fwidth(edge), 1e-4) / 1.3);
-        midrib = 1.0 - smoothstep(0.0, 0.10, abs(in.uv.y));
-        vein = smoothstep(0.85, 1.0, 1.0 - abs(fract(in.uv.x * 7.0 - abs(in.uv.y) * 1.4) - 0.5) * 2.0) * (1.0 - edge);
-        // Fine fibres along the blade (the reference's long parallel veins / glass striations).
-        vein += u.tex.y * pow(0.5 + 0.5 * sin(in.uv.y * 23.0 + 1.5 * sin(in.uv.x * 5.0 + in.q.y * 9.0)), 6.0);
-        young = in.q.x; hashv = in.q.y;
-    } else {
-        young = in.q.w; hashv = in.q.x;
-        margin = 0.6 * pow(1.0 - abs(dot(n, V)), 2.0);   // glass stem: the lit edge carries the light
-        // Striated glass: streaks running along the stem, alternating cyan / magenta (reference outer band).
-        stripe = 0.5 + 0.5 * sin(acos(clamp(in.uv.y, -1.0, 1.0)) * 7.0 + hashv * 31.0);
-        vein = u.tex.y * pow(stripe, 5.0);
-        if (in.q.z > 0.5) { return float4(float3(1.0, 0.55, 0.18) * u.tex.z, 1.0); }   // hair: thin lit filament
-    }
-    if (dot(n, V) < 0.0) { n = -n; }               // two-sided
-    // Base colour by age: young tissue paler/warmer, opened tissue deeper green.
-    float3 albedo = mix(float3(0.10, 0.40, 0.06), float3(0.42, 0.66, 0.10), young);
-    albedo = mix(albedo, float3(0.06, 0.40, 0.32), 0.35 * (0.5 + 0.5 * sin(hashv * 37.0)));   // teal variety
-    albedo *= 1.0 + 0.45 * midrib + 0.25 * vein;
-    float3 col = float3(0.0);
-    // Lights. The reference is lit from INSIDE the coil: tissue near the core glows amber (light
-    // through the blade), far tissue is dark glass whose edges carry the light (gold where it faces
-    // the core, thin-film cyan/violet where it faces away). Interiors darker than rims.
+    float zview = in.pos.w;
+    // Light from the core: amber, falls off with distance; 'warm' = how much this point faces the core light.
     float3 Lc = u.coil.xyz - in.wpos;
     float dc = length(Lc); Lc /= max(dc, 1e-4);
     float att = u.coil.w / (1.0 + (dc / u.coilCol.w) * (dc / u.coilCol.w) * 4.0);
-    float3 Ls[3] = { Lc, normalize(u.keyDir.xyz), normalize(u.backDir.xyz) };
-    float3 Cs[3] = { u.coilCol.rgb * att, float3(0.85, 0.92, 1.0) * u.keyDir.w, float3(0.55, 0.45, 1.0) * u.backDir.w };
-    for (int i = 0; i < 3; i++) {
-        float3 L = Ls[i];
-        float ndl = dot(n, L);
-        float diff = saturate((ndl + 0.35) / 1.35);                       // wrap: soft, leafy
-        float3 H = normalize(L + V);
-        float nh = saturate(dot(n, H));
-        float spec = pow(nh, 90.0) * 2.5 + pow(nh, 18.0) * 0.25;          // glassy: sharp + soft lobe
-        float fres = 0.04 + 0.96 * pow(1.0 - saturate(dot(n, V)), 5.0);
-        col += Cs[i] * (albedo * diff * u.look.x + spec * fres * 6.0 * float3(1.0));
-    }
-    // Transmission: a thin blade passes the core light whichever side faces it (veins brighter).
-    float thin = in.kind > 0.5 ? 1.0 : 0.3;
-    float3 amber = u.coilCol.rgb * att;
-    col += amber * u.mat.x * thin * (0.55 + 0.45 * young) * (1.0 + 0.8 * vein + 0.6 * midrib)
-         * mix(float3(1.0), albedo * 2.5, u.mat.w);
-    // Rims: gold toward the core light, thin-film iridescence away from it and at grazing angles.
-    float cosv = saturate(dot(n, V));
-    float3 film = irid(cosv * 1.3 + hashv * 0.35 + t * 0.02);
-    float grazing = pow(1.0 - cosv, 2.0);
     float warm = saturate(att / (att + u.mat.z));
-    if (stripe >= 0.0) { film = mix(float3(0.15, 0.75, 1.0), float3(0.85, 0.20, 0.90), smoothstep(0.3, 0.7, stripe)); }
-    float3 rimCol = mix(film * u.look.y, float3(1.0, u.warmc.x, u.warmc.y) * u.mat.y, warm);
-    col += rimCol * (0.35 * grazing + 1.1 * margin + u.tex.w * rimLine) * (0.6 + 0.4 * saturate(att));
-    if (int(u.look.w) == 1) { col = n * 0.5 + 0.5; }
-    return float4(col, 1.0);
+    float3 amber = u.coilCol.rgb * att;
+    if (dot(n, V) < 0.0) { n = -n; }               // two-sided
+    float cosv = saturate(dot(n, V));
+    float fres = pow(1.0 - cosv, 3.0);
+    float3 rimWarm = float3(1.0, u.warmc.x, u.warmc.y), rimCool = float3(0.80, 0.90, 1.0);
+    float3 spec = float3(0.0);
+    {   // glints from key + back lights
+        float3 L1 = normalize(u.keyDir.xyz), L2 = normalize(u.backDir.xyz);
+        float s1 = pow(saturate(dot(n, normalize(L1 + V))), 120.0), s2 = pow(saturate(dot(n, normalize(L2 + V))), 60.0);
+        spec = (s1 * u.keyDir.w + s2 * u.backDir.w * float3(0.7, 0.75, 1.0)) * u.glass.w;
+    }
+    if (in.kind > 0.5) {
+        // ---- Lobe / leaflet: rounded, scalloped, glass edge, veins, cell web.
+        float prof = leafProfile(in.uv.x);
+        if (prof < 0.02) { discard_fragment(); }
+        float serr = 0.80 + 0.20 * sqrt(abs(sin(3.14159 * in.uv.x * u.tex.x)));
+        float edge = abs(in.uv.y) / max(serr, 1e-3);
+        float fw = max(fwidth(edge), 1e-4);
+        float cov = saturate((1.0 - edge) / fw + 0.5);                 // analytic edge coverage (no stair-steps)
+        if (cov <= 0.0) { discard_fragment(); }
+        float dpx = (1.0 - edge) / fw;                                  // distance to the margin in pixels
+        float rim = exp(-dpx / u.glass.z);                              // the glass edge, ~2–3 px
+        float midrib = 1.0 - smoothstep(0.0, 0.08, abs(in.uv.y));
+        float sec = smoothstep(0.80, 1.0, 1.0 - abs(fract(in.uv.x * 7.0 - abs(in.uv.y) * 1.4) - 0.5) * 2.0) * (1.0 - edge);
+        float2 cuv = float2(in.uv.x * 7.0, in.uv.y * 2.5) + in.q.y * 17.0;
+        float cells = 1.0 - smoothstep(0.0, 0.08, cellEdge(cuv));
+        cells *= saturate(1.0 - 3.0 * fwidth(cuv.x));                  // fade where cells would alias
+        float curled = saturate(in.q.z / max(u.warmc.z, 1e-3) - 0.4);   // curled lobes: green glass; open: orange vellum
+        float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
+        green = mix(green, float3(0.05, 0.42, 0.36), 0.35 * (0.5 + 0.5 * sin(in.q.y * 37.0)));     // teal variety
+        float3 film = irid(cosv * 1.1 + in.uv.x * 0.6 + in.q.y * 0.35 + t * 0.02);                // hue drifts ACROSS the surface
+        float3 tintCool = mix(green, film * 0.6, u.glass.y * (1.0 - warm));
+        float3 tint = mix(float3(1.0, 0.55, 0.20), tintCool * 2.0, saturate(u.mat.w + curled * 0.8));
+        tint = mix(tint, green * 2.0, (1.0 - warm) * 0.5);
+        // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
+        float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
+        body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
+        float3 rimC = mix(rimCool * u.look.y * 0.5, rimWarm * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
+        float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres) + spec;
+        float alpha = cov * mix(u.glass.x, 1.0, saturate(rim + 0.5 * fres));
+        return oit(C * alpha, alpha, zview, u.eye.z, float3(0.0));
+    }
+    // ---- Stem / tube.
+    if (in.q.z > 0.5) {                                 // hair: a thin lit filament (emissive only)
+        FOut o; o.accum = float4(0.0); o.reveal = 0.0;
+        o.add = float4(mix(rimCool * 0.6, float3(1.0, 0.55, 0.18), warm) * u.tex.z, 0.0); return o;
+    }
+    float ang = in.uv.y * 6.2831853;
+    float edgeV = 1.0 - cosv;
+    float rim = pow(edgeV, 2.5);
+    // Helical cyan/magenta striping (reference outer band) where the stem faces away from the core;
+    // fine fibre lines along the stem everywhere, faded where they would alias.
+    float helix = ang * u.stem.x + dot(in.wpos, float3(9.0, 7.0, 0.0)) * u.stem.y + in.q.x * 31.0;
+    float stripe = smoothstep(-0.25, 0.25, sin(helix));
+    float fa = ang * u.stem.z;
+    float fib = pow(0.5 + 0.5 * cos(fa), 10.0) * saturate(1.0 - 1.5 * fwidth(fa));
+    float3 band = mix(float3(0.10, 0.70, 1.00), float3(0.80, 0.18, 0.85), stripe);
+    float3 green = mix(float3(0.10, 0.40, 0.06), float3(0.35, 0.60, 0.10), in.q.w);
+    float3 tint = mix(green * 2.0, band * 1.6, u.stem.w * (1.0 - warm));
+    float3 body = (amber * u.mat.x * 0.5 + float3(0.05, 0.07, 0.10) * u.look.x) * tint * (1.0 + 1.2 * fib);
+    float lit = saturate(dot(n, Lc) * 0.5 + 0.5);                       // the side facing the core carries the gold rim
+    float3 rimC = mix(rimCool * u.look.y * 0.5 * mix(float3(1.0), band * 1.5, u.stem.w), rimWarm * u.mat.y * 1.3, warm * lit);
+    float3 C = body + rimC * rim * 1.6 + spec;
+    float alpha = mix(u.glass.x * 1.4, 1.0, rim);
+    return oit(C * alpha, alpha, zview, u.eye.z, float3(0.0));
+}
+
+kernel void resolve_oit(texture2d<float> accum [[texture(0)]], texture2d<float> reveal [[texture(1)]],
+                        texture2d<float> add [[texture(2)]], texture2d<float, access::write> out [[texture(3)]],
+                        uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
+    float4 a = accum.read(gid); float r = reveal.read(gid).r; float3 e = add.read(gid).rgb;
+    float3 avg = a.rgb / max(a.a, 1e-5);
+    out.write(float4(avg * (1.0 - r) + e, 1.0 - r), gid);
 }
 
 // Beads: tiny bright drops (dew / guttation in the reference), drawn as additive sprites.
@@ -200,11 +239,11 @@ vertex BOut bead_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     o.uv = k; o.c = b.c;
     return o;
 }
-fragment float4 bead_fragment(BOut in [[stage_in]], constant U& u [[buffer(1)]]) {
+fragment FOut bead_fragment(BOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float d = length(in.uv);
-    float core = exp(-d * d * 9.0);
+    float core = exp(-d * d * 9.0) + 0.25 * exp(-d * d * 2.0);      // pearl + soft halo
     float tw = 0.65 + 0.35 * sin(u.eye.w * (1.5 + 2.0 * fract(in.c.a * 7.1)) + in.c.a * 40.0);
-    return float4(in.c.rgb * core * u.look.z * tw, 0.0);
+    FOut o; o.accum = float4(0.0); o.reveal = 0.0; o.add = float4(in.c.rgb * core * u.look.z * tw, 0.0); return o;
 }
 
 // MARK: present: background, fern, bloom, tone
@@ -275,9 +314,15 @@ kernel void present(texture2d<float> hdr [[texture(0)]],
     bg += float3(0.9, 0.38, 0.06) * u.bgk.x * coilScreen.w * exp(-dot(dl, dl));
     float4 f = hdr.sample(lin, uv, level(0.0));
     float3 col = bg * (1.0 - f.a) + f.rgb;
-    col += blur(hdr, uv, 1.0).rgb * 0.10 + blur(hdr, uv, 3.0).rgb * 0.12 + blur(hdr, uv, 5.0).rgb * 0.18 + blur(hdr, uv, 7.0).rgb * 0.15;
+    col += blur(hdr, uv, 1.0).rgb * u.bgk.y + blur(hdr, uv, 2.0).rgb * u.bgk.z
+         + blur(hdr, uv, 3.0).rgb * 0.12 + blur(hdr, uv, 5.0).rgb * 0.18 + blur(hdr, uv, 7.0).rgb * 0.15;
     float2 v = uv - 0.5; col *= 1.0 - 0.55 * dot(v, v);
-    col = aces(col * 0.9);
+    // Hue-preserving tone map (x/(1+x) on the brightest channel) so hot rims stay saturated;
+    // only the very hottest cores bleach toward white.
+    col *= u.bgk.w;
+    float m = max(col.r, max(col.g, col.b));
+    float3 tm = col * ((m / (1.0 + m)) / max(m, 1e-4));
+    col = mix(tm, float3(m / (1.0 + m)), smoothstep(3.0, 12.0, m) * 0.6);
     col = pow(col, float3(1.0 / 1.1));
     out.write(float4(col, 1.0), gid);
 }
@@ -292,7 +337,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -309,14 +354,16 @@ func renderPSO(_ v: String, _ f: String, additive: Bool) -> MTLRenderPipelineSta
     d.vertexFunction = library.makeFunction(name: v)
     d.fragmentFunction = library.makeFunction(name: f)
     d.rasterSampleCount = msaa
-    d.colorAttachments[0].pixelFormat = .rgba16Float
     d.depthAttachmentPixelFormat = .depth32Float
-    if additive {
-        let c = d.colorAttachments[0]!
-        c.isBlendingEnabled = true
-        c.sourceRGBBlendFactor = .one; c.destinationRGBBlendFactor = .one
-        c.sourceAlphaBlendFactor = .zero; c.destinationAlphaBlendFactor = .one
+    // Weighted blended OIT: 0 accum (Σ, Σ), 1 revealage (Π 1−α), 2 additive emission.
+    for (i, fmt) in [MTLPixelFormat.rgba16Float, .r16Float, .rgba16Float].enumerated() {
+        let c = d.colorAttachments[i]!
+        c.pixelFormat = fmt; c.isBlendingEnabled = true
+        c.sourceRGBBlendFactor = i == 1 ? .zero : .one
+        c.destinationRGBBlendFactor = i == 1 ? .oneMinusSourceColor : .one
+        c.sourceAlphaBlendFactor = .one; c.destinationAlphaBlendFactor = .one
     }
+    _ = additive
     return try! device.makeRenderPipelineState(descriptor: d)
 }
 let leafPSO = renderPSO("leaf_vertex", "fern_fragment", additive: false)
@@ -341,6 +388,9 @@ func tex(_ w: Int, _ h: Int, _ fmt: MTLPixelFormat, mips: Bool = false, samples:
     return device.makeTexture(descriptor: d)!
 }
 let colorMS = tex(outW, outH, .rgba16Float, samples: msaa)
+let revealMS = tex(outW, outH, .r16Float, samples: msaa), addMS = tex(outW, outH, .rgba16Float, samples: msaa)
+let accumTex = tex(outW, outH, .rgba16Float), revealTex = tex(outW, outH, .r16Float), addTex = tex(outW, outH, .rgba16Float)
+let resolvePSO = try! device.makeComputePipelineState(function: library.makeFunction(name: "resolve_oit")!)
 let depthMS = tex(outW, outH, .depth32Float, samples: msaa)
 let hdrTex = tex(outW, outH, .rgba16Float, mips: true)
 let outTex = tex(outW, outH, .rgba8Unorm)
@@ -380,6 +430,7 @@ struct Rule {
     var rampP = envF("RAMPP", 0.35)             // pinna curl ramps in over this much of its length (curls more toward the tip)
     var outS = envF("OUTS", 0.6), inS = envF("INS", 1.4)   // coil: outer-side / inner-side pinna size
     var hook = envF("HOOK", 0.25)
+    var crz = envF("CRZ", 1.3), crzC = envF("CRZC", 0.5), beadC = envF("BEADC", 0.45)   // crozier tube thickening, curl threshold, bead size ÷ r
     var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
 var dump: [String] = []
@@ -416,7 +467,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             // A hair: a fine filament curling off the lobe margin, catching the orange light.
             let hu = 0.3 + 0.6 * hashf(hash * 8.1), hs: Float = hashf(hash * 2.7) > 0.5 ? 1 : -1
             let w = normalize(cross(d, n))
-            var hp = p0 + d * (hu * len) + w * (hs * len * rule.leafW * 0.9)
+            let prof = pow(max(sin(Float.pi * pow(hu, 0.7)), 0), 0.45)          // = leafProfile in the shader
+            var hp = p0 + d * (hu * len) + w * (hs * len * rule.leafW * prof * 0.85)
             var hd = normalize(w * hs + d * 0.6), hl = len * rule.hairL / 3
             for _ in 0..<3 {
                 let hq = hp + hd * hl
@@ -437,7 +489,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let f = 1 - pow(rule.sig, Float(k))
         let c = smooth(front, front + (level == 0 ? rule.ramp : rule.rampP), f)
         let young = min(1, young0 * 0.5 + c)
-        let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1)
+        // Croziers (a pinna's curled tip) are one thick tapering glass tube (reference: 8–15 px → ~3 px).
+        let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1) * (level >= 1 ? 1 + rule.crz * c : 1)
         let p1 = p + d * S
         if level <= 1 && dumping { dump.append("\(level) \(hash) \(p.x) \(p.y) \(p.z) \(S)") }
         if r > 1.5 * pxWorld {
@@ -458,7 +511,14 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         // each starts unrolling only once this chain's front has passed the junction.
         let mature = 1 - smooth(front - rule.pRamp, front + rule.ramp, f)
         let bS0 = S * rule.sigS * (rule.immature + (1 - rule.immature) * mature)
-        if total * bS0 > rule.minPx * pxWorld {
+        if level >= 1 && c > rule.crzC {
+            // In the crozier the pinnules are replaced by a string of beads on the outer edge (every link).
+            if nBeads < maxBeads {
+                let outer = normalize(cross(N, d))
+                beads[nBeads] = Bead(p: SIMD4(p + outer * (r * 1.15), max(r * rule.beadC, 1.2 * pxWorld)), c: [1.0, 0.72, 0.42, hashf(hash + Float(k))])
+                nBeads += 1
+            }
+        } else if total * bS0 > rule.minPx * pxWorld {
             let passed = min(1, max(0, (front - f) / max(rule.delay, 1e-3)))
             for side: Float in [-1, 1] {
                 let at = p + d * (S * (0.5 + 0.5 * side * rule.alt))
@@ -535,25 +595,27 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      backDir: SIMD4(normalize(SIMD3<Float>(0.4, 0.5, -0.8)), envF("BACK", 1.633)),
                      look: [envF("BODY", 0.667), envF("IRID", 1.376), envF("BEAD", 7.719), envF("DBG", 0)],
                      mat: [envF("TRANS", 1.152), envF("RIMG", 1.174), envF("WARMK", 0.532), envF("TALB", 0.314)],
-                     bgk: [envF("HAZE", 0.03), 0, 0, 0],
+                     bgk: [envF("HAZE", 0.03), envF("BLOOM1", 0.25), envF("BLOOM2", 0.18), envF("EXPO", 1.6)],
                      tex: [envF("SCAL", 3.768), envF("FIB", 0.429), envF("HAIRG", 2.222), envF("LINE", 0.879)],
-                     warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), 0, 0])
+                     warmc: [envF("RIMCG", 0.562), envF("RIMCB", 0.236), rule.leafBend, 0],
+                     glass: [envF("GA", 0.35), envF("FILMB", 0.5), envF("RIMPX", 2.2), envF("GLINT", 1.0)],
+                     stem: [envF("HELIX", 4), envF("PITCH", 1.0), envF("FIBN", 24), envF("BAND", 1.0)])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
     let cb = queue.makeCommandBuffer()!
     let rp = MTLRenderPassDescriptor()
-    rp.colorAttachments[0].texture = colorMS
-    rp.colorAttachments[0].resolveTexture = hdrTex
-    rp.colorAttachments[0].loadAction = .clear
-    rp.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-    rp.colorAttachments[0].storeAction = .multisampleResolve
+    for (i, (ms, rs)) in [(colorMS, accumTex), (revealMS, revealTex), (addMS, addTex)].enumerated() {
+        rp.colorAttachments[i].texture = ms; rp.colorAttachments[i].resolveTexture = rs
+        rp.colorAttachments[i].loadAction = .clear; rp.colorAttachments[i].storeAction = .multisampleResolve
+        rp.colorAttachments[i].clearColor = i == 1 ? MTLClearColor(red: 1, green: 1, blue: 1, alpha: 1) : MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+    }
     rp.depthAttachment.texture = depthMS
     rp.depthAttachment.loadAction = .clear; rp.depthAttachment.clearDepth = 1; rp.depthAttachment.storeAction = .dontCare
     let re = cb.makeRenderCommandEncoder(descriptor: rp)!
     re.setVertexBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
     re.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.stride, index: 1)
-    re.setDepthStencilState(depthOn)
+    re.setDepthStencilState(depthRead)
     re.setCullMode(.none)
     if nTubes > 0 {
         re.setRenderPipelineState(tubePSO); re.setVertexBuffer(tubeBuf, offset: 0, index: 0)
@@ -569,6 +631,11 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
         re.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: nBeads)
     }
     re.endEncoding()
+    let rc = cb.makeComputeCommandEncoder()!
+    rc.setComputePipelineState(resolvePSO)
+    rc.setTexture(accumTex, index: 0); rc.setTexture(revealTex, index: 1); rc.setTexture(addTex, index: 2); rc.setTexture(hdrTex, index: 3)
+    rc.dispatchThreads(MTLSize(width: outW, height: outH, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
+    rc.endEncoding()
     let mb = cb.makeBlitCommandEncoder()!; mb.generateMipmaps(for: hdrTex); mb.endEncoding()
     let ce = cb.makeComputeCommandEncoder()!
     ce.setComputePipelineState(presentPSO)
