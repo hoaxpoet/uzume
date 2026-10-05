@@ -51,6 +51,7 @@ struct U {
     float4 hue;        // warm→orange transition (start, end), 0, 0
     float4 glass3;     // glint cells per world unit, glint fraction, crozier fresnel gain, leaflet light floor
     float4 peel;       // pass-2 flag, transmission tint strength, depth epsilon, refraction
+    float4 peel2;      // glass body glow, 0, 0, 0
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -204,7 +205,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]], d
         float3 tint = mix(glassC, float3(1.0, 0.70, 0.42) * 1.2, hot);        // peach vellum (ref ≈ 245,170,100)
         amber = mix(amber, max(att, u.coil.w * u.glass3.w * vellum) * float3(1.0, 0.9, 0.75), hot);   // lit THROUGH (leaflets get a light floor)
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
-        float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x) * tint;   // fill takes the tint: dim glass stays saturated
+        float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + 0.08 * u.look.x + u.peel2.x) * tint;   // fill takes the tint; + glass glow
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
         float3 rimC = mix(rimCool * u.look.y * 0.5, rimWarm * u.mat.y, warm) * (0.6 + 0.6 * saturate(att));
         float3 C = body + rimC * (u.tex.w * rim + 0.6 * fres) + spec;
@@ -372,7 +373,7 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]], d
     float3 tint = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
     float hot = smoothstep(u.hue.x, u.hue.y, warm);
     tint = mix(tint, float3(1.0, 0.70, 0.42) * 1.2, hot);
-    float3 body = (mix(u.coilCol.rgb * att, att * float3(1.0, 0.9, 0.75), hot) * u.mat.x + 0.08 * u.look.x) * tint;
+    float3 body = (mix(u.coilCol.rgb * att, att * float3(1.0, 0.9, 0.75), hot) * u.mat.x + 0.08 * u.look.x + u.peel2.x) * tint;   // + its own glass glow (bodies read filled, not empty)
     // Veins where the lobe is wide enough to show them (reference leaflets: bright midrib, darker
     // secondaries angled toward the tip). In the lobe's own (along u, across a) coordinates, AA'd by fwidth.
     float wpx = best.h / px;
@@ -456,11 +457,14 @@ kernel void compose(texture2d<float> front [[texture(0)]], texture2d<float> tran
                     constant U& u [[buffer(0)]], uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
     float4 f = front.read(gid), t = trans.read(gid);
-    // a touch of refraction: look up the back layer a little displaced by the front's transmission gradient
-    int2 o = int2(round(float2(trans.read(gid + uint2(1, 0)).g - t.g, trans.read(gid + uint2(0, 1)).g - t.g) * u.peel.w));
-    int2 mx = int2(out.get_width() - 1, out.get_height() - 1), c0 = int2(gid) + o;
-    float4 b = 0.4 * back.read(uint2(clamp(c0, int2(0), mx)));            // seen through glass: slightly softened
-    for (int k = 0; k < 4; k++) { int2 dd = int2(k == 0 ? 2 : (k == 1 ? -2 : 0), k == 2 ? 2 : (k == 3 ? -2 : 0)); b += 0.15 * back.read(uint2(clamp(c0 + dd, int2(0), mx))); }
+    // Refraction + softening with FILTERED, fractional-pixel taps (integer offsets read as blocky patches).
+    float2 sz = float2(out.get_width(), out.get_height()), uv = (float2(gid) + 0.5) / sz, px = 1.0 / sz;
+    float gx = trans.sample(lin, uv + float2(px.x, 0)).g - trans.sample(lin, uv - float2(px.x, 0)).g;
+    float gy = trans.sample(lin, uv + float2(0, px.y)).g - trans.sample(lin, uv - float2(0, px.y)).g;
+    float2 ub = uv + float2(gx, gy) * u.peel.w * px;
+    float4 b = 0.4 * back.sample(lin, ub);
+    b += 0.15 * (back.sample(lin, ub + float2(1.2, 0) * px) + back.sample(lin, ub - float2(1.2, 0) * px)
+               + back.sample(lin, ub + float2(0, 1.2) * px) + back.sample(lin, ub - float2(0, 1.2) * px));
     float tl = dot(t.rgb, float3(0.3333));
     float bgw = (1.0 - f.a) + tl * (1.0 - b.a);                  // how much of the background still shows
     out.write(float4(f.rgb + t.rgb * b.rgb, 1.0 - bgw), gid);
@@ -525,7 +529,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>; var glass3: SIMD4<Float>; var peel: SIMD4<Float> = [0, 0, 0, 0]
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>; var glass3: SIMD4<Float>; var peel: SIMD4<Float> = [0, 0, 0, 0]; var peel2: SIMD4<Float> = [0, 0, 0, 0]
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -894,6 +898,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let cb = queue.makeCommandBuffer()!
     var u2 = u; u2.peel = [1, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
     u.peel = [0, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
+    u.peel2 = [envF("GFILL", 0.15), 0, 0, 0]; u2.peel2 = u.peel2
     // Pass 1: nearest surface (+ its transmission colour, + resolved depth for the peel). Pass 2: the next one.
     for pass in 0..<2 {
         let rp = MTLRenderPassDescriptor()
