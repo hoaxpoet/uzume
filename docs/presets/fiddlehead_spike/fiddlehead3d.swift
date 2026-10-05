@@ -48,6 +48,7 @@ struct U {
     float4 vein;       // secondary veins per radian of spiral, slant, midrib gain, secondary darkening
     float4 glass2;     // core-light cap, crozier body alpha, wide-bloom gain, 0
     float4 stem2;      // chamber-wall darkening, 0, 0, 0
+    float4 hue;        // warm→orange transition (start, end), 0, 0
 };
 
 // Leaf instance: origin+length, dir+width, normal+cup, (young, hash, bend, level)
@@ -111,7 +112,7 @@ vertex VOut tube_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float ang = 6.2831853 * float(quad + cs[corner].x) / float(NS);
     float3 a = t.a.xyz, b = t.b.xyz, ax = normalize(b - a);
     float3 s1 = normalize(cross(ax, t.n.xyz)), s2 = cross(s1, ax);
-    float r = mix(t.a.w, t.b.w, along) * (1.0 + 0.15 * along);   // slight overlap into the next link
+    float r = mix(t.a.w, t.b.w, along);                              // continuous radius (an end bulge made notches)
     float3 radial = s1 * cos(ang) + s2 * sin(ang);
     float3 p = mix(a, b + ax * t.b.w * 0.5, along) + radial * r;
     VOut o;
@@ -181,9 +182,10 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
         float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
         green = mix(green, float3(0.05, 0.42, 0.36), 0.35 * (0.5 + 0.5 * sin(in.q.y * 37.0)));     // teal variety
         float3 film = irid(cosv * 1.1 + in.uv.x * 0.6 + in.q.y * 0.35 + t * 0.02);                // hue drifts ACROSS the surface
-        float3 tintCool = mix(green, film * 0.6, u.glass.y * (1.0 - warm));
-        float3 tint = mix(float3(1.0, 0.55, 0.20), tintCool * 2.0, saturate(u.mat.w + curled * 0.8));
-        tint = mix(tint, green * 2.0, (1.0 - warm) * 0.5);
+        // Hue by PLACE, never an average of complementary hues (orange + green = the beige we had): green
+        // glass (teal/violet film far from the core), orange vellum where the core light is strong.
+        float3 glassC = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
+        float3 tint = mix(glassC, float3(1.0, 0.50, 0.15) * 1.2, smoothstep(u.hue.x, u.hue.y, warm) * (1.0 - 0.5 * curled));
         // Body: light through the blade (amber near the core) + a little cool fill; veins: midrib bright, secondaries dark.
         float3 body = (amber * u.mat.x * (0.6 + 0.4 * in.q.x) + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
         body *= (1.0 + 0.9 * midrib + 0.35 * cells) * (1.0 - 0.45 * sec);
@@ -202,7 +204,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]]) {
     // Helical cyan/magenta striping (reference outer band) where the stem faces away from the core;
     // fine fibre lines along the stem everywhere, faded where they would alias.
     float helix = ang * u.stem.x + dot(in.wpos, float3(9.0, 7.0, 0.0)) * u.stem.y + in.q.x * 31.0;
-    float stripe = smoothstep(-0.25, 0.25, sin(helix));
+    float stripe = 0.5 + 0.5 * sin(helix + 3.0 * cosv);          // soft bands that slide with the view (thin film)
     float fa = ang * u.stem.z;
     float fib = pow(0.5 + 0.5 * cos(fa), 10.0) * saturate(1.0 - 1.5 * fwidth(fa));
     float3 band = mix(float3(0.10, 0.70, 1.00), float3(0.80, 0.18, 0.85), stripe);
@@ -338,8 +340,8 @@ fragment FOut curl_fragment(COut in [[stage_in]], constant U& u [[buffer(1)]]) {
     float3 green = mix(float3(0.10, 0.45, 0.06), float3(0.35, 0.62, 0.08), in.q.x);
     green = mix(green, float3(0.05, 0.42, 0.36), 0.35 * (0.5 + 0.5 * sin(in.q.y * 37.0)));
     float3 film = irid(cosv * 1.1 + best.u * 0.15 + in.q.y * 0.35 + u.eye.w * 0.02);
-    float3 tint = mix(green * 2.0, film, u.glass.y * (1.0 - warm));
-    tint = mix(tint, float3(1.0, 0.55, 0.20), warm * u.mat.w);
+    float3 tint = mix(green * 2.0, film * 1.2, u.glass.y * (1.0 - warm));
+    tint = mix(tint, float3(1.0, 0.50, 0.15) * 1.2, smoothstep(u.hue.x, u.hue.y, warm));
     float3 body = (u.coilCol.rgb * att * u.mat.x + float3(0.05, 0.07, 0.10) * u.look.x) * tint;
     // Veins where the lobe is wide enough to show them (reference leaflets: bright midrib, darker
     // secondaries angled toward the tip). In the lobe's own (along u, across a) coordinates, AA'd by fwidth.
@@ -471,7 +473,7 @@ func envF(_ k: String, _ d: Float) -> Float { env[k].flatMap(Float.init) ?? d }
 struct Uniforms {
     var viewProj: simd_float4x4; var eye: SIMD4<Float>; var coil: SIMD4<Float>; var coilCol: SIMD4<Float>
     var keyDir: SIMD4<Float>; var backDir: SIMD4<Float>; var look: SIMD4<Float>
-    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>
+    var mat: SIMD4<Float>; var bgk: SIMD4<Float>; var tex: SIMD4<Float>; var warmc: SIMD4<Float>; var glass: SIMD4<Float>; var stem: SIMD4<Float>; var curl: SIMD4<Float>; var curl2: SIMD4<Float>; var vein: SIMD4<Float>; var glass2: SIMD4<Float>; var stem2: SIMD4<Float>; var hue: SIMD4<Float>
 }
 struct Leaf { var o: SIMD4<Float>; var d: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
 struct Tube { var a: SIMD4<Float>; var b: SIMD4<Float>; var n: SIMD4<Float>; var q: SIMD4<Float> }
@@ -657,7 +659,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         }
         return
     }
-    var p = p0, d = d0, N = N0, S = S0, prev = p0
+    var p = p0, d = d0, N = N0, S = S0, prev = p0, prevRmid: Float = 0
     var k = 0, turnAcc: Float = 0
     while total * S > rule.minPx * pxWorld && k < 300 && nTubes < maxTubes {
         let f = 1 - pow(rule.sig, Float(k))
@@ -674,13 +676,16 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             // Thick stems: a smooth quadratic through the link midpoints (no kinks at the joints).
             let a0 = k == 0 ? p : (prev + p) * 0.5, a2 = (p + p1) * 0.5, ctrl = k == 0 ? (a0 + a2) * 0.5 : p
             var q0 = a0
+            let rA = k == 0 ? r : prevRmid, rB = r * (1 + (rule.sig - 1) * 0.5)   // radius continuous across joints
+            var r0 = rA
             for j in 1...4 where nTubes < maxTubes {
                 let t = Float(j) / 4, q = (1 - t) * (1 - t) * a0 + 2 * (1 - t) * t * ctrl + t * t * a2
-                let rr = r * (1 + (rule.sig - 1) * t)
-                let wall: Float = (j == 1 && level == 0 && c > 0.5) ? 1 : 0       // chamber wall at each coil link
-                tubes[nTubes] = Tube(a: SIMD4(q0, rr / (1 + (rule.sig - 1) / 4)), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level), -wall, 0])
-                nTubes += 1; q0 = q
+                let rr = rA + (rB - rA) * t
+                let wall: Float = (j == 1 && level == 0 && turnAcc > 6.2832) ? 1 : 0   // chamber walls: inner turns only
+                tubes[nTubes] = Tube(a: SIMD4(q0, r0), b: SIMD4(q, rr), n: SIMD4(N, young), q: [hash, Float(level), -wall, 0])
+                nTubes += 1; q0 = q; r0 = rr
             }
+            prevRmid = rB
         } else if r > 0.3 * pxWorld {
             tubes[nTubes] = Tube(a: SIMD4(p, r), b: SIMD4(p1, r * rule.sig), n: SIMD4(N, young), q: [hash, Float(level), 0, 0])
             nTubes += 1
@@ -812,7 +817,8 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
                      curl2: [envF("GPSI", 0.52), envF("GDU", 0.9), envF("GT", 0.12), 0],
                      vein: [envF("VEINF", 2.2), envF("VEINS", 0.8), envF("VMID", 0.9), envF("VSEC", 0.45)],
                      glass2: [envF("CORECAP", 1.768), envF("CURLA", 0.592), envF("BLOOMW", 0.127), 0],
-                     stem2: [envF("WALL", 0.8), 0, 0, 0])
+                     stem2: [envF("WALL", 0.8), 0, 0, 0],
+                     hue: [envF("HUEA", 0.45), envF("HUEB", 0.7), 0, 0])
     let clip = vp * SIMD4<Float>(eyePos, 1)
     var coilScreen = SIMD4<Float>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 0.35 * (1 + unfurl), u.coil.w / 2.2)
 
