@@ -621,6 +621,7 @@ var nLeaves = 0, nTubes = 0, nBeads = 0
 struct Rule {
     var sig = envF("SIG", 0.9568), sigS = envF("SIGS", 0.253)
     var sig1 = envF("SIG1", envF("SIG", 0.9568))
+    var pExp1 = envF("PEXP1", 1), immature1 = envF("IMM1", envF("IMM", 0.67))   // pinna-level size law / tip shrink (open: blade rolls up full width)
     var maxTurn1 = envF("TURN1", envF("TURN", 0.276))      // pinna/pinnule curl rate (open fit sizes the tip croziers)
     var alpha = envF("ALPHA", 1.37)
     var maxTurn = envF("TURN", 0.276), ramp = envF("RAMP", 0.001), baseTurn = envF("BT", -0.0187)
@@ -669,7 +670,7 @@ let ruleO: Rule = {
     r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
     r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
     r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
-    r.sig1 = o("SIG1", r.sig1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
+    r.sig1 = o("SIG1", r.sig1); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
     return r
 }()
 var rule = rule0
@@ -680,7 +681,7 @@ func blendRule(_ w: Float) {
     rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
     rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
     rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
-    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
+    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
 }
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
@@ -798,9 +799,10 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         // Branch ratio per level: stalk→pinna is fitted (0.168); pinna→pinnule is larger so each level's curl
         // is ~0.4× its parent's (reference ladder: coil ~500 → croziers 25–60 → hooks 10–25 → tendrils <10 px).
         // Coil pinnae shrink slower than the spiral (reference: turn 2 still holds 33–50 px lobes): size ∝ S^PEXP.
-        let sizeLaw: Float = level == 0 ? pow(S / S0, rule.pExp - 1) : 1
+        // size ∝ S^PEXP: coil pinnae shrink slower than the spiral; open pinnae keep their blade width into the tip crozier
+        let sizeLaw: Float = pow(S / S0, (level == 0 ? rule.pExp : rule.pExp1) - 1)
         // child length = sigS × this chain's remaining length, whatever the two levels' link ratios are
-        let bS0 = S / (1 - sg) * (1 - rule.sig1) * sizeLaw * (level == 0 ? rule.sigS : rule.sigS1) * (rule.immature + (1 - rule.immature) * mature)
+        let bS0 = S / (1 - sg) * (1 - rule.sig1) * sizeLaw * (level == 0 ? rule.sigS : rule.sigS1) * ((level == 0 ? rule.immature : rule.immature1) + (1 - (level == 0 ? rule.immature : rule.immature1)) * mature)
         if level >= 1 && c > rule.crzC {
             // In the crozier the pinnules are replaced by a string of beads on the outer edge (every link).
             if nBeads < maxBeads {
