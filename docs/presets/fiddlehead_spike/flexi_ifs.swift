@@ -36,7 +36,7 @@ let msl = """
 using namespace metal;
 
 struct P { float ww; float w; float scale; float mirror; float2 centre; int iters; uint seed; float4 tone; float4 sd; float4 ext;
-           float4 hue; float4 sv; float4 core; };   // hue per nesting level 0..3+; sat/val; core glow (screen x, y, radius px, gain)   // ext: leaflet reach-back, stipe length (segments), stipe share   // sd: seed half-width (0 = Flexi's disc), side scale
+           float4 hue; float4 sv; float4 core; float4 fp; };   // fp.xy: main map's fixed point (frame)   // hue per nesting level 0..3+; sat/val; core glow (screen x, y, radius px, gain)   // ext: leaflet reach-back, stipe length (segments), stipe share   // sd: seed half-width (0 = Flexi's disc), side scale
 
 static uint hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
 static float rnd(thread uint& s) { s = hash(s); return float(s) * (1.0 / 4294967296.0); }
@@ -55,8 +55,14 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
                 // a ∈ [0,1] the segment; a < 0 extends a chain's free end backward: −ext.x reaches a leaflet's base back to its
                 // parent stalk (Flexi's fat disc bridged that gap), and the frond's own base continues as a straight stipe.
                 a = rnd(s) < p.ext.z ? -p.ext.x - rnd(s) * (p.ext.y - p.ext.x) : mix(-p.ext.x, 1.0, rnd(s));
-                float l = rnd(s) * 2.0 - 1.0; float2 d = normalize(x1), nrm = float2(-d.y, d.x);
-                x = x1 * a + nrm * l * p.sd.x * mix(1.0, 0.89, a); c = 1.0 - abs(l);
+                // The stalk between two main-arm steps is the main map's own continuous flow — a log-spiral ARC about its fixed
+                // point C: s(a) = C + λ^a R(−a·ww)(0 − C), λ = 1/1.12 (a straight chord drew polygons once the curl tightened).
+                // The stipe (a < −reach) continues straight along the base tangent.
+                float l = rnd(s) * 2.0 - 1.0; float2 C = p.fp.xy, v = -C; const float ln = -0.1133287;   // ln(1/1.12)
+                float aa = max(a, -p.ext.x), g = exp(ln * aa);
+                float2 rv = rot(v, -aa * p.ww), pos = C + g * rv, tan = g * (ln * rv - p.ww * float2(-rv.y, rv.x));
+                float2 d = normalize(tan); pos += d * length(tan) * (a - aa);
+                x = pos + float2(-d.y, d.x) * l * p.sd.x * min(g, 1.0); c = 1.0 - abs(l);
             } else { float r = R * sqrt(rnd(s)), th = 6.2831853 * rnd(s); x = r * float2(cos(th), sin(th)); c = 1.0 - r / R; }
             n = 0; lvl = 0; chainStart = true;
         }
@@ -103,7 +109,7 @@ kernel void tone(device const uint* img [[buffer(0)]], constant P& p [[buffer(1)
     else {
         // colour by nesting level: the deepest copies ARE the rims of every lobe (self-similarity), so level 3+ carries the
         // reference's iridescence (hue cycling with path length); a lobe's body is level 1–2; level 0 the stalk.
-        float h = lvl == 0u ? p.hue.x : lvl == 1u ? p.hue.y : lvl == 2u ? p.hue.z : p.hue.w + 0.11 * age;
+        float h = lvl == 0u ? p.hue.x : lvl == 1u ? p.hue.y : float(lvl) < p.sv.y ? p.hue.z : p.hue.w;   // zones; the deepest copies are the lobe edges
         col = hsv2rgb(fract(h), p.sv.x, 1.0);
     }
     col *= pow(b, p.tone.y) * p.tone.z * (lvl == 0u ? p.tone.w : 1.0);    // main stalk dimmer
@@ -115,7 +121,7 @@ kernel void tone(device const uint* img [[buffer(0)]], constant P& p [[buffer(1)
 constexpr sampler lin(filter::linear, address::clamp_to_zero);
 
 kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::write> out [[texture(1)]],
-                 constant float4& g [[buffer(0)]], constant float4& t [[buffer(1)]], uint2 gid [[thread_position_in_grid]]) {
+                 constant float4& g [[buffer(0)]], constant float4& t [[buffer(1)]], constant float4& rm [[buffer(2)]], uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W)u || gid.y >= \(H)u) { return; }
     float2 sz = float2(\(W).0, \(H).0), uv = (float2(gid) + 0.5) / sz;
     float4 c0 = src.read(gid); float3 c = c0.rgb, b = float3(0.0); float wsum = 0.0, cov = 0.0;
@@ -125,6 +131,15 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
         b += s.rgb * w; cov += step(0.12, s.a) * w; wsum += w;
     }
     cov /= wsum;                                                 // local fill: 1 deep inside a blade, ~0.5 on its rim
+    // Coherent colour zones: keep this pixel's brightness, take its hue from the neighbourhood (max-composited paths
+    // differ pixel to pixel — per-point hues averaged to mud).
+    const float3 Y = float3(0.299, 0.587, 0.114); float3 hb = b / wsum; float Lb = dot(hb, Y);
+    if (Lb > 1e-4) { c = hb * (dot(c, Y) / Lb); }
+    // Iridescent rims as their own layer: hue turns smoothly with angle around the coil centre (violet → cyan → magenta).
+    float2 dc = float2(gid) - rm.xy; float ang = atan2(dc.y, dc.x) / 6.2831853 + 0.05 * t.x;
+    float rh = rm.w + 0.18 * sin(6.2831853 * ang);
+    float3 rimc = clamp(abs(fract(rh + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+    c += rimc * rm.z * 4.0 * cov * (1.0 - cov) * smoothstep(0.05, 0.3, c0.a);
     c *= mix(1.0, g.z, smoothstep(0.55, 0.95, cov)) * (1.0 + g.w * 4.0 * cov * (1.0 - cov));   // dark interiors, glowing rims
     uint h = hash(gid.x * 7919u + gid.y * 104729u + uint(t.x * 60.0) / 6u);                       // sparkle: sparse, ~10 Hz
     c += (rnd(h) < t.y && c0.a > 0.35) ? float3(1.0, 0.95, 0.85) * t.z * c0.a : float3(0.0);
@@ -137,11 +152,14 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
 // MARK: - Flexi's frond
 
 struct Params { var ww: Float; var w: Float; var scale: Float; var mirror: Float; var centre: SIMD2<Float>; var iters: Int32; var seed: UInt32
-                var tone: SIMD4<Float>; var sd: SIMD4<Float>; var ext: SIMD4<Float>; var hue: SIMD4<Float>; var sv: SIMD4<Float>; var core: SIMD4<Float> }
+                var tone: SIMD4<Float>; var sd: SIMD4<Float>; var ext: SIMD4<Float>; var hue: SIMD4<Float>; var sv: SIMD4<Float>; var core: SIMD4<Float>; var fp = SIMD4<Float>(0, 0, 0, 0) }
+
+var driveSway: Float?, driveSpark: Float?   // per-frame overrides from a music drive (film `drive` mode)
+var fixedFrame: (SIMD2<Float>, SIMD2<Float>)?
 
 /// unfurl 0 = Understory's one-turn fiddlehead curl (KAPPA), 1 = open; plus Flexi-like sway.
 func curl(_ u: Float, _ t: Float) -> (ww: Float, w: Float) {
-    let ww = envF("KAPPA", 0.75) * (1 - u) + envF("KAPPA_O", 0.08) * u + envF("SWAY", 0.01) * (sin(t * 0.9) + 0.5 * sin(t * 1.7 + 1.3))
+    let ww = envF("KAPPA", 0.75) * (1 - u) + envF("KAPPA_O", 0.08) * u + (driveSway ?? envF("SWAY", 0.01) * (sin(t * 0.9) + 0.5 * sin(t * 1.7 + 1.3)))
     return (ww, envF("HEAD", 0) - 5 * ww)
 }
 
@@ -151,10 +169,11 @@ func rot(_ v: SIMD2<Float>, _ a: Float) -> SIMD2<Float> { SIMD2(v.x * cos(a) - v
 func extent(ww: Float, w: Float, theta: Float) -> (SIMD2<Float>, SIMD2<Float>) {
     let ss = envF("SIDE", 3.3), tm = 0.042 * SIMD2<Float>(sin(w), cos(w)), ts = SIMD2<Float>(0.08 * sin(w), 0.045 * cos(w)), pm: Float = 0.797 / (0.797 + 2 / (ss * ss))
     var lo = SIMD2<Float>(repeating: 9), hi = SIMD2<Float>(repeating: -9), x = SIMD2<Float>(0, 0), n = 0
+    var rng: UInt64 = 0x9E3779B97F4A7C15   // deterministic: the same bounds for the same frond (a random sample jittered the camera)
     let mir = envF("MIRROR", 1)
     for i in 0..<300_000 {
         if i % 70 == 0 { x = .zero; n = 0 } else {
-            let u = Float.random(in: 0..<1)
+            rng = rng &* 6364136223846793005 &+ 1442695040888963407; let u = Float(rng >> 40) / Float(1 << 24)
             x = u < pm ? rot(x - tm, -ww) / 1.12 : rot(x - ts, u < pm + (1 - pm) / 2 ? -envF("ANG", .pi / 4) : envF("ANG", .pi / 4)) / ss; n += 1
         }
         if 1 - 0.015 * Float(n) > 0.1 { let q = rot(SIMD2(x.x * mir, -x.y), theta); lo = simd_min(lo, q); hi = simd_max(hi, q) }
@@ -186,19 +205,20 @@ func render(unfurl u: Float, time t: Float) {
     let tm0 = 0.042 * SIMD2<Float>(sin(w), cos(w)), x1 = rot(-tm0, -ww) / 1.12, mir = envF("MIRROR", 1)
     let sd = SIMD2(-x1.x * mir, x1.y)                                    // stipe direction in display space (+y up)
     let theta = envF("UPRIGHT", 1) * (-.pi / 2 - atan2(sd.y, sd.x)) + envF("LEAN", 0)
-    let (lo, hi) = extent(ww: ww, w: w, theta: theta), fill = envF("FILL", 0.9)
+    let (lo, hi) = fixedFrame ?? extent(ww: ww, w: w, theta: theta), fill = envF("FILL", 0.9)   // films: one fixed frame (no re-framing jitter)
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
     var p = Params(ww: ww, w: w, scale: scale, mirror: envF("MIRROR", 1), centre: (lo + hi) * 0.5, iters: Int32(envF("ITERS", 280)),
-                   seed: UInt32(t * 1000) &+ 17, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 0.8), envF("STALKB", 0.45)],
+                   seed: 17 /* fixed: same random paths every frame, so detail moves instead of fizzing */, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 1.6), envF("STALKB", 0.45)],
                    sd: [envF("SEEDW", 0.002), envF("SIDE", 3.3), envF("ANG", .pi / 4), envF("TAPER", 0.8)],
                    ext: [envF("REACH", 1.0), envF("STIPE", 6), envF("PSTIPE", 0.05), theta],
-                   hue: [envF("H0", 0.11), envF("H1", 0.08), envF("H2", 0.13), envF("H3", 0.78)], sv: [envF("SAT", 1.0), 0, 0, 0],
+                   hue: [envF("H0", 0.11), envF("H1", 0.29), envF("H2", 0.25), envF("H3", 0.2)], sv: [envF("SAT", 0.85), envF("RIMLVL", 4), 0, 0],
                    core: [0, 0, 0, 0])
     var fp = SIMD2<Float>(0, 0)                                           // spiral centre = main map's fixed point
     let tm = 0.042 * SIMD2<Float>(sin(w), cos(w))
     for _ in 0..<400 { fp = rot(fp - tm, -ww) / 1.12 }
     let fs = (rot(SIMD2(fp.x * p.mirror, -fp.y), theta) - p.centre) * scale + SIMD2(Float(W / 2), Float(H / 2))
-    p.core = [fs.x, Float(H) - 1 - fs.y, envF("CORER", 0.08) * Float(H), envF("CORE", 0.7) * (1 - u)]
+    p.fp = [fp.x, fp.y, 0, 0]
+    p.core = [fs.x, Float(H) - 1 - fs.y, envF("CORER", 0.07) * Float(H), envF("CORE", 1.6) * (1 - u)]
     let cb = queue.makeCommandBuffer()!
     let bl = cb.makeBlitCommandEncoder()!; bl.fill(buffer: img, range: 0..<img.length, value: 0); bl.endEncoding()
     let ce = cb.makeComputeCommandEncoder()!
@@ -210,8 +230,9 @@ func render(unfurl u: Float, time t: Float) {
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.setComputePipelineState(glowPSO)
     var gp = SIMD4<Float>(envF("GLOWR", 2.5), envF("GLOW", 0.25), envF("INNER", 0.45), envF("RIM", 1.0))
-    var sp = SIMD4<Float>(t, envF("SPARK", 0.003), envF("SPARKI", 1.5), 0)
-    ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0); ce.setBytes(&sp, length: 16, index: 1)
+    var sp = SIMD4<Float>(t, driveSpark ?? envF("SPARK", 0.003), envF("SPARKI", 1.5), 0)
+    var rmp = SIMD4<Float>(p.core.x, p.core.y, envF("RIMI", 0.5), envF("RIMH", 0.72))
+    ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0); ce.setBytes(&sp, length: 16, index: 1); ce.setBytes(&rmp, length: 16, index: 2)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.endEncoding()
     let bb = cb.makeBlitCommandEncoder()!
@@ -249,6 +270,38 @@ case "film":
     }
     try! pipe.fileHandleForWriting.close(); ff.waitUntilExit()
     FileHandle.standardError.write(String(format: "worst gpu %.1f ms\n", worst).data(using: .utf8)!)
+case "drive":   // drive <csv: u,sway,spark per 30 fps frame> <audio> <out.mp4>  — unfurl/sway/sparkle from the music
+    let rows = try! String(contentsOfFile: args[2], encoding: .utf8).split(separator: "\n").map { $0.split(separator: ",").compactMap { Float($0) } }
+    let ff = Process(); ff.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+    ff.arguments = ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "\(W)x\(H)", "-r", "30", "-i", "-", "-i", args[3],
+                    "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "16", "-c:a", "aac", args[4]]
+    let pipe = Pipe(); ff.standardInput = pipe; try! ff.run()
+    var flo = SIMD2<Float>(repeating: 9), fhi = SIMD2<Float>(repeating: -9)   // union of the frond's bounds over the unfurl range
+    for k in 0...10 {
+        let (ww, w) = curl(Float(k) / 10, 0)
+        let tm0 = 0.042 * SIMD2<Float>(sin(w), cos(w)), x1 = rot(-tm0, -ww) / 1.12, mir = envF("MIRROR", 1), sd = SIMD2(-x1.x * mir, x1.y)
+        let (lo, hi) = extent(ww: ww, w: w, theta: envF("UPRIGHT", 1) * (-.pi / 2 - atan2(sd.y, sd.x)) + envF("LEAN", 0))
+        flo = simd_min(flo, lo); fhi = simd_max(fhi, hi)
+    }
+    fixedFrame = (flo, fhi)
+    let follow = envF("FOLLOW", 1) > 0.5                                // slow camera: frame the frond itself, bounds eased ~1.5 s
+    var worst = 0.0, total = 0.0, uS = rows.first?[0] ?? 0, cam: (SIMD2<Float>, SIMD2<Float>)? = nil
+    for (i, r) in rows.enumerated() where r.count == 3 {
+        uS += (r[0] - uS) * envF("USLEW", 0.08)                         // ponytail: one-pole slew; the engine would use its section envelope
+        driveSway = r[1]; driveSpark = r[2]
+        if follow {
+            let (ww, w) = curl(uS, Float(i) / 30)
+            let tm0 = 0.042 * SIMD2<Float>(sin(w), cos(w)), x1 = rot(-tm0, -ww) / 1.12, mir = envF("MIRROR", 1), sd = SIMD2(-x1.x * mir, x1.y)
+            let e = extent(ww: ww, w: w, theta: envF("UPRIGHT", 1) * (-.pi / 2 - atan2(sd.y, sd.x)) + envF("LEAN", 0))
+            let k: Float = 0.022
+            cam = cam.map { ($0.0 + (e.0 - $0.0) * k, $0.1 + (e.1 - $0.1) * k) } ?? e
+            fixedFrame = cam
+        }
+        render(unfurl: uS, time: Float(i) / 30); worst = max(worst, lastMs); total += lastMs
+        pipe.fileHandleForWriting.write(Data(bytes: readback.contents(), count: W * H * 4))
+    }
+    try! pipe.fileHandleForWriting.close(); ff.waitUntilExit()
+    FileHandle.standardError.write(String(format: "frames %d, mean gpu %.1f ms, worst %.1f ms\n", rows.count, total / Double(max(rows.count, 1)), worst).data(using: .utf8)!)
 default:
-    print("usage: flexiifs still <unfurl> <out.png> | flexiifs film <seconds> <out.mp4>")
+    print("usage: flexiifs still <unfurl> <out.png> | flexiifs film <seconds> <out.mp4> | flexiifs drive <csv> <audio> <out.mp4>")
 }
