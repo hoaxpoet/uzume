@@ -39,28 +39,29 @@ static float rnd(thread uint& s) { s = hash(s); return float(s) * (1.0 / 4294967
 
 kernel void chaos(device const Map* maps [[buffer(0)]], constant P& p [[buffer(1)]],
                   device atomic_uint* hist [[buffer(2)]], uint gid [[thread_position_in_grid]]) {
+    // Two walkers: xP wanders the pinna attractor A_P (maps P→P); xW samples the frond A_W, whose maps are
+    // either W→W (stem, stalk continuation) or pinna maps that take a point of A_P (from xP) into W.
+    // (A single walker can go P→W but never back, so it collapsed onto the stalk curve.)
     uint s = hash(gid * 9781u + p.seed);
-    float2 x = float2(rnd(s) - 0.5, rnd(s) * 3.0);
-    int node = 0; float c = 0.5;
+    float2 xP = float2(rnd(s) - 0.5, rnd(s) * 3.0), xW = xP;
+    float cP = 0.5, cW = 0.5;
+    float totP = 0.0, totW = 0.0;
+    for (int j = 0; j < p.nMaps; j++) { if (maps[j].to == 1) { totP += maps[j].p; } else { totW += maps[j].p; } }
     for (int i = 0; i < p.iters; i++) {
-        // pick a map whose domain is the current node, by probability
-        float r = rnd(s), acc = 0.0; int k = 0;
-        float tot = 0.0;
-        for (int j = 0; j < p.nMaps; j++) { if (maps[j].from == node) { tot += maps[j].p; } }
-        r *= tot;
-        for (int j = 0; j < p.nMaps; j++) {
-            if (maps[j].from != node) { continue; }
-            acc += maps[j].p; k = j;
-            if (r <= acc) { break; }
-        }
+        float r = rnd(s) * totP, acc = 0.0; int k = 0;            // advance the pinna walker
+        for (int j = 0; j < p.nMaps; j++) { if (maps[j].to != 1) { continue; } acc += maps[j].p; k = j; if (r <= acc) { break; } }
+        xP = maps[k].m * xP + maps[k].t; cP = 0.5 * (cP + maps[k].col);
+        r = rnd(s) * totW; acc = 0.0;                              // advance the frond walker
+        for (int j = 0; j < p.nMaps; j++) { if (maps[j].to != 0) { continue; } acc += maps[j].p; k = j; if (r <= acc) { break; } }
         Map mp = maps[k];
-        x = mp.m * x + mp.t; node = mp.to; c = 0.5 * (c + mp.col);
-        if (i < 16 || node != 0) { continue; }                 // plot only settled points of the whole frond
-        float2 q = (x - p.centre) * p.scale + float2(\(W / 2).0, \(H / 2).0);
+        if (mp.from == 1) { xW = mp.m * xP + mp.t; cW = 0.5 * (cP + mp.col); }
+        else { xW = mp.m * xW + mp.t; cW = 0.5 * (cW + mp.col); }
+        if (i < 20) { continue; }
+        float2 q = (xW - p.centre) * p.scale + float2(\(W / 2).0, \(H / 2).0);
         if (q.x < 0.0 || q.y < 0.0 || q.x >= \(W).0 || q.y >= \(H).0) { continue; }
         uint idx = (uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x)) * 2u;
         atomic_fetch_add_explicit(&hist[idx], 1u, memory_order_relaxed);
-        atomic_fetch_add_explicit(&hist[idx + 1u], uint(c * 255.0), memory_order_relaxed);
+        atomic_fetch_add_explicit(&hist[idx + 1u], uint(cW * 255.0), memory_order_relaxed);
     }
 }
 
@@ -134,22 +135,22 @@ func fernMaps(_ u: Float, _ t: Float) -> [Map] {
     m.append(Map(m: rs(sP, -curlP), t: [0, hMain], p: 0.80, from: 1, to: 1, col: 0.55))
     m.append(Map(m: rs(sPP, aPP), t: [0, hPin], p: 0.09, from: 1, to: 1, col: 0.95))
     m.append(Map(m: rs(sPP, -aPP, flip: true), t: [0, hPin * 0.95], p: 0.09, from: 1, to: 1, col: 0.95))
+    for i in m.indices { m[i].p = max(abs(m[i].m.determinant), envF("PFLOOR", 0.03)) }   // area-proportional picks
     return m
 }
 
 func extent(_ maps: [Map]) -> (SIMD2<Float>, SIMD2<Float>) {
-    var x = SIMD2<Float>(0, 0), node: Int32 = 0, xs: [Float] = [], ys: [Float] = []
-    var g = SystemRandomNumberGenerator()
-    for i in 0..<30000 {
-        let cand = maps.filter { $0.from == node }; let tot = cand.reduce(0) { $0 + $1.p }
-        var r = Float.random(in: 0..<tot, using: &g), pick = cand[0]
-        for c in cand { r -= c.p; if r <= 0 { pick = c; break } }
-        x = pick.m * x + pick.t; node = pick.to
-        if i > 50 && node == 0 { xs.append(x.x); ys.append(x.y) }
+    var xP = SIMD2<Float>(0, 0), xW = SIMD2<Float>(0, 0), xs: [Float] = [], ys: [Float] = []
+    let mp = maps.filter { $0.to == 1 }, mw = maps.filter { $0.to == 0 }
+    func pick(_ a: [Map]) -> Map { var r = Float.random(in: 0..<a.reduce(0) { $0 + $1.p }); for c in a { r -= c.p; if r <= 0 { return c } }; return a[0] }
+    for i in 0..<40000 {
+        let a = pick(mp); xP = a.m * xP + a.t
+        let b = pick(mw); xW = b.m * (b.from == 1 ? xP : xW) + b.t
+        if i > 50 { xs.append(xW.x); ys.append(xW.y) }
     }
     xs.sort(); ys.sort()
     func q(_ a: [Float], _ f: Float) -> Float { a[min(a.count - 1, Int(Float(a.count) * f))] }
-    return ([q(xs, 0.01), q(ys, 0.01)], [q(xs, 0.99), q(ys, 0.99)])
+    return ([q(xs, 0.005), q(ys, 0.005)], [q(xs, 0.995), q(ys, 0.995)])
 }
 
 // MARK: - Metal setup
