@@ -95,16 +95,21 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
             float2 d = normalize(tn); pos += d * length(tn) * (a - aa);
             // leaf TISSUE: at leaflet depth the repeated piece is a filled lens-shaped blade (half-width ∝ sin πa, in units of
             // the segment's length), so a chain of them is a row of overlapping leaflets — lines alone read as filigree
-            float hw = (lvl >= int(p.ext.x) && a >= 0.0) ? max(p.sd.x, p.fp.w * length(C) * 0.11 * sin(3.14159 * aa)) : p.sd.x * (lvl == 0 ? p.sd.w : 1.0);
+            float lance = pow(sin(3.14159 * aa), 0.7) * (1.0 - 0.6 * aa) * (0.72 + 0.28 * abs(sin(9.42478 * aa)));   // pointed, toothed
+            // curled, a pinna is ONE smooth leaf: its own chain drawn as a blade, thinning back to a line as it opens (Matt)
+            // one CONSTANT local width along the pinna's chain = a single smooth stroke that tapers with the chain itself
+            // (a lens per segment drew facets: ivy/stained-glass shards)
+            float bw = (lvl == 1 && a >= 0.0) ? p.fp.w * smoothstep(0.5, 0.15, ul) * length(C) * 0.06 * smoothstep(0.0, 1.2, float(run) + aa) : 0.0;   // only strongly curled pinnae; base tapers
+            float hw = bw > p.sd.x ? bw : p.sd.x * (lvl == 0 ? p.sd.w : 1.0);
             float2 x = A * (pos + float2(-d.y, d.x) * l * hw * min(g, 1.0)) + T;
-            float cc = lvl == 0 ? 1.0 - pow(abs(l), 4.0) : (lvl >= int(p.ext.x) && p.fp.w > 0.0) ? 0.55 + 0.45 * pow(abs(l), 3.0) : 1.0 - abs(l);   // stalk flat; blades filled with a brighter edge
+            float cc = lvl == 0 ? 1.0 - pow(abs(l), 4.0) : (bw > p.sd.x) ? 0.3 : 1.0 - abs(l);   // stalk flat; the blade is only a faint under-glow — the leaf is its sub-leaflets
             float b = (stipe ? cc * smoothstep(-p.ext.y, -0.5 * p.ext.y, a) * p.tone.w : cc) * (lvl == 0 ? 0.6 : 1.0) - 0.015 * float(n);   // stalk loses the max to leaves: drawn behind
             if (b > 0.0) {
                 float2 q = (rot(float2(x.x * p.mirror, -x.y), p.ext.w) - p.centre) * p.scale + float2(\(W / 2).0 + p.wave.w, \(H / 2).0);
                 if (q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
                     // packed: brightness 12 | stalk joint the point hangs from 7 | level 4 | joint along its own chain 6 | side 1
                     uint idx = uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x);
-                    atomic_fetch_max_explicit(&img[idx], (uint(b * 4095.0) << 20) | (uint(min(lvl == 0 ? run : j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(min(run, 63)) << 3) | (uint(side0) << 2), memory_order_relaxed);
+                    atomic_fetch_max_explicit(&img[idx], (uint(b * 4095.0) << 20) | (uint(min(lvl == 0 ? run : j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(min(run, 63)) << 3) | (uint(side0) << 2) | (bw > p.sd.x ? 2u : 0u), memory_order_relaxed);   // bit 1: blade pixel
                 }
             }
             if (n >= 66) { i++; break; }                                // Flexi's fade has reached zero
@@ -114,13 +119,27 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
                 float sg = u < pm + 0.5 * (1.0 - pm) ? -1.0 : 1.0, a0 = p.uf2.w;
                 float2 att = C + exp(ln * a0) * rot(-C, -a0 * ww);
                 // OUTB: while coiled, one side's pinnae swing further out, studding the coil's outer rim (reference)
-                float ang = p.sd.z + (sg == p.sv.w ? p.fp.z * (1.0 - smoothstep(0.0, 0.6, ul)) : 0.0);
-                T = A * att + T; A = A * (rotm(-sg * ang) / ss);
+                float ang = lvl >= 1 ? mix(0.45, p.sd.z, ul) : p.sd.z + (sg == p.sv.w ? p.fp.z * (1.0 - smoothstep(0.0, 0.6, ul)) : 0.0);   // sub-leaflets of a curled pinna lie tight along it
+                // 3-D FOLD: a rolled pinna also folds out of the picture plane, over the coil's side. Drawn flat, each rolled
+                // pinna showed its whole circle (a wheel/rosette); tilted by φ about the parent stalk's direction at the
+                // attachment, it projects squashed along the stalk — elongated, lying along the coil, overlapping like scales.
+                // φ grows as the parent closes (open = flat), so the fern unfolds in depth as it unfurls.
+                float2 rva = rot(-C, -a0 * ww), dt = normalize(ln * rva - ww * float2(-rva.y, rva.x));
+                float cphi = cos(p.pl2.w * (1.0 - ul));
+                float2x2 Rt = float2x2(dt, float2(-dt.y, dt.x)), Fold = Rt * float2x2(float2(1.0, 0.0), float2(0.0, cphi)) * transpose(Rt);
+                // bilateral symmetry: the left pinna is the MIRROR of the right about the parent stalk (Flexi rotates one chiral
+                // frond both ways, so one side curled away and the other hugged the stalk — the frond looked lopsided)
+                float2x2 Refl = Rt * float2x2(float2(1.0, 0.0), float2(0.0, -1.0)) * transpose(Rt);
+                // sub-leaflets of a curled pinna are a small FRINGE on the leaf's edge; full size again as the pinna opens
+                float sc = lvl >= 1 ? ss * mix(p.ext.x, 1.0, ul) : mix(ss, p.fp.y, ul);   // pinnae: big when curled (pack the coil), smaller when open (keep its gaps)
+                T = A * att + T; float ms = p.fp.x > 1.5 ? 1.0 : -1.0;   // which side is the mirror image (MIRRORSIDE 1: left, 2: right)
+                A = (p.fp.x > 0.5 && sg == ms) ? A * Refl * Fold * (rotm(ms * ang) / sc) : A * Fold * (rotm(-sg * ang) / sc);
                 // the branch opens after the parent's front passes its joint, each branch on its own schedule
                 bh = hash(bh ^ (uint(run) * 2u + (sg > 0.0 ? 1u : 0u) + 0x9e37u * uint(lvl + 1)));
                 if (lvl == 0) { side0 = sg > 0.0 ? 1 : 0; j0 = run; }
                 ph = float(bh & 1023u) * 0.00614;                     // each branch sways on its own phase
                 ul = clamp((F - float(run) - a0) / p.uf.w + p.uf2.z * ul * (float(bh & 1023u) / 1023.0 - 0.5), p.mo.w, 1.0);   // jitter ∝ parent's openness; floor: even closed, a pinna is a leaf (straight base, curled tip), not a wheel
+                if (lvl >= 1) { ul = max(ul, 0.85); }      // ...and stay nearly straight: a serrated row, not curl glyphs
                 F = frontAt(ul, p); swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3 + float(bh & 1023u) * 0.0061);
                 lvl++; run = 0;
             }
@@ -158,7 +177,9 @@ kernel void tone(device const uint* img [[buffer(0)]], constant P& p [[buffer(1)
         h += side == 1u ? -0.015 : 0.02;
         if (float(lvl) >= p.sv.y && t > 0.7) { h = side == 1u ? 0.86 : 0.78; }   // thin pink/violet accents on the deepest tips
     }
-    float3 col = hsv2rgb(fract(h + 1.0), p.sv.x, 1.0) * pow(b, p.tone.y) * p.tone.z * (lvl == 0u ? p.tone.w : 1.0);
+    // veins (stalk + pinna rachis lines, not blades) brighter, fine leaflet tissue a little darker: open fronds get structure
+    float vein = (lvl <= 1u && (v & 2u) == 0u) ? p.tone.x / 30.0 : (lvl >= 2u ? 0.8 : 1.0);   // tone.x (was AGESPAN) = 30 × vein gain
+    float3 col = hsv2rgb(fract(h + 1.0), p.sv.x, 1.0) * pow(b, p.tone.y) * p.tone.z * (lvl == 0u ? p.tone.w : 1.0) * vein;
     // light flowing along: each beat launches a pulse from the base that travels out through every chain (age = generations)
     float pl = 0.0;
     for (int k = 0; k < 4; k++) {
@@ -207,7 +228,8 @@ kernel void bgblur(device const uint* bg [[buffer(0)]], constant float4& t [[buf
 }
 
 kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::write> out [[texture(1)]], texture2d<float> bgt [[texture(2)]],
-                 constant float4& g [[buffer(0)]], constant float4& t [[buffer(1)]], constant float4& rm [[buffer(2)]], uint2 gid [[thread_position_in_grid]]) {
+                 constant float4& g [[buffer(0)]], constant float4& t [[buffer(1)]], constant float4& rm [[buffer(2)]], device const uint* img [[buffer(3)]],
+                 uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W)u || gid.y >= \(H)u) { return; }
     float2 sz = float2(\(W).0, \(H).0), uv = (float2(gid) + 0.5) / sz;
     float4 c0 = src.read(gid); float3 c = c0.rgb, b = float3(0.0); float wsum = 0.0, cov = 0.0;
@@ -225,6 +247,18 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
     float Lb = dot(hb, Y);
     if (Lb > 1e-4) { c = hb * (dot(c, Y) / Lb); }
     c *= mix(1.0, g.z, smoothstep(0.55, 0.95, cov)) * (1.0 + g.w * 4.0 * cov * (1.0 - cov));   // dark interiors, glowing rims
+    // LEAFLET OUTLINES: each pixel knows which pinna it belongs to (stalk joint + side). Where a lit neighbour belongs to a
+    // different pinna, this is a leaflet boundary: a crisp bright edge, so packed pinnae read as discrete leaflets.
+    uint v0 = img[gid.y * \(W)u + gid.x], id0 = ((v0 >> 13) & 127u) * 2u + ((v0 >> 2) & 1u); float edge = 0.0;
+    if ((v0 >> 20) > 200u && ((v0 >> 9) & 15u) >= 1u) {
+        for (int k = 0; k < 4; k++) {
+            int2 o = int2(gid) + int2(k == 0 ? 1 : k == 1 ? -1 : 0, k == 2 ? 1 : k == 3 ? -1 : 0);
+            if (o.x < 0 || o.y < 0 || o.x >= \(W) || o.y >= \(H)) { continue; }
+            uint vn = img[uint(o.y) * \(W)u + uint(o.x)];
+            if ((vn >> 20) > 200u && ((vn >> 9) & 15u) >= 1u && ((vn >> 13) & 127u) * 2u + ((vn >> 2) & 1u) != id0) { edge = 1.0; }
+        }
+    }
+    c = mix(c, c * 1.6 + float3(0.55, 0.75, 0.35) * rm.z * c0.a, edge);
     // (no amber edge light: amber + green bodies mixed to yellow — the reference keeps them as separate zones)
     // sparkle beads ALONG THE RIMS (reference: hundreds of 1–3 px white-to-orange beads on every edge), ~10 Hz twinkle
     uint h = hash(gid.x * 7919u + gid.y * 104729u + uint(t.x * 60.0) / 6u); float rimw = 4.0 * cov * (1.0 - cov);
@@ -251,7 +285,7 @@ var driveEnergy: Float = 0.5, drivePulses = SIMD4<Float>(-1, -1, -1, -1)   // mu
 var fixedFrame: (SIMD2<Float>, SIMD2<Float>)?
 
 let KAPPA = envF("KAPPA", 0.75), KAPPA_O = envF("KAPPA_O", 0.03), JN = envF("JN", 22), WFRONT = envF("WFRONT", 3), LAGJ = envF("LAGJ", 8)
-let JIT = envF("JIT", 0.6), ATTACH = envF("ATTACH", 0.4), SIDE = envF("SIDE", 4.0), ANG = envF("ANG", .pi / 4)
+let JIT = envF("JIT", 0.6), ATTACH = envF("ATTACH", 0.4), SIDE = envF("SIDE", 2.6), ANG = envF("ANG", .pi / 4)
 
 /// Whole-frond sway: a slow wind that never stops, plus the bass pushing it (drive).
 func sway(_ t: Float) -> Float { envF("WIND", 0.05) * (sin(t * 0.45) + 0.6 * sin(t * 1.1 + 1.0)) + (driveSway ?? 0) }
@@ -340,14 +374,14 @@ func render(unfurl u: Float, time t: Float) {
     if envF("DEBUGEXT", 0) > 0 { FileHandle.standardError.write("extent lo \(lo) hi \(hi) scale \(scale)\n".data(using: .utf8)!) }
     var p = Params(ww: 0, w: 0, scale: scale, mirror: envF("MIRROR", 1), centre: (lo + hi) * 0.5, iters: Int32(envF("ITERS", 280)),
                    seed: 17 /* fixed: same random paths every frame, so detail moves instead of fizzing */, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 1.2), envF("STALKB", 1.0)],
-                   sd: [envF("SEEDW", 0.002), SIDE, ANG, envF("STALKW", 1.5)],
+                   sd: [envF("SEEDW", 0.002), SIDE, ANG, envF("STALKW", 0.75)],
                    ext: [0, envF("STIPE", 6), envF("PSTIPE", 0.3), theta],
                    hue: [envF("H0", 0.1), envF("H1", 0.13), envF("H2", 0.3), envF("H3", 0.38)], sv: [envF("SAT", 0.85), envF("RIMLVL", 3), 0, 0],
                    core: [0, 0, 0, 0])
     p.uf = [u, JN, WFRONT, LAGJ]; p.uf2 = [KAPPA, KAPPA_O, JIT, ATTACH]; p.mo = [t, sway(t), envF("SWAYB", 0.05), envF("CHILDMIN", 0.15)]
-    p.sv.z = envF("RUNSPAN", 9); p.sv.w = envF("OUTSG", 1); p.fp.z = envF("OUTB", 0.6); p.fp.w = envF("BLADE", 0); p.ext.x = envF("BLADELVL", 2)
+    p.sv.z = envF("RUNSPAN", 9); p.sv.w = envF("OUTSG", 1); p.fp.z = envF("OUTB", 0.6); p.fp.w = envF("BLADE", 8); p.ext.x = envF("FRINGE", 1.3); p.fp.y = envF("SIDE_O", 3.6); p.fp.x = envF("MIRRORSIDE", 1)
     p.wave = [envF("WAVEA", 0.035) * (0.5 + driveEnergy), envF("WAVES", 1.6), envF("WAVEJ", 3.0), envF("HEROX", -0.12) * Float(W)]   // .w: hero left of centre (reference)   // bending wave, bigger when loud
-    p.pulse = drivePulses; p.pl2 = [envF("PSPEED", 9), envF("PWIDTH", 0.9), envF("PGAIN", 3.75), 0]
+    p.pulse = drivePulses; p.pl2 = [envF("PSPEED", 9), envF("PWIDTH", 0.9), envF("PGAIN", 3.75), envF("FOLD", 0.9)]   // .w: pinna fold angle when closed (rad)
     // warm light at the coil's eye: the limit of the top chain's joints
     var A = matrix_identity_float2x2, T = SIMD2<Float>(0, 0)
     for k in 0..<80 { let j = joint(curlAt(u, Float(k) + 1) + sway(t)); T = A * j.t + T; A = A * j.M }
@@ -369,7 +403,7 @@ func render(unfurl u: Float, time t: Float) {
     var gp = SIMD4<Float>(envF("GLOWR", 2.5), envF("GLOW", 0.25), envF("INNER", 0.2), envF("RIM", 1.5))
     var sp = SIMD4<Float>(t, driveSpark ?? envF("SPARK", 0.003), envF("SPARKI", 1.5), envF("SATLIFT", 1.0))
     var rmp = SIMD4<Float>(p.core.x, p.core.y, envF("RIMI", 0.5), envF("BGI", 1.0))
-    ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0); ce.setBytes(&sp, length: 16, index: 1); ce.setBytes(&rmp, length: 16, index: 2); ce.setTexture(bgTex, index: 2)
+    ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0); ce.setBytes(&sp, length: 16, index: 1); ce.setBytes(&rmp, length: 16, index: 2); ce.setTexture(bgTex, index: 2); ce.setBuffer(img, offset: 0, index: 3)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.endEncoding()
     let bb = cb.makeBlitCommandEncoder()!
