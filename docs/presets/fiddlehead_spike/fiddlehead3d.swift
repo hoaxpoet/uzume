@@ -621,7 +621,7 @@ var nLeaves = 0, nTubes = 0, nBeads = 0
 struct Rule {
     var sig = envF("SIG", 0.9568), sigS = envF("SIGS", 0.253)
     var sig1 = envF("SIG1", envF("SIG", 0.9568))
-    var pinCap = envF("PINCAP", 99), tap0 = envF("TAP0", 1)   // open pinnule cap ÷ pinna spacing; length at the stalk end
+    var pinCap = envF("PINCAP", 99), tap0 = envF("TAP0", 1), absAng = envF("ABSANG", 0)   // open pinnule cap ÷ pinna spacing; length at the stalk end
     var pExp1 = envF("PEXP1", 1), immature1 = envF("IMM1", envF("IMM", 0.67))   // pinna-level size law / tip shrink (open: blade rolls up full width)
     var maxTurn1 = envF("TURN1", envF("TURN", 0.276))      // pinna/pinnule curl rate (open fit sizes the tip croziers)
     var alpha = envF("ALPHA", 1.37)
@@ -663,7 +663,7 @@ let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "du
 let rule0 = Rule()
 // The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
 // frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
-let openFit: [String: Float] = ["SIG_O": 0.8387, "SIGS_O": 0.7698, "ALPHA_O": 0.7928, "BT_O": 0.0313, "BT1_O": 0.0261, "PINF_O": 0.5992, "TURN_O": 0.1767, "TURN1_O": 0.3475, "SIG1_O": 0.97, "SIGS1_O": 0.35, "ALPHA1_O": 0.8, "CURLON_O": -1.0, "KAPMIN_O": 1.0]   // fitted to 02_reference_open (fitopen.py)
+let openFit: [String: Float] = ["SIG_O": 0.8636, "SIGS_O": 0.723, "ALPHA_O": 0.9413, "BT_O": 0.0332, "BT1_O": 0.0151, "PINF_O": 0.6447, "TURN_O": 0.15, "TURN1_O": 0.3334, "SIG1_O": 0.97, "SIGS1_O": 0.12, "ALPHA1_O": 0.9, "CURLON_O": 1.1, "KAPMIN_O": 1.0, "ABSANG_O": 1.0, "IMM1_O": 0.8, "RAMPP_O": 0.15, "HOOKR_O": 0.3, "HAIRP_O": 0.0, "LEAFLEN_O": 2.0, "LEAFW_O": 0.25, "PROF_O": 1.0, "LEAFPX_O": 50, "PEXP1_O": 1.0, "TAP0_O": 0.7, "PINCAP_O": 0.3]   // fitted to 02_reference_open (fitopen.py)
 let ruleO: Rule = {
     var r = rule0
     func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", openFit[k + "_O"] ?? v) }
@@ -671,7 +671,7 @@ let ruleO: Rule = {
     r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
     r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
     r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
-    r.sig1 = o("SIG1", r.sig1); r.leafPx = o("LEAFPX", r.leafPx); r.hookR = o("HOOKR", r.hookR); r.leafW = o("LEAFW", r.leafW); r.pinCap = o("PINCAP", r.pinCap); r.tap0 = o("TAP0", r.tap0); r.leafLen = o("LEAFLEN", r.leafLen); r.hairP = o("HAIRP", r.hairP); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
+    r.sig1 = o("SIG1", r.sig1); r.leafPx = o("LEAFPX", r.leafPx); r.hookR = o("HOOKR", r.hookR); r.leafW = o("LEAFW", r.leafW); r.pinCap = o("PINCAP", r.pinCap); r.absAng = o("ABSANG", r.absAng); r.tap0 = o("TAP0", r.tap0); r.leafLen = o("LEAFLEN", r.leafLen); r.hairP = o("HAIRP", r.hairP); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
     return r
 }()
 var rule = rule0
@@ -682,7 +682,7 @@ func blendRule(_ w: Float) {
     rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
     rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
     rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
-    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.leafPx = m(rule0.leafPx, ruleO.leafPx); rule.hookR = m(rule0.hookR, ruleO.hookR); rule.leafW = m(rule0.leafW, ruleO.leafW); rule.pinCap = m(rule0.pinCap, ruleO.pinCap); rule.tap0 = m(rule0.tap0, ruleO.tap0); rule.leafLen = m(rule0.leafLen, ruleO.leafLen); rule.hairP = m(rule0.hairP, ruleO.hairP); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
+    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.leafPx = m(rule0.leafPx, ruleO.leafPx); rule.hookR = m(rule0.hookR, ruleO.hookR); rule.leafW = m(rule0.leafW, ruleO.leafW); rule.pinCap = m(rule0.pinCap, ruleO.pinCap); rule.absAng = m(rule0.absAng, ruleO.absAng); rule.tap0 = m(rule0.tap0, ruleO.tap0); rule.leafLen = m(rule0.leafLen, ruleO.leafLen); rule.hairP = m(rule0.hairP, ruleO.hairP); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
 }
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
@@ -823,7 +823,11 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                 let atC = p + d * (S * (0.5 + 0.5 * side * rule.alt))
                 let bS = bS0 * (1 + ((side * handed < 0 ? rule.outS : rule.inS) - 1) * c * (level == 0 ? 1 : 0))
                 let ang = (level == 0 ? rule.alpha : rule.alpha1) * (1 - 0.25 * c)
-                let bd = rotate(d, about: N, -side * ang)                 // in-plane: right is −about N
+                var bd = rotate(d, about: N, -side * ang)                 // in-plane: right is −about N
+                if level == 0 && rule.absAng > 0 {
+                    // Open frond: pinnae rise at the same angle on both sides even though the stalk leans (Matt's open ref)
+                    bd = normalize(bd + (rotate(SIMD3<Float>(0, 1, 0), about: N, -side * ang) - bd) * rule.absAng)
+                }
                 let bN = rotate(N, about: bd, side * rule.tilt * (level == 0 ? 1 : 0.4))
                 let bh = (hash * 7.31 + Float(k) * 0.618 + (side > 0 ? 0.29 : 0.71)).truncatingRemainder(dividingBy: 1)
                 let at = atC + normalize(bd - d * dot(bd, d)) * (r * 0.8) - N * (r * 0.35)   // emerge from the tube's SIDE, a little behind (not across its front)
@@ -877,8 +881,8 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     blendRule(wO)
     let front = envF("F0", 0.1235) + (envF("FMAX", 0.85) - envF("F0", 0.1235)) * unfurl
     let base = SIMD3<Float>(envF("BX", -0.377), envF("BY", -0.700), 0)
-    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.1549) - envF("LEAN", 0.037)) * wO + sway
-    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 1.5993) - envF("SEG", 0.193)) * wO
+    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.1395) - envF("LEAN", 0.037)) * wO + sway
+    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 1.0749) - envF("SEG", 0.193)) * wO
     let dir0 = SIMD3<Float>(sin(lean), cos(lean), 0)
     let tb = Date()
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
