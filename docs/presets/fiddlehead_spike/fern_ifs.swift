@@ -95,19 +95,24 @@ kernel void tone(device const uint* hist [[buffer(0)]], constant float4& t [[buf
     float n = float(hist[idx]);
     float a = log(1.0 + n) / log(1.0 + t.x);                  // log-density (flame) brightness
     float3 col = n > 0.0 ? palette(float(hist[idx + 1u]) / max(n, 1.0) / 255.0) : float3(0.0);
-    out.write(float4(col * pow(a, t.y) * t.z, 1.0), gid);
+    out.write(float4(col * pow(a, t.y) * t.z, a), gid);        // alpha = density brightness (coverage for the rim pass)
 }
 
 constexpr sampler lin(filter::linear, address::clamp_to_zero);
 kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::write> out [[texture(1)]],
-                 constant float4& g [[buffer(0)]], uint2 gid [[thread_position_in_grid]]) {
+                 constant float4& g [[buffer(0)]], constant float4& t [[buffer(1)]], uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W)u || gid.y >= \(H)u) { return; }
     float2 sz = float2(\(W).0, \(H).0), uv = (float2(gid) + 0.5) / sz;
-    float3 c = src.read(gid).rgb, b = float3(0.0); float wsum = 0.0;
+    float4 c0 = src.read(gid); float3 c = c0.rgb, b = float3(0.0); float wsum = 0.0, cov = 0.0;
     for (int j = -3; j <= 3; j++) for (int i = -3; i <= 3; i++) {
         float w = exp(-float(i * i + j * j) / 6.0);
-        b += src.sample(lin, uv + float2(i, j) * g.x / sz).rgb * w; wsum += w;
+        float4 s = src.sample(lin, uv + float2(i, j) * g.x / sz);
+        b += s.rgb * w; cov += step(0.12, s.a) * w; wsum += w;
     }
+    cov /= wsum;                                                 // local fill: 1 deep inside a blade, ~0.5 on its rim
+    c *= mix(1.0, g.z, smoothstep(0.55, 0.95, cov)) * (1.0 + g.w * 4.0 * cov * (1.0 - cov));   // dark interiors, glowing rims
+    uint h = hash(gid.x * 7919u + gid.y * 104729u + uint(t.x * 60.0) / 6u);                       // sparkle: sparse, ~10 Hz
+    c += (rnd(h) < t.y && c0.a > 0.35) ? float3(1.0, 0.95, 0.85) * t.z * c0.a : float3(0.0);
     c += b / wsum * g.y + float3(0.004, 0.005, 0.008);
     c = c / (1.0 + c);
     out.write(float4(pow(c, float3(1.0 / 1.8)), 1.0), gid);
@@ -143,7 +148,7 @@ func fern(_ u: Float, _ t: Float) -> Fern {
     let sway = envF("SWAY", 0.01) * (sin(t * 0.9) + 0.5 * sin(t * 1.7 + 1.3))
     // straight fern proportions (Barnsley-like; a slight natural bend)
     let sW = envF("SW", 0.86), hW = envF("HW", 1.6), bW = envF("BEND", 0.03) + sway
-    let sPin = L("SPIN", 0.24, 0.42), aPin = envF("APIN", 1.0), hPin = envF("HPIN", 1.6)   // arms puff out as it opens
+    let sPin = L("SPIN", 0.24, 1.1), aPin = envF("APIN", 1.3), hPin = envF("HPIN", 1.6)   // arms puff out as it opens
     let sP = envF("SP", 0.86), hP = envF("HP", 1.6)
     let sPP = L("SPP", 0.28, 0.32), aPP = envF("APP", 0.95), hPP = envF("HPP", 1.6)
     let stem = simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, envF("STEMW", 0.16))))
@@ -159,9 +164,9 @@ func fern(_ u: Float, _ t: Float) -> Fern {
     for i in m.indices { m[i].p = max(abs(m[i].m.determinant), envF("PFLOOR", 0.03)) }   // area-proportional picks
     // rolls: where each level's rolling starts (fraction of its length), spiral b (growth e^{2πb} per turn)
     let lenW = hW / (1 - sW), lenP = hP / (1 - sP)
-    let rw = Roll(a: L("RW", 0.10, 0.82), b: envF("BW", 0.16), len: lenW, dir: 1)
-    let rp = Roll(a: L("RP", 0.05, 0.45), b: envF("BP", 0.18), len: lenP, dir: envF("DIRP", 1))
-    let rpp = Roll(a: L("RPP", 0.05, 0.30), b: envF("BPP", 0.2), len: lenP, dir: envF("DIRPP", 1))
+    let rw = Roll(a: L("RW", 0.10, 0.85), b: envF("BW", 0.16), len: lenW, dir: 1)
+    let rp = Roll(a: L("RP", 0.05, 0.45), b: envF("BP", 0.18), len: lenP, dir: envF("DIRP", -1))   // pinna tips roll down/outward
+    let rpp = Roll(a: L("RPP", 0.05, 0.45), b: envF("BPP", 0.2), len: lenP, dir: envF("DIRPP", 1))
     return Fern(maps: m, rw: rw, rp: rp, rpp: rpp)
 }
 
@@ -176,7 +181,7 @@ func extent(_ f: Fern) -> (SIMD2<Float>, SIMD2<Float>) {
     }
     xs.sort(); ys.sort()
     func q(_ a: [Float], _ v: Float) -> Float { a[min(a.count - 1, Int(Float(a.count) * v))] }
-    return ([q(xs, 0.005), q(ys, 0.005)], [q(xs, 0.995), q(ys, 0.995)])
+    return ([xs.first!, ys.first!], [xs.last!, ys.last!])   // full bbox: the rolled tip is sparse but bright — any quantile clips it
 }
 
 // MARK: - Metal
@@ -217,8 +222,9 @@ func render(unfurl u: Float, time t: Float) {
     ce.setBuffer(hist, offset: 0, index: 0); ce.setBytes(&tp, length: 16, index: 1); ce.setTexture(hdr, index: 0)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.setComputePipelineState(glowPSO)
-    var gp = SIMD4<Float>(envF("GLOWR", 2.5), envF("GLOW", 0.8), 0, 0)
-    ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0)
+    var gp = SIMD4<Float>(envF("GLOWR", 2.5), envF("GLOW", 0.8), envF("INNER", 0.35), envF("RIM", 0.8))
+    var sp = SIMD4<Float>(t, envF("SPARK", 0.004), envF("SPARKI", 1.5), 0)
+    ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0); ce.setBytes(&sp, length: 16, index: 1)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.endEncoding()
     let bb = cb.makeBlitCommandEncoder()!
