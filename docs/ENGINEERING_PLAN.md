@@ -387,6 +387,15 @@ Branch `claude/understory-development-2c507d`.
 | **UND.5** fiddleheads + vocals | ✅ built 2026-10-01 — live path pending (M7) | κ_max 0.45 (fitted to ref 02); voice = vocalsEnergyRel vetoed by brass/woodwind/string activity (the vocal stem carries trumpet); replay: sung 0.83 / 0.87 open, instrumental 0.00. Phrase timing + streaming path: cannot verify offline (design §12) |
 | **UND.6 / UND.7** M7 + certification | ⏸ | Matt's M7 PASS; NEW_PRESET_CHECKLIST §4 gates; 10-minute soak, watchdog silent |
 
+### Lane · Fiddlehead — one live fractal fern crozier ⏸ PARKED (2026-10-06)
+
+Spike only: branch `claude/fiddlehead-fh1`, local and unpushed. Nothing reached the engine. Code and instruments are in `docs/presets/fiddlehead_spike/`; the state and lessons are in `BRIEF.md §FH.6`.
+
+| Increment | Status | Done-when / outcome |
+|---|---|---|
+| **FH.1–FH.5** IFS → 2D raster → live 3D L-system + per-pixel croziers | ❌ rejected by Matt (2026-10-05: *"looks like shit"*) | Matched the reference's fractal-detail metrics off-screen, but the read failed |
+| **FH.6** GPU chaos-game IFS: complete self-similarity, roll warps, spine walkers | ⏸ **PARKED**: failed the agreed gate (Matt 2026-10-06: *"one last try, then park"*) | Done-when: the plain open fern reads as ONE fern frond on the first check. Outcome: NO. The spines gave a clear stalk and 6–7 outer blades per side, but the centre stays a lattice of overlapping leaflet copies (a point-cloud IFS has no per-pinna band). Reopen only with a construction that confines each pinna to its own band |
+
 ### Lane · SCAN — Spotify playlists from the screen (D-260)
 
 Spotify's February 2026 Web API rules cap the paste-a-link connector at 5 users, so Spotify playlists are

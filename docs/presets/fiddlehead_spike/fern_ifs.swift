@@ -38,7 +38,7 @@ using namespace metal;
 
 struct Map { float2x2 m; float2 t; float p; int from; int to; float col; int roll; };   // x' = m·roll?(x) + t
 struct Roll { float a; float b; float len; float dir; };      // roll start (fraction of length), spiral b, length, side
-struct P { int nMaps; int iters; float scale; float pad; float2 centre; float time; uint seed; Roll rw; Roll rp; Roll rpp; };
+struct P { int nMaps; int iters; float scale; float pad; float2 centre; float time; uint seed; Roll rw; Roll rp; Roll rpp; float4 spine; float4 spine2; };
 
 static uint hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
 static float rnd(thread uint& s) { s = hash(s); return float(s) * (1.0 / 4294967296.0); }
@@ -58,6 +58,29 @@ static float2 roll(float2 q, Roll R) {
 kernel void chaos(device const Map* maps [[buffer(0)]], constant P& p [[buffer(1)]],
                   device atomic_uint* hist [[buffer(2)]], uint gid [[thread_position_in_grid]]) {
     uint s = hash(gid * 9781u + p.seed);
+    if (p.spine.x > 0.5 && gid % uint(p.spine.x) == 0u) {      // spine walkers: the stalk and pinna rachises as thin strips
+        // pushed through the same maps (so they taper, roll and align with the tissue exactly). maps[1] = frond step,
+        // maps[2/3] = pinna placement, maps[5] = pinna step. Geometric depth ∝ step scale = uniform density per length.
+        float lW = log(sqrt(abs(determinant(maps[1].m)))), lP = log(sqrt(abs(determinant(maps[5].m))));
+        for (int i = 0; i < p.iters; i++) {
+            float2 x; float col;
+            if (rnd(s) < p.spine.y) { x = float2((rnd(s) * 2.0 - 1.0) * p.spine.z, rnd(s) * maps[1].t.y); col = 0.02; }
+            else {
+                x = float2((rnd(s) * 2.0 - 1.0) * p.spine.w, rnd(s) * maps[5].t.y);
+                int j = min(int(log(max(rnd(s), 1e-7)) / lP), 60);
+                for (int n = 0; n < j; n++) { x = maps[5].m * x + maps[5].t; }
+                Map b = maps[rnd(s) < 0.5 ? 2 : 3]; x = b.m * roll(x, p.rp) + b.t; col = 0.3;
+            }
+            int k = min(int(log(max(rnd(s), 1e-7)) / lW), 60);
+            for (int n = 0; n < k; n++) { x = maps[1].m * x + maps[1].t; }
+            float2 q = (roll(x, p.rw) - p.centre) * p.scale + float2(\(W / 2).0, \(H / 2).0);
+            if (q.x < 0.0 || q.y < 0.0 || q.x >= \(W).0 || q.y >= \(H).0) { continue; }
+            uint idx = (uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x)) * 2u, w = uint(p.spine2.x);
+            atomic_fetch_add_explicit(&hist[idx], w, memory_order_relaxed);
+            atomic_fetch_add_explicit(&hist[idx + 1u], uint(col * 255.0) * w, memory_order_relaxed);
+        }
+        return;
+    }
     float2 xP = float2(rnd(s) - 0.5, rnd(s) * 3.0), xW = xP;
     float cP = 0.5, cW = 0.5, totP = 0.0, totW = 0.0;
     for (int j = 0; j < p.nMaps; j++) { if (maps[j].to == 1) { totP += maps[j].p; } else { totW += maps[j].p; } }
@@ -124,7 +147,7 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
 struct Map { var m: simd_float2x2; var t: SIMD2<Float>; var p: Float; var from: Int32; var to: Int32; var col: Float; var roll: Int32 }
 struct Roll { var a: Float; var b: Float; var len: Float; var dir: Float }
 struct Params { var nMaps: Int32; var iters: Int32; var scale: Float; var pad: Float = 0; var centre: SIMD2<Float>; var time: Float; var seed: UInt32
-                var rw: Roll; var rp: Roll; var rpp: Roll }
+                var rw: Roll; var rp: Roll; var rpp: Roll; var spine = SIMD4<Float>(0, 0, 0, 0); var spine2 = SIMD4<Float>(0, 0, 0, 0) }
 
 func rs(_ s: Float, _ a: Float, flip: Bool = false) -> simd_float2x2 {   // scale·rotation (optionally mirrored)
     let c = cos(a) * s, n = sin(a) * s
@@ -210,7 +233,8 @@ func render(unfurl u: Float, time t: Float) {
     let (lo, hi) = extent(f), fill = envF("FILL", 0.88)
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
     var p = Params(nMaps: Int32(f.maps.count), iters: Int32(envF("ITERS", 256)), scale: scale, pad: envF("SHOWP", 0), centre: (lo + hi) * 0.5,
-                   time: t, seed: UInt32(t * 1000) &+ 17, rw: f.rw, rp: f.rp, rpp: f.rpp)
+                   time: t, seed: UInt32(t * 1000) &+ 17, rw: f.rw, rp: f.rp, rpp: f.rpp,
+                   spine: [envF("SPINEDIV", 8), envF("SPINEF", 0.3), envF("WF", 0.05), envF("WP", 0.03)], spine2: [envF("SPINEW", 6), 0, 0, 0])
     let threads = Int(envF("THREADS", 65536))
     let cb = queue.makeCommandBuffer()!
     let bl = cb.makeBlitCommandEncoder()!; bl.fill(buffer: hist, range: 0..<hist.length, value: 0); bl.endEncoding()

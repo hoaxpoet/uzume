@@ -113,3 +113,19 @@ for legibility. Open problems:
   stalk → pinna → leaflet hierarchy that makes a frond read never appears. At the reference's wide aspect, long
   pinnae overlap, and the upper pinna copies tile in rows behind the lower ones.
 - The tight-coil state was never fixed: fine curls 12 vs 149 in the reference; lit fraction 0.17 vs 0.52.
+
+## FH.6 gate (2026-10-06): PARKED
+
+Matt chose "one last try, then park". The try was spine walkers: the stalk and pinna rachises are drawn as thin strips
+pushed through the same maps (SPINEDIV/SPINEF/WF/WP/SPINEW), so they taper and align with the tissue.
+
+The gate result (plain open fern, no rolls): **NO**.
+- **What the spines achieved:** a clear curved, tapering stalk and 6–7 outer blades per side on visible spines.
+- **What still failed:** the centre stays a lattice of overlapping leaflet copies, with no per-pinna bands.
+
+Root cause: in a self-affine frond, each pinna copy spans the full frond width, so at the reference's wide
+aspect the upper pinnae overlap the lower ones.
+
+A reopen would need a construction that confines each pinna to its own band along the stalk. For example:
+- an explicit pinna list with per-pinna IFS, not the frond's self-copy map;
+- or a non-affine placement.
