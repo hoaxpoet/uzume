@@ -656,7 +656,27 @@ var dump: [String] = []
 var skelLo = SIMD2<Float>(repeating: 0), skelHi = SIMD2<Float>(repeating: 0)
 let curlTest = ProcessInfo.processInfo.environment["CURLTEST"] != nil
 let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "dump"                        // "dump" mode: level-0/1 skeletons in image px
-let rule = Rule()
+let rule0 = Rule()
+// The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
+// frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
+let ruleO: Rule = {
+    var r = rule0
+    func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", v) }
+    r.sig = o("SIG", r.sig); r.sigS = o("SIGS", r.sigS); r.sigS1 = o("SIGS1", r.sigS1)
+    r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
+    r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
+    r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
+    return r
+}()
+var rule = rule0
+func blendRule(_ w: Float) {
+    func m(_ a: Float, _ b: Float) -> Float { a + (b - a) * w }
+    rule = rule0
+    rule.sig = m(rule0.sig, ruleO.sig); rule.sigS = m(rule0.sigS, ruleO.sigS); rule.sigS1 = m(rule0.sigS1, ruleO.sigS1)
+    rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
+    rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
+    rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
+}
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
 
@@ -837,10 +857,12 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let viewH = envF("VIEWH", 1.4), camD = envF("CAMD", 3.0)
     let fov: Float = 2 * atan(0.5 * viewH / camD)                // VIEWH: world height in frame at the fern
     let aspect = Float(outW) / Float(outH)
+    let wO = unfurl * unfurl * (3 - 2 * unfurl)                    // eased blend coil-fit → open-fit
+    blendRule(wO)
     let front = envF("F0", 0.1235) + (envF("FMAX", 1.0) - envF("F0", 0.1235)) * unfurl
     let base = SIMD3<Float>(envF("BX", -0.377), envF("BY", -0.700), 0)
-    let lean = envF("LEAN", 0.037) + sway
-    let seg0 = envF("SEG", 0.193) * (1 + envF("GROW", 0.0) * unfurl)
+    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.037) - envF("LEAN", 0.037)) * wO + sway
+    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 0.193) - envF("SEG", 0.193)) * wO
     let dir0 = SIMD3<Float>(sin(lean), cos(lean), 0)
     let tb = Date()
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
