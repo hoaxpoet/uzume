@@ -36,12 +36,14 @@ let msl = """
 using namespace metal;
 
 struct P { float ww; float w; float scale; float mirror; float2 centre; int iters; uint seed; float4 tone; float4 sd; float4 ext;
-           float4 hue; float4 sv; float4 core; float4 fp; float4 uf; float4 uf2; float4 mo; };
+           float4 hue; float4 sv; float4 core; float4 fp; float4 uf; float4 uf2; float4 mo; float4 wave; float4 fg; float4 pulse; float4 pl2; };
 // sd: seed half-width, side scale, side angle, —   ext: —, stipe length (segments), stipe share, display turn
 // hue: hue per nesting level 0..3+   sv: sat, rim level   core: warm light (screen x, y, radius px, gain)
 // uf: unfurl u, joints to open (JN), front half-width (joints), child lag (joints)
 // uf2: curl closed (KAPPA), curl open, per-branch timing jitter (u units), attach point along the joint (0..1)
-// mo: time, global sway (rad), per-branch sway (rad), —
+// mo: time, global sway (rad), per-branch sway (rad), —   wave: travelling bend amplitude (rad), speed (rad/s), joints per radian, —
+// fg: near-focus foreground coils (scale px/unit, coil-eye x, y in frame units, brightness)   pulse: seconds since the last 4 beats
+// pl2: pulse speed (generations/s), width (generations), gain, —
 
 static uint hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x846ca68b; x ^= x >> 16; return x; }
 static float rnd(thread uint& s) { s = hash(s); return float(s) * (1.0 / 4294967296.0); }
@@ -74,38 +76,52 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
     int i = 0;
     while (i < p.iters) {
         float2x2 A = float2x2(1.0); float2 T = 0.0;
-        int lvl = 0, run = 0, n = 0; float ul = p.uf.x; uint bh = 0x2545u;
-        float F = frontAt(ul, p), swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3);   // per chain: front and sway
+        // 1 thread in 8 draws a near-focus foreground coil (bottom corners, as in the reference) instead of the hero
+        bool fgw = (gid & 3u) == 3u; int fgk = int((gid >> 2) & 1u);
+        int lvl = 0, run = 0, n = 0, side0 = 0, j0 = 0; float ul = fgw ? 0.0 : p.uf.x; uint bh = fgw ? 0x51u + uint(fgk) : 0x2545u;
+        float F = frontAt(ul, p), swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3), ph = 0.0;   // per chain: front, sway, wave phase
         for (; i < p.iters; i++) {
             // the current chain's next joint: its curl, then Flexi's main map λR(X − tm) (heading w = −5·ww) and its fixed
             // point C, from a table over ww (built on the CPU: this was most of the cost)
-            float ww = mix(p.uf2.x, p.uf2.y, 1.0 - smoothstep(F - p.uf.z, F + p.uf.z, float(run) + 1.0)) + swb;
+            // + a bending wave travelling up each chain (the frond sways like a plant, not a hinge)
+            float ww = mix(p.uf2.x, p.uf2.y, 1.0 - smoothstep(F - p.uf.z, F + p.uf.z, float(run) + 1.0)) + swb
+                     + p.wave.x * sin(p.mo.x * p.wave.y - (float(run) + 1.0) / p.wave.z + ph);
             float fi = clamp((ww + 0.4) / 1.8, 0.0, 1.0) * 511.0; int k0 = min(int(fi), 510); float fr = fi - float(k0);
             float4 m4 = mix(jt[2 * k0], jt[2 * k0 + 2], fr), tc = mix(jt[2 * k0 + 1], jt[2 * k0 + 3], fr);
             float2x2 M = float2x2(m4.xy, m4.zw); float2 tmv = tc.xy, C = tc.zw;
             // seed piece: the arc from this joint to the next (a ∈ [0,1]); the frond's own base continues as a stipe
-            bool stipe = n == 0 && rnd(s) < p.ext.z;
+            bool stipe = !fgw && n == 0 && rnd(s) < p.ext.z;
             float a = stipe ? -rnd(s) * p.ext.y : rnd(s), l = rnd(s) * 2.0 - 1.0;
             float aa = max(a, 0.0), g = exp(ln * aa);
             float2 rv = rot(-C, -aa * ww), pos = C + g * rv, tn = g * (ln * rv - ww * float2(-rv.y, rv.x));
             float2 d = normalize(tn); pos += d * length(tn) * (a - aa);
-            float2 x = A * (pos + float2(-d.y, d.x) * l * p.sd.x * min(g, 1.0)) + T;
+            float2 x = A * (pos + float2(-d.y, d.x) * l * p.sd.x * (fgw ? 3.0 : 1.0) * min(g, 1.0)) + T;   // near-focus coils: thicker
             float cc = 1.0 - abs(l);
             float b = (stipe ? cc * smoothstep(-p.ext.y, -0.5 * p.ext.y, a) * p.tone.w : cc) - 0.015 * float(n);
-            if (b > 0.0) {
-                float2 q = (rot(float2(x.x * p.mirror, -x.y), p.ext.w) - p.centre) * p.scale + float2(\(W / 2).0, \(H / 2).0);
+            if (fgw && b > 0.0) {                                       // foreground coil: fixed screen place, dimmer, sharp
+                float2 fx = float2(x.x * p.mirror, -x.y) - p.fg.yz;
+                float2 q = rot(fx, fgk == 0 ? 0.5 : -0.9) * p.fg.x * (fgk == 0 ? 1.0 : 0.85)
+                         + float2(fgk == 0 ? 0.10 * \(W).0 : 0.92 * \(W).0, fgk == 0 ? 0.16 * \(H).0 : 0.12 * \(H).0);
                 if (q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
+                    uint idx = uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x), bq = uint(b * p.fg.w * 4095.0);
+                    atomic_fetch_max_explicit(&img[idx], (bq << 20) | (uint(min(lvl == 0 ? run : j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(min(run, 63)) << 3) | (uint(side0) << 2) | 2u, memory_order_relaxed);
+                }
+            } else if (b > 0.0) {
+                float2 q = (rot(float2(x.x * p.mirror, -x.y), p.ext.w) - p.centre) * p.scale + float2(\(W / 2).0 + p.wave.w, \(H / 2).0);
+                if (q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
+                    // packed: brightness 12 | generations 7 | level 4 | joint along its own chain 6 | top-level side 1 | fg 1
                     uint idx = uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x);
-                    atomic_fetch_max_explicit(&img[idx], (uint(b * 65535.0) << 16) | (uint(min(n, 1023)) << 6) | uint(min(lvl, 63)), memory_order_relaxed);
+                    atomic_fetch_max_explicit(&img[idx], (uint(b * 4095.0) << 20) | (uint(min(lvl == 0 ? run : j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(min(run, 63)) << 3) | (uint(side0) << 2), memory_order_relaxed);
                 }
                 // background: the same frond as out-of-focus GHOSTS (larger, turned, off to the sides, slowly drifting) at
                 // quarter resolution — blurred later into a garden of glowing ferns behind the hero frond
                 if ((i & 3) == 0) {
-                    const float3 gh[3] = { float3(2.2, 0.55, -0.55), float3(1.7, -0.35, 0.52), float3(2.6, 0.25, -0.95) };   // scale, turn, x offset (kept off the hero)
+                    // midground silhouettes (reference: left of centre and lower right, 15–25 % of frame height)
+                    const float4 gh[3] = { float4(0.26, 0.35, 0.30, 0.45), float4(0.22, -0.5, 0.80, 0.22), float4(0.16, 0.9, 0.12, 0.62) };   // scale, turn, x, y (frame fractions)
                     float2 ctr = float2(\(W / 2).0, \(H / 2).0);
                     for (int k = 0; k < 3; k++) {
-                        float2 gq = gh[k].x * rot(q - ctr, gh[k].y + 0.02 * sin(p.mo.x * 0.11 + float(k) * 2.1)) + ctr
-                                  + float2(gh[k].z * \(W).0 + 30.0 * sin(p.mo.x * 0.07 + float(k)), -0.25 * \(H).0 * float(k == 2));
+                        float2 gq = gh[k].x * rot(q - ctr, gh[k].y + 0.03 * sin(p.mo.x * 0.3 + float(k) * 2.1))
+                                  + float2(gh[k].z * \(W).0, gh[k].w * \(H).0);
                         gq *= 0.25;
                         if (gq.x >= 0.0 && gq.y >= 0.0 && gq.x < \(W / 4).0 && gq.y < \(H / 4).0) {
                             atomic_fetch_max_explicit(&bg[uint(\(H / 4).0 - 1.0 - gq.y) * \(W / 4)u + uint(gq.x)], uint(b * 65535.0), memory_order_relaxed);
@@ -122,6 +138,8 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
                 T = A * att + T; A = A * (rotm(-sg * p.sd.z) / ss);
                 // the branch opens after the parent's front passes its joint, each branch on its own schedule
                 bh = hash(bh ^ (uint(run) * 2u + (sg > 0.0 ? 1u : 0u) + 0x9e37u * uint(lvl + 1)));
+                if (lvl == 0) { side0 = sg > 0.0 ? 1 : 0; j0 = run; }
+                ph = float(bh & 1023u) * 0.00614;                     // each branch sways on its own phase
                 ul = clamp((F - float(run) - a0) / p.uf.w + p.uf2.z * (float(bh & 1023u) / 1023.0 - 0.5), 0.0, 1.0);
                 F = frontAt(ul, p); swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3 + float(bh & 1023u) * 0.0061);
                 lvl++; run = 0;
@@ -148,17 +166,27 @@ kernel void tone(device const uint* img [[buffer(0)]], constant P& p [[buffer(1)
                  texture2d<float, access::write> out [[texture(0)]], uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W)u || gid.y >= \(H)u) { return; }
     uint v = img[gid.y * \(W)u + gid.x];
-    float b = float(v >> 16) / 65535.0, age = float((v >> 6) & 1023u);
-    uint lvl = v & 63u;
-    float3 col;
-    if (p.hue.x < 0.0) { col = palette(age / p.tone.x); }                   // FH.6 palette (hue.x < 0)
+    float b = float(v >> 20) / 4095.0, j0 = float((v >> 13) & 127u);   // j0: the stalk joint this point hangs from
+    uint lvl = (v >> 9) & 15u, run = (v >> 3) & 63u, side = (v >> 2) & 1u;
+    // The reference's psychedelic palette shifts ALONG each chain: lime at a pinna's base → gold → orange → violet/pink at
+    // its crozier tip; the stalk gold; the deepest copies' tips (the lobe rims) cyan or violet; left pinnae lean cyan,
+    // right lean orange.
+    float t = clamp(float(run) / p.sv.z, 0.0, 1.0), h;
+    if (lvl == 0u) { h = p.hue.x; }
     else {
-        // colour by nesting level: the deepest copies ARE the rims of every lobe (self-similarity), so level 3+ carries the
-        // reference's iridescence (hue cycling with path length); a lobe's body is level 1–2; level 0 the stalk.
-        float h = lvl == 0u ? p.hue.x : lvl == 1u ? p.hue.y : float(lvl) < p.sv.y ? p.hue.z : p.hue.w;   // zones; the deepest copies are the lobe edges
-        col = hsv2rgb(fract(h), p.sv.x, 1.0);
+        h = t < 0.6 ? mix(0.32, 0.27, t / 0.6) : mix(0.27, 0.08, (t - 0.6) / 0.4);   // emerald body → lime → amber toward the tip
+        h += side == 1u ? -0.015 : 0.02;
+        if (float(lvl) >= p.sv.y && t > 0.7) { h = side == 1u ? 0.86 : 0.78; }   // thin pink/violet accents on the deepest tips
     }
-    col *= pow(b, p.tone.y) * p.tone.z * (lvl == 0u ? p.tone.w : 1.0);    // main stalk dimmer
+    float3 col = hsv2rgb(fract(h + 1.0), p.sv.x, 1.0) * pow(b, p.tone.y) * p.tone.z * (lvl == 0u ? p.tone.w : 1.0);
+    // light flowing along: each beat launches a pulse from the base that travels out through every chain (age = generations)
+    float pl = 0.0;
+    for (int k = 0; k < 4; k++) {
+        float e = p.pulse[k];
+        // veins only: the stalk (level 0) and each pinna's rachis (level 1)
+        if (e >= 0.0 && (v & 2u) == 0u && lvl <= 1u) { float z = (j0 + 0.35 * float(lvl == 0u ? 0u : run) - p.pl2.x * e) / p.pl2.y; pl += exp(-z * z) * exp(-e / 3.0); }
+    }
+    col += float3(1.0, 0.95, 0.82) * pl * p.pl2.z * b;
     float2 d = (float2(gid) - p.core.xy) / max(p.core.z, 1.0);
     col += float3(1.0, 0.55, 0.18) * p.core.w * exp(-dot(d, d)) * (0.4 + 0.6 * b);   // warm light inside the coil
     out.write(float4(col, b), gid);
@@ -167,15 +195,40 @@ kernel void tone(device const uint* img [[buffer(0)]], constant P& p [[buffer(1)
 constexpr sampler lin(filter::linear, address::clamp_to_zero);
 
 // The ghost layer, blurred wide at quarter resolution (≈ 40 px at full resolution): out-of-focus ferns.
-kernel void bgblur(device const uint* bg [[buffer(0)]], texture2d<float, access::write> out [[texture(0)]], uint2 gid [[thread_position_in_grid]]) {
+// The whole background at QUARTER resolution (it is soft by nature; per full-res pixel it cost ~80 M disc tests a frame):
+// to the measured reference brief — a near-black forest night (top cooler and darkest), faint far TRUNKS, midground fern
+// silhouettes (the ghost layer blurred ≈ 1.5 % of width, dim teal left → violet right), and 50 dim coloured bokeh discs in
+// the middle band on the left and right thirds. Values are reference output RGB taken back through the final tone curve.
+kernel void bgblur(device const uint* bg [[buffer(0)]], constant float4& t [[buffer(1)]], texture2d<float, access::write> out [[texture(0)]],
+                   uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W / 4)u || gid.y >= \(H / 4)u) { return; }
     float acc = 0.0, ws = 0.0;
     for (int j = -6; j <= 6; j++) for (int i = -6; i <= 6; i++) {
-        int2 c = clamp(int2(gid) + 2 * int2(i, j), int2(0), int2(\(W / 4 - 1), \(H / 4 - 1)));   // 2-px taps: ~2× wider blur
+        int2 c = clamp(int2(gid) + int2(i, j), int2(0), int2(\(W / 4 - 1), \(H / 4 - 1)));
         float w = exp(-float(i * i + j * j) / 18.0);
         acc += float(bg[uint(c.y) * \(W / 4)u + uint(c.x)]) / 65535.0 * w; ws += w;
     }
-    out.write(float4(acc / ws), gid);
+    float2 sz = float2(\(W).0, \(H).0), px = (float2(gid) + 0.5) * 4.0, uv = px / sz;
+    float3 back = mix(float3(0.003, 0.003, 0.002), float3(0.0005, 0.002, 0.005), smoothstep(0.0, 0.5, uv.y));
+    back = mix(back, float3(0.001, 0.001, 0.001), smoothstep(0.6, 1.0, uv.y));
+    for (int k = 0; k < 6; k++) {                                 // far trunks: very faint, irregular soft verticals
+        uint hk = hash(uint(k) * 3001u + 7u); float xk = float(hk & 1023u) / 1023.0, wk = 0.008 + 0.03 * float((hk >> 10) & 255u) / 255.0;
+        float z = (uv.x - xk - 0.01 * sin(uv.y * 9.0 + float(k))) / wk, amp = 0.3 + 0.7 * float((hk >> 18) & 255u) / 255.0;
+        back += float3(0.007, 0.008, 0.007) * amp * exp(-z * z) * smoothstep(0.75, 0.1, uv.y) * (0.6 + 0.4 * sin(uv.y * 23.0 + float(k) * 3.0));
+    }
+    back += mix(float3(0.030, 0.075, 0.090), float3(0.060, 0.030, 0.095), uv.x) * t.w * pow(acc / ws, 0.8);   // midground ferns
+    const float3 bkc[4] = { float3(80, 150, 160), float3(120, 80, 170), float3(200, 140, 70), float3(110, 160, 80) };
+    for (int k = 0; k < 16; k++) {                                // bokeh: few, large, soft (3–7 % of width), 15–35 % opacity
+        uint hk = hash(uint(k) * 7919u + 13u);
+        float fx = float(hk & 1023u) / 1023.0, bx = fx < 0.5 ? fx * 0.66 : 0.34 + fx * 0.66;   // left and right thirds
+        float2 cpos = float2(bx, 0.30 + 0.50 * float((hk >> 10) & 1023u) / 1023.0) * sz
+                    + 25.0 * float2(sin(t.x * 0.05 + float(k)), cos(t.x * 0.04 + float(k) * 1.7));
+        float rad = sz.x * (0.015 + 0.02 * float((hk >> 20) & 255u) / 255.0), dd = length(px - cpos) / rad;
+        float disc = smoothstep(1.0, 0.6, dd) * (0.8 + 0.2 * smoothstep(0.5, 0.9, dd));
+        float op = 0.15 + 0.20 * float((hk >> 28) & 15u) / 15.0;
+        back += pow(bkc[hk % 4u] / 255.0 * op, float3(1.8)) * disc * t.w;
+    }
+    out.write(float4(back, 1.0), gid);
 }
 
 kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::write> out [[texture(1)]], texture2d<float> bgt [[texture(2)]],
@@ -191,32 +244,22 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
     cov /= wsum;                                                 // local fill: 1 deep inside a blade, ~0.5 on its rim
     // Coherent colour zones: keep this pixel's brightness, take its hue from the neighbourhood (max-composited paths
     // differ pixel to pixel — per-point hues averaged to mud).
-    const float3 Y = float3(0.299, 0.587, 0.114); float3 hb = b / wsum; float Lb = dot(hb, Y);
+    // (tight 3×3 at 1 px: a wide neighbourhood averaged green and orange zones to beige)
+    const float3 Y = float3(0.299, 0.587, 0.114); float3 hb = 0.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { hb += src.read(uint2(clamp(int2(gid) + int2(i, j), int2(0), int2(\(W - 1), \(H - 1))))).rgb; }
+    float Lb = dot(hb, Y);
     if (Lb > 1e-4) { c = hb * (dot(c, Y) / Lb); }
-    // Iridescent rims as their own layer: hue turns smoothly with angle around the coil centre (violet → cyan → magenta).
-    float2 dc = float2(gid) - rm.xy; float ang = atan2(dc.y, dc.x) / 6.2831853 + 0.05 * t.x;
-    float rh = rm.w + 0.18 * sin(6.2831853 * ang);
-    float3 rimc = clamp(abs(fract(rh + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
-    c += rimc * rm.z * 4.0 * cov * (1.0 - cov) * smoothstep(0.05, 0.3, c0.a);
     c *= mix(1.0, g.z, smoothstep(0.55, 0.95, cov)) * (1.0 + g.w * 4.0 * cov * (1.0 - cov));   // dark interiors, glowing rims
-    uint h = hash(gid.x * 7919u + gid.y * 104729u + uint(t.x * 60.0) / 6u);                       // sparkle: sparse, ~10 Hz
-    c += (rnd(h) < t.y && c0.a > 0.35) ? float3(1.0, 0.95, 0.85) * t.z * c0.a : float3(0.0);
+    // (no amber edge light: amber + green bodies mixed to yellow — the reference keeps them as separate zones)
+    // sparkle beads ALONG THE RIMS (reference: hundreds of 1–3 px white-to-orange beads on every edge), ~10 Hz twinkle
+    uint h = hash(gid.x * 7919u + gid.y * 104729u + uint(t.x * 60.0) / 6u); float rimw = 4.0 * cov * (1.0 - cov);
+    float r1 = rnd(h), r2 = rnd(h);
+    c += (r1 < t.y * 6.0 * smoothstep(0.5, 0.9, rimw) && c0.a > 0.2) ? mix(float3(1.0, 0.95, 0.85), float3(1.0, 0.55, 0.15), r2) * t.z * c0.a : float3(0.0);
     c += b / wsum * g.y;
-    // background (replaces black): blurred ghost ferns in deep green, a few soft drifting bokeh discs, a dim warm floor glow
-    float gb = bgt.sample(lin, uv).r;
-    float3 back = float3(0.010, 0.022, 0.026) + float3(0.020, 0.060, 0.075) * rm.w * pow(gb, 0.8);   // cooler, darker than the hero
-    back += float3(0.05, 0.03, 0.01) * smoothstep(0.4, 1.0, uv.y);   // warm light low in the frame
-    for (int k = 0; k < 16; k++) {
-        uint hk = hash(uint(k) * 7919u + 13u);
-        float2 cpos = float2(float(hk & 1023u) / 1023.0, float((hk >> 10) & 1023u) / 1023.0) * sz
-                    + 40.0 * float2(sin(t.x * 0.05 + float(k)), cos(t.x * 0.04 + float(k) * 1.7));
-        float rad = 18.0 + 50.0 * float((hk >> 20) & 255u) / 255.0, dd = length(float2(gid) - cpos) / rad;
-        float disc = smoothstep(1.0, 0.9, dd) * (0.6 + 0.4 * smoothstep(0.6, 0.95, dd));   // flat bokeh disc, brighter rim
-        float3 bc = (hk & 3u) == 0u ? float3(0.9, 0.6, 0.2) : float3(0.25, 0.8, 0.45);
-        back += bc * disc * 0.035 * rm.w;
-    }
+    float3 back = bgt.sample(lin, uv).rgb;                          // the background (built at quarter res in bgblur)
     c += back;
-    c = c / (1.0 + c);
+    c = max(mix(float3(dot(c, Y)), c, t.w), 0.0);                 // saturation lift: x/(1+x) washes colour toward white
+    c = min(c / (1.0 + dot(c, Y)), 1.0);                          // compress LUMINANCE: per-channel x/(1+x) turned bright orange yellow
     out.write(float4(pow(c, float3(1.0 / 1.8)), 1.0), gid);
 }
 """
@@ -225,15 +268,18 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
 
 struct Params { var ww: Float; var w: Float; var scale: Float; var mirror: Float; var centre: SIMD2<Float>; var iters: Int32; var seed: UInt32
                 var tone: SIMD4<Float>; var sd: SIMD4<Float>; var ext: SIMD4<Float>; var hue: SIMD4<Float>; var sv: SIMD4<Float>; var core: SIMD4<Float>
-                var fp = SIMD4<Float>(0, 0, 0, 0); var uf = SIMD4<Float>(0, 0, 0, 0); var uf2 = SIMD4<Float>(0, 0, 0, 0); var mo = SIMD4<Float>(0, 0, 0, 0) }
+                var fp = SIMD4<Float>(0, 0, 0, 0); var uf = SIMD4<Float>(0, 0, 0, 0); var uf2 = SIMD4<Float>(0, 0, 0, 0); var mo = SIMD4<Float>(0, 0, 0, 0)
+                var wave = SIMD4<Float>(0, 0, 1, 0); var fg = SIMD4<Float>(0, 0, 0, 0); var pulse = SIMD4<Float>(-1, -1, -1, -1); var pl2 = SIMD4<Float>(0, 1, 0, 0) }
 
 var driveSway: Float?, driveSpark: Float?   // per-frame overrides from a music drive (film `drive` mode)
+var driveEnergy: Float = 0.5, drivePulses = SIMD4<Float>(-1, -1, -1, -1)   // music intensity 0…1; seconds since the last 4 beats
 var fixedFrame: (SIMD2<Float>, SIMD2<Float>)?
 
 let KAPPA = envF("KAPPA", 0.6), KAPPA_O = envF("KAPPA_O", 0.03), JN = envF("JN", 22), WFRONT = envF("WFRONT", 3), LAGJ = envF("LAGJ", 8)
 let JIT = envF("JIT", 0.6), ATTACH = envF("ATTACH", 0.4), SIDE = envF("SIDE", 3.3), ANG = envF("ANG", .pi / 4)
 
-func sway(_ t: Float) -> Float { driveSway ?? envF("SWAY", 0.01) * (sin(t * 0.9) + 0.5 * sin(t * 1.7 + 1.3)) }
+/// Whole-frond sway: a slow wind that never stops, plus the bass pushing it (drive).
+func sway(_ t: Float) -> Float { envF("WIND", 0.05) * (sin(t * 0.45) + 0.6 * sin(t * 1.1 + 1.0)) + (driveSway ?? 0) }
 
 /// = the kernel's curlAt: joint j (1 = base) of a chain with unfurl ul; the front sweeps from the base tipward.
 func frontAt(_ ul: Float) -> Float {   // = the kernel's: constant-length front
@@ -261,16 +307,17 @@ func extent(u: Float, t: Float, theta: Float) -> (SIMD2<Float>, SIMD2<Float>) {
     var rng: UInt64 = 0x9E3779B97F4A7C15   // deterministic: the same bounds for the same frond (a random sample jittered the camera)
     func r01() -> Float { rng = rng &* 6364136223846793005 &+ 1442695040888963407; return Float(rng >> 40) / Float(1 << 24) }
     for _ in 0..<5000 {
-        var A = matrix_identity_float2x2, T = SIMD2<Float>(0, 0), run: Float = 0, ul = u, lvl = 0
+        var A = matrix_identity_float2x2, T = SIMD2<Float>(0, 0), run: Float = 0, ul = u, lvl = 0, ph: Float = 0
+        let wa = envF("WAVEA", 0.035) * (0.5 + driveEnergy), wsp = envF("WAVES", 1.6), wj = envF("WAVEJ", 3.0)
         for n in 0..<60 {
-            let j = joint(curlAt(ul, run + 1) + sway(t))
+            let j = joint(curlAt(ul, run + 1) + sway(t) + wa * sin(t * wsp - (run + 1) / wj + ph))   // = the kernel's bending wave
             // frame the LEAVES (level ≥ 1): the bare stalk below the coil may run off the bottom, as in the reference
             if lvl >= 1 && 1 - 0.015 * Float(n) > envF("EXTB", 0.35) { let q = rot(SIMD2(T.x * mir, -T.y), theta); lo = simd_min(lo, q); hi = simd_max(hi, q) }
             let x = r01()
             if x < pm { T = A * j.t + T; A = A * j.M; run += 1 } else {
                 let sg: Float = x < pm + (1 - pm) / 2 ? -1 : 1, g = exp(-0.1133287 * ATTACH)
                 T = A * (j.C + g * rot(-j.C, -ATTACH * curlAt(ul, run + 1))) + T; A = A * ((1 / SIDE) * rotm(-sg * ANG))
-                let F = frontAt(ul); ul = min(max((F - run - ATTACH) / LAGJ, 0), 1); run = 0; lvl += 1
+                let F = frontAt(ul); ul = min(max((F - run - ATTACH) / LAGJ, 0), 1); run = 0; lvl += 1; ph = r01() * 6.283
             }
         }
     }
@@ -295,7 +342,7 @@ let tonePSO = try! device.makeComputePipelineState(function: lib.makeFunction(na
 let glowPSO = try! device.makeComputePipelineState(function: lib.makeFunction(name: "glow")!)
 let bgPSO = try! device.makeComputePipelineState(function: lib.makeFunction(name: "bgblur")!)
 let bgBuf = device.makeBuffer(length: (W / 4) * (H / 4) * 4, options: .storageModePrivate)!
-let bgTex: MTLTexture = { let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: W / 4, height: H / 4, mipmapped: false); d.usage = [.shaderRead, .shaderWrite]; return device.makeTexture(descriptor: d)! }()
+let bgTex: MTLTexture = { let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: W / 4, height: H / 4, mipmapped: false); d.usage = [.shaderRead, .shaderWrite]; return device.makeTexture(descriptor: d)! }()
 let img = device.makeBuffer(length: W * H * 4, options: .storageModePrivate)!
 /// Joint table over ww ∈ [−0.4, 1.4] (512 entries): columns of M, then (t, C) — the kernel interpolates.
 let jointTable: MTLBuffer = {
@@ -313,20 +360,26 @@ var lastMs = 0.0
 
 func render(unfurl u: Float, time t: Float) {
     let theta = uprightTheta(u, t)
-    let (lo, hi) = fixedFrame ?? extent(u: u, t: t, theta: theta), fill = envF("FILL", 0.8)   // films: eased frame (no re-framing jitter)
+    let (lo, hi) = fixedFrame ?? extent(u: u, t: t, theta: theta), fill = envF("FILL", 0.85)   // films: eased frame (no re-framing jitter)
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
     if envF("DEBUGEXT", 0) > 0 { FileHandle.standardError.write("extent lo \(lo) hi \(hi) scale \(scale)\n".data(using: .utf8)!) }
     var p = Params(ww: 0, w: 0, scale: scale, mirror: envF("MIRROR", 1), centre: (lo + hi) * 0.5, iters: Int32(envF("ITERS", 280)),
-                   seed: 17 /* fixed: same random paths every frame, so detail moves instead of fizzing */, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 1.8), envF("STALKB", 0.45)],
+                   seed: 17 /* fixed: same random paths every frame, so detail moves instead of fizzing */, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 1.2), envF("STALKB", 0.45)],
                    sd: [envF("SEEDW", 0.002), SIDE, ANG, 0],
                    ext: [0, envF("STIPE", 6), envF("PSTIPE", 0.3), theta],
-                   hue: [envF("H0", 0.1), envF("H1", 0.13), envF("H2", 0.3), envF("H3", 0.38)], sv: [envF("SAT", 1.0), envF("RIMLVL", 3), 0, 0],
+                   hue: [envF("H0", 0.1), envF("H1", 0.13), envF("H2", 0.3), envF("H3", 0.38)], sv: [envF("SAT", 0.85), envF("RIMLVL", 3), 0, 0],
                    core: [0, 0, 0, 0])
-    p.uf = [u, JN, WFRONT, LAGJ]; p.uf2 = [KAPPA, KAPPA_O, JIT, ATTACH]; p.mo = [t, sway(t), envF("SWAYB", 0.03), 0]
+    p.uf = [u, JN, WFRONT, LAGJ]; p.uf2 = [KAPPA, KAPPA_O, JIT, ATTACH]; p.mo = [t, sway(t), envF("SWAYB", 0.05), 0]
+    p.sv.z = envF("RUNSPAN", 9)
+    p.wave = [envF("WAVEA", 0.035) * (0.5 + driveEnergy), envF("WAVES", 1.6), envF("WAVEJ", 3.0), envF("HEROX", -0.12) * Float(W)]   // .w: hero left of centre (reference)   // bending wave, bigger when loud
+    p.pulse = drivePulses; p.pl2 = [envF("PSPEED", 9), envF("PWIDTH", 0.9), envF("PGAIN", 3.75), 0]
+    var fA = matrix_identity_float2x2, fT = SIMD2<Float>(0, 0)          // foreground coils: eye of the fully coiled frond
+    for k in 0..<80 { let j = joint(curlAt(0, Float(k) + 1)); fT = fA * j.t + fT; fA = fA * j.M }
+    p.fg = [envF("FGS", 0.9) * Float(H) / 0.16, fT.x * p.mirror, -fT.y, envF("FGB", 0.9)]
     // warm light at the coil's eye: the limit of the top chain's joints
     var A = matrix_identity_float2x2, T = SIMD2<Float>(0, 0)
     for k in 0..<80 { let j = joint(curlAt(u, Float(k) + 1) + sway(t)); T = A * j.t + T; A = A * j.M }
-    let fs = (rot(SIMD2(T.x * p.mirror, -T.y), theta) - p.centre) * scale + SIMD2(Float(W / 2), Float(H / 2))
+    let fs = (rot(SIMD2(T.x * p.mirror, -T.y), theta) - p.centre) * scale + SIMD2(Float(W / 2) + envF("HEROX", -0.12) * Float(W), Float(H / 2))
     p.core = [fs.x, Float(H) - 1 - fs.y, envF("CORER", 0.05) * Float(H), envF("CORE", 3.0) * (1 - u)]
     let cb = queue.makeCommandBuffer()!
     let bl = cb.makeBlitCommandEncoder()!; bl.fill(buffer: img, range: 0..<img.length, value: 0); bl.fill(buffer: bgBuf, range: 0..<bgBuf.length, value: 0); bl.endEncoding()
@@ -337,12 +390,13 @@ func render(unfurl u: Float, time t: Float) {
     ce.setComputePipelineState(tonePSO)
     ce.setBuffer(img, offset: 0, index: 0); ce.setBytes(&p, length: MemoryLayout<Params>.stride, index: 1); ce.setTexture(hdr, index: 0)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
-    ce.setComputePipelineState(bgPSO); ce.setBuffer(bgBuf, offset: 0, index: 0); ce.setTexture(bgTex, index: 0)
+    var bgp = SIMD4<Float>(t, 0, 0, envF("BGI", 1.0))
+    ce.setComputePipelineState(bgPSO); ce.setBuffer(bgBuf, offset: 0, index: 0); ce.setBytes(&bgp, length: 16, index: 1); ce.setTexture(bgTex, index: 0)
     ce.dispatchThreads(MTLSize(width: W / 4, height: H / 4, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.setComputePipelineState(glowPSO)
-    var gp = SIMD4<Float>(envF("GLOWR", 2.5), envF("GLOW", 0.25), envF("INNER", 0.35), envF("RIM", 1.2))
-    var sp = SIMD4<Float>(t, driveSpark ?? envF("SPARK", 0.003), envF("SPARKI", 1.5), 0)
-    var rmp = SIMD4<Float>(p.core.x, p.core.y, envF("RIMI", 0), envF("BGI", 1.0))
+    var gp = SIMD4<Float>(envF("GLOWR", 2.5), envF("GLOW", 0.25), envF("INNER", 0.2), envF("RIM", 1.5))
+    var sp = SIMD4<Float>(t, driveSpark ?? envF("SPARK", 0.003), envF("SPARKI", 1.5), envF("SATLIFT", 1.0))
+    var rmp = SIMD4<Float>(p.core.x, p.core.y, envF("RIMI", 0.5), envF("BGI", 1.0))
     ce.setTexture(hdr, index: 0); ce.setTexture(outTex, index: 1); ce.setBytes(&gp, length: 16, index: 0); ce.setBytes(&sp, length: 16, index: 1); ce.setBytes(&rmp, length: 16, index: 2); ce.setTexture(bgTex, index: 2)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
     ce.endEncoding()
@@ -364,6 +418,7 @@ func writePNG(_ path: String) {
 let args = CommandLine.arguments
 switch args.count > 1 ? args[1] : "" {
 case "still":
+    if let pe = env["PULSES"] { let v = pe.split(separator: ",").compactMap { Float($0) }; drivePulses = SIMD4((0..<4).map { $0 < v.count ? v[$0] : -1 }) }
     render(unfurl: Float(args[2])!, time: 1)
     FileHandle.standardError.write(String(format: "gpu %.1f ms, points %.1fM\n", lastMs, envF("THREADS", 65536) * envF("ITERS", 280) / 1e6).data(using: .utf8)!)
     writePNG(args[3])
@@ -389,10 +444,16 @@ case "drive":   // drive <csv: u,sway,spark per 30 fps frame> <audio> <out.mp4> 
     let pipe = Pipe(); ff.standardInput = pipe; try! ff.run()
     let follow = envF("FOLLOW", 1) > 0.5                                // slow camera: frame the frond itself, bounds eased ~1.5 s
     var worst = 0.0, total = 0.0, uS = rows.first?[0] ?? 0, cam: (SIMD2<Float>, SIMD2<Float>)? = nil
-    for (i, r) in rows.enumerated() where r.count == 3 {
-        let umax = envF("UMAX", 0.02)                                  // a fern can't snap open: ≥ ~1.7 s closed → open
+    var onsetTimes: [Float] = []
+    for (i, r) in rows.enumerated() where r.count >= 3 {
+        let umax = envF("UMAX", 0.006)                                  // a fern can't snap open: ≥ ~1.7 s closed → open
         uS += min(max((r[0] - uS) * envF("USLEW", 0.08), -umax), umax)   // ponytail: slew; the engine would use its section envelope
         driveSway = r[1]; driveSpark = r[2]
+        if r.count >= 5 {                                               // beats launch light pulses; energy drives the sway wave
+            if r[3] > 0.5 { onsetTimes.insert(Float(i) / 30, at: 0); onsetTimes = Array(onsetTimes.prefix(4)) }
+            driveEnergy = r[4]
+            drivePulses = SIMD4((0..<4).map { $0 < onsetTimes.count ? Float(i) / 30 - onsetTimes[$0] : -1 })
+        }
         if follow {
             let tt = Float(i) / 30, e = extent(u: uS, t: tt, theta: uprightTheta(uS, tt))
             // zoom OUT fast (the frond must never outgrow the frame), zoom IN slowly (no pumping); a symmetric 1.5 s ease
