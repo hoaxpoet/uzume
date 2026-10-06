@@ -654,13 +654,13 @@ struct Rule {
     var hairP = envF("HAIRP", 0.284), hairL = envF("HAIRL", 0.6)   // hairs: fraction of lobes, length ÷ lobe               // lobe tips hook toward the pinna tip                 // left/right pinnae alternate by this fraction of a link
 }
 var dump: [String] = []
-var skelLo = SIMD2<Float>(repeating: 0), skelHi = SIMD2<Float>(repeating: 0)
+var skelLo = SIMD2<Float>(repeating: 0), skelHi = SIMD2<Float>(repeating: 0), frameBottom: Float = -1e9
 let curlTest = ProcessInfo.processInfo.environment["CURLTEST"] != nil
 let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "dump"                        // "dump" mode: level-0/1 skeletons in image px
 let rule0 = Rule()
 // The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
 // frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
-let openFit: [String: Float] = ["SIG_O": 0.9561, "SIGS_O": 0.7515, "ALPHA_O": 1.1813, "BT_O": 0.0009, "BT1_O": 0.0555, "PINF_O": 0.6598, "RAMPP_O": 0.5671, "LEAN_O": 0.0038, "SEG_O": 0.4415, "TURN_O": 0.3179]   // fitted to 02_reference_open (fitopen.py)
+let openFit: [String: Float] = ["SIG_O": 0.8635, "SIG1_O": 0.9, "SIGS_O": 0.7418, "SIGS1_O": 0.1271, "ALPHA_O": 1.2141, "ALPHA1_O": 0.9787, "BT_O": -0.0006, "BT1_O": 0.078, "PINF_O": 0.6896, "TURN_O": 0.2983, "CURLON_O": 0.3, "KAPMIN_O": 0.4]   // fitted to 02_reference_open (fitopen.py)
 let ruleO: Rule = {
     var r = rule0
     func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", openFit[k + "_O"] ?? v) }
@@ -768,7 +768,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         let coreFat: Float = level == 0 ? 1 + rule.coreT * c * min(1, turnAcc / 6.2832) : 1
         let r = S * rule.stemR[min(level, 1)] * (level >= 2 ? 0.8 : 1) * (level >= 1 ? 1 + rule.crz * c : 1) * coreFat
         let p1 = p + d * S
-        if level <= 1 { skelLo = simd_min(skelLo, SIMD2(p1.x, p1.y)); skelHi = simd_max(skelHi, SIMD2(p1.x, p1.y)) }   // framing extent
+        if level <= 1 && p1.y > frameBottom { skelLo = simd_min(skelLo, SIMD2(p1.x, p1.y)); skelHi = simd_max(skelHi, SIMD2(p1.x, p1.y)) }   // framing extent (only what's above the frame bottom)
         if level <= 1 && dumping { dump.append("\(level) \(hash) \(p.x) \(p.y) \(p.z) \(S)") }
         if r > 1.5 * pxWorld {
             // Thick stems: a smooth quadratic through the link midpoints (no kinks at the joints).
@@ -798,7 +798,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         // is ~0.4× its parent's (reference ladder: coil ~500 → croziers 25–60 → hooks 10–25 → tendrils <10 px).
         // Coil pinnae shrink slower than the spiral (reference: turn 2 still holds 33–50 px lobes): size ∝ S^PEXP.
         let sizeLaw: Float = level == 0 ? pow(S / S0, rule.pExp - 1) : 1
-        let bS0 = S * sizeLaw * (level == 0 ? rule.sigS : rule.sigS1) * (rule.immature + (1 - rule.immature) * mature)
+        // child length = sigS × this chain's remaining length, whatever the two levels' link ratios are
+        let bS0 = S / (1 - sg) * (1 - rule.sig1) * sizeLaw * (level == 0 ? rule.sigS : rule.sigS1) * (rule.immature + (1 - rule.immature) * mature)
         if level >= 1 && c > rule.crzC {
             // In the crozier the pinnules are replaced by a string of beads on the outer edge (every link).
             if nBeads < maxBeads {
@@ -864,16 +865,17 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let aspect = Float(outW) / Float(outH)
     let wO = unfurl * unfurl * (3 - 2 * unfurl)                    // eased blend coil-fit → open-fit
     blendRule(wO)
-    let front = envF("F0", 0.1235) + (envF("FMAX", 0.4199) - envF("F0", 0.1235)) * unfurl
+    let front = envF("F0", 0.1235) + (envF("FMAX", 0.851) - envF("F0", 0.1235)) * unfurl
     let base = SIMD3<Float>(envF("BX", -0.377), envF("BY", -0.700), 0)
-    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.0038) - envF("LEAN", 0.037)) * wO + sway
-    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 0.4415) - envF("SEG", 0.193)) * wO
+    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", -0.0005) - envF("LEAN", 0.037)) * wO + sway
+    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 0.6586) - envF("SEG", 0.193)) * wO
     let dir0 = SIMD3<Float>(sin(lean), cos(lean), 0)
     let tb = Date()
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
     pxWorld = 12 * viewH / Float(outH)
     nLeaves = 0; nTubes = 0; nBeads = 0; nCurls = 0
     skelLo = SIMD2(repeating: .greatestFiniteMagnitude); skelHi = -skelLo
+    frameBottom = envF("CY", 0.0) - viewH / 2
     chain(base, dir: dir0, normal: SIMD3(0, 0, 1), link: seg0, front: front, level: 0, hash: 0.37, young0: 0)
     let lo = skelLo, hi = skelHi          // stalk + pinna skeleton extent (emitted tubes miss thin far parts)
     let cx0 = envF("CX", 0.0), bottom = envF("CY", 0.0) - viewH / 2, margin = envF("FRAMEM", 0.06)
