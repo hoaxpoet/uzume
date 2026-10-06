@@ -32,7 +32,7 @@ let msl = """
 #include <metal_stdlib>
 using namespace metal;
 
-struct P { float4 sp; float4 rim; float4 cam; float4 lit; float4 stalk; float4 misc; float4 misc2; float4 q; float4 stalk2; float4 x2; float4 x3; float4 x4; };   // x3: L1 pinnule spacing, scale, lean, midrib thickness   x4: pinnule spiral b, band-width scale, L1 LOD scale   // x2: leaflet slant, leaflet width   // stalk2: stalk-pinna spiral growth, band-width scale, upward lean   // q: supersamples   // misc2: pinna count, pinna scale
+struct P { float4 sp; float4 rim; float4 cam; float4 lit; float4 stalk; float4 misc; float4 misc2; float4 q; float4 stalk2; float4 x2; float4 x3; float4 x4; float4 x5; float4 x6; float4 x7; };   // x5/x6: frond shape (see frond)   x7: coil frond length, coil mirror, stalk frond length, stalk mirror   // x3: L1 pinnule spacing, scale, lean, midrib thickness   x4: pinnule spiral b, band-width scale, L1 LOD scale   // x2: leaflet slant, leaflet width   // stalk2: stalk-pinna spiral growth, band-width scale, upward lean   // q: supersamples   // misc2: pinna count, pinna scale
 // sp:    R0 (outer coil radius), b (spiral growth per radian), k (tube radius / spiral radius), φ0 (outer end angle)
 // rim:   child scale (× local spiral radius), child spacing (rad), depth (levels), child lean (rad)
 // cam:   centre x, y (scene units), view half-height, perspective
@@ -184,6 +184,91 @@ static Hit pinnaL1(float3 p, float2 attach, float2 dir, float s, float side, flo
     return ch;
 }
 
+// THE FROND — Matt: "BOTH curls at the top and nested. Recursion." One element: a leafy stem along a gentle arc that ends
+// in a CURL; its leaflets are smaller copies of the same element (leafy, curled tip). Canonical frame: root at the origin,
+// heading +x, length 1, bending toward +y. x5: arc curvature, curl radius, curl growth b, root half-width
+// x6: leaflet cell length (× local half-width), child scale, child lean (rad), taper (width lost by the tip)
+struct Arc { float s; float across; float2 pt; float2 T; float2 N; };
+static Arc arcPos(float2 q, float kA) {
+    float rho = 1.0 / kA; float2 v = q - float2(0.0, rho);
+    float th = clamp(atan2(v.x, -v.y), 0.0, kA);                        // arc length 1 ↔ angle kA
+    Arc a; a.s = th * rho; a.T = float2(cos(th), sin(th)); a.N = float2(-sin(th), cos(th));
+    a.pt = float2(0.0, rho) + rho * float2(sin(th), -cos(th));
+    a.across = dot(q - a.pt, a.N);
+    return a;
+}
+static float2 xform(float2 p, float2 attach, float2 dir, float sc, bool mirror) {
+    float2 q = rot2(-atan2(dir.y, dir.x)) * (p - attach) / sc;
+    return mirror ? float2(q.x, -q.y) : q;
+}
+// the curl at the arc's end: the canonical crozier band, mapped onto the arc's end point and tangent, width-matched
+static Hit frondCurl(float3 q, float aEnd, float wsc, bool cuts, constant P& P_) {
+    float kA = P_.x5.x, rc = P_.x5.y;
+    Arc e = arcPos(float2(sin(kA), 1.0 - cos(kA)) / kA, kA);
+    float sc = rc / P_.sp.x;
+    float kws = aEnd / (P_.misc.y * rc);
+    return pinna(q, e.pt, e.T, sc, 1.0, -1.0, P_.x5.z, cuts ? kws : -kws, wsc, P_);
+}
+// leaf level: the arc band with leaflets cut into it, plus its leafy curl
+static Hit frondLeaf(float3 q, float wsc, constant P& P_) {
+    float kA = P_.x5.x, a0 = P_.x5.w, tau = P_.x6.w, cl = P_.x6.x;
+    Arc A = arcPos(q.xy, kA);
+    float a = a0 * (1.0 - tau * A.s), c = 0.35 * a;
+    Hit h; h.lvl = 4.0; h.ws = wsc; h.rr = a * 3.0; h.v = clamp(A.across / a, -1.0, 1.0);
+    float u = -log(max(1.0 - tau * A.s, 1e-3)) / (cl * a0 * tau);       // leaflet cells shrink with the width
+    h.phi = u / max(P_.misc.w, 1e-3);
+    float alongOut = max(0.0, dot(q.xy - A.pt, A.T) * (A.s > 0.5 ? 1.0 : -1.0));   // capped at both ends (the root end ran on forever)   // past either end
+    h.d = (length(float2(length(float2(A.across, alongOut)) / a, q.z / c)) - 1.0) * min(a, c);
+    float scr = smoothstep(0.004, 0.012, a * wsc);
+    if (scr > 0.01) {
+        float ax = clamp(abs(A.across) / a, 0.0, 1.0), uu = fract(u + P_.x2.x * ax) - 0.5;
+        float wl = P_.x2.y * (1.0 - pow(ax, 1.6)) + 0.03;
+        float cut = min((abs(uu) - wl) * cl * a * 0.8, abs(A.across) - 0.1 * a);
+        h.d = max(h.d, mix(-1.0, cut, scr));
+    }
+    Hit cu = frondCurl(q, a0 * (1.0 - tau), wsc, true, P_);
+    if (cu.d < h.d) { h = cu; h.lvl = 4.0; }
+    return h;
+}
+// frond level: a thin rachis on the arc, lined both sides with leaf-level fronds (their curls turned toward the tip), + the curl
+static Hit frond(float3 q, float wsc, constant P& P_) {
+    float kA = P_.x5.x, a0 = P_.x5.w, tau = P_.x6.w, cl = P_.x6.x;
+    if (wsc * a0 < 0.02) { return frondLeaf(q, wsc, P_); }              // small on screen: one level is enough (LOD)
+    Arc A = arcPos(q.xy, kA);
+    float ar = 0.22 * a0 * (1.0 - tau * A.s);
+    float alongOut = max(0.0, dot(q.xy - A.pt, A.T) * (A.s > 0.5 ? 1.0 : -1.0));   // capped at both ends (the root end ran on forever)
+    Hit h; h.lvl = 2.0; h.ws = wsc; h.rr = ar * 3.0; h.v = 0.0; h.phi = 0.0;
+    h.d = length(float3(A.across, alongOut, q.z)) - ar;
+    float u = -log(max(1.0 - tau * A.s, 1e-3)) / (cl * a0 * tau), k0 = floor(u);
+    for (int j = -1; j <= 1; j++) {
+        float uk = k0 + float(j) + 0.5;
+        float sk = (1.0 - exp(-uk * cl * a0 * tau)) / tau;
+        if (sk < 0.03 || sk > 0.97) { continue; }
+        float th = sk * kA; float2 T = float2(cos(th), sin(th)), N = float2(-sin(th), cos(th));
+        float2 B = float2(0.0, 1.0 / kA) + float2(sin(th), -cos(th)) / kA;
+        float ak = a0 * (1.0 - tau * sk), sc = P_.x6.y * ak / a0;
+        if (length(q.xy - B) > sc * 1.4) { continue; }
+        for (int sd = 0; sd <= 1; sd++) {
+            float side = sd == 0 ? 1.0 : -1.0;
+            float2 dir = normalize(side * N + P_.x6.z * T);
+            float2 ql = xform(q.xy, B + side * N * ar, dir, sc, side > 0.0);
+            Hit ch = frondLeaf(float3(ql, q.z / sc), wsc * sc, P_);
+            ch.d *= sc;
+            if (ch.d < h.d) { h = ch; }
+        }
+    }
+    Hit cu = frondCurl(q, a0 * (1.0 - tau), wsc, true, P_);
+    if (cu.d < h.d) { h = cu; h.lvl = 4.0; }
+    return h;
+}
+// place a frond in the world: root at `attach`, heading `dir`, length `len`
+static Hit frondAt(float3 p, float2 attach, float2 dir, float len, bool mirror, constant P& P_) {
+    float2 q = xform(p.xy, attach, dir, len, mirror);
+    Hit h = frond(float3(q, p.z / len), len, P_);
+    h.d *= len;
+    return h;
+}
+
 static Hit scene(float3 p, constant P& P_) {
     float R0 = P_.sp.x, b = P_.sp.y, phi0 = P_.sp.w;
     Hit best; best.d = 1e9; best.phi = phi0; best.rr = R0; best.lvl = -1.0; best.v = 0.0; best.ws = 1.0;
@@ -205,7 +290,7 @@ static Hit scene(float3 p, constant P& P_) {
                 if (length(p.xy - C) > s * R0 * 3.0) { continue; }
                 float2 dir = normalize(side * uc + Tin * P_.rim.w);
                 Hit ch = side > 0.0 ? pinna(p, C + side * uc * P_.rim.x * rc, dir, s, side, -1.0, P_.misc2.z, -0.4, 1.0, P_)          // outside: smooth glass curls
-                                    : pinnaL1(p, C + side * uc * P_.rim.x * rc, dir, s, side, -1.0, P_.misc2.z, P_.stalk2.y, P_);   // inside: croziers OF croziers   // outside: smooth glass curls; inside: leafy, same leaflet proportions as the stalk's
+                                    : frondAt(p, C + side * uc * P_.rim.x * rc, dir, s * P_.sp.x * P_.x7.x, P_.x7.y > 0.0, P_);   // inside: croziers OF croziers   // outside: smooth glass curls; inside: leafy, same leaflet proportions as the stalk's
                 if (ch.d < best.d) { best = ch; best.v = side > 0.0 ? ch.v : -ch.v; if (side > 0.0) { best.lvl = 1.0; } }
             }
         }
@@ -221,7 +306,7 @@ static Hit scene(float3 p, constant P& P_) {
             float2 B = bez(a, c, e, tp), T = normalize(2.0 * (1.0 - tp) * (c - a) + 2.0 * tp * (e - c)), Nn = float2(-T.y, T.x);
             float s = P_.misc2.y * (1.0 + 1.2 * tp);
             if (length(p.xy - B) > s * R0 * 2.6) { continue; }
-            Hit ch = pinnaL1(p, B + side * Nn * P_.rim.x * R0, normalize(side * Nn - STL * T), s, side, 1.0, STB, STW, P_);   // stalk: feathery lances (looser spiral, narrower band), curling only at the tip
+            Hit ch = frondAt(p, B + side * Nn * P_.rim.x * R0, normalize(side * Nn - STL * T), s * R0 * P_.x7.z, (side > 0.0) == (P_.x7.w > 0.0), P_);   // stalk: feathery lances (looser spiral, narrower band), curling only at the tip
             if (ch.d < best.d) { best = ch; }
         }
     }
@@ -377,7 +462,7 @@ static float3 renderPix(float2 pix, constant P& P_) {
     if (P_.x4.w > 0.5) {                                              // DEBUG: geometry only — level colour × diffuse, no glass
         if (!hit) { return float3(0.002); }
         float3 n = nrm(ro + rd * t, P_);
-        const float3 lc[5] = { float3(0.2, 0.8, 0.2), float3(1.0, 0.8, 0.2), float3(0.3, 0.9, 0.9), float3(0.9, 0.3, 0.9), float3(1.0, 1.0, 1.0) };
+        const float3 lc[5] = { float3(0.2, 0.8, 0.2), float3(1.0, 0.8, 0.2), float3(0.3, 0.9, 0.9), float3(0.9, 0.3, 0.9), float3(0.4, 0.9, 0.3) };
         float3 c0 = h.lvl < -0.5 ? float3(0.6) : lc[clamp(int(h.lvl), 0, 4)];
         return c0 * (0.15 + 0.85 * clamp(dot(n, normalize(float3(-0.4, 0.5, -0.8))), 0.0, 1.0));
     }
@@ -445,7 +530,7 @@ kernel void compose(texture2d<float> hdr [[texture(0)]], texture2d<float> bl [[t
 }
 """
 
-struct Params { var sp: SIMD4<Float>; var rim: SIMD4<Float>; var cam: SIMD4<Float>; var lit: SIMD4<Float>; var stalk: SIMD4<Float>; var misc: SIMD4<Float>; var misc2: SIMD4<Float>; var q = SIMD4<Float>(1, 0, 0, 0); var stalk2 = SIMD4<Float>(0, 0, 0, 0); var x2 = SIMD4<Float>(0, 0, 0, 0); var x3 = SIMD4<Float>(0, 0, 0, 0); var x4 = SIMD4<Float>(0, 0, 0, 0) }
+struct Params { var sp: SIMD4<Float>; var rim: SIMD4<Float>; var cam: SIMD4<Float>; var lit: SIMD4<Float>; var stalk: SIMD4<Float>; var misc: SIMD4<Float>; var misc2: SIMD4<Float>; var q = SIMD4<Float>(1, 0, 0, 0); var stalk2 = SIMD4<Float>(0, 0, 0, 0); var x2 = SIMD4<Float>(0, 0, 0, 0); var x3 = SIMD4<Float>(0, 0, 0, 0); var x4 = SIMD4<Float>(0, 0, 0, 0); var x5 = SIMD4<Float>(0, 0, 0, 0); var x6 = SIMD4<Float>(0, 0, 0, 0); var x7 = SIMD4<Float>(0, 0, 0, 0) }
 
 let device = MTLCreateSystemDefaultDevice()!
 let lib = try! device.makeLibrary(source: msl, options: nil)
@@ -466,16 +551,19 @@ func render(unfurl u: Float, time t: Float) {
     // unfurl: the spiral loosens (b grows) and its outer end unrolls
     let b = envF("B", 0.17) + envF("B_O", 0.45) * u
     var p = Params(sp: [envF("R0", 1.0), b, envF("K", 0.085), envF("PHI0", Float.pi * 1.05)],
-                   rim: [envF("RIMS", 0.05), envF("RIMD", 0.4), envF("DEPTH", 0.24), envF("RIMLEAN", 2.0)],
+                   rim: [envF("RIMS", 0.05), envF("RIMD", 0.32), envF("DEPTH", 0.24), envF("RIMLEAN", 1.2)],
                    cam: [envF("CX", -0.2), envF("CY", -0.18), envF("VIEW", 0.99), envF("PERSP", 0.15)],
                    lit: [envF("CORE", 2.4), envF("IRID", 0.5), envF("SPARK", 0.35), envF("GLOW", 0.08)],
                    stalk: [envF("SBX", -0.6), envF("SBY", -2.1), envF("SBEND", 1.0), envF("SGROW", 0.8)],
-                   misc: [t, envF("KW", 0.55), envF("KT", 0.07), envF("LEAFN", 6)], misc2: [envF("NPIN", 12), envF("PINS", 0.26), envF("PINB", 0.18), envF("STALKR", 1.0)])
+                   misc: [t, envF("KW", 0.55), envF("KT", 0.07), envF("LEAFN", 6)], misc2: [envF("NPIN", 10), envF("PINS", 0.26), envF("PINB", 0.18), envF("STALKR", 1.0)])
     p.q.x = envF("SS", 4); p.q.y = envF("MIRS", 1); p.q.z = envF("OSC", 0.35); p.q.w = envF("OSP", 0.3)
-    p.stalk2 = [envF("STB", 0.6), envF("STW", 0.7), envF("STL", 1.5), envF("ND", 0.7)]
+    p.stalk2 = [envF("STB", 0.6), envF("STW", 0.7), envF("STL", 0.5), envF("ND", 0.7)]
     p.x2 = [envF("SL", 0.3), envF("LW", 0.45), 0, 0]
     p.x3 = [envF("SP1", 0.6), envF("S1", 0.42), envF("LEAN1", 1.2), envF("TH1", 0.035)]
     p.x4 = [envF("BL", 0.25), envF("KWL", 0.22), envF("LOD1", 0.0), envF("DBG", 0)]
+    p.x5 = [envF("FK", 1.1), envF("FC", 0.3), envF("FB", 0.18), envF("FW", 0.07)]
+    p.x6 = [envF("FCL", 1.6), envF("FS", 0.38), envF("FL", 0.8), envF("TAU", 0.6)]
+    p.x7 = [envF("CFL", 2.4), envF("CMIR", 1), envF("SFL", 2.0), envF("SMIR", 1)]
     let cb = queue.makeCommandBuffer()!, ce = cb.makeComputeCommandEncoder()!
     let full = MTLSize(width: W, height: H, depth: 1), quarter = MTLSize(width: W / 4, height: H / 4, depth: 1), tg = MTLSize(width: 16, height: 16, depth: 1)
     ce.setComputePipelineState(pso); ce.setBytes(&p, length: MemoryLayout<Params>.stride, index: 0); ce.setTexture(hdrTex, index: 0)
