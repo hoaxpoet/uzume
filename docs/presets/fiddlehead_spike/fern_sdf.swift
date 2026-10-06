@@ -46,14 +46,14 @@ static uint hash(uint x) { x ^= x >> 16; x *= 0x7feb352d; x ^= x >> 15; x *= 0x8
 static float h1(float2 q) { return float(hash(uint(q.x * 1973.0 + 7.0) ^ hash(uint(q.y * 9277.0 + 3.0)))) / 4294967296.0; }
 static float2x2 rot2(float a) { float c = cos(a), s = sin(a); return float2x2(float2(c, s), float2(-s, c)); }
 
-struct Hit { float d; float phi; float lvl; float rr; float v; };   // v: across the band, −1 inner edge … +1 outer edge
+struct Hit { float d; float phi; float lvl; float rr; float v; float ws; };   // ws: world scale of the copy hit (on-screen LOD)   // v: across the band, −1 inner edge … +1 outer edge
 
 // Distance to the spiral tube (one crozier, local units). Returns also the winding's φ and spiral radius at the nearest point.
 static Hit spiralTube(float3 p, constant P& P_, float bo) {
     float R0 = P_.sp.x, b = bo > 0.0 ? bo : P_.sp.y, k = P_.sp.z, phi0 = P_.sp.w, cosA = 1.0 / sqrt(1.0 + b * b);
     float r = length(p.xy), ph = atan2(p.y, p.x);
     float t = (log(max(r, 1e-6) / R0) / b + phi0 - ph) / (2.0 * PI);
-    Hit h; h.d = 1e9; h.phi = phi0; h.rr = R0; h.lvl = 0.0; h.v = 0.0;
+    Hit h; h.d = 1e9; h.phi = phi0; h.rr = R0; h.lvl = 0.0; h.v = 0.0; h.ws = 1.0;
     float KW = P_.misc.y, KT = P_.misc.z;
     float kmax = floor((phi0 - ph) / (2.0 * PI));                 // the outermost winding that exists at this angle
     for (int dk = 0; dk <= 1; dk++) {
@@ -64,7 +64,8 @@ static Hit spiralTube(float3 p, constant P& P_, float bo) {
         // LEAFLETS CUT INTO THE OUTLINE: the band swells at each leaflet and notches between them (toothed, not a printed strip);
         // leaflet spacing follows log-radius, so it is the same count per scale on the coil and on every pinna
         float sig = log(rr / R0) / b, cu = fract(sig * P_.misc.w);   // by this spiral's OWN growth: pinnae had 2.25× too many leaflets (rope)
-        float notch = 1.0 - 0.38 * smoothstep(0.02, 0.10, rr / R0) * (1.0 - pow(sin(PI * cu), 0.6));   // fades where leaflets go sub-pixel (needle vortex)
+        float jit = 0.85 + 0.3 * h1(float2(floor(sig * P_.misc.w), floor(phi0 * 7.0)));   // each leaflet its own size (bead-chain read)
+        float notch = (1.0 - 0.38 * smoothstep(0.02, 0.10, rr / R0) * (1.0 - pow(sin(PI * cu), 0.6))) * mix(1.0, jit, 0.8);   // fades where leaflets go sub-pixel
         float a = mix(k, KW * notch, tp) * rr, c = mix(k, KT, tp) * rr, dr = (r - rr) * cosA;
         float d = (length(float2(dr / a, p.z / c)) - 1.0) * min(a, c);
         if (d < h.d) { h.d = d; h.phi = sig + phi0; h.rr = rr; h.v = clamp(dr / a, -1.0, 1.0); }   // phi: leaflet coordinate
@@ -121,7 +122,7 @@ static Hit scene(float3 p, constant P& P_) {
             float2 ql = rot2(-ang) * (p.xy - attach) / s;
             if (side < 0.0) { ql = reflect(ql, normalize(float2(-tinP.y, tinP.x))); }   // bilateral: mirrored pinnae
             Hit ch = spiralTube(float3(ql + P0, p.z / s), P_, bp);
-            if (ch.d * s < best.d) { best.d = ch.d * s; best.phi = ch.phi; best.rr = ch.rr; best.lvl = 0.0; best.v = ch.v; }
+            if (ch.d * s < best.d) { best.d = ch.d * s; best.phi = ch.phi; best.rr = ch.rr; best.lvl = 0.0; best.v = ch.v; best.ws = s; }
             // TIP CROZIER: a log spiral can't run straight then curl tight, so every pinna gets a small crozier (the coil's own
             // spiral) at its tip, continuing its curve — "every pinna ends in a crozier" (reference)
             {
@@ -130,7 +131,7 @@ static Hit scene(float3 p, constant P& P_) {
                 float st = 0.30, angt = atan2(tdir.y, tdir.x) - atan2(tin0.y, tin0.x);
                 float2 qt = rot2(-angt) * (ql + P0 - Tt) / st + P0;
                 Hit ct = spiralTube(float3(qt, p.z / (s * st)), P_, 0.0);
-                if (ct.d * s * st < best.d) { best.d = ct.d * s * st; best.phi = ct.phi; best.rr = ct.rr; best.lvl = 0.0; best.v = ct.v; }
+                if (ct.d * s * st < best.d) { best.d = ct.d * s * st; best.phi = ct.phi; best.rr = ct.rr; best.lvl = 0.0; best.v = ct.v; best.ws = s * st; }
             }
         }
     }
@@ -156,7 +157,7 @@ static Hit scene(float3 p, constant P& P_) {
         }
         sc *= bestS;
         float d = bestC.d * sc;
-        if (d < best.d) { best.d = d; best.phi = bestC.phi; best.rr = bestC.rr; best.lvl = float(lv); best.v = bestC.v; }
+        if (d < best.d) { best.d = d; best.phi = bestC.phi; best.rr = bestC.rr; best.lvl = float(lv); best.v = bestC.v; best.ws = sc; }
         q = bestQ; cur = bestC;
     }
     return best;
@@ -177,14 +178,23 @@ static float3 shade(float3 p, float3 rd, Hit h, constant P& P_, thread float& fr
         // LEAF PATTERN on the band: a herringbone of leaflets, a fixed number per radian (they shrink with the spiral),
         // each with a midrib and a bright edge, separated by dark gaps; outer half green, inner half backlit
         float N = P_.misc.w, cu = fract(h.phi * N), side = h.v >= 0.0 ? 1.0 : -1.0, av = abs(h.v);
-        float across = cu - 0.5 - 0.45 * av * side;                 // leaflets slant along the band, mirrored inner/outer
+        float lj = h1(float2(floor(h.phi * N), h.lvl * 5.0 + 1.0));
+        float across = cu - 0.5 - (0.35 + 0.2 * lj) * av * side;     // leaflets slant along the band (each its own angle), mirrored inner/outer
         across -= round(across);
-        float wl = 0.42 * pow(sin(3.14159 * clamp(av * 0.95 + 0.05, 0.0, 1.0)), 0.6);
-        float lod = smoothstep(0.02, 0.10, h.rr / P_.sp.x);          // pattern fades where leaflets go sub-pixel
+        float wl = (0.36 + 0.12 * lj) * pow(sin(3.14159 * clamp(av * 0.95 + 0.05, 0.0, 1.0)), 0.6);
+        float lod = smoothstep(0.02, 0.10, h.rr * h.ws / P_.sp.x);   // pattern fades where leaflets go sub-pixel ON SCREEN
         float inLeaf = mix(0.7, smoothstep(wl, wl - 0.06, abs(across)), lod);
         float edgeL = smoothstep(0.06, 0.0, abs(abs(across) - wl + 0.03));
-        float vein = smoothstep(0.035, 0.0, abs(across)) + smoothstep(0.03, 0.0, av) * 0.6;
-        float3 green = mix(float3(0.03, 0.35, 0.06), float3(0.12, 0.72, 0.14), 0.5 + 0.5 * n.y);   // saturated emerald
+        float vein = smoothstep(0.035, 0.0, abs(across)) + smoothstep(0.03, 0.0, av) * 0.6
+                   + smoothstep(0.06, 0.0, abs(fract(av * 6.0 - abs(across) * 4.0) - 0.5) - 0.44) * 0.35;   // pinnate side veins
+        // BACKLIT GLASS: a warm light behind the frond shines through the thin leaves — bodies glow lime-gold where lit through,
+        // deep green where not; hue ranges emerald/teal (outer, left) → gold → amber toward the core (reference)
+        float3 Lb = normalize(float3(0.25, 0.35, 1.0));
+        float backlit = clamp(0.35 + 0.65 * dot(-n, -Lb) * 0.5 + 0.5 * fres, 0.0, 1.0);
+        float warmth = smoothstep(1.5, 0.3, length(p.xy)), cool = smoothstep(-0.4, -1.6, p.x);
+        float3 deep = mix(float3(0.02, 0.22, 0.05), float3(0.02, 0.20, 0.16), cool);
+        float3 lit = mix(mix(float3(0.45, 0.95, 0.20), float3(0.30, 0.90, 0.75), cool), float3(1.0, 0.78, 0.25), warmth);
+        float3 green = mix(deep, lit, backlit);
         float3 tissue = green * (0.35 + 0.65 * inLeaf) + float3(0.55, 0.85, 0.30) * (edgeL * 0.6 + vein * 0.35) * inLeaf;
         float key = 0.55 + 0.45 * dot(n, normalize(float3(-0.4, 0.6, -0.7)));   // wrap: glass undersides aren't black
         // light from the coil's eye shining THROUGH the tissue: strongest near the eye and on the band's inner half
@@ -197,19 +207,20 @@ static float3 shade(float3 p, float3 rd, Hit h, constant P& P_, thread float& fr
         float cellId = floor(h.phi * N * 2.0) + h.lvl * 997.0;
         float bead = smoothstep(0.22, 0.08, length(sc2)) * step(1.0 - P_.lit.z, h1(float2(cellId, 7.0)));
         bead += (h.lvl > 0.5 ? step(0.86, h1(float2(floor(h.phi * 6.0) + h.lvl * 13.0, 3.0))) * smoothstep(0.4, 0.9, fres) : 0.0);
-        float3 spark = mix(float3(1.0, 0.78, 0.45), float3(0.8, 0.6, 1.0), h1(float2(cellId, 2.0))) * bead * 2.5;
+        float3 spark = mix(float3(1.0, 0.78, 0.45), float3(0.8, 0.6, 1.0), h1(float2(cellId, 2.0))) * bead * 2.8;
         float spec = pow(clamp(dot(reflect(normalize(float3(0.4, -0.6, 0.7)), n), vv), 0.0, 1.0), 40.0);
-        tissue = green * (0.15 + 0.4 * inLeaf) + float3(0.6, 1.0, 0.3) * (edgeL * 3.2 + vein * 0.6) * inLeaf;   // glass: dark body, glowing edges
+        tissue = green * (0.25 + 0.75 * inLeaf) + mix(float3(0.7, 1.0, 0.4), float3(1.0, 0.85, 0.45), warmth) * (edgeL * 2.6 + vein * 0.7) * inLeaf;   // glass body lit through, glowing rims and veins
         tissue += float3(1.0, 0.55, 0.15) * inLeaf * (1.0 - edgeL) * smoothstep(0.9, 0.2, av) * 0.6;    // warm light glowing through leaflet centres
-        if (h.lvl < -0.5) { tissue = green * 0.42 + float3(0.6, 1.0, 0.3) * fres * 1.2; amber *= 0.3; }   // the band's look: no seam at the join
+        if (h.lvl < -0.5) { tissue = green * 0.55 + float3(0.8, 1.0, 0.45) * (fres * 1.2 + 0.35); amber *= 0.3; }   // a glowing glass midrib
         if (h.lvl > 0.5) { tissue = mix(float3(1.0, 0.7, 0.25), float3(0.75, 0.45, 1.0), h1(float2(floor(h.phi * 3.0), h.lvl))) * (0.8 + 1.6 * fres); }   // rim croziers: glowing gold/violet beads
         float ao = 1.0;                                                // depth: crevices go dark (it read as a flat sticker)
         for (int k = 1; k <= 4; k++) { float hh = 0.02 * float(k); ao -= (hh - scene(p + n * hh, P_).d) * (0.9 / float(k)) * 6.0; }
         ao = clamp(ao, 0.15, 1.0);
         float3 gc = floor(p * 140.0); float gl = h1(gc.xy + gc.z * 17.0);                  // glints hashed in 3-D, on edges
         float glint = step(0.93, gl) * smoothstep(0.3, 0.8, fres) * 6.0;
+        float fall = 0.45 + 0.95 * exp(-length(p.xy) * 0.85);       // light FALLS OFF from the blazing core (evenly bright read flat)
         fresOut = fres;
-        return (tissue * key + irid) * ao + amber + spark * 2.0 + float3(1.0, 0.95, 0.85) * (spec * 2.5 + glint);
+        return (tissue * key * fall + irid) * ao + amber + spark * 2.0 + float3(1.0, 0.95, 0.85) * (spec * 2.5 + glint);
 }
 
 kernel void render(constant P& P_ [[buffer(0)]], texture2d<float, access::write> out [[texture(0)]], uint2 gid [[thread_position_in_grid]]) {   // writes HDR
@@ -260,8 +271,8 @@ kernel void render(constant P& P_ [[buffer(0)]], texture2d<float, access::write>
             for (int i = 0; i < 90; i++) { Hit hh = scene(ro + rd * tl, P_); if (hh.d < 0.0006 * (1.0 + tl)) { h = hh; lh = true; break; } tl += hh.d * 0.7; if (tl > 8.0) { break; } }
         }
         if (!lh) { break; }
-        float fr; float3 S = shade(ro + rd * tl, rd, h, P_, fr);
-        float al = mix(0.42, 0.97, fr);
+        float fr; float3 S = shade(ro + rd * tl, rd, h, P_, fr) * (layer == 0 ? 1.0 : 0.6);   // turns seen through glass sit back
+        float al = mix(0.78, 0.97, fr);   // leaf bodies GLOW (mostly opaque); see-through only at grazing edges — centres went dark
         acc += Tr * al * S; Tr *= (1.0 - al);
         for (int i = 0; i < 40; i++) { float dd = scene(ro + rd * tl, P_).d; if (dd > 0.0015) { break; } tl += max(-dd, 0.002); }   // through the tissue
         tl += 0.002;
@@ -295,6 +306,8 @@ kernel void compose(texture2d<float> hdr [[texture(0)]], texture2d<float> bl [[t
     if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
     float2 uv = (float2(gid) + 0.5) / float2(out.get_width(), out.get_height());
     float3 c = hdr.read(gid).rgb + bl.sample(lin, uv).rgb * g.x;
+    float Y = dot(c, float3(0.299, 0.587, 0.114));
+    c = max(mix(float3(Y), c, g.y), 0.0);                            // saturation lift (median 0.32 vs the reference's 0.59)
     c = c / (1.0 + dot(c, float3(0.299, 0.587, 0.114)));            // luminance tone map (hue-safe)
     out.write(float4(pow(clamp(c, 0.0, 1.0), float3(1.0 / 2.2)), 1.0), gid);
 }
@@ -325,7 +338,7 @@ func render(unfurl u: Float, time t: Float) {
                    cam: [envF("CX", -0.66), envF("CY", -0.66), envF("VIEW", 2.2), envF("PERSP", 0.15)],
                    lit: [envF("CORE", 1.6), envF("IRID", 0.5), envF("SPARK", 0.75), envF("GLOW", 0.6)],
                    stalk: [envF("SBX", -1.5), envF("SBY", -3.0), envF("SBEND", 1.4), envF("SGROW", 0.6)],
-                   misc: [t, envF("KW", 0.32), envF("KT", 0.07), envF("LEAFN", 7.0)], misc2: [envF("NPIN", 8), envF("PINS", 1.45), envF("PINB", 0.45), envF("STALKR", 0.5)])
+                   misc: [t, envF("KW", 0.32), envF("KT", 0.07), envF("LEAFN", 7.0)], misc2: [envF("NPIN", 8), envF("PINS", 1.45), envF("PINB", 0.45), envF("STALKR", 0.35)])
     let cb = queue.makeCommandBuffer()!, ce = cb.makeComputeCommandEncoder()!
     let full = MTLSize(width: W, height: H, depth: 1), quarter = MTLSize(width: W / 4, height: H / 4, depth: 1), tg = MTLSize(width: 16, height: 16, depth: 1)
     ce.setComputePipelineState(pso); ce.setBytes(&p, length: MemoryLayout<Params>.stride, index: 0); ce.setTexture(hdrTex, index: 0)
@@ -335,7 +348,7 @@ func render(unfurl u: Float, time t: Float) {
     ce.setComputePipelineState(blurPSO)
     ce.setTexture(bA, index: 0); ce.setTexture(bB, index: 1); ce.setBytes(&dh, length: 8, index: 0); ce.dispatchThreads(quarter, threadsPerThreadgroup: tg)
     ce.setTexture(bB, index: 0); ce.setTexture(bA, index: 1); ce.setBytes(&dv, length: 8, index: 0); ce.dispatchThreads(quarter, threadsPerThreadgroup: tg)
-    var g = SIMD4<Float>(envF("BLOOM", 2.0), 0, 0, 0)
+    var g = SIMD4<Float>(envF("BLOOM", 2.0), envF("SATL", 1.5), 0, 0)
     ce.setComputePipelineState(composePSO); ce.setTexture(hdrTex, index: 0); ce.setTexture(bA, index: 1); ce.setTexture(outTex, index: 2)
     ce.setBytes(&g, length: 16, index: 0); ce.dispatchThreads(full, threadsPerThreadgroup: tg)
     ce.endEncoding()
