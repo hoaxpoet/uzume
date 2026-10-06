@@ -621,6 +621,7 @@ var nLeaves = 0, nTubes = 0, nBeads = 0
 struct Rule {
     var sig = envF("SIG", 0.9568), sigS = envF("SIGS", 0.253)
     var sig1 = envF("SIG1", envF("SIG", 0.9568))
+    var pinCap = envF("PINCAP", 99), tap0 = envF("TAP0", 1)   // open pinnule cap ÷ pinna spacing; length at the stalk end
     var pExp1 = envF("PEXP1", 1), immature1 = envF("IMM1", envF("IMM", 0.67))   // pinna-level size law / tip shrink (open: blade rolls up full width)
     var maxTurn1 = envF("TURN1", envF("TURN", 0.276))      // pinna/pinnule curl rate (open fit sizes the tip croziers)
     var alpha = envF("ALPHA", 1.37)
@@ -670,7 +671,7 @@ let ruleO: Rule = {
     r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
     r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
     r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
-    r.sig1 = o("SIG1", r.sig1); r.leafPx = o("LEAFPX", r.leafPx); r.hookR = o("HOOKR", r.hookR); r.leafW = o("LEAFW", r.leafW); r.leafLen = o("LEAFLEN", r.leafLen); r.hairP = o("HAIRP", r.hairP); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
+    r.sig1 = o("SIG1", r.sig1); r.leafPx = o("LEAFPX", r.leafPx); r.hookR = o("HOOKR", r.hookR); r.leafW = o("LEAFW", r.leafW); r.pinCap = o("PINCAP", r.pinCap); r.tap0 = o("TAP0", r.tap0); r.leafLen = o("LEAFLEN", r.leafLen); r.hairP = o("HAIRP", r.hairP); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
     return r
 }()
 var rule = rule0
@@ -681,7 +682,7 @@ func blendRule(_ w: Float) {
     rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
     rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
     rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
-    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.leafPx = m(rule0.leafPx, ruleO.leafPx); rule.hookR = m(rule0.hookR, ruleO.hookR); rule.leafW = m(rule0.leafW, ruleO.leafW); rule.leafLen = m(rule0.leafLen, ruleO.leafLen); rule.hairP = m(rule0.hairP, ruleO.hairP); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
+    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.leafPx = m(rule0.leafPx, ruleO.leafPx); rule.hookR = m(rule0.hookR, ruleO.hookR); rule.leafW = m(rule0.leafW, ruleO.leafW); rule.pinCap = m(rule0.pinCap, ruleO.pinCap); rule.tap0 = m(rule0.tap0, ruleO.tap0); rule.leafLen = m(rule0.leafLen, ruleO.leafLen); rule.hairP = m(rule0.hairP, ruleO.hairP); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
 }
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
@@ -695,7 +696,7 @@ func rotate(_ v: SIMD3<Float>, about a: SIMD3<Float>, _ ang: Float) -> SIMD3<Flo
 /// One chain in its own plane (normal N): walk links, emitting a tube per link, branching on both
 /// sides; level 2 (pinnules) is emitted as single curved leaf blades.
 func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, link S0: Float, front: Float,
-           level: Int, hash: Float, young0: Float, side: Float = 0, handed: Float = 1) {
+           level: Int, hash: Float, young0: Float, side: Float = 0, handed: Float = 1, spacing: Float = 0, pos: Float = 0) {
     let sg = level == 0 ? rule.sig : rule.sig1          // link ratio per level: few pinnae on the stalk, many pinnules per pinna
     let total = 1 / (1 - sg)
     // Fractal depth is set by the screen, not a fixed level: a branch keeps branching (the same rule)
@@ -705,7 +706,12 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
     let curledHere = 1 - (front - rule.pinOpen) / (rule.pinFront - rule.pinOpen) > rule.curlOn
     if level >= 1 && (total * S0 < rule.leafPx * pxWorld || (curledHere && total * S0 < rule.curlPx * pxWorld) || level >= 5) {
         // A pinnule: one cupped, serrated blade, bent toward the coil while its pinna is curled.
-        let len = total * S0 * rule.leafLen
+        var len = total * S0 * rule.leafLen
+        if level >= 2 && spacing > 0 {
+            // Open frond (Matt's open reference): a pinnule is at most PINCAP × the gap to the next pinna on the same
+            // side (a dark band beside every blade), and shortest at the stalk end, full length ~⅓ out along the pinna.
+            len = min(len, rule.pinCap * spacing) * min(1, rule.tap0 + (1 - rule.tap0) * pos / 0.33)
+        }
         guard len * rule.leafW > rule.minPx * pxWorld, nLeaves < maxLeaves else { return }
         let curled = 1 - (front - rule.pinOpen) / (rule.pinFront - rule.pinOpen)
         let jit = (hashf(hash * 13.7) - 0.5) * 2 * rule.leafJitter
@@ -830,7 +836,8 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
                     continue
                 }
                 chain(at, dir: bd, normal: bN, link: bS, front: rule.pinOpen + (rule.pinFront - rule.pinOpen) * passed, level: level + 1, hash: bh, young0: young, side: side,
-                      handed: handed * (rule.mirror > 0.5 ? side : 1))      // bilateral symmetry: sides curl mirrored
+                      handed: handed * (rule.mirror > 0.5 ? side : 1),      // bilateral symmetry: sides curl mirrored
+                      spacing: level == 0 ? S : spacing, pos: level == 0 ? 0 : f)
             }
         }
         // Pinnae (level ≥ 1) carry curvature along their whole length (reference: every pinna arcs); only the
