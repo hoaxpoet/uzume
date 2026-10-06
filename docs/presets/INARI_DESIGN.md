@@ -1,8 +1,9 @@
 # Inari — Design
 
-**Status:** INARI.1 (built into the app) 2026-10-05, `certified: false` (the planner skips it; ⌘] / ⌘[ and `UZUME_PIN_SCENE=Inari` reach it).
-**Next:** INARI.2 — tune the music sync on real sessions (Matt: *"we will still need to tune the music
-sync a bit before it ships"*), then M7 and certification.
+**Status: ⛔ STOPPED 2026-10-06 (Matt: *"yes, wrap it up"*). This branch is not merged and the preset
+does not ship.** INARI.1 was built into the app 2026-10-05; Matt's live look: *"not an impressive scene …
+you can tell that it's a static background where only the illumination changes"*, and *"what we built
+was a total compromise because you were unable to match the visual style of the original."* See §6.
 
 ## 1. The scene and what changes
 
@@ -70,3 +71,24 @@ scene was abandoned: it could not reach the drawing's detail.
 | INARI.1 | The preset in the app: drawings + light map, per-light levels from stems, `InariTests` | ✅ engine suite; Matt's first live look |
 | INARI.2 | Music-sync tuning on real sessions (local + streaming); flash measurement | Matt's M7 |
 | INARI.3 | Certification | NEW_PRESET_CHECKLIST §4 |
+
+## 6. Why it stopped — the four attempts
+
+Matt asked for a living scene in the style of his reference illustration. Every route hit the same
+gap: the scene needs hand-made art with motion built in, and this setup can only write code that
+draws.
+
+1. **3D rebuild (ray-marched SDF, baked + relit).** Layout matched by landmark solve; the foxes reached
+   a carved-stone read, but the illustration's density (fur, lichen, ivy) is hand-placed marks that
+   procedural rules cannot produce — they came out as wood grain, cracked stone, camouflage.
+2. **The drawing relit (INARI.1, this branch).** Matt's two drawings (moonlit / all lights), each light
+   brightening its own area. Faithful to the art, but a static picture with lights.
+3. **Layers with parallax** (Matt generated sky / hills / shrine / foreground with a #00FF00 key). The
+   depth read, but the camera move had no reason (*"the camera movement is nonsensical to me"*).
+4. **Layers, fixed camera, animated by warping** (cloud creep, leaf sway, mist). Bending a drawing
+   smears its strokes (*"you can see smearing around the moon"*). Real motion needs every element
+   (cloud bank, branch) as its own separate piece of art.
+
+**Stem bleed (engine-wide, found here).** One light group ← one stem exposes the separator's
+leakage directly — the eyes answer a guitar, the shrine a bass note. Scenes that blend several
+primitives average it away; a scene that maps one element to one stem cannot.
