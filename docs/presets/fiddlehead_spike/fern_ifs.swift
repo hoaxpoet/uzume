@@ -72,7 +72,7 @@ kernel void chaos(device const Map* maps [[buffer(0)]], constant P& p [[buffer(1
         if (b.from == 1) { xW = b.m * (b.roll == 1 ? roll(xP, p.rp) : xP) + b.t; cW = 0.5 * (cP + b.col); }
         else { xW = b.m * xW + b.t; cW = 0.5 * (cW + b.col); }
         if (i < 30) { continue; }
-        float2 q = (roll(xW, p.rw) - p.centre) * p.scale + float2(\(W / 2).0, \(H / 2).0);
+        float2 q = ((p.pad > 0.5 ? roll(xP, p.rp) : roll(xW, p.rw)) - p.centre) * p.scale + float2(\(W / 2).0, \(H / 2).0);   // pad>0.5: debug — show one pinna
         if (q.x < 0.0 || q.y < 0.0 || q.x >= \(W).0 || q.y >= \(H).0) { continue; }
         uint idx = (uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x)) * 2u;
         atomic_fetch_add_explicit(&hist[idx], 1u, memory_order_relaxed);
@@ -172,7 +172,7 @@ func extent(_ f: Fern) -> (SIMD2<Float>, SIMD2<Float>) {
     for i in 0..<40000 {
         let a = pick(mp); xP = a.m * (a.roll == 2 ? roll(xP, f.rpp) : xP) + a.t
         let b = pick(mw); xW = b.from == 1 ? b.m * (b.roll == 1 ? roll(xP, f.rp) : xP) + b.t : b.m * xW + b.t
-        if i > 50 { let q = roll(xW, f.rw); xs.append(q.x); ys.append(q.y) }
+        if i > 50 { let q = envF("SHOWP", 0) > 0.5 ? roll(xP, f.rp) : roll(xW, f.rw); xs.append(q.x); ys.append(q.y) }
     }
     xs.sort(); ys.sort()
     func q(_ a: [Float], _ v: Float) -> Float { a[min(a.count - 1, Int(Float(a.count) * v))] }
@@ -203,7 +203,7 @@ func render(unfurl u: Float, time t: Float) {
     for (i, m) in f.maps.enumerated() { mp[i] = m }
     let (lo, hi) = extent(f), fill = envF("FILL", 0.88)
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
-    var p = Params(nMaps: Int32(f.maps.count), iters: Int32(envF("ITERS", 256)), scale: scale, centre: (lo + hi) * 0.5,
+    var p = Params(nMaps: Int32(f.maps.count), iters: Int32(envF("ITERS", 256)), scale: scale, pad: envF("SHOWP", 0), centre: (lo + hi) * 0.5,
                    time: t, seed: UInt32(t * 1000) &+ 17, rw: f.rw, rp: f.rp, rpp: f.rpp)
     let threads = Int(envF("THREADS", 65536))
     let cb = queue.makeCommandBuffer()!
