@@ -621,6 +621,7 @@ var nLeaves = 0, nTubes = 0, nBeads = 0
 struct Rule {
     var sig = envF("SIG", 0.9568), sigS = envF("SIGS", 0.253)
     var sig1 = envF("SIG1", envF("SIG", 0.9568))
+    var maxTurn1 = envF("TURN1", envF("TURN", 0.276))      // pinna/pinnule curl rate (open fit sizes the tip croziers)
     var alpha = envF("ALPHA", 1.37)
     var maxTurn = envF("TURN", 0.276), ramp = envF("RAMP", 0.001), baseTurn = envF("BT", -0.0187)
     var delay = envF("DELAY", 0.15), immature = envF("IMM", 0.67)
@@ -660,7 +661,7 @@ let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "du
 let rule0 = Rule()
 // The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
 // frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
-let openFit: [String: Float] = ["SIG_O": 0.8635, "SIG1_O": 0.9, "SIGS_O": 0.7418, "SIGS1_O": 0.1271, "ALPHA_O": 1.2141, "ALPHA1_O": 0.9787, "BT_O": -0.0006, "BT1_O": 0.078, "PINF_O": 0.6896, "TURN_O": 0.2983, "CURLON_O": 0.3, "KAPMIN_O": 0.4]   // fitted to 02_reference_open (fitopen.py)
+let openFit: [String: Float] = ["SIG_O": 0.882, "SIGS_O": 0.9055, "ALPHA_O": 0.5, "BT_O": 0.025, "BT1_O": 0.0415, "PINF_O": 0.7537, "TURN_O": 0.15, "TURN1_O": 0.6748, "SIG1_O": 0.97, "SIGS1_O": 0.25, "ALPHA1_O": 0.8, "CURLON_O": -1.0, "KAPMIN_O": 1.0]   // fitted to 02_reference_open (fitopen.py)
 let ruleO: Rule = {
     var r = rule0
     func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", openFit[k + "_O"] ?? v) }
@@ -668,7 +669,7 @@ let ruleO: Rule = {
     r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
     r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
     r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
-    r.sig1 = o("SIG1", r.sig1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
+    r.sig1 = o("SIG1", r.sig1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
     return r
 }()
 var rule = rule0
@@ -679,7 +680,7 @@ func blendRule(_ w: Float) {
     rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
     rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
     rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
-    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
+    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
 }
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
@@ -832,7 +833,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         }
         // Pinnae (level ≥ 1) carry curvature along their whole length (reference: every pinna arcs); only the
         // stalk's base curvature is the fitted near-straight value.
-        let turn = (level == 0 ? rule.baseTurn : rule.baseTurn1) * (1 - c) + rule.maxTurn * c
+        let turn = (level == 0 ? rule.baseTurn : rule.baseTurn1) * (1 - c) + (level == 0 ? rule.maxTurn : rule.maxTurn1) * c
         d = rotate(d, about: N, -turn * handed)                         // curl clockwise seen from +N (× handedness)
         turnAcc += turn
         prev = p; p = p1
@@ -865,10 +866,10 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let aspect = Float(outW) / Float(outH)
     let wO = unfurl * unfurl * (3 - 2 * unfurl)                    // eased blend coil-fit → open-fit
     blendRule(wO)
-    let front = envF("F0", 0.1235) + (envF("FMAX", 0.851) - envF("F0", 0.1235)) * unfurl
+    let front = envF("F0", 0.1235) + (envF("FMAX", 0.85) - envF("F0", 0.1235)) * unfurl
     let base = SIMD3<Float>(envF("BX", -0.377), envF("BY", -0.700), 0)
-    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", -0.0005) - envF("LEAN", 0.037)) * wO + sway
-    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 0.6586) - envF("SEG", 0.193)) * wO
+    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.1225) - envF("LEAN", 0.037)) * wO + sway
+    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 2.0207) - envF("SEG", 0.193)) * wO
     let dir0 = SIMD3<Float>(sin(lean), cos(lean), 0)
     let tb = Date()
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
