@@ -60,7 +60,7 @@ static Hit spiralTube(float3 p, constant P& P_, float bo) {
         float phk = ph + 2.0 * PI * min(floor(t) + float(dk), kmax);   // (no windings past the outer end: it was a tunnel)
         float rr = R0 * exp(b * (phk - phi0));
         // the coil is a broad flat BAND of leaves (reference), not a round tube: elliptical cross-section
-        float tp = smoothstep(phi0, phi0 - 1.4, phk);                // the band narrows into the stalk at its outer end (was a cut-off wedge)
+        float tp = smoothstep(phi0, phi0 - (bo > 0.0 ? 0.3 : 1.4), phk);   // root taper: short on pinnae (a long one left only thin spikes)
         // LEAFLETS CUT INTO THE OUTLINE: the band swells at each leaflet and notches between them (toothed, not a printed strip);
         // leaflet spacing follows log-radius, so it is the same count per scale on the coil and on every pinna
         float sig = log(rr / R0) / b, cu = fract(sig * P_.misc.w);   // by this spiral's OWN growth: pinnae had 2.25× too many leaflets (rope)
@@ -70,9 +70,7 @@ static Hit spiralTube(float3 p, constant P& P_, float bo) {
         float d = (length(float2(dr / a, p.z / c)) - 1.0) * min(a, c);
         if (d < h.d) { h.d = d; h.phi = sig + phi0; h.rr = rr; h.v = clamp(dr / a, -1.0, 1.0); }   // phi: leaflet coordinate
     }
-    float3 E = float3(R0 * cos(phi0), R0 * sin(phi0), 0.0);       // ROUNDED END: the outer end was a flat cut (joint wedges)
-    float de = length(p - E) - k * R0;
-    if (de < h.d) { h.d = de; h.phi = phi0; h.rr = R0; h.v = 0.0; }
+    // (no end-cap ball: Matt — "branches should not be connected to the tree with a circle"; the band already tapers to its root)
     return h;
 }
 
@@ -82,7 +80,7 @@ static float stalkDist(float3 p, constant P& P_, thread float& tOut) {
     float R0 = P_.sp.x, phi0 = P_.sp.w, b = P_.sp.y;
     float2 a = R0 * float2(cos(phi0), sin(phi0));
     float2 u0 = float2(cos(phi0), sin(phi0)), tout = normalize(b * u0 + float2(-u0.y, u0.x));   // outward along the spiral
-    float2 e = P_.stalk.xy, c = a + tout * P_.stalk.z;
+    float2 e = P_.stalk.xy, c = a + tout * P_.stalk.z + float2(-0.55, 0.0);   // bowed, like the reference's stalk
     float best = 1e9, bt = 0.0;
     for (int i = 0; i <= 24; i++) { float t = float(i) / 24.0; float dd = length(p.xy - bez(a, c, e, t)); if (dd < best) { best = dd; bt = t; } }
     for (int it = 0; it < 4; it++) {
@@ -92,73 +90,78 @@ static float stalkDist(float3 p, constant P& P_, thread float& tOut) {
         if (d1 < best) { best = d1; bt = t1; } if (d2 < best) { best = d2; bt = t2; }
     }
     tOut = bt;
-    float rad = P_.misc2.w * P_.sp.z * R0 * (1.0 + P_.stalk.w * bt);   // a thin glass rachis, mostly hidden by its pinnae
+    float rad = P_.misc2.w * P_.rim.x * R0 * (1.0 + P_.stalk.w * bt);   // the rachis continued, thickening toward the base
     return length(float2(best, p.z)) - rad;
 }
 
 // The whole scene: the crozier + its stalk, and rim croziers (copies) descended into level by level.
+// THE FIDDLEHEAD = ONE RULE: a rachis that rolls into a log spiral and continues as the stalk, lined on both sides with
+// pinnae — small croziers (the same leaf band, its own looser spiral) scaled to the local coil radius. The outer pinnae's
+// curled tips ARE the ring of rim croziers; the inner pinnae are the amber-lit leaves; down the stalk the same pinnae,
+// longer, curl at their tips. (A separate band + rim + pipe stalk read as an assembled object.)
+static float rachisSpiral(float3 p, constant P& P_, thread float2& ph2) {
+    float R0 = P_.sp.x, b = P_.sp.y, phi0 = P_.sp.w, cosA = 1.0 / sqrt(1.0 + b * b);
+    float r = length(p.xy), ph = atan2(p.y, p.x);
+    float t = (log(max(r, 1e-6) / R0) / b + phi0 - ph) / (2.0 * PI), kmax = floor((phi0 - ph) / (2.0 * PI));
+    float best = 1e9;
+    for (int dk = 0; dk <= 1; dk++) {
+        float phk = ph + 2.0 * PI * min(floor(t) + float(dk), kmax), rr = R0 * exp(b * (phk - phi0));
+        float d = length(float2((r - rr) * cosA, p.z)) - P_.rim.x * rr;
+        ph2[dk] = phk;
+        best = min(best, d);
+    }
+    return best;
+}
+
+static Hit pinna(float3 p, float2 attach, float2 dir, float s, float side, constant P& P_) {
+    float R0 = P_.sp.x, phi0 = P_.sp.w, bp = P_.misc2.z;
+    float2 u0 = float2(cos(phi0), sin(phi0)), P0 = R0 * u0, tinB = -normalize(bp * u0 + float2(-u0.y, u0.x));
+    float ang = atan2(dir.y, dir.x) - atan2(tinB.y, tinB.x);
+    float2 ql = rot2(-ang) * (p.xy - attach) / s;
+    if (side < 0.0) { ql = reflect(ql, normalize(float2(-tinB.y, tinB.x))); }        // mirrored pair
+    Hit ch = spiralTube(float3(ql + P0, p.z / s), P_, bp);
+    ch.d *= s; ch.ws = s; ch.lvl = 0.0;
+    return ch;
+}
+
 static Hit scene(float3 p, constant P& P_) {
-    Hit best = spiralTube(p, P_, 0.0);
+    float R0 = P_.sp.x, b = P_.sp.y, phi0 = P_.sp.w;
+    Hit best; best.d = 1e9; best.phi = phi0; best.rr = R0; best.lvl = -1.0; best.v = 0.0; best.ws = 1.0;
+    // the rachis: spiral + stalk (smoothly joined)
+    float2 ph2; float dr = rachisSpiral(p, P_, ph2);
     float tS; float ds = stalkDist(p, P_, tS);
-    // smooth union with the band (a hard min left a black wedge at the join); the stalk is shaded as a stalk (lvl −1)
-    float hk = clamp(0.5 + 0.5 * (ds - best.d) / 0.08, 0.0, 1.0), dj = mix(ds, best.d, hk) - 0.08 * hk * (1.0 - hk);
-    if (ds < best.d) { best.phi = P_.sp.w; best.rr = P_.sp.x; best.lvl = -1.0; best.v = 0.0; }
-    best.d = dj;
-    {   // LEAFY LOWER FROND: pinnae along the stalk = croziers (the same leaf band) on alternating sides, bigger toward the
-        // base, leaning up toward the coil and mirrored left/right — the reference's lower frond, half the image
-        float R0 = P_.sp.x, b = P_.sp.y, phi0 = P_.sp.w;
-        float2 u0 = float2(cos(phi0), sin(phi0)), tin0 = -normalize(b * u0 + float2(-u0.y, u0.x)), P0 = R0 * u0;
-        float2 tout = -tin0, a = P0, e = P_.stalk.xy, c = a + normalize(b * u0 + float2(-u0.y, u0.x)) * P_.stalk.z;
-        float NP = P_.misc2.x, dt = 0.8 / (NP - 1.0), bp = P_.misc2.z;
-        float2 tinP = -normalize(bp * u0 + float2(-u0.y, u0.x));           // the pinna's own root direction (its looser spiral)
-        for (int j = 0; j < 12; j++) {                                      // ALL pinnae (two nearest clipped big ones into shingles)
-            if (float(j) >= NP) { break; }
-            float ii = float(j), tp = 0.1 + ii * dt, side = fmod(ii, 2.0) < 0.5 ? 1.0 : -1.0;
-            float2 B = bez(a, c, e, tp), T = normalize(2.0 * (1.0 - tp) * (c - a) + 2.0 * tp * (e - c)), Nn = float2(-T.y, T.x);
-            float s = P_.misc2.y * (0.45 + 0.9 * tp);
-            if (length(p.xy - B) > s * R0 * 2.4) { continue; }              // cheap bound
-            float2 dir = normalize(side * Nn - 0.7 * T), attach = B + side * Nn * P_.sp.z * R0;
-            float ang = atan2(dir.y, dir.x) - atan2(tinP.y, tinP.x);
-            float2 ql = rot2(-ang) * (p.xy - attach) / s;
-            if (side < 0.0) { ql = reflect(ql, normalize(float2(-tinP.y, tinP.x))); }   // bilateral: mirrored pinnae
-            Hit ch = spiralTube(float3(ql + P0, p.z / s), P_, bp);
-            if (ch.d * s < best.d) { best.d = ch.d * s; best.phi = ch.phi; best.rr = ch.rr; best.lvl = 0.0; best.v = ch.v; best.ws = s; }
-            // TIP CROZIER: a log spiral can't run straight then curl tight, so every pinna gets a small crozier (the coil's own
-            // spiral) at its tip, continuing its curve — "every pinna ends in a crozier" (reference)
-            {
-                float rt = 0.16 * R0, pht = phi0 - log(R0 / rt) / bp;
-                float2 ut = float2(cos(pht), sin(pht)), Tt = rt * ut, tdir = -normalize(bp * ut + float2(-ut.y, ut.x));
-                float st = 0.30, angt = atan2(tdir.y, tdir.x) - atan2(tin0.y, tin0.x);
-                float2 qt = rot2(-angt) * (ql + P0 - Tt) / st + P0;
-                Hit ct = spiralTube(float3(qt, p.z / (s * st)), P_, 0.0);
-                if (ct.d * s * st < best.d) { best.d = ct.d * s * st; best.phi = ct.phi; best.rr = ct.rr; best.lvl = 0.0; best.v = ct.v; best.ws = s * st; }
+    float hk = clamp(0.5 + 0.5 * (ds - dr) / 0.05, 0.0, 1.0);
+    best.d = mix(ds, dr, hk) - 0.05 * hk * (1.0 - hk);
+    // coil pinnae: the two nearest windings × the two nearest pinna sites × both sides
+    for (int w = 0; w <= 1; w++) {
+        float cf = floor((ph2[w] - phi0) / P_.rim.y);
+        for (int j = 0; j <= 1; j++) {
+            float phc = phi0 + min(cf + float(j), -1.0) * P_.rim.y, rc = R0 * exp(b * (phc - phi0));
+            float2 uc = float2(cos(phc), sin(phc)), C = uc * rc, Tin = -normalize(b * uc + float2(-uc.y, uc.x));
+            float s = P_.rim.z * rc / R0;
+            if (length(p.xy - C) > s * R0 * 2.6) { continue; }
+            for (int sd = 0; sd <= 1; sd++) {
+                float side = sd == 0 ? 1.0 : -1.0;
+                float2 dir = normalize(side * uc + Tin * P_.rim.w);          // lean toward the coil's tip
+                Hit ch = pinna(p, C + side * uc * P_.rim.x * rc, dir, s, side, P_);
+                if (ch.d < best.d) { best = ch; best.v = side > 0.0 ? ch.v : -ch.v; }
             }
         }
     }
-    float3 q = p; float sc = 1.0;
-    Hit cur = spiralTube(q, P_, 0.0);
-    float R0 = P_.sp.x, b = P_.sp.y, k = P_.sp.z, phi0 = P_.sp.w;
-    float2 u0 = float2(cos(phi0), sin(phi0)), tin0 = -normalize(b * u0 + float2(-u0.y, u0.x));   // child's inward travel at its root
-    float2 P0 = R0 * u0;
-    for (int lv = 1; lv <= int(P_.rim.z); lv++) {
-        // the two nearest rim children along the winding the point sits on (one child only clipped neighbours into wedges)
-        float cf = floor((cur.phi - phi0) / P_.rim.y);
-        Hit bestC; bestC.d = 1e9; float3 bestQ = q; float bestS = 1.0;
-        for (int j = 0; j <= 1; j++) {
-            float phc = phi0 + min(cf + float(j), -ceil(1.4 / P_.rim.y)) * P_.rim.y;   // only where the band is full width (they floated off its tapered end)
-            float rc = R0 * exp(b * (phc - phi0));
-            float2 uc = float2(cos(phc), sin(phc));
-            float2 attach = uc * rc * (1.0 + P_.misc.y * 0.85);   // on the band's outer edge
-            float s = P_.rim.x * rc / R0;                           // child scale
-            float ang = atan2(uc.y, uc.x) + P_.rim.w - atan2(tin0.y, tin0.x);   // leaves the rim along the outward normal
-            float3 ql = float3(rot2(-ang) * (q.xy - attach) / s + P0, q.z / s);
-            Hit ch = spiralTube(ql, P_, 0.0);
-            if (ch.d * s < bestC.d * bestS) { bestC = ch; bestQ = ql; bestS = s; }
+    // stalk pinnae: longer down the stalk, alternating sides, leaning up toward the coil
+    {
+        float2 u0 = float2(cos(phi0), sin(phi0)), a = R0 * u0, tout = normalize(b * u0 + float2(-u0.y, u0.x));
+        float2 e = P_.stalk.xy, c = a + tout * P_.stalk.z + float2(-0.55, 0.0);
+        float NP = P_.misc2.x, dt = 0.85 / max(NP - 1.0, 1.0);
+        for (int j = 0; j < 12; j++) {
+            if (float(j) >= NP) { break; }
+            float tp = 0.06 + float(j) * dt, side = fmod(float(j), 2.0) < 0.5 ? 1.0 : -1.0;
+            float2 B = bez(a, c, e, tp), T = normalize(2.0 * (1.0 - tp) * (c - a) + 2.0 * tp * (e - c)), Nn = float2(-T.y, T.x);
+            float s = P_.misc2.y * (1.0 + 1.2 * tp);
+            if (length(p.xy - B) > s * R0 * 2.6) { continue; }
+            Hit ch = pinna(p, B + side * Nn * P_.rim.x * R0, normalize(side * Nn - 0.6 * T), s, side, P_);
+            if (ch.d < best.d) { best = ch; }
         }
-        sc *= bestS;
-        float d = bestC.d * sc;
-        if (d < best.d) { best.d = d; best.phi = bestC.phi; best.rr = bestC.rr; best.lvl = float(lv); best.v = bestC.v; best.ws = sc; }
-        q = bestQ; cur = bestC;
     }
     return best;
 }
@@ -257,8 +260,8 @@ kernel void render(constant P& P_ [[buffer(0)]], texture2d<float, access::write>
         float vein = smoothstep(0.03, 0.0, abs(cell)) + smoothstep(0.08, 0.0, abs(fract(rn * 9.0 + abs(cell) * 3.0) - 0.5) - 0.42) * 0.5;
         float heat = exp(-rn * 2.6);
         float inside = smoothstep(RS, RS * 0.8, rc);                 // nothing outside the star (it lifted the whole frame)
-        col += float3(1.0, 0.45, 0.08) * leaf * (0.6 + 0.8 * vein) * 5.0 * heat * inside * P_.lit.x;
-        col += float3(1.0, 0.9, 0.7) * exp(-rc * rc / (0.012 * RS * RS)) * 22.0 * P_.lit.x;   // the hot eye: white
+        col += float3(1.0, 0.45, 0.08) * 0.0 * leaf * vein * heat * inside;   // (the leaf star read as a sunflower: the coil's own pinnae carry the core)
+        col += float3(1.0, 0.75, 0.4) * exp(-rc * rc / (0.03 * RS * RS)) * 6.0 * P_.lit.x;    // a warm glow in the eye
     }
     float3 coreP = float3(0.0, 0.0, 0.25);                            // amber light in the coil's eye, a little behind
     // GLASS: up to 3 surface layers composited front to back — each partly see-through across its face, opaque and bright
@@ -334,11 +337,11 @@ func render(unfurl u: Float, time t: Float) {
     // unfurl: the spiral loosens (b grows) and its outer end unrolls
     let b = envF("B", 0.20) + envF("B_O", 0.45) * u
     var p = Params(sp: [envF("R0", 1.0), b, envF("K", 0.085), envF("PHI0", Float.pi * 1.05)],
-                   rim: [envF("RIMS", 0.14), envF("RIMD", 0.13), envF("DEPTH", 2), envF("RIMLEAN", 0.0)],
-                   cam: [envF("CX", -0.66), envF("CY", -0.66), envF("VIEW", 2.2), envF("PERSP", 0.15)],
+                   rim: [envF("RIMS", 0.035), envF("RIMD", 0.11), envF("DEPTH", 0.55), envF("RIMLEAN", 0.55)],
+                   cam: [envF("CX", -0.25), envF("CY", -0.35), envF("VIEW", 1.55), envF("PERSP", 0.15)],
                    lit: [envF("CORE", 1.6), envF("IRID", 0.5), envF("SPARK", 0.75), envF("GLOW", 0.6)],
-                   stalk: [envF("SBX", -1.5), envF("SBY", -3.0), envF("SBEND", 1.4), envF("SGROW", 0.6)],
-                   misc: [t, envF("KW", 0.32), envF("KT", 0.07), envF("LEAFN", 7.0)], misc2: [envF("NPIN", 8), envF("PINS", 1.45), envF("PINB", 0.45), envF("STALKR", 0.35)])
+                   stalk: [envF("SBX", -0.6), envF("SBY", -2.1), envF("SBEND", 1.0), envF("SGROW", 0.8)],
+                   misc: [t, envF("KW", 0.32), envF("KT", 0.07), envF("LEAFN", 11)], misc2: [envF("NPIN", 8), envF("PINS", 0.30), envF("PINB", 0.33), envF("STALKR", 1.0)])
     let cb = queue.makeCommandBuffer()!, ce = cb.makeComputeCommandEncoder()!
     let full = MTLSize(width: W, height: H, depth: 1), quarter = MTLSize(width: W / 4, height: H / 4, depth: 1), tg = MTLSize(width: 16, height: 16, depth: 1)
     ce.setComputePipelineState(pso); ce.setBytes(&p, length: MemoryLayout<Params>.stride, index: 0); ce.setTexture(hdrTex, index: 0)
