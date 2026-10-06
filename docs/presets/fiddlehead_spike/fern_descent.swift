@@ -309,7 +309,7 @@ static float3 pal(float x, constant float4* PL) {
     float u = abs(fract(x * 0.5) * 2.0 - 1.0) * 5.0; int i = min(int(u), 4); float f = smoothstep(0.0, 1.0, u - float(i));
     float3 c = pow(mix(PL[i].rgb, PL[i + 1].rgb, f), float3(2.2));
     float Y = dot(c, float3(0.2126, 0.7152, 0.0722));
-    return c * clamp(0.18 / max(Y, 1e-3), 0.45, 2.2);                     // even brightness along the palette (gold/emerald ran 2-3× brighter than cobalt)
+    return c * clamp(\(envF("LUM", 0.08)) / max(Y, 1e-3), 0.3, 1.3);                   // even brightness: bright hues come DOWN to the dark ones                     // even brightness along the palette (gold/emerald ran 2-3× brighter than cobalt)
 }
 static float hsh(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
 
@@ -338,8 +338,8 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
         int np = int(P.tm.w);
         for (int i = 0; i < np; i++) {
             float dphi = pulses[i].x - r.phi;
-            float head = exp(-dphi * dphi / 0.0016), tail = dphi > 0.0 ? exp(-dphi / 0.18) : 0.0;
-            pulse += pulses[i].y * (head * 1.6 + tail * 0.5);
+            float head = exp(-dphi * dphi / 0.0016), tail = dphi > 0.0 ? exp(-dphi / 0.08) : 0.0;
+            pulse += pulses[i].y * (head * 1.0 + tail * 0.25);
         }
         float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phiC * P.au.w * 2.0 - P.tm.z * t * 2.0));   // light rides the colour bands
         float shimmer = step(1.0 - 0.25 * P.au.y, hsh(float2(r.id * 97.0 + floor(r.s * 9.0), floor(t * 18.0))));
@@ -357,7 +357,7 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
         // jewel read: dark translucent body, glowing toward its midrib; the LIGHT lives on edges and veins
         float3 tissue = c0 * relief * (0.18 + 0.45 * mid * mid) * (0.5 + 0.9 * ripple) * (0.8 + 0.4 * P.au.x);
         float wv = max(r.vein, r.nvein * 0.7);
-        float3 glow = cv * wv * (0.9 + 1.6 * P.au.x * ripple + 7.0 * pulse);
+        float3 glow = cv * wv * (0.7 + 2.2 * P.au.x * ripple + 7.0 * pulse);   // bass swells the ripple light
         float rim = smoothstep(-pix * 2.5, -pix * 0.2, r.d) * cov;
         float3 edge = c1 * rim * (1.1 + 3.0 * pulse + 2.0 * shimmer);
         float3 col = tissue * (1.0 + 2.5 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.4;
@@ -472,6 +472,7 @@ let palettes: [[SIMD4<Float>]] = [
 var palSel = palettes[min(Int(envF("PAL", 4)), palettes.count - 1)]
 let palBuf = device.makeBuffer(bytes: &palSel, length: MemoryLayout<SIMD4<Float>>.stride * 6, options: .storageModeShared)!
 let pulseBuf = device.makeBuffer(length: MemoryLayout<SIMD2<Float>>.stride * 32, options: .storageModeShared)!
+var exposure: Float = envF("EXPO", 2.8)
 func renderFrame() -> Double {
     let cb = queue.makeCommandBuffer()!, ce = cb.makeComputeCommandEncoder()!
     ce.setComputePipelineState(renderPSO); ce.setTexture(F, index: 0); ce.setTexture(T, index: 1); ce.setTexture(C, index: 2); ce.setTexture(hdrT, index: 3)
@@ -483,7 +484,7 @@ func renderFrame() -> Double {
     ce.setComputePipelineState(blurPSO)
     ce.setTexture(bA, index: 0); ce.setTexture(bB, index: 1); ce.setBytes(&dh, length: 8, index: 0); ce.dispatchThreads(q4, threadsPerThreadgroup: tg)
     ce.setTexture(bB, index: 0); ce.setTexture(bA, index: 1); ce.setBytes(&dv, length: 8, index: 0); ce.dispatchThreads(q4, threadsPerThreadgroup: tg)
-    var g = SIMD4<Float>(envF("BLOOM", 1.0), envF("WHITE", 2.5), envF("EXPO", 2.0), 0)
+    var g = SIMD4<Float>(envF("BLOOM", 1.0), envF("WHITE", 2.5), exposure, 0)
     ce.setComputePipelineState(composePSO); ce.setTexture(hdrT, index: 0); ce.setTexture(bA, index: 1); ce.setTexture(outT, index: 2)
     ce.setBytes(&g, length: 16, index: 0); ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: tg)
     ce.endEncoding()
@@ -537,20 +538,40 @@ func setZoom(time t: Float) {
     P.zc = [x.x, x.y, V0 * pow(sigStar, frac), rotEnd * frac]
     P.tm.x = t; P.tm.y = (cyc - Float(lifts)) * sStar; P.tm.z = envF("FLOW", 0.12)
 }
-// stand-in music: a beat at BPM with accents, a bass envelope, treble shimmer
-func setMusic(time t: Float) {
-    let bpm = envF("BPM", 112), beat = 60 / bpm
-    var arr: [SIMD2<Float>] = []
-    var tb = floor(t / beat) * beat
-    while tb > t - 8 && arr.count < 32 {
-        let n = Int(tb / beat + 0.5), amp: Float = n % 4 == 0 ? 1.0 : (n % 2 == 0 ? 0.55 : 0.3)
-        arr.append(SIMD2((tb / zoomPeriod - 1) * sStar + pulseSpeed * (t - tb), amp))
-        tb -= beat
+// MUSIC. DRIVE=<prefix> reads tools/fern_drive.py output: <prefix>.csv (per 30 fps frame: bass dev, treble dev, energy)
+// and <prefix>.beats (grid beat time, accent). Without it: a stand-in beat at BPM.
+// Continuous energy is the primary driver (ripple ← bass, shimmer ← treble, overall glow ← loudness); pulses ride the
+// fitted beat GRID (never raw onsets), each as strong as its beat's accent.
+var driveRows: [SIMD3<Float>] = [], driveBeats: [SIMD2<Float>] = []
+if let pre = env["DRIVE"] {
+    func rows(_ path: String) -> [[Float]] {
+        (try? String(contentsOfFile: path, encoding: .utf8))?.split(separator: "\n").map { $0.split(separator: ",").compactMap { Float($0) } } ?? []
     }
-    memcpy(pulseBuf.contents(), arr, MemoryLayout<SIMD2<Float>>.stride * arr.count)
+    driveRows = rows(pre + ".csv").filter { $0.count == 3 }.map { SIMD3($0[0], $0[1], $0[2]) }
+    driveBeats = rows(pre + ".beats").filter { $0.count == 2 }.map { SIMD2($0[0], $0[1]) }
+    FileHandle.standardError.write("drive: \(driveRows.count) frames, \(driveBeats.count) beats\n".data(using: .utf8)!)
+}
+func setMusic(time t: Float) {
+    var arr: [SIMD2<Float>] = []
+    if driveBeats.isEmpty {
+        let beat = 60 / envF("BPM", 112)
+        var tb = floor(t / beat) * beat
+        while tb > t - 8 && arr.count < 32 {
+            let n = Int(tb / beat + 0.5), amp: Float = n % 4 == 0 ? 1.0 : (n % 2 == 0 ? 0.55 : 0.3)
+            arr.append(SIMD2((tb / zoomPeriod - 1) * sStar + pulseSpeed * (t - tb), amp)); tb -= beat
+        }
+        let ph = t.truncatingRemainder(dividingBy: beat)
+        P.au.x = exp(-ph / 0.3); P.au.y = 0.5 + 0.5 * sin(t * 3.1) * sin(t * 1.7)
+    } else {
+        for b in driveBeats.reversed() where b.x <= t && b.x > t - 8 && arr.count < 32 {
+            arr.append(SIMD2((b.x / zoomPeriod - 1) * sStar + pulseSpeed * (t - b.x + envF("LEAD", 0.0)), b.y * b.y * 0.7))   // accents squared: downbeats stand out
+        }
+        let r = driveRows[min(max(Int(t * 30), 0), driveRows.count - 1)]
+        P.au.x = r.x; P.au.y = r.y
+        exposure = envF("EXPO", 2.8) * (0.55 + 0.55 * r.z)               // quiet passages dim, loud ones bloom
+    }
+    memcpy(pulseBuf.contents(), arr, MemoryLayout<SIMD2<Float>>.stride * max(arr.count, 1))
     P.tm.w = Float(arr.count)
-    let ph = t.truncatingRemainder(dividingBy: beat)
-    P.au.x = exp(-ph / 0.3); P.au.y = 0.5 + 0.5 * sin(t * 3.1) * sin(t * 1.7)
     P.au.z = envF("HUE", 0.33)
 }
 
@@ -563,8 +584,9 @@ if args.count > 2 && args[1] == "still" {
 } else if args.count > 3 && args[1] == "video" {
     let secs = Float(args[3])!, fps: Float = 30
     let ff = Process(); ff.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
-    ff.arguments = ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "\(W)x\(H)", "-r", "30", "-i", "-",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", args[2]]
+    ff.arguments = ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", "\(W)x\(H)", "-r", "30", "-i", "-"]
+        + (env["AUDIO"].map { ["-i", $0, "-c:a", "aac", "-b:a", "192k", "-shortest"] } ?? [])
+        + ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", args[2]]
     let pipe = Pipe(); ff.standardInput = pipe; try! ff.run()
     var worst = 0.0
     for i in 0..<Int(secs * fps) {
