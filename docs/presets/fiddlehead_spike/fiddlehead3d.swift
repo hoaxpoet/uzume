@@ -661,7 +661,7 @@ let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "du
 let rule0 = Rule()
 // The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
 // frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
-let openFit: [String: Float] = ["SIG_O": 0.8387, "SIGS_O": 0.7698, "ALPHA_O": 0.7928, "BT_O": 0.0313, "BT1_O": 0.0261, "PINF_O": 0.5992, "TURN_O": 0.1767, "TURN1_O": 0.3475, "SIG1_O": 0.97, "SIGS1_O": 0.25, "ALPHA1_O": 0.8, "CURLON_O": -1.0, "KAPMIN_O": 1.0]   // fitted to 02_reference_open (fitopen.py)
+let openFit: [String: Float] = ["SIG_O": 0.8387, "SIGS_O": 0.7698, "ALPHA_O": 0.7928, "BT_O": 0.0313, "BT1_O": 0.0261, "PINF_O": 0.5992, "TURN_O": 0.1767, "TURN1_O": 0.3475, "SIG1_O": 0.97, "SIGS1_O": 0.35, "ALPHA1_O": 0.8, "CURLON_O": -1.0, "KAPMIN_O": 1.0]   // fitted to 02_reference_open (fitopen.py)
 let ruleO: Rule = {
     var r = rule0
     func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", openFit[k + "_O"] ?? v) }
