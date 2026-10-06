@@ -313,7 +313,7 @@ var lastMs = 0.0
 
 func render(unfurl u: Float, time t: Float) {
     let theta = uprightTheta(u, t)
-    let (lo, hi) = fixedFrame ?? extent(u: u, t: t, theta: theta), fill = envF("FILL", 0.85)   // films: eased frame (no re-framing jitter)
+    let (lo, hi) = fixedFrame ?? extent(u: u, t: t, theta: theta), fill = envF("FILL", 0.8)   // films: eased frame (no re-framing jitter)
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
     if envF("DEBUGEXT", 0) > 0 { FileHandle.standardError.write("extent lo \(lo) hi \(hi) scale \(scale)\n".data(using: .utf8)!) }
     var p = Params(ww: 0, w: 0, scale: scale, mirror: envF("MIRROR", 1), centre: (lo + hi) * 0.5, iters: Int32(envF("ITERS", 280)),
@@ -395,8 +395,13 @@ case "drive":   // drive <csv: u,sway,spark per 30 fps frame> <audio> <out.mp4> 
         driveSway = r[1]; driveSpark = r[2]
         if follow {
             let tt = Float(i) / 30, e = extent(u: uS, t: tt, theta: uprightTheta(uS, tt))
-            let k: Float = 0.022
-            cam = cam.map { ($0.0 + (e.0 - $0.0) * k, $0.1 + (e.1 - $0.1) * k) } ?? e
+            // zoom OUT fast (the frond must never outgrow the frame), zoom IN slowly (no pumping); a symmetric 1.5 s ease
+            // let an opening frond run off the top in 329 of 897 frames
+            func ease(_ c: Float, _ t: Float, grow: Bool) -> Float { c + (t - c) * (grow ? 0.5 : 0.022) }
+            cam = cam.map { c in
+                (SIMD2(ease(c.0.x, e.0.x, grow: e.0.x < c.0.x), ease(c.0.y, e.0.y, grow: e.0.y < c.0.y)),
+                 SIMD2(ease(c.1.x, e.1.x, grow: e.1.x > c.1.x), ease(c.1.y, e.1.y, grow: e.1.y > c.1.y)))
+            } ?? e
             fixedFrame = cam
         }
         render(unfurl: uS, time: Float(i) / 30); worst = max(worst, lastMs); total += lastMs
