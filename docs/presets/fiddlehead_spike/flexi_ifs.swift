@@ -76,9 +76,7 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
     int i = 0;
     while (i < p.iters) {
         float2x2 A = float2x2(1.0); float2 T = 0.0;
-        // 1 thread in 8 draws a near-focus foreground coil (bottom corners, as in the reference) instead of the hero
-        bool fgw = (gid & 3u) == 3u; int fgk = int((gid >> 2) & 1u);
-        int lvl = 0, run = 0, n = 0, side0 = 0, j0 = 0; float ul = fgw ? 0.0 : p.uf.x; uint bh = fgw ? 0x51u + uint(fgk) : 0x2545u;
+        int lvl = 0, run = 0, n = 0, side0 = 0, j0 = 0; float ul = p.uf.x; uint bh = 0x2545u;
         float F = frontAt(ul, p), swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3), ph = 0.0;   // per chain: front, sway, wave phase
         for (; i < p.iters; i++) {
             // the current chain's next joint: its curl, then Flexi's main map λR(X − tm) (heading w = −5·ww) and its fixed
@@ -90,43 +88,20 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
             float4 m4 = mix(jt[2 * k0], jt[2 * k0 + 2], fr), tc = mix(jt[2 * k0 + 1], jt[2 * k0 + 3], fr);
             float2x2 M = float2x2(m4.xy, m4.zw); float2 tmv = tc.xy, C = tc.zw;
             // seed piece: the arc from this joint to the next (a ∈ [0,1]); the frond's own base continues as a stipe
-            bool stipe = !fgw && n == 0 && rnd(s) < p.ext.z;
+            bool stipe = n == 0 && rnd(s) < p.ext.z;
             float a = stipe ? -rnd(s) * p.ext.y : rnd(s), l = rnd(s) * 2.0 - 1.0;
             float aa = max(a, 0.0), g = exp(ln * aa);
             float2 rv = rot(-C, -aa * ww), pos = C + g * rv, tn = g * (ln * rv - ww * float2(-rv.y, rv.x));
             float2 d = normalize(tn); pos += d * length(tn) * (a - aa);
-            float2 x = A * (pos + float2(-d.y, d.x) * l * p.sd.x * (fgw ? 3.0 : 1.0) * min(g, 1.0)) + T;   // near-focus coils: thicker
+            float2 x = A * (pos + float2(-d.y, d.x) * l * p.sd.x * min(g, 1.0)) + T;
             float cc = 1.0 - abs(l);
             float b = (stipe ? cc * smoothstep(-p.ext.y, -0.5 * p.ext.y, a) * p.tone.w : cc) - 0.015 * float(n);
-            if (fgw && b > 0.0) {                                       // foreground coil: fixed screen place, dimmer, sharp
-                float2 fx = float2(x.x * p.mirror, -x.y) - p.fg.yz;
-                float2 q = rot(fx, fgk == 0 ? 0.5 : -0.9) * p.fg.x * (fgk == 0 ? 1.0 : 0.85)
-                         + float2(fgk == 0 ? 0.10 * \(W).0 : 0.92 * \(W).0, fgk == 0 ? 0.16 * \(H).0 : 0.12 * \(H).0);
-                if (q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
-                    uint idx = uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x), bq = uint(b * p.fg.w * 4095.0);
-                    atomic_fetch_max_explicit(&img[idx], (bq << 20) | (uint(min(lvl == 0 ? run : j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(min(run, 63)) << 3) | (uint(side0) << 2) | 2u, memory_order_relaxed);
-                }
-            } else if (b > 0.0) {
+            if (b > 0.0) {
                 float2 q = (rot(float2(x.x * p.mirror, -x.y), p.ext.w) - p.centre) * p.scale + float2(\(W / 2).0 + p.wave.w, \(H / 2).0);
                 if (q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
-                    // packed: brightness 12 | generations 7 | level 4 | joint along its own chain 6 | top-level side 1 | fg 1
+                    // packed: brightness 12 | stalk joint the point hangs from 7 | level 4 | joint along its own chain 6 | side 1
                     uint idx = uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x);
                     atomic_fetch_max_explicit(&img[idx], (uint(b * 4095.0) << 20) | (uint(min(lvl == 0 ? run : j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(min(run, 63)) << 3) | (uint(side0) << 2), memory_order_relaxed);
-                }
-                // background: the same frond as out-of-focus GHOSTS (larger, turned, off to the sides, slowly drifting) at
-                // quarter resolution — blurred later into a garden of glowing ferns behind the hero frond
-                if ((i & 3) == 0) {
-                    // midground silhouettes (reference: left of centre and lower right, 15–25 % of frame height)
-                    const float4 gh[3] = { float4(0.26, 0.35, 0.30, 0.45), float4(0.22, -0.5, 0.80, 0.22), float4(0.16, 0.9, 0.12, 0.62) };   // scale, turn, x, y (frame fractions)
-                    float2 ctr = float2(\(W / 2).0, \(H / 2).0);
-                    for (int k = 0; k < 3; k++) {
-                        float2 gq = gh[k].x * rot(q - ctr, gh[k].y + 0.03 * sin(p.mo.x * 0.3 + float(k) * 2.1))
-                                  + float2(gh[k].z * \(W).0, gh[k].w * \(H).0);
-                        gq *= 0.25;
-                        if (gq.x >= 0.0 && gq.y >= 0.0 && gq.x < \(W / 4).0 && gq.y < \(H / 4).0) {
-                            atomic_fetch_max_explicit(&bg[uint(\(H / 4).0 - 1.0 - gq.y) * \(W / 4)u + uint(gq.x)], uint(b * 65535.0), memory_order_relaxed);
-                        }
-                    }
                 }
             }
             if (n >= 66) { i++; break; }                                // Flexi's fade has reached zero
@@ -187,8 +162,10 @@ kernel void tone(device const uint* img [[buffer(0)]], constant P& p [[buffer(1)
         if (e >= 0.0 && (v & 2u) == 0u && lvl <= 1u) { float z = (j0 + 0.35 * float(lvl == 0u ? 0u : run) - p.pl2.x * e) / p.pl2.y; pl += exp(-z * z) * exp(-e / 3.0); }
     }
     col += float3(1.0, 0.95, 0.82) * pl * p.pl2.z * b;
-    float2 d = (float2(gid) - p.core.xy) / max(p.core.z, 1.0);
-    col += float3(1.0, 0.55, 0.18) * p.core.w * exp(-dot(d, d)) * (0.4 + 0.6 * b);   // warm light inside the coil
+    // warm light AT THE TIP: points hanging from the stalk's last joints (the coil's eye) emit amber; the glow pass blooms
+    // it. Attached to the structure, it follows the tip however hard the frond moves (a CPU-placed glow lagged the sway).
+    float tip = smoothstep(p.core.z - 3.0, p.core.z + 3.0, j0);
+    col = mix(col, float3(1.0, 0.55, 0.18) * pow(b, p.tone.y) * p.tone.z, 0.7 * tip) + float3(1.0, 0.5, 0.15) * p.core.w * tip * b;
     out.write(float4(col, b), gid);
 }
 
@@ -202,12 +179,6 @@ constexpr sampler lin(filter::linear, address::clamp_to_zero);
 kernel void bgblur(device const uint* bg [[buffer(0)]], constant float4& t [[buffer(1)]], texture2d<float, access::write> out [[texture(0)]],
                    uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W / 4)u || gid.y >= \(H / 4)u) { return; }
-    float acc = 0.0, ws = 0.0;
-    for (int j = -6; j <= 6; j++) for (int i = -6; i <= 6; i++) {
-        int2 c = clamp(int2(gid) + int2(i, j), int2(0), int2(\(W / 4 - 1), \(H / 4 - 1)));
-        float w = exp(-float(i * i + j * j) / 18.0);
-        acc += float(bg[uint(c.y) * \(W / 4)u + uint(c.x)]) / 65535.0 * w; ws += w;
-    }
     float2 sz = float2(\(W).0, \(H).0), px = (float2(gid) + 0.5) * 4.0, uv = px / sz;
     float3 back = mix(float3(0.003, 0.003, 0.002), float3(0.0005, 0.002, 0.005), smoothstep(0.0, 0.5, uv.y));
     back = mix(back, float3(0.001, 0.001, 0.001), smoothstep(0.6, 1.0, uv.y));
@@ -216,7 +187,6 @@ kernel void bgblur(device const uint* bg [[buffer(0)]], constant float4& t [[buf
         float z = (uv.x - xk - 0.01 * sin(uv.y * 9.0 + float(k))) / wk, amp = 0.3 + 0.7 * float((hk >> 18) & 255u) / 255.0;
         back += float3(0.007, 0.008, 0.007) * amp * exp(-z * z) * smoothstep(0.75, 0.1, uv.y) * (0.6 + 0.4 * sin(uv.y * 23.0 + float(k) * 3.0));
     }
-    back += mix(float3(0.030, 0.075, 0.090), float3(0.060, 0.030, 0.095), uv.x) * t.w * pow(acc / ws, 0.8);   // midground ferns
     const float3 bkc[4] = { float3(80, 150, 160), float3(120, 80, 170), float3(200, 140, 70), float3(110, 160, 80) };
     for (int k = 0; k < 16; k++) {                                // bokeh: few, large, soft (3–7 % of width), 15–35 % opacity
         uint hk = hash(uint(k) * 7919u + 13u);
@@ -322,7 +292,7 @@ func extent(u: Float, t: Float, theta: Float) -> (SIMD2<Float>, SIMD2<Float>) {
         }
     }
     let pad = 0.04 * simd_reduce_max(hi - lo)   // proportional: a fixed 0.03 was 40 % of a coiled frond's height
-    return (lo - pad, hi + pad)
+    return (lo - pad, hi + pad + SIMD2(0, 0.05 * (hi.y - lo.y)))   // + headroom where the tip swings (branch sway phases are hashed on the GPU)
 }
 
 /// Upright turn: the stipe (−x1 of the base joint) points straight down the screen.
@@ -360,7 +330,7 @@ var lastMs = 0.0
 
 func render(unfurl u: Float, time t: Float) {
     let theta = uprightTheta(u, t)
-    let (lo, hi) = fixedFrame ?? extent(u: u, t: t, theta: theta), fill = envF("FILL", 0.85)   // films: eased frame (no re-framing jitter)
+    let (lo, hi) = fixedFrame ?? extent(u: u, t: t, theta: theta), fill = envF("FILL", 0.9)   // films: eased frame (no re-framing jitter)
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
     if envF("DEBUGEXT", 0) > 0 { FileHandle.standardError.write("extent lo \(lo) hi \(hi) scale \(scale)\n".data(using: .utf8)!) }
     var p = Params(ww: 0, w: 0, scale: scale, mirror: envF("MIRROR", 1), centre: (lo + hi) * 0.5, iters: Int32(envF("ITERS", 280)),
@@ -373,14 +343,11 @@ func render(unfurl u: Float, time t: Float) {
     p.sv.z = envF("RUNSPAN", 9)
     p.wave = [envF("WAVEA", 0.035) * (0.5 + driveEnergy), envF("WAVES", 1.6), envF("WAVEJ", 3.0), envF("HEROX", -0.12) * Float(W)]   // .w: hero left of centre (reference)   // bending wave, bigger when loud
     p.pulse = drivePulses; p.pl2 = [envF("PSPEED", 9), envF("PWIDTH", 0.9), envF("PGAIN", 3.75), 0]
-    var fA = matrix_identity_float2x2, fT = SIMD2<Float>(0, 0)          // foreground coils: eye of the fully coiled frond
-    for k in 0..<80 { let j = joint(curlAt(0, Float(k) + 1)); fT = fA * j.t + fT; fA = fA * j.M }
-    p.fg = [envF("FGS", 0.9) * Float(H) / 0.16, fT.x * p.mirror, -fT.y, envF("FGB", 0.9)]
     // warm light at the coil's eye: the limit of the top chain's joints
     var A = matrix_identity_float2x2, T = SIMD2<Float>(0, 0)
     for k in 0..<80 { let j = joint(curlAt(u, Float(k) + 1) + sway(t)); T = A * j.t + T; A = A * j.M }
     let fs = (rot(SIMD2(T.x * p.mirror, -T.y), theta) - p.centre) * scale + SIMD2(Float(W / 2) + envF("HEROX", -0.12) * Float(W), Float(H / 2))
-    p.core = [fs.x, Float(H) - 1 - fs.y, envF("CORER", 0.05) * Float(H), envF("CORE", 3.0) * (1 - u)]
+    p.core = [fs.x, Float(H) - 1 - fs.y, envF("TIPJ", 14), envF("CORE", 1.2) * (1 - 0.6 * u)]   // .z: stalk joint where the tip glow starts
     let cb = queue.makeCommandBuffer()!
     let bl = cb.makeBlitCommandEncoder()!; bl.fill(buffer: img, range: 0..<img.length, value: 0); bl.fill(buffer: bgBuf, range: 0..<bgBuf.length, value: 0); bl.endEncoding()
     let ce = cb.makeComputeCommandEncoder()!
