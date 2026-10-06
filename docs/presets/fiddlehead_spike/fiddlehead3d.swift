@@ -664,7 +664,7 @@ let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "du
 let rule0 = Rule()
 // The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
 // frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
-let openFit: [String: Float] = ["BEHIND_O": 0.0, "SIG_O": 0.8636, "SIGS_O": 0.723, "ALPHA_O": 0.9413, "BT_O": 0.0332, "BT1_O": 0.0151, "PINF_O": 0.6447, "TURN_O": 0.15, "TURN1_O": 0.3334, "SIG1_O": 0.97, "SIGS1_O": 0.12, "ALPHA1_O": 0.9, "CURLON_O": 1.1, "KAPMIN_O": 1.0, "ABSANG_O": 1.0, "IMM1_O": 0.8, "RAMPP_O": 0.15, "HOOKR_O": 0.3, "HAIRP_O": 0.0, "LEAFLEN_O": 2.0, "LEAFW_O": 0.25, "PROF_O": 1.0, "LEAFPX_O": 50, "PEXP1_O": 1.0, "TAP0_O": 0.7, "PINCAP_O": 0.3]   // fitted to 02_reference_open (fitopen.py)
+let openFit: [String: Float] = ["SIG_O": 0.8294, "SIGS_O": 0.9106, "ALPHA_O": 0.9486, "BT_O": 0.0424, "BT1_O": 0.0231, "PINF_O": 0.5174, "TURN_O": 0.15, "TURN1_O": 0.3834, "SIG1_O": 0.97, "SIGS1_O": 0.12, "ALPHA1_O": 0.9, "CURLON_O": 1.1, "KAPMIN_O": 1.0, "ABSANG_O": 1.0, "IMM1_O": 0.8, "RAMPP_O": 0.15, "HOOKR_O": 0.3, "HAIRP_O": 0.0, "LEAFLEN_O": 2.0, "LEAFW_O": 0.25, "PROF_O": 1.0, "LEAFPX_O": 50, "PEXP1_O": 1.4, "TAP0_O": 0.7, "PINCAP_O": 0.3, "BEHIND_O": 0.0, "COILCAP_O": 0.4]   // fitted to 02_reference_open (fitopen.py)
 let ruleO: Rule = {
     var r = rule0
     func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", openFit[k + "_O"] ?? v) }
@@ -885,10 +885,10 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let aspect = Float(outW) / Float(outH)
     let wO = unfurl * unfurl * (3 - 2 * unfurl)                    // eased blend coil-fit → open-fit
     blendRule(wO)
-    let front = envF("F0", 0.1235) + (envF("FMAX", 0.85) - envF("F0", 0.1235)) * unfurl
+    let front = envF("F0", 0.1235) + (envF("FMAX", 0.8632) - envF("F0", 0.1235)) * unfurl
     let base = SIMD3<Float>(envF("BX", -0.377), envF("BY", -0.700), 0)
-    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.1395) - envF("LEAN", 0.037)) * wO + sway
-    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 1.0749) - envF("SEG", 0.193)) * wO
+    let lean = envF("LEAN", 0.037) + (envF("LEAN_O", 0.1239) - envF("LEAN", 0.037)) * wO + sway
+    let seg0 = envF("SEG", 0.193) + (envF("SEG_O", 1.484) - envF("SEG", 0.193)) * wO
     let dir0 = SIMD3<Float>(sin(lean), cos(lean), 0)
     let tb = Date()
     // Coarse pre-pass for the frond's extent (big pixels → shallow recursion).
