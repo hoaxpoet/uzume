@@ -9,7 +9,8 @@ win = np.hanning(n); f = np.fft.rfftfreq(n, 1 / sr)
 mags = np.array([np.abs(np.fft.rfft(x[i * hop:i * hop + n] * win)) for i in range(frames)])
 db = 20 * np.log10(np.sqrt((mags ** 2).mean(1)) + 1e-6)
 sec = np.convolve(db, np.ones(90) / 90, mode="same")
-lo, hi = np.percentile(sec, 5), np.percentile(sec, 95); u = np.clip((sec - lo) / (hi - lo), 0, 1)
+lo, hi = np.percentile(sec, 15), np.percentile(sec, 85)   # quietest ~15 % fully coiled, loudest ~15 % fully open
+u = np.clip((sec - lo) / (hi - lo), 0, 1)
 u = 0.5 - 0.5 * np.cos(np.pi * u)                                      # ease
 bass = mags[:, (f > 20) & (f < 150)].mean(1); avg = np.convolve(bass, np.ones(120) / 120, mode="same")
 sway = np.clip(bass / (avg + 1e-6) - 1, -1, 2) * 0.02
