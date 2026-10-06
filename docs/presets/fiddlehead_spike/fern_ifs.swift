@@ -150,14 +150,15 @@ func fern(_ u: Float, _ t: Float) -> Fern {
     let sW = envF("SW", 0.86), hW = envF("HW", 1.6), bW = envF("BEND", 0.03) + sway
     let sPin = L("SPIN", 0.24, 1.1), aPin = envF("APIN", 1.3), hPin = envF("HPIN", 1.6)   // arms puff out as it opens
     let sP = envF("SP", 0.86), hP = envF("HP", 1.6)
-    let sPP = L("SPP", 0.28, 0.32), aPP = envF("APP", 0.95), hPP = envF("HPP", 1.6)
+    let sPP = L("SPP", 0.28, 0.32), aPP = envF("APP", 0.95), hPP = envF("HPP", 0.15)
     let stem = simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, envF("STEMW", 0.16))))
     var m: [Map] = []
     m.append(Map(m: stem, t: [0, 0], p: 0, from: 0, to: 0, col: 0.02, roll: 0))
     m.append(Map(m: rs(sW, -bW), t: [0, hW], p: 0, from: 0, to: 0, col: 0.25, roll: 0))
     m.append(Map(m: rs(sPin, aPin), t: [0, hPin], p: 0, from: 1, to: 0, col: 0.6, roll: 1))
     m.append(Map(m: rs(sPin, -aPin, flip: true), t: [0, hPin * 0.95], p: 0, from: 1, to: 0, col: 0.6, roll: 1))
-    m.append(Map(m: stem, t: [0, 0], p: 0, from: 1, to: 1, col: 0.1, roll: 0))
+    let pstem = simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, envF("PSTEMW", 0.02))))   // pinna petiole (bare inner wire if long)
+    m.append(Map(m: pstem, t: [0, 0], p: 0, from: 1, to: 1, col: 0.1, roll: 0))
     m.append(Map(m: rs(sP, -envF("BENDP", 0.03)), t: [0, hP], p: 0, from: 1, to: 1, col: 0.45, roll: 0))
     m.append(Map(m: rs(sPP, aPP), t: [0, hPP], p: 0, from: 1, to: 1, col: 0.95, roll: 2))
     m.append(Map(m: rs(sPP, -aPP, flip: true), t: [0, hPP * 0.95], p: 0, from: 1, to: 1, col: 0.95, roll: 2))

@@ -90,3 +90,26 @@ for legibility. Open problems:
   reference as PNG). `curls.py` = whorl counter (Poincaré index, negative-controlled); `density.py` =
   one-sided density gate; `regionhue.py` = colour BY REGION (whole-image hue let orange flood everything);
   `searchmat7.py` = the latest joint fit. Lessons: gate every search on density; never mix orange+green.
+
+## FH.6 state (2026-10-06): pure-IFS fern, stopped at the escalation trigger
+
+- Matt rejected FH.5 ("looks like shit"). He defined the intricacy he wants as COMPLETE self-similarity: zoom
+  into any part and it is another whole fern, down to sparkle. He approved an IFS chaos game: "yes, but it
+  needs to look like a FERN".
+- `fern_ifs.swift`: two-node graph-directed IFS (frond W / pinna P, two walkers) plus log-spiral roll warps
+  at frond, pinna and leaflet level, and a flame tone with a rim/interior/sparkle stage. About 5–14 ms per frame
+  at 1672×941 for 16.8 M points.
+- Instruments (`tools/`), all ranked against the off-screen judge's verdicts:
+  - `edgefine.py`: fine-edge contrast. Fog scores 0.18, reference 0.44.
+  - `pinnagap.py`: gaps between pinnae.
+  - `radial.py`: dark-in-hull from the stalk to the edge; this one caught the bare petiole ladder.
+  - `aspect.py`
+  - `score.py`
+  - Hull coverage REWARDED fog. Never use it alone.
+- Seven judged rounds (ifsv9 → ifsv22) never read as one fern frond. Each failed differently: dome, fog,
+  moth wings, bare central ladder, hairnet of hooks, bouquet of fronds, tiled lattice. The metrics can match the
+  reference (aspect, gap counts, radial profile) while the read still fails.
+- Root issue: a point-cloud IFS gives every level the same weight. There is no thick, bright stalk or pinna spine, so the
+  stalk → pinna → leaflet hierarchy that makes a frond read never appears. At the reference's wide aspect, long
+  pinnae overlap, and the upper pinna copies tile in rows behind the lower ones.
+- The tight-coil state was never fixed: fine curls 12 vs 149 in the reference; lit fraction 0.17 vs 0.52.
