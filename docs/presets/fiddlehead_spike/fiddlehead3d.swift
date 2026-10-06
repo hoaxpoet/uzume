@@ -665,7 +665,7 @@ let dumping = CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "du
 let rule0 = Rule()
 // The OPEN frond is fitted separately to Matt's open reference (02_reference_open…): pinnae expand as the
 // frond opens, so unfurl blends the rule from the coil fit (rule0) to the open fit (KEY_O env overrides).
-let openFit: [String: Float] = ["CURLSWEEP_O": 0.6, "TAPEXP_O": 1.0, "TERM2_O": 1.0, "EMERGE_O": 1.1, "SIG_O": 0.8294, "SIGS_O": 0.9106, "ALPHA_O": 0.9486, "BT_O": 0.0424, "BT1_O": 0.0231, "PINF_O": 0.5174, "TURN_O": 0.15, "TURN1_O": 0.3834, "SIG1_O": 0.97, "SIGS1_O": 0.12, "ALPHA1_O": 0.9, "CURLON_O": 1.1, "KAPMIN_O": 1.0, "ABSANG_O": 1.0, "IMM1_O": 0.8, "RAMPP_O": 0.15, "HOOKR_O": 0.3, "HAIRP_O": 0.0, "LEAFLEN_O": 2.0, "LEAFW_O": 0.25, "PROF_O": 1.0, "LEAFPX_O": 50, "PEXP1_O": 1.4, "TAP0_O": 1.0, "PINCAP_O": 0.4, "BEHIND_O": 0.0, "COILCAP_O": 0.3]   // fitted to 02_reference_open (fitopen.py)
+let openFit: [String: Float] = ["CURLSWEEP_O": 0.6, "TAPEXP_O": 1.0, "TERM2_O": 1.0, "EMERGE_O": 1.1, "SIG_O": 0.8294, "SIGS_O": 0.9106, "ALPHA_O": 0.9486, "BT_O": 0.0424, "BT1_O": 0.0231, "PINF_O": 0.5174, "TURN_O": 0.15, "TURN1_O": 0.3834, "SIG1_O": 0.97, "SIGS1_O": 0.12, "ALPHA1_O": 0.9, "CURLON_O": 1.1, "KAPMIN_O": 1.0, "ABSANG_O": 1.0, "IMM1_O": 0.8, "RAMPP_O": 0.15, "HOOKR_O": 0.3, "HAIRP_O": 0.0, "LEAFLEN_O": 2.0, "LEAFW_O": 0.25, "PROF_O": 1.0, "LEAFPX_O": 50, "PEXP1_O": 1.4, "TAP0_O": 1.0, "PINCAP_O": 0.4, "BEHIND_O": 0.0, "COILCAP_O": 0.5]   // fitted to 02_reference_open (fitopen.py)
 let ruleO: Rule = {
     var r = rule0
     func o(_ k: String, _ v: Float) -> Float { envF(k + "_O", openFit[k + "_O"] ?? v) }
@@ -710,16 +710,19 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
     // (open frond: a pinnule is always ONE blade — recursing big base pinnules made the base skeletal and the tip heavy)
     if level >= 1 && (total * S0 < rule.leafPx * pxWorld || (curledHere && total * S0 < rule.curlPx * pxWorld) || level >= 5 || (level >= 2 && rule.term2 > 0.5)) {
         // A pinnule: one cupped, serrated blade, bent toward the coil while its pinna is curled.
-        var len = total * S0 * rule.leafLen
+        let len0 = total * S0 * rule.leafLen
+        var len = len0
         if level >= 2 && spacing > 0 {
             // Open frond (Matt's open reference): a pinnule is at most PINCAP × the gap to the next pinna on the same
             // side (a dark band beside every blade), and shortest at the stalk end, full length ~⅓ out along the pinna.
             // largest at the stalk, declining smoothly to the eye (Matt's open ref): cap × (1 − pos)^TAPEXP
             len = min(len, rule.pinCap * spacing * pow(max(1 - pos, 0.02), rule.tapExp)) * min(1, rule.tap0 + (1 - rule.tap0) * pos / 0.33)
         }
-        if level >= 2 && parentC > 0.3 && rule.coilCap < 50 {
-            // Inside a pinna's tip curl, pinnules stay short of the curl's radius (≈ link ÷ turn) so the eye stays dark.
-            len = min(len, rule.coilCap * parentS / max(rule.maxTurn1, 0.05))
+        if level >= 2 && rule.coilCap < 50 {
+            // Inside a pinna's tip curl, pinnules are sized by the curl's LOCAL radius alone (≈ link ÷ turn) — teeth
+            // stay visible on the coil and the eye stays dark; blended in as the curl begins.
+            let lenCoil = min(len0, rule.coilCap * parentS / max(rule.maxTurn1, 0.05))
+            len += (lenCoil - len) * smooth(0.2, 0.6, parentC)
         }
         guard len * rule.leafW > rule.minPx * pxWorld, nLeaves < maxLeaves else { return }
         let curled = 1 - (front - rule.pinOpen) / (rule.pinFront - rule.pinOpen)
