@@ -620,6 +620,7 @@ var nLeaves = 0, nTubes = 0, nBeads = 0
 // pinna ~900 px, i.e. the big triangle frond, and pushed recursion 4–5 levels deep into a needle carpet).
 struct Rule {
     var sig = envF("SIG", 0.9568), sigS = envF("SIGS", 0.253)
+    var sig1 = envF("SIG1", envF("SIG", 0.9568))
     var alpha = envF("ALPHA", 1.37)
     var maxTurn = envF("TURN", 0.276), ramp = envF("RAMP", 0.001), baseTurn = envF("BT", -0.0187)
     var delay = envF("DELAY", 0.15), immature = envF("IMM", 0.67)
@@ -667,6 +668,7 @@ let ruleO: Rule = {
     r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
     r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
     r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
+    r.sig1 = o("SIG1", r.sig1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
     return r
 }()
 var rule = rule0
@@ -677,6 +679,7 @@ func blendRule(_ w: Float) {
     rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
     rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
     rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
+    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
 }
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
@@ -691,7 +694,8 @@ func rotate(_ v: SIMD3<Float>, about a: SIMD3<Float>, _ ang: Float) -> SIMD3<Flo
 /// sides; level 2 (pinnules) is emitted as single curved leaf blades.
 func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, link S0: Float, front: Float,
            level: Int, hash: Float, young0: Float, side: Float = 0, handed: Float = 1) {
-    let total = 1 / (1 - rule.sig)
+    let sg = level == 0 ? rule.sig : rule.sig1          // link ratio per level: few pinnae on the stalk, many pinnules per pinna
+    let total = 1 / (1 - sg)
     // Fractal depth is set by the screen, not a fixed level: a branch keeps branching (the same rule)
     // while it is big enough to show its own sub-branches; below that it is drawn as one leaf blade.
     // Curled tissue hands over to the per-pixel crozier while it is still big enough to read as a spiral
@@ -755,7 +759,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
     var p = p0, d = d0, N = N0, S = S0, prev = p0, prevRmid: Float = 0
     var k = 0, turnAcc: Float = 0
     while total * S > rule.minPx * pxWorld && k < 300 && nTubes < maxTubes {
-        let f = 1 - pow(rule.sig, Float(k))
+        let f = 1 - pow(sg, Float(k))
         let c = smooth(front, front + (level == 0 ? rule.ramp : rule.rampP), f)
         let young = min(1, young0 * 0.5 + c)
         // Croziers (a pinna's curled tip) are one thick tapering glass tube (reference: 8–15 px → ~3 px).
@@ -771,7 +775,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             let a0 = k == 0 ? p : (prev + p) * 0.5, a2 = (p + p1) * 0.5, ctrl = k == 0 ? (a0 + a2) * 0.5 : p
             var q0 = a0
             // radius continuous across joints; a branch tapers in from its junction (no cap)
-            let rA = k == 0 ? (level >= 1 ? r * 0.4 : r) : prevRmid, rB = r * (1 + (rule.sig - 1) * 0.5)
+            let rA = k == 0 ? (level >= 1 ? r * 0.4 : r) : prevRmid, rB = r * (1 + (sg - 1) * 0.5)
             var r0 = rA
             let nSub = r > 6 * pxWorld ? 8 : 4                                   // thick tubes: finer arcs (outer-edge notches)
             for j in 1...nSub where nTubes < maxTubes {
@@ -784,7 +788,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
             }
             prevRmid = rB
         } else if r > 0.3 * pxWorld {
-            tubes[nTubes] = Tube(a: SIMD4(p, r), b: SIMD4(p1, r * rule.sig), n: SIMD4(N, young), q: [hash, Float(level), 0, 0])
+            tubes[nTubes] = Tube(a: SIMD4(p, r), b: SIMD4(p1, r * sg), n: SIMD4(N, young), q: [hash, Float(level), 0, 0])
             nTubes += 1
         }
         // Branches: same rule one level down; immature (smaller) where the chain is still coiled;
@@ -831,7 +835,7 @@ func chain(_ p0: SIMD3<Float>, dir d0: SIMD3<Float>, normal N0: SIMD3<Float>, li
         d = rotate(d, about: N, -turn * handed)                         // curl clockwise seen from +N (× handedness)
         turnAcc += turn
         prev = p; p = p1
-        S *= rule.sig
+        S *= sg
         k += 1
     }
     if level == 0 { eyePos = p }
