@@ -199,10 +199,10 @@ static int stateFor(float len, float viewH, constant Params& P) {
 
 // THE DESCENT — from a frame `q` whose frond has length `scale` (output units). PHI is the nerve-impulse path
 // coordinate: Σ arc fractions along each stem from the starting root (an impulse crosses every stem in the same time)
-struct Res { float d; float lvl; float s; float vein; float across; float h; float id; float nvein; float phi; };
+struct Res { float d; float lvl; float s; float vein; float across; float h; float id; float nvein; float phi; float phiC; float scaleC; };   // phiC/scaleC: the frond that is a visible UNIT on screen (colour comes from it)
 static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
                        constant Child* ch, constant Params& P, float pix) {
-    Res r; r.d = 1e9; r.lvl = -1.0; r.s = 0.0; r.vein = 0.0; r.across = 0.0; r.h = 0.0; r.id = 0.0; r.nvein = 0.0; r.phi = phi0;
+    Res r; r.d = 1e9; r.lvl = -1.0; r.s = 0.0; r.vein = 0.0; r.across = 0.0; r.h = 0.0; r.id = 0.0; r.nvein = 0.0; r.phi = phi0; r.phiC = phi0; r.scaleC = scale;
     float phi = phi0, sure = 1e9, surePhi = phi0, sureS = 0.0; float sureL = 0.0;
     float texel = 2.5 * (P.bmax.x - P.bmin.x) / float(\(TR));
     int maxL = int(P.misc.y);
@@ -211,6 +211,7 @@ static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d
         float2 uv = uvOf(q, P); float o = outside(q, P);
         float4 f = F.sample(lin, uv, uint(st)); f.x += o; f.w += o;
         float tq = T.sample(lin, uv, uint(st)).x + o;
+        if (scale >= viewH * P.curl.w) { r.phiC = phi + f.y; r.scaleC = scale; }
         if (tq < -texel && tq * scale < sure) { sure = tq * scale; surePhi = phi + f.y; sureS = f.y; sureL = float(L) + 0.5; }   // this level is SURE the point is in the tree
         float rach = f.w * scale;                                          // this level's stem (a vein)
         r.vein = max(r.vein, smoothstep(pix * 1.2, -pix * 0.5, rach) * (1.0 - 0.12 * float(L)));
@@ -272,11 +273,16 @@ static Res look(float2 uv, constant Params& P, texture2d_array<float> F, texture
 }
 
 static float3 hsv(float h, float s, float v) { float3 k = clamp(abs(fract(h + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); return v * mix(float3(1.0), k, s); }
+// the palette: 6 sRGB anchors walked as a PING-PONG gradient (no hard wrap back to the start), converted to linear
+static float3 pal(float x, constant float4* PL) {
+    float u = abs(fract(x * 0.5) * 2.0 - 1.0) * 5.0; int i = min(int(u), 4); float f = smoothstep(0.0, 1.0, u - float(i));
+    return pow(mix(PL[i].rgb, PL[i + 1].rgb, f), float3(2.2));
+}
 static float hsh(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
 
 kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<float> T [[texture(1)]], texture2d_array<float> C [[texture(2)]],
-                   texture2d<float, access::write> out [[texture(3)]],
-                   constant Child* ch [[buffer(0)]], constant Params& P [[buffer(1)]], constant float2* pulses [[buffer(2)]],
+                   texture2d<float, access::write> out [[texture(3)]],   // HDR
+                   constant Child* ch [[buffer(0)]], constant Params& P [[buffer(1)]], constant float2* pulses [[buffer(2)]], constant float4* PL [[buffer(3)]],
                    uint2 gid [[thread_position_in_grid]]) {
     if (gid.x >= \(W)u || gid.y >= \(H)u) { return; }
     float2 res = float2(\(W).0, \(H).0);
@@ -302,25 +308,60 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
             float head = exp(-dphi * dphi / 0.0016), tail = dphi > 0.0 ? exp(-dphi / 0.18) : 0.0;
             pulse += pulses[i].y * (head * 1.6 + tail * 0.5);
         }
-        float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phi * 2.0 - t * 0.6));
+        float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phiC * P.au.w * 2.0 - P.tm.z * t * 2.0));   // light rides the colour bands
         float shimmer = step(1.0 - 0.25 * P.au.y, hsh(float2(r.id * 97.0 + floor(r.s * 9.0), floor(t * 18.0))));
-        // COLOUR BATH: hue drifts along the impulse path and by level, so the branching reads as bands of colour
-        float hue = hue0 + 0.22 * r.phi + 0.09 * floor(r.lvl) + 0.03 * sin(t * 0.2);   // wide spread: several colours in every frame
+        // COLOUR BATH: the fern GLOWS (emissive, not lit) in a curated psychedelic palette. Hue runs along the impulse path
+        // and steps per level, so the branching reads as bands of colour; it flows outward over time (colour pours down
+        // the branches); each leaflet its own small offset. Palette chosen in sRGB, converted to linear (gamma washed
+        // linear-space hues to pastel).
+        // hue from the visible unit: its path position + its on-screen size (continuous, so the loop is seamless and
+        // colour shifts as each frond grows toward the camera); finer levels vary brightness, not hue (sub-pixel hue mixing → grey)
+        float viewH = pix * res.y;
+        float hue = hue0 + P.au.w * r.phiC - 0.17 * log(r.scaleC / viewH) - P.tm.z * t;   // bands of colour pour down the branches
         float mid = 1.0 - abs(r.across);
-        float3 body = hsv(hue, 0.92, 0.05 + 0.40 * dif * (0.55 + 0.45 * mid));
+        float3 c0 = pal(hue, PL), c1 = pal(hue + 0.12, PL), cv = mix(pal(hue + 0.06, PL), float3(1.0), 0.2);
+        float relief = 0.25 + 0.75 * dif;
+        // jewel read: dark translucent body, glowing toward its midrib; the LIGHT lives on edges and veins
+        float3 tissue = c0 * relief * (0.18 + 0.45 * mid * mid) * (0.5 + 0.9 * ripple) * (0.8 + 0.4 * P.au.x);
         float wv = max(r.vein, r.nvein * 0.7);
-        float3 glow = hsv(hue + 0.08, 0.6, 1.0) * wv * (0.25 + 0.6 * P.au.x * ripple + 3.0 * pulse);
-        float rim = smoothstep(-pix * 3.0, -pix * 0.3, r.d) * cov;
-        float3 edge = hsv(hue + 0.33, 0.8, 1.0) * rim * (0.08 + 0.6 * pulse + 0.25 * shimmer);
-        float3 col = body * (1.0 + 1.2 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.25;
+        float3 glow = cv * wv * (0.9 + 1.6 * P.au.x * ripple + 7.0 * pulse);
+        float rim = smoothstep(-pix * 2.5, -pix * 0.2, r.d) * cov;
+        float3 edge = c1 * rim * (1.1 + 3.0 * pulse + 2.0 * shimmer);
+        float3 col = tissue * (1.0 + 2.5 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.4;
         if (P.misc.z > 0.5) { col = float3(0.2, 0.55, 0.15) * (0.35 + 0.8 * dif) + float3(0.5, 0.8, 0.3) * r.vein * 0.3; }   // plain fern (structure check)
-        float3 bg = P.misc.z > 0.5 ? float3(0.01, 0.012, 0.015)
-                  : hsv(hue0 + 0.5 + 0.15 * uv.x + 0.05 * sin(t * 0.13 + uv.y * 2.0), 0.95, 0.012 + 0.012 * sin(uv.x * 2.0 + t * 0.2));   // deep, saturated, dark: the fern carries the light
+        // the bath behind: a slow drifting fog of palette light (black read as a void, not a bath)
+        float fog = 0.5 + 0.5 * sin(uv.x * 2.3 + t * 0.21) * sin(uv.y * 1.7 - t * 0.17 + 1.3 * sin(uv.x * 1.1 + t * 0.09));
+        float3 bg = P.misc.z > 0.5 ? float3(0.01, 0.012, 0.015) : pal(hue0 + 0.35 * uv.x + 0.25 * fog - P.tm.z * t, PL) * (0.012 + 0.05 * fog * fog);
         acc += mix(bg, col, cov);
     }
     acc *= 0.25;
-    acc = acc / (1.0 + dot(acc, float3(0.299, 0.587, 0.114)) * 0.6);
-    out.write(float4(pow(clamp(acc, 0.0, 1.0), float3(1.0 / 2.2)), 1.0), gid);
+    out.write(float4(acc, 1.0), gid);
+}
+
+// BLOOM: bright parts → quarter resolution → wide separable Gaussian, added back; the light spills into the dark (a bath)
+kernel void bright(texture2d<float> src [[texture(0)]], texture2d<float, access::write> dst [[texture(1)]], uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) { return; }
+    float3 a = 0.0;
+    for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) { a += src.read(gid * 4u + uint2(i, j)).rgb; }
+    dst.write(float4(max(a / 16.0 - 0.25, 0.0), 1.0), gid);   // the light spills into the gaps (a bath), but only the brighter half blooms
+}
+kernel void blur(texture2d<float> src [[texture(0)]], texture2d<float, access::write> dst [[texture(1)]], constant int2& dir [[buffer(0)]], uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) { return; }
+    float3 a = 0.0; float ws = 0.0;
+    for (int k = -24; k <= 24; k++) {
+        int2 c = clamp(int2(gid) + dir * k, int2(0), int2(dst.get_width() - 1, dst.get_height() - 1));
+        float w = exp(-float(k * k) / 160.0); a += src.read(uint2(c)).rgb * w; ws += w;
+    }
+    dst.write(float4(a / ws, 1.0), gid);
+}
+kernel void compose(texture2d<float> hdr [[texture(0)]], texture2d<float> bl [[texture(1)]], texture2d<float, access::write> out [[texture(2)]],
+                    constant float4& g [[buffer(0)]], uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
+    float2 uv = (float2(gid) + 0.5) / float2(out.get_width(), out.get_height());
+    float3 c = hdr.read(gid).rgb * g.z + bl.sample(lin, uv).rgb * g.x;
+    float m = max(c.r, max(c.g, c.b));
+    c *= (1.0 + m / (g.y * g.y)) / (1.0 + m) ;                             // tone map on the MAX channel: hues stay saturated
+    out.write(float4(pow(clamp(c, 0.0, 1.0), float3(1.0 / 2.2)), 1.0), gid);
 }
 """
 
@@ -345,10 +386,11 @@ var P = Params(bmin: bmin, bmax: bmax,
                top: [envF("TX", -0.5), envF("TY", -1.55), envF("TA", 1.75), envF("TL", 3.4)],
                shape: [W0, CS, SINF, 0],
                misc: [Float(NCH), envF("MAXL", 14), envF("DBG", 0), envF("CW", 4)],   // CW: candidate window either side
-               curl: [LOPEN, LCURL, 0, 0], lift: [0, 0, 0, 1], zc: .zero, tm: .zero, au: [0, 0, envF("HUE", 0.33), 0])
+               curl: [LOPEN, LCURL, 0, envF("CUNIT", 0.15)], lift: [0, 0, 0, 1], zc: .zero, tm: .zero, au: [0, 0, envF("HUE", 0.33), envF("HSPREAD", 1.4)])
 
 let F = tex(.rgba32Float, TR, TR, slices: NST), T = tex(.r32Float, TR, TR, slices: NST), C = tex(.rgba32Float, TR, TR, slices: NST)
 let TA = tex(.r32Float, TR, TR), outT = tex(.rgba8Unorm, W, H)
+let hdrT = tex(.rgba16Float, W, H), bA = tex(.rgba16Float, W / 4, H / 4), bB = tex(.rgba16Float, W / 4, H / 4)
 let tg = MTLSize(width: 16, height: 16, depth: 1), grid = MTLSize(width: TR, height: TR, depth: 1)
 do {
     let t0 = Date()
@@ -378,13 +420,37 @@ do {
 }
 
 let readback = device.makeBuffer(length: W * H * 4, options: .storageModeShared)!
-let renderPSO = pso("render")
+let renderPSO = pso("render"), brightPSO = pso("bright"), blurPSO = pso("blur"), composePSO = pso("compose")
+// PALETTES, each anchored to a named look (PAL=n)
+let palettes: [[SIMD4<Float>]] = [
+    // 0 psychedelic: violet → magenta → amber → emerald → cyan → blue
+    [[0.42, 0.12, 0.95, 0], [0.98, 0.12, 0.62, 0], [1.0, 0.58, 0.06, 0], [0.15, 0.92, 0.38, 0], [0.05, 0.82, 0.98, 0], [0.18, 0.30, 1.0, 0]],
+    // 1 bioluminescent night forest (Pandora): ink blue → electric cyan → aqua → violet → magenta bloom
+    [[0.05, 0.10, 0.45, 0], [0.0, 0.45, 0.95, 0], [0.0, 0.95, 0.90, 0], [0.35, 0.95, 0.75, 0], [0.55, 0.25, 1.0, 0], [0.95, 0.20, 0.80, 0]],
+    // 2 Klimt gold (The Tree of Life): deep teal → emerald → olive gold → gold leaf → amber → ember red
+    [[0.02, 0.30, 0.35, 0], [0.05, 0.55, 0.40, 0], [0.55, 0.62, 0.15, 0], [1.0, 0.80, 0.25, 0], [1.0, 0.52, 0.08, 0], [0.80, 0.15, 0.08, 0]],
+    // 3 aurora borealis: deep violet → rose → magenta → teal → emerald → lime-white
+    [[0.25, 0.10, 0.55, 0], [0.85, 0.25, 0.55, 0], [0.60, 0.20, 0.85, 0], [0.05, 0.70, 0.75, 0], [0.10, 0.95, 0.45, 0], [0.75, 1.0, 0.55, 0]],
+    // 4 Sainte-Chapelle stained glass: cobalt → ultramarine → ruby → crimson → gold → emerald
+    [[0.05, 0.15, 0.75, 0], [0.20, 0.25, 1.0, 0], [0.85, 0.05, 0.25, 0], [1.0, 0.25, 0.10, 0], [1.0, 0.75, 0.10, 0], [0.05, 0.65, 0.35, 0]],
+]
+var palSel = palettes[min(Int(envF("PAL", 4)), palettes.count - 1)]
+let palBuf = device.makeBuffer(bytes: &palSel, length: MemoryLayout<SIMD4<Float>>.stride * 6, options: .storageModeShared)!
 let pulseBuf = device.makeBuffer(length: MemoryLayout<SIMD2<Float>>.stride * 32, options: .storageModeShared)!
 func renderFrame() -> Double {
     let cb = queue.makeCommandBuffer()!, ce = cb.makeComputeCommandEncoder()!
-    ce.setComputePipelineState(renderPSO); ce.setTexture(F, index: 0); ce.setTexture(T, index: 1); ce.setTexture(C, index: 2); ce.setTexture(outT, index: 3)
-    ce.setBuffer(chBuf, offset: 0, index: 0); ce.setBytes(&P, length: MemoryLayout<Params>.stride, index: 1); ce.setBuffer(pulseBuf, offset: 0, index: 2)
+    ce.setComputePipelineState(renderPSO); ce.setTexture(F, index: 0); ce.setTexture(T, index: 1); ce.setTexture(C, index: 2); ce.setTexture(hdrT, index: 3)
+    ce.setBuffer(chBuf, offset: 0, index: 0); ce.setBytes(&P, length: MemoryLayout<Params>.stride, index: 1); ce.setBuffer(pulseBuf, offset: 0, index: 2); ce.setBuffer(palBuf, offset: 0, index: 3)
     ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: tg)
+    let q4 = MTLSize(width: W / 4, height: H / 4, depth: 1)
+    ce.setComputePipelineState(brightPSO); ce.setTexture(hdrT, index: 0); ce.setTexture(bA, index: 1); ce.dispatchThreads(q4, threadsPerThreadgroup: tg)
+    var dh = SIMD2<Int32>(1, 0), dv = SIMD2<Int32>(0, 1)
+    ce.setComputePipelineState(blurPSO)
+    ce.setTexture(bA, index: 0); ce.setTexture(bB, index: 1); ce.setBytes(&dh, length: 8, index: 0); ce.dispatchThreads(q4, threadsPerThreadgroup: tg)
+    ce.setTexture(bB, index: 0); ce.setTexture(bA, index: 1); ce.setBytes(&dv, length: 8, index: 0); ce.dispatchThreads(q4, threadsPerThreadgroup: tg)
+    var g = SIMD4<Float>(envF("BLOOM", 1.0), envF("WHITE", 2.5), envF("EXPO", 2.0), 0)
+    ce.setComputePipelineState(composePSO); ce.setTexture(hdrT, index: 0); ce.setTexture(bA, index: 1); ce.setTexture(outT, index: 2)
+    ce.setBytes(&g, length: 16, index: 0); ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: tg)
     ce.endEncoding()
     let bb = cb.makeBlitCommandEncoder()!
     bb.copy(from: outT, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(), sourceSize: MTLSize(width: W, height: H, depth: 1),
@@ -434,7 +500,7 @@ func setZoom(time t: Float) {
     P.curl.z = 1
     P.lift = [L.o.x, L.o.y, L.a, L.s]
     P.zc = [x.x, x.y, V0 * pow(sigStar, frac), rotEnd * frac]
-    P.tm.x = t; P.tm.y = (cyc - Float(lifts)) * sStar
+    P.tm.x = t; P.tm.y = (cyc - Float(lifts)) * sStar; P.tm.z = envF("FLOW", 0.12)
 }
 // stand-in music: a beat at BPM with accents, a bass envelope, treble shimmer
 func setMusic(time t: Float) {
@@ -450,7 +516,7 @@ func setMusic(time t: Float) {
     P.tm.w = Float(arr.count)
     let ph = t.truncatingRemainder(dividingBy: beat)
     P.au.x = exp(-ph / 0.3); P.au.y = 0.5 + 0.5 * sin(t * 3.1) * sin(t * 1.7)
-    P.au.z = envF("HUE", 0.33) + 0.01 * t
+    P.au.z = envF("HUE", 0.33)
 }
 
 let args = CommandLine.arguments
