@@ -79,8 +79,8 @@ static float3 irid(float t) {
 
 constant int NU = 10, NV = 4;                     // leaf grid (along × across halves)
 
-static float leafProfile(float u) {               // reference pinnules: rounded oblong glass lobes, blunt tip
-    return pow(max(sin(3.14159 * pow(clamp(u, 0.0, 1.0), 0.7)), 0.0), 0.45);
+static float leafProfile(float u, float e) {      // e 0.45: rounded oblong lobe (coil); higher e: pointed lance (open pinnules)
+    return pow(max(sin(3.14159 * pow(clamp(u, 0.0, 1.0), 0.7)), 0.0), e);
 }
 
 vertex VOut leaf_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -92,7 +92,7 @@ vertex VOut leaf_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float uu = float(qi + cs[corner].x) / float(NU);
     float vv = float(qj + cs[corner].y) / float(NV) - 1.0;      // −1 … 1
     float3 d = l.d.xyz, n = l.n.xyz, w = normalize(cross(d, n));
-    float len = l.o.w, wid = l.d.w * leafProfile(uu), cup = l.n.w, bend = l.q.z;
+    float len = l.o.w, wid = l.d.w * leafProfile(uu, u.peel2.z), cup = l.n.w, bend = l.q.z;
     // Shape: cupped across (a shallow U), bent along (tip curls toward the normal).
     float hook = l.q.w;                            // signed in-plane hook toward the parent's tip
     float3 p = l.o.xyz + d * (uu * len) + w * (vv * wid + hook * uu * uu * len) + n * (cup * vv * vv * wid + bend * uu * uu * len);
@@ -178,7 +178,7 @@ fragment FOut fern_fragment(VOut in [[stage_in]], constant U& u [[buffer(1)]], d
     }
     if (in.kind > 0.5) {
         // ---- Lobe / leaflet: rounded, scalloped, glass edge, veins, cell web.
-        float prof = leafProfile(in.uv.x);
+        float prof = leafProfile(in.uv.x, u.peel2.z);
         if (prof < 0.02) { discard_fragment(); }
         float serr = 0.80 + 0.20 * sqrt(abs(sin(3.14159 * in.uv.x * u.tex.x)));
         float edge = abs(in.uv.y) / max(serr, 1e-3);
@@ -933,7 +933,7 @@ func render(unfurl: Float, sway: Float, time: Float, dt: Float = 0) {
     let cb = queue.makeCommandBuffer()!
     var u2 = u; u2.peel = [1, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
     u.peel = [0, envF("PEELT", 0.8), envF("PEELEPS", 2e-5), envF("REFR", 6)]
-    u.peel2 = [envF("GFILL", 0.15), envF("GVAR", 0.7), 0, 0]; u2.peel2 = u.peel2
+    u.peel2 = [envF("GFILL", 0.15), envF("GVAR", 0.7), envF("PROF", 0.45) + (envF("PROF_O", 0.45) - envF("PROF", 0.45)) * wO, 0]; u2.peel2 = u.peel2
     // Pass 1: nearest surface (+ its transmission colour, + resolved depth for the peel). Pass 2: the next one.
     for pass in 0..<2 {
         let rp = MTLRenderPassDescriptor()
