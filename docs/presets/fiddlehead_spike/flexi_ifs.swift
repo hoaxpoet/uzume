@@ -36,7 +36,8 @@ let msl = """
 using namespace metal;
 
 struct P { float ww; float w; float scale; float mirror; float2 centre; int iters; uint seed; float4 tone; float4 sd; float4 ext;
-           float4 hue; float4 sv; float4 core; float4 fp; float4 uf; float4 uf2; float4 mo; float4 wave; float4 fg; float4 pulse; float4 pl2; };
+           float4 hue; float4 sv; float4 core; float4 fp; float4 uf; float4 uf2; float4 mo; float4 wave; float4 fg; float4 pulse; float4 pl2; float4 lf; };
+// lf: leaflet primitive — length (× chain size), width (× length), samples per leaf, curl-in openness threshold
 // sd: seed half-width, side scale, side angle, —   ext: —, stipe length (segments), stipe share, display turn
 // hue: hue per nesting level 0..3+   sv: sat, rim level   core: warm light (screen x, y, radius px, gain)
 // uf: unfurl u, joints to open (JN), front half-width (joints), child lag (joints)
@@ -76,17 +77,36 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
     int i = 0;
     while (i < p.iters) {
         float2x2 A = float2x2(1.0); float2 T = 0.0;
-        int lvl = 0, run = 0, n = 0, side0 = 0, j0 = 0; float ul = p.uf.x; uint bh = 0x2545u;
+        int lvl = 0, run = 0, n = 0, side0 = 0, j0 = 0; float ul = p.uf.x; uint bh = 0x2545u; bool leafy = false;
         float F = frontAt(ul, p), swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3), ph = 0.0;   // per chain: front, sway, wave phase
         for (; i < p.iters; i++) {
             // the current chain's next joint: its curl, then Flexi's main map λR(X − tm) (heading w = −5·ww) and its fixed
             // point C, from a table over ww (built on the CPU: this was most of the cost)
             // + a bending wave travelling up each chain (the frond sways like a plant, not a hinge)
             float ww = mix(p.uf2.x, p.uf2.y, 1.0 - smoothstep(F - p.uf.z, F + p.uf.z, float(run) + 1.0)) + swb
-                     + p.wave.x * sin(p.mo.x * p.wave.y - (float(run) + 1.0) / p.wave.z + ph);
+                     + p.wave.x * (lvl < 2 ? 1.0 : 0.15) * sin(p.mo.x * p.wave.y - (float(run) + 1.0) / p.wave.z + ph);   // leaflets keep an even herringbone
             float fi = clamp((ww + 0.4) / 1.8, 0.0, 1.0) * 511.0; int k0 = min(int(fi), 510); float fr = fi - float(k0);
             float4 m4 = mix(jt[2 * k0], jt[2 * k0 + 2], fr), tc = mix(jt[2 * k0 + 1], jt[2 * k0 + 3], fr);
             float2x2 M = float2x2(m4.xy, m4.zw); float2 tmv = tc.xy, C = tc.zw;
+            // LEAFLET PRIMITIVE (curled pinnae, Matt: "smooth when curled"): a sub-leaflet of a curled pinna is stamped as ONE
+            // filled lance — serrated margin, bright rim, lime → amber base to tip — placed and turned by the same maps, its
+            // AREA sampled (the fractal skeleton inside a few-pixel leaflet rendered as needles/moss at any point count).
+            if (leafy) {
+                float2 t0 = normalize(ln * (-C) - ww * float2(C.y, -C.x)), nm = float2(-t0.y, t0.x);
+                float L = length(C) * p.lf.x;
+                for (int k = 0; k < int(p.lf.z) && i < p.iters; k++, i++) {
+                    float uu = rnd(s), vv = rnd(s) * 2.0 - 1.0;
+                    float wdt = p.lf.y * L * sqrt(4.0 * uu * (1.0 - uu)) * pow(1.0 - uu, 0.8) * (0.8 + 0.2 * abs(sin(uu * 21.99)));   // broad base, POINTED tip
+                    float2 lp = rot(t0 * uu * L + nm * vv * wdt, 0.35 * uu * uu);
+                    float2 x = A * lp + T, q = (rot(float2(x.x * p.mirror, -x.y), p.ext.w) - p.centre) * p.scale + float2(\(W / 2).0 + p.wave.w, \(H / 2).0);
+                    float b = (0.8 + 0.2 * (1.0 - abs(vv))) - 0.015 * float(n);   // opaque: a leaf's body outshines the rims of leaves behind it
+                    if (b > 0.0 && q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
+                        uint idx = uint(\(H).0 - 1.0 - q.y) * \(W)u + uint(q.x);
+                        atomic_fetch_max_explicit(&img[idx], (uint(b * 4095.0) << 20) | (uint(min(j0, 127)) << 13) | (uint(min(lvl, 15)) << 9) | (uint(uu < 0.8 ? int(uu * 5.0) : 8) << 3) | (uint(side0) << 2), memory_order_relaxed);
+                    }
+                }
+                break;
+            }
             // seed piece: the arc from this joint to the next (a ∈ [0,1]); the frond's own base continues as a stipe
             bool stipe = n == 0 && rnd(s) < p.ext.z;
             float a = stipe ? -rnd(s) * p.ext.y : rnd(s), l = rnd(s) * 2.0 - 1.0;
@@ -116,7 +136,7 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
             float u = rnd(s);
             if (u < pm) { T = A * tmv + T; A = A * M; run++; }          // main arm: X' = λR(X − tm)
             else {                                                     // side branch, attached ON this joint's arc
-                float sg = u < pm + 0.5 * (1.0 - pm) ? -1.0 : 1.0, a0 = p.uf2.w;
+                float sg = u < pm + 0.5 * (1.0 - pm) ? -1.0 : 1.0, a0 = p.uf2.w, pul = ul;   // pul: the parent chain's openness
                 float2 att = C + exp(ln * a0) * rot(-C, -a0 * ww);
                 // OUTB: while coiled, one side's pinnae swing further out, studding the coil's outer rim (reference)
                 float ang = lvl >= 1 ? mix(0.45, p.sd.z, ul) : p.sd.z + (sg == p.sv.w ? p.fp.z * (1.0 - smoothstep(0.0, 0.6, ul)) : 0.0);   // sub-leaflets of a curled pinna lie tight along it
@@ -140,6 +160,9 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
                 ph = float(bh & 1023u) * 0.00614;                     // each branch sways on its own phase
                 ul = clamp((F - float(run) - a0) / p.uf.w + p.uf2.z * ul * (float(bh & 1023u) / 1023.0 - 0.5), p.mo.w, 1.0);   // jitter ∝ parent's openness; floor: even closed, a pinna is a leaf (straight base, curled tip), not a wheel
                 if (lvl >= 1) { ul = max(ul, 0.85); }      // ...and stay nearly straight: a serrated row, not curl glyphs
+                // crossfade by a FIXED per-leaflet threshold (branch hash), so each leaflet switches once as its pinna opens —
+                // a per-path random draw flickered leaves in and out every frame near the threshold
+                leafy = lvl == 1 && float(hash(bh ^ 0x51edu) & 1023u) / 1023.0 < smoothstep(p.lf.w + 0.2, p.lf.w - 0.2, pul);
                 F = frontAt(ul, p); swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3 + float(bh & 1023u) * 0.0061);
                 lvl++; run = 0;
             }
@@ -250,12 +273,12 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
     // LEAFLET OUTLINES: each pixel knows which pinna it belongs to (stalk joint + side). Where a lit neighbour belongs to a
     // different pinna, this is a leaflet boundary: a crisp bright edge, so packed pinnae read as discrete leaflets.
     uint v0 = img[gid.y * \(W)u + gid.x], id0 = ((v0 >> 13) & 127u) * 2u + ((v0 >> 2) & 1u); float edge = 0.0;
-    if ((v0 >> 20) > 200u && ((v0 >> 9) & 15u) >= 1u) {
+    if ((v0 >> 20) > 200u && ((v0 >> 9) & 15u) == 1u) {   // whole pinnae only: leaflet outlines drew pale lines through the leaves
         for (int k = 0; k < 4; k++) {
             int2 o = int2(gid) + int2(k == 0 ? 1 : k == 1 ? -1 : 0, k == 2 ? 1 : k == 3 ? -1 : 0);
             if (o.x < 0 || o.y < 0 || o.x >= \(W) || o.y >= \(H)) { continue; }
             uint vn = img[uint(o.y) * \(W)u + uint(o.x)];
-            if ((vn >> 20) > 200u && ((vn >> 9) & 15u) >= 1u && ((vn >> 13) & 127u) * 2u + ((vn >> 2) & 1u) != id0) { edge = 1.0; }
+            if ((vn >> 20) > 200u && ((vn >> 9) & 15u) == 1u && ((vn >> 13) & 127u) * 2u + ((vn >> 2) & 1u) != id0) { edge = 1.0; }
         }
     }
     c = mix(c, c * 1.6 + float3(0.55, 0.75, 0.35) * rm.z * c0.a, edge);
@@ -278,7 +301,8 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
 struct Params { var ww: Float; var w: Float; var scale: Float; var mirror: Float; var centre: SIMD2<Float>; var iters: Int32; var seed: UInt32
                 var tone: SIMD4<Float>; var sd: SIMD4<Float>; var ext: SIMD4<Float>; var hue: SIMD4<Float>; var sv: SIMD4<Float>; var core: SIMD4<Float>
                 var fp = SIMD4<Float>(0, 0, 0, 0); var uf = SIMD4<Float>(0, 0, 0, 0); var uf2 = SIMD4<Float>(0, 0, 0, 0); var mo = SIMD4<Float>(0, 0, 0, 0)
-                var wave = SIMD4<Float>(0, 0, 1, 0); var fg = SIMD4<Float>(0, 0, 0, 0); var pulse = SIMD4<Float>(-1, -1, -1, -1); var pl2 = SIMD4<Float>(0, 1, 0, 0) }
+                var wave = SIMD4<Float>(0, 0, 1, 0); var fg = SIMD4<Float>(0, 0, 0, 0); var pulse = SIMD4<Float>(-1, -1, -1, -1); var pl2 = SIMD4<Float>(0, 1, 0, 0)
+                var lf = SIMD4<Float>(0, 0, 0, 0) }
 
 var driveSway: Float?, driveSpark: Float?   // per-frame overrides from a music drive (film `drive` mode)
 var driveEnergy: Float = 0.5, drivePulses = SIMD4<Float>(-1, -1, -1, -1)   // music intensity 0…1; seconds since the last 4 beats
@@ -379,7 +403,8 @@ func render(unfurl u: Float, time t: Float) {
                    hue: [envF("H0", 0.1), envF("H1", 0.13), envF("H2", 0.3), envF("H3", 0.38)], sv: [envF("SAT", 0.85), envF("RIMLVL", 3), 0, 0],
                    core: [0, 0, 0, 0])
     p.uf = [u, JN, WFRONT, LAGJ]; p.uf2 = [KAPPA, KAPPA_O, JIT, ATTACH]; p.mo = [t, sway(t), envF("SWAYB", 0.05), envF("CHILDMIN", 0.15)]
-    p.sv.z = envF("RUNSPAN", 9); p.sv.w = envF("OUTSG", 1); p.fp.z = envF("OUTB", 0.6); p.fp.w = envF("BLADE", 8); p.ext.x = envF("FRINGE", 1.3); p.fp.y = envF("SIDE_O", 3.6); p.fp.x = envF("MIRRORSIDE", 1)
+    p.lf = [envF("LEAFLEN", 0.75), envF("LEAFW", 0.4), envF("LEAFS", 24), envF("LEAFT", 0.45)]
+    p.sv.z = envF("RUNSPAN", 9); p.sv.w = envF("OUTSG", 1); p.fp.z = envF("OUTB", 0.6); p.fp.w = envF("BLADE", 8); p.ext.x = envF("FRINGE", 1.7); p.fp.y = envF("SIDE_O", 3.6); p.fp.x = envF("MIRRORSIDE", 1)
     p.wave = [envF("WAVEA", 0.035) * (0.5 + driveEnergy), envF("WAVES", 1.6), envF("WAVEJ", 3.0), envF("HEROX", -0.12) * Float(W)]   // .w: hero left of centre (reference)   // bending wave, bigger when loud
     p.pulse = drivePulses; p.pl2 = [envF("PSPEED", 9), envF("PWIDTH", 0.9), envF("PGAIN", 3.75), envF("FOLD", 0.9)]   // .w: pinna fold angle when closed (rad)
     // warm light at the coil's eye: the limit of the top chain's joints
@@ -461,10 +486,13 @@ case "drive":   // drive <csv: u,sway,spark per 30 fps frame> <audio> <out.mp4> 
             drivePulses = SIMD4((0..<4).map { $0 < onsetTimes.count ? Float(i) / 30 - onsetTimes[$0] : -1 })
         }
         if follow {
-            let tt = Float(i) / 30, e = extent(u: uS, t: tt, theta: uprightTheta(uS, tt))
+            // frame for where the frond CAN be soon: unfurl speed is capped, so 0.12 ahead (~0.7 s at the cap) is a safe bound —
+            // the camera then eases instead of snapping outward when the frond opens fast
+            let tt = Float(i) / 30, ua = min(uS + 0.12, 1), e0 = extent(u: uS, t: tt, theta: uprightTheta(uS, tt)), e1 = extent(u: ua, t: tt, theta: uprightTheta(ua, tt))
+            let e = (simd_min(e0.0, e1.0), simd_max(e0.1, e1.1))
             // zoom OUT fast (the frond must never outgrow the frame), zoom IN slowly (no pumping); a symmetric 1.5 s ease
             // let an opening frond run off the top in 329 of 897 frames
-            func ease(_ c: Float, _ t: Float, grow: Bool) -> Float { c + (t - c) * (grow ? 0.5 : 0.022) }
+            func ease(_ c: Float, _ t: Float, grow: Bool) -> Float { c + (t - c) * (grow ? 0.15 : 0.022) }
             cam = cam.map { c in
                 (SIMD2(ease(c.0.x, e.0.x, grow: e.0.x < c.0.x), ease(c.0.y, e.0.y, grow: e.0.y < c.0.y)),
                  SIMD2(ease(c.1.x, e.1.x, grow: e.1.x > c.1.x), ease(c.1.y, e.1.y, grow: e.1.y > c.1.y)))

@@ -15,7 +15,7 @@ def ema(v, k):
     for i in range(1, len(v)): o[i] = o[i - 1] + (v[i] - o[i - 1]) * k
     return o
 e1 = ema(db, 1 / 30); en = np.clip((e1 - np.percentile(e1, 10)) / (np.percentile(e1, 90) - np.percentile(e1, 10)), 0, 1)
-slow = ema(db, 1 / 180); u = 0.15 + 0.75 * np.clip((slow - np.percentile(slow, 10)) / (np.percentile(slow, 90) - np.percentile(slow, 10) + 1e-6), 0, 1)
+slow = ema(db, 1 / 180); u = 0.0 + 0.9 * np.clip((slow - np.percentile(slow, 10)) / (np.percentile(slow, 90) - np.percentile(slow, 10) + 1e-6), 0, 1)
 bass = mags[:, (f > 20) & (f < 150)].mean(1); avg = np.convolve(bass, np.ones(120) / 120, mode="same")
 sway = ema(np.clip(bass / (avg + 1e-6) - 1, -1, 2) * 0.06, 0.15)
 flux = np.maximum(np.diff(mags, axis=0, prepend=mags[:1]), 0).sum(1); flux /= np.percentile(flux, 95) + 1e-9
