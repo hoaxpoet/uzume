@@ -199,20 +199,25 @@ static int stateFor(float len, float viewH, constant Params& P) {
 
 // THE DESCENT — from a frame `q` whose frond has length `scale` (output units). PHI is the nerve-impulse path
 // coordinate: Σ arc fractions along each stem from the starting root (an impulse crosses every stem in the same time)
-struct Res { float d; float lvl; float s; float vein; float across; float h; float id; float nvein; float phi; float phiC; float scaleC; };   // phiC/scaleC: the frond that is a visible UNIT on screen (colour comes from it)
-static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
-                       constant Child* ch, constant Params& P, float pix) {
-    Res r; r.d = 1e9; r.lvl = -1.0; r.s = 0.0; r.vein = 0.0; r.across = 0.0; r.h = 0.0; r.id = 0.0; r.nvein = 0.0; r.phi = phi0; r.phiC = phi0; r.scaleC = scale;
+struct Res { float d; float lvl; float s; float vein; float across; float h; float id; float nvein; float phi; float phiC; float scaleC; float flag; };   // flag (debug DBG=2): 1 sure-fill, 2 alt won, 3 outside bbox, 4 no child, 5 far   // phiC/scaleC: the frond that is a visible UNIT on screen (colour comes from it)
+// a path not taken: the runner-up child whose subtree ALSO contains the point (overlapping siblings)
+struct Alt { bool on; float2 q; float scale; float phi; int L; float id; float phiC; float scaleC; };
+static Res walk(float2 q, float scale, float phi0, int L0, float id0, float phiC0, float scaleC0, float viewH,
+               texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
+               constant Child* ch, constant Params& P, float pix, thread Alt& alt) {
+    Res r; r.d = 1e9; r.lvl = -1.0; r.s = 0.0; r.vein = 0.0; r.across = 0.0; r.h = 0.0; r.id = id0; r.nvein = 0.0; r.phi = phi0; r.phiC = phiC0; r.scaleC = scaleC0;
+    alt.on = false; r.flag = 0.0;
     float phi = phi0, sure = 1e9, surePhi = phi0, sureS = 0.0; float sureL = 0.0;
     float texel = 2.5 * (P.bmax.x - P.bmin.x) / float(\(TR));
     int maxL = int(P.misc.y);
-    for (int L = 0; L <= maxL; L++) {
+    for (int L = L0; L <= maxL; L++) {
         int st = stateFor(scale, viewH, P);
         float2 uv = uvOf(q, P); float o = outside(q, P);
         float4 f = F.sample(lin, uv, uint(st)); f.x += o; f.w += o;
         float tq = T.sample(lin, uv, uint(st)).x + o;
         if (scale >= viewH * P.curl.w) { r.phiC = phi + f.y; r.scaleC = scale; }
-        if (tq < -texel && tq * scale < sure) { sure = tq * scale; surePhi = phi + f.y; sureS = f.y; sureL = float(L) + 0.5; }   // this level is SURE the point is in the tree
+        bool fine = texel * scale < pix * 1.5;                             // this level's outline is sharp on screen (coarse levels blur real gaps shut)
+        if (fine && tq < -texel && tq * scale < sure) { sure = tq * scale; surePhi = phi + f.y; sureS = f.y; sureL = float(L) + 0.5; }   // this level is SURE the point is in the tree
         float rach = f.w * scale;                                          // this level's stem (a vein)
         r.vein = max(r.vein, smoothstep(pix * 1.2, -pix * 0.5, rach) * (1.0 - 0.12 * float(L)));
         if (rach < r.d) { r.d = rach; r.lvl = float(L); r.s = f.y; r.across = 0.0; r.phi = phi + f.y; }
@@ -226,12 +231,12 @@ static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d
             r.h = max(r.h, sigma(f.y, P) * 0.12 * sqrt(ub) * scale);      // each leaflet a shallow dome
             break;
         }
-        if (o > 0.0) { break; }
+        if (o > 0.0) { r.flag = 3.0; break; }
         float4 c = C.read(uint2(clamp(uv, 0.0, 0.9999) * float(\(TR))), uint(st));
         int k0 = int(c.x + 0.5);
-        if (k0 < 0 || c.y > 0.5) { break; }
+        if (k0 < 0 || c.y > 0.5) { r.flag = 4.0; break; }
         // the lookup is texel-coarse: re-decide EXACTLY among its neighbours along the stem, both sides
-        int k = k0; float bd = 1e9;
+        int k = k0, k2 = -1; float bd = 1e9, bd2 = 1e9;
         int Wn = int(P.misc.w);
         for (int j = -Wn; j <= Wn + 1; j++) {
             int kk = (k0 & ~1) + j;
@@ -240,9 +245,19 @@ static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d
             int sj = stateFor(scale * cc.scale, viewH, P);
             float2 qc = toChild(q, cc);
             float dk = (T.sample(lin, uvOf(qc, P), uint(sj)).x + outside(qc, P)) * cc.scale;
-            if (dk < bd) { bd = dk; k = kk; }
+            if (dk < bd) { bd2 = bd; k2 = k; bd = dk; k = kk; } else if (dk < bd2) { bd2 = dk; k2 = kk; }
         }
-        if (bd > 0.25) { break; }
+        if (bd > 0.25) { r.flag = 5.0; break; }
+        if (bd > 0.0 && tq < 0.0 && fine) {                                       // no candidate holds the point, yet the tree here does: draw this level's outline
+            float blade = tq * scale;
+            if (blade < r.d) { r.d = blade; r.lvl = float(L) + 0.5; r.s = f.y; r.phi = phi + f.y; r.across = 0.0; }
+            r.flag = 5.0; break;
+        }
+        if (!alt.on && k2 >= 0 && k2 != k && bd2 < 0.0) {                // the point is inside the runner-up's subtree too: remember that path
+            constant Child& K2 = ch[st * NCHC + k2];
+            alt.on = true; alt.q = toChild(q, K2); alt.scale = scale * K2.scale; alt.phi = phi + K2.s; alt.L = L + 1;
+            alt.id = fract(r.id * 7.31 + float(k2) * 0.1373 + 0.17); alt.phiC = r.phiC; alt.scaleC = r.scaleC;
+        }
         constant Child& K = ch[st * NCHC + k];
         phi += K.s;
         q = toChild(q, K);
@@ -250,8 +265,24 @@ static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d
         r.id = fract(r.id * 7.31 + float(k) * 0.1373 + 0.17);
     }
     // a coarser level was sure it is inside but the path fell into a gap (texture-resolution dead end): trust the coarse level
-    if (r.d > 0.0 && sure < 0.0) { r.d = sure; r.phi = surePhi; r.s = sureS; r.lvl = sureL; }
+    if (r.d > 0.0 && sure < 0.0) { r.d = sure; r.phi = surePhi; r.s = sureS; r.lvl = sureL; r.flag = 1.0; }
     return r;
+}
+
+// the descent proper: the nearest path, then up to NALT runner-up paths where siblings overlap; the nearest surface wins
+// (one path alone clipped overlapping fronds along straight boundaries — 'tips cut off')
+static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
+                       constant Child* ch, constant Params& P, float pix) {
+    Alt alt;
+    Res best = walk(q, scale, phi0, 0, 0.0, phi0, scale, viewH, F, T, C, ch, P, pix, alt);
+    for (int n = 0; n < int(P.shape.w) && alt.on; n++) {
+        Alt a = alt;
+        Res r = walk(a.q, a.scale, a.phi, a.L, a.id, a.phiC, a.scaleC, viewH, F, T, C, ch, P, pix, alt);
+        float vein = max(best.vein, r.vein), h = max(best.h, r.h);
+        if (r.d < best.d) { best = r; best.flag = max(best.flag, 2.0); }
+        best.vein = vein; best.h = h;
+    }
+    return best;
 }
 
 // screen uv → descent. Stills: the top frond placed in the world. ZOOM: the camera rides the dive point (host-computed),
@@ -276,7 +307,9 @@ static float3 hsv(float h, float s, float v) { float3 k = clamp(abs(fract(h + fl
 // the palette: 6 sRGB anchors walked as a PING-PONG gradient (no hard wrap back to the start), converted to linear
 static float3 pal(float x, constant float4* PL) {
     float u = abs(fract(x * 0.5) * 2.0 - 1.0) * 5.0; int i = min(int(u), 4); float f = smoothstep(0.0, 1.0, u - float(i));
-    return pow(mix(PL[i].rgb, PL[i + 1].rgb, f), float3(2.2));
+    float3 c = pow(mix(PL[i].rgb, PL[i + 1].rgb, f), float3(2.2));
+    float Y = dot(c, float3(0.2126, 0.7152, 0.0722));
+    return c * clamp(0.18 / max(Y, 1e-3), 0.45, 2.2);                     // even brightness along the palette (gold/emerald ran 2-3× brighter than cobalt)
 }
 static float hsh(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
 
@@ -329,6 +362,8 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
         float3 edge = c1 * rim * (1.1 + 3.0 * pulse + 2.0 * shimmer);
         float3 col = tissue * (1.0 + 2.5 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.4;
         if (P.misc.z > 0.5) { col = float3(0.2, 0.55, 0.15) * (0.35 + 0.8 * dif) + float3(0.5, 0.8, 0.3) * r.vein * 0.3; }   // plain fern (structure check)
+        if (P.misc.z > 1.5) { const float3 fc[6] = { float3(0.15), float3(1, 0, 0), float3(0, 0.4, 1), float3(1, 1, 0), float3(1, 0, 1), float3(0, 1, 1) };
+                              col = mix(col, fc[int(r.flag)], 0.6); cov = 1.0; }
         // the bath behind: a slow drifting fog of palette light (black read as a void, not a bath)
         float fog = 0.5 + 0.5 * sin(uv.x * 2.3 + t * 0.21) * sin(uv.y * 1.7 - t * 0.17 + 1.3 * sin(uv.x * 1.1 + t * 0.09));
         float3 bg = P.misc.z > 0.5 ? float3(0.01, 0.012, 0.015) : pal(hue0 + 0.35 * uv.x + 0.25 * fog - P.tm.z * t, PL) * (0.012 + 0.05 * fog * fog);
@@ -384,7 +419,7 @@ let spBuf = device.makeBuffer(bytes: &spines, length: MemoryLayout<SIMD2<Float>>
 var P = Params(bmin: bmin, bmax: bmax,
                cam: [envF("ZX", 0.0), envF("ZY", 0.0), envF("VIEW", 1.0) / envF("ZOOM", 1), envF("FLIP", 1)],
                top: [envF("TX", -0.5), envF("TY", -1.55), envF("TA", 1.75), envF("TL", 3.4)],
-               shape: [W0, CS, SINF, 0],
+               shape: [W0, CS, SINF, envF("NALT", 3)],
                misc: [Float(NCH), envF("MAXL", 14), envF("DBG", 0), envF("CW", 4)],   // CW: candidate window either side
                curl: [LOPEN, LCURL, 0, envF("CUNIT", 0.15)], lift: [0, 0, 0, 1], zc: .zero, tm: .zero, au: [0, 0, envF("HUE", 0.33), envF("HSPREAD", 1.4)])
 
