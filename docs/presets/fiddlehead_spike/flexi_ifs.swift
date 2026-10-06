@@ -93,9 +93,12 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
             float aa = max(a, 0.0), g = exp(ln * aa);
             float2 rv = rot(-C, -aa * ww), pos = C + g * rv, tn = g * (ln * rv - ww * float2(-rv.y, rv.x));
             float2 d = normalize(tn); pos += d * length(tn) * (a - aa);
-            float2 x = A * (pos + float2(-d.y, d.x) * l * p.sd.x * min(g, 1.0)) + T;
-            float cc = 1.0 - abs(l);
-            float b = (stipe ? cc * smoothstep(-p.ext.y, -0.5 * p.ext.y, a) * p.tone.w : cc) - 0.015 * float(n);
+            // leaf TISSUE: at leaflet depth the repeated piece is a filled lens-shaped blade (half-width ∝ sin πa, in units of
+            // the segment's length), so a chain of them is a row of overlapping leaflets — lines alone read as filigree
+            float hw = (lvl >= int(p.ext.x) && a >= 0.0) ? max(p.sd.x, p.fp.w * length(C) * 0.11 * sin(3.14159 * aa)) : p.sd.x * (lvl == 0 ? p.sd.w : 1.0);
+            float2 x = A * (pos + float2(-d.y, d.x) * l * hw * min(g, 1.0)) + T;
+            float cc = lvl == 0 ? 1.0 - pow(abs(l), 4.0) : (lvl >= int(p.ext.x) && p.fp.w > 0.0) ? 0.55 + 0.45 * pow(abs(l), 3.0) : 1.0 - abs(l);   // stalk flat; blades filled with a brighter edge
+            float b = (stipe ? cc * smoothstep(-p.ext.y, -0.5 * p.ext.y, a) * p.tone.w : cc) * (lvl == 0 ? 0.6 : 1.0) - 0.015 * float(n);   // stalk loses the max to leaves: drawn behind
             if (b > 0.0) {
                 float2 q = (rot(float2(x.x * p.mirror, -x.y), p.ext.w) - p.centre) * p.scale + float2(\(W / 2).0 + p.wave.w, \(H / 2).0);
                 if (q.x >= 0.0 && q.y >= 0.0 && q.x < \(W).0 && q.y < \(H).0) {
@@ -110,12 +113,14 @@ kernel void chaos(device atomic_uint* img [[buffer(0)]], constant P& p [[buffer(
             else {                                                     // side branch, attached ON this joint's arc
                 float sg = u < pm + 0.5 * (1.0 - pm) ? -1.0 : 1.0, a0 = p.uf2.w;
                 float2 att = C + exp(ln * a0) * rot(-C, -a0 * ww);
-                T = A * att + T; A = A * (rotm(-sg * p.sd.z) / ss);
+                // OUTB: while coiled, one side's pinnae swing further out, studding the coil's outer rim (reference)
+                float ang = p.sd.z + (sg == p.sv.w ? p.fp.z * (1.0 - smoothstep(0.0, 0.6, ul)) : 0.0);
+                T = A * att + T; A = A * (rotm(-sg * ang) / ss);
                 // the branch opens after the parent's front passes its joint, each branch on its own schedule
                 bh = hash(bh ^ (uint(run) * 2u + (sg > 0.0 ? 1u : 0u) + 0x9e37u * uint(lvl + 1)));
                 if (lvl == 0) { side0 = sg > 0.0 ? 1 : 0; j0 = run; }
                 ph = float(bh & 1023u) * 0.00614;                     // each branch sways on its own phase
-                ul = clamp((F - float(run) - a0) / p.uf.w + p.uf2.z * (float(bh & 1023u) / 1023.0 - 0.5), 0.0, 1.0);
+                ul = clamp((F - float(run) - a0) / p.uf.w + p.uf2.z * ul * (float(bh & 1023u) / 1023.0 - 0.5), p.mo.w, 1.0);   // jitter ∝ parent's openness; floor: even closed, a pinna is a leaf (straight base, curled tip), not a wheel
                 F = frontAt(ul, p); swb = p.mo.y + p.mo.z * sin(p.mo.x * 1.3 + float(bh & 1023u) * 0.0061);
                 lvl++; run = 0;
             }
@@ -245,8 +250,8 @@ var driveSway: Float?, driveSpark: Float?   // per-frame overrides from a music 
 var driveEnergy: Float = 0.5, drivePulses = SIMD4<Float>(-1, -1, -1, -1)   // music intensity 0…1; seconds since the last 4 beats
 var fixedFrame: (SIMD2<Float>, SIMD2<Float>)?
 
-let KAPPA = envF("KAPPA", 0.6), KAPPA_O = envF("KAPPA_O", 0.03), JN = envF("JN", 22), WFRONT = envF("WFRONT", 3), LAGJ = envF("LAGJ", 8)
-let JIT = envF("JIT", 0.6), ATTACH = envF("ATTACH", 0.4), SIDE = envF("SIDE", 3.3), ANG = envF("ANG", .pi / 4)
+let KAPPA = envF("KAPPA", 0.75), KAPPA_O = envF("KAPPA_O", 0.03), JN = envF("JN", 22), WFRONT = envF("WFRONT", 3), LAGJ = envF("LAGJ", 8)
+let JIT = envF("JIT", 0.6), ATTACH = envF("ATTACH", 0.4), SIDE = envF("SIDE", 4.0), ANG = envF("ANG", .pi / 4)
 
 /// Whole-frond sway: a slow wind that never stops, plus the bass pushing it (drive).
 func sway(_ t: Float) -> Float { envF("WIND", 0.05) * (sin(t * 0.45) + 0.6 * sin(t * 1.1 + 1.0)) + (driveSway ?? 0) }
@@ -334,13 +339,13 @@ func render(unfurl u: Float, time t: Float) {
     let scale = min(Float(H) * fill / (hi.y - lo.y), Float(W) * fill / (hi.x - lo.x))
     if envF("DEBUGEXT", 0) > 0 { FileHandle.standardError.write("extent lo \(lo) hi \(hi) scale \(scale)\n".data(using: .utf8)!) }
     var p = Params(ww: 0, w: 0, scale: scale, mirror: envF("MIRROR", 1), centre: (lo + hi) * 0.5, iters: Int32(envF("ITERS", 280)),
-                   seed: 17 /* fixed: same random paths every frame, so detail moves instead of fizzing */, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 1.2), envF("STALKB", 0.45)],
-                   sd: [envF("SEEDW", 0.002), SIDE, ANG, 0],
+                   seed: 17 /* fixed: same random paths every frame, so detail moves instead of fizzing */, tone: [envF("AGESPAN", 45), envF("GAMMA", 1.4), envF("EXPO", 1.2), envF("STALKB", 1.0)],
+                   sd: [envF("SEEDW", 0.002), SIDE, ANG, envF("STALKW", 1.5)],
                    ext: [0, envF("STIPE", 6), envF("PSTIPE", 0.3), theta],
                    hue: [envF("H0", 0.1), envF("H1", 0.13), envF("H2", 0.3), envF("H3", 0.38)], sv: [envF("SAT", 0.85), envF("RIMLVL", 3), 0, 0],
                    core: [0, 0, 0, 0])
-    p.uf = [u, JN, WFRONT, LAGJ]; p.uf2 = [KAPPA, KAPPA_O, JIT, ATTACH]; p.mo = [t, sway(t), envF("SWAYB", 0.05), 0]
-    p.sv.z = envF("RUNSPAN", 9)
+    p.uf = [u, JN, WFRONT, LAGJ]; p.uf2 = [KAPPA, KAPPA_O, JIT, ATTACH]; p.mo = [t, sway(t), envF("SWAYB", 0.05), envF("CHILDMIN", 0.15)]
+    p.sv.z = envF("RUNSPAN", 9); p.sv.w = envF("OUTSG", 1); p.fp.z = envF("OUTB", 0.6); p.fp.w = envF("BLADE", 0); p.ext.x = envF("BLADELVL", 2)
     p.wave = [envF("WAVEA", 0.035) * (0.5 + driveEnergy), envF("WAVES", 1.6), envF("WAVEJ", 3.0), envF("HEROX", -0.12) * Float(W)]   // .w: hero left of centre (reference)   // bending wave, bigger when loud
     p.pulse = drivePulses; p.pl2 = [envF("PSPEED", 9), envF("PWIDTH", 0.9), envF("PGAIN", 3.75), 0]
     // warm light at the coil's eye: the limit of the top chain's joints
