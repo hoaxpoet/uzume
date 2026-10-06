@@ -95,7 +95,7 @@ kernel void glow(texture2d<float> src [[texture(0)]], texture2d<float, access::w
         b += src.sample(lin, uv + float2(i, j) * g.x / sz).rgb * w; wsum += w;
     }
     c += b / wsum * g.y;
-    float3 bg = float3(0.006, 0.010, 0.014) + float3(0.0, 0.012, 0.010) * (1.0 - uv.y);
+    float3 bg = float3(0.004, 0.005, 0.008);
     c = bg + c;
     c = c / (1.0 + c);                                          // soft shoulder
     out.write(float4(pow(c, float3(1.0 / 1.8)), 1.0), gid);
@@ -115,26 +115,28 @@ func rs(_ s: Float, _ a: Float, flip: Bool = false) -> simd_float2x2 {   // scal
 
 /// Fern maps for unfurl u (0 = tight crozier, 1 = open frond). Node 0 = whole frond W, node 1 = pinna P.
 func fernMaps(_ u: Float, _ t: Float) -> [Map] {
-    let sway = envF("SWAY", 0.03) * sin(t * 0.9) + envF("SWAY", 0.03) * 0.5 * sin(t * 1.7 + 1.3)
-    // whole-frond curl per step: coil (tight) → nearly straight (open)
-    let curlW = envF("CURLW", 0.30) * (1 - u) + envF("CURLW_O", 0.04) * u + sway
-    // pinna curl: pinnae are croziers too; they open later (lag) than the frond
-    let up = max(0, min(1, (u - 0.25) / 0.75))
-    let curlP = envF("CURLP", 0.30) * (1 - up) + envF("CURLP_O", 0.06) * up
-    let sMain = envF("SMAIN", 0.86), sPin = envF("SPIN", 0.30) * (0.75 + 0.25 * u)     // arms puff out as it opens
-    let aPin = envF("APIN", 0.85), hMain = envF("HMAIN", 1.6), hPin = envF("HPIN", 1.6)
-    let sP = envF("SMAINP", 0.84), sPP = envF("SPINP", 0.30), aPP = envF("APINP", 0.9)
+    // Two parameter sets, blended by unfurl: COIL (u=0) — a crozier is a log spiral (~2.7× per turn), so the
+    // frond map takes many small overlapping steps (contraction ~0.95, ~15° per step) with small pinna copies;
+    // OPEN (u=1) — Barnsley proportions (0.86, big step, pinnae ~0.33) with a slight curl. The arms puff out.
+    func L(_ k: String, _ c: Float, _ o: Float) -> Float { let a = envF(k, c), b = envF(k + "_O", o); return a + (b - a) * u }
+    let sway = envF("SWAY", 0.02) * (sin(t * 0.9) + 0.5 * sin(t * 1.7 + 1.3))
+    let sW = L("SW", 0.95, 0.86), cW = L("CW", 0.26, 0.05) + sway, hW = L("HW", 0.35, 1.6)
+    let sPin = L("SPIN", 0.10, 0.33), aPin = L("APIN", 1.0, 0.95), hPin = L("HPIN", 0.35, 1.6)
+    // the pinna is itself a fern whose own curl rolls its tip into a crozier (every level curls)
+    let sP = L("SP", 0.93, 0.88), cP = L("CP", 0.30, 0.14), hP = L("HP", 0.9, 1.6)
+    let sPP = L("SPP", 0.22, 0.30), aPP = L("APP", 0.95, 0.9), hPP = L("HPP", 0.9, 1.6)
+    let stem = simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, envF("STEMW", 0.16))))
     var m: [Map] = []
-    // node 0 (whole frond)
-    m.append(Map(m: simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, 0.16))), t: [0, 0], p: 0.02, from: 0, to: 0, col: 0.05))
-    m.append(Map(m: rs(sMain, -curlW), t: [0, hMain], p: 0.80, from: 0, to: 0, col: 0.45))
-    m.append(Map(m: rs(sPin, aPin), t: [0, hPin], p: 0.09, from: 1, to: 0, col: 0.75))
-    m.append(Map(m: rs(sPin, -aPin, flip: true), t: [0, hPin * 0.95], p: 0.09, from: 1, to: 0, col: 0.75))
-    // node 1 (pinna — itself a fern with its own curl)
-    m.append(Map(m: simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, 0.16))), t: [0, 0], p: 0.02, from: 1, to: 1, col: 0.10))
-    m.append(Map(m: rs(sP, -curlP), t: [0, hMain], p: 0.80, from: 1, to: 1, col: 0.55))
-    m.append(Map(m: rs(sPP, aPP), t: [0, hPin], p: 0.09, from: 1, to: 1, col: 0.95))
-    m.append(Map(m: rs(sPP, -aPP, flip: true), t: [0, hPin * 0.95], p: 0.09, from: 1, to: 1, col: 0.95))
+    // node 0 — the whole frond
+    m.append(Map(m: stem, t: [0, 0], p: 0, from: 0, to: 0, col: 0.05))
+    m.append(Map(m: rs(sW, -cW), t: [0, hW], p: 0, from: 0, to: 0, col: 0.40))
+    m.append(Map(m: rs(sPin, aPin), t: [0, hPin], p: 0, from: 1, to: 0, col: 0.75))
+    m.append(Map(m: rs(sPin, -aPin, flip: true), t: [0, hPin * 0.95], p: 0, from: 1, to: 0, col: 0.75))
+    // node 1 — a pinna (itself a fern with its own curl)
+    m.append(Map(m: stem, t: [0, 0], p: 0, from: 1, to: 1, col: 0.10))
+    m.append(Map(m: rs(sP, -cP), t: [0, hP], p: 0, from: 1, to: 1, col: 0.55))
+    m.append(Map(m: rs(sPP, aPP), t: [0, hPP], p: 0, from: 1, to: 1, col: 0.95))
+    m.append(Map(m: rs(sPP, -aPP, flip: true), t: [0, hPP * 0.95], p: 0, from: 1, to: 1, col: 0.95))
     for i in m.indices { m[i].p = max(abs(m[i].m.determinant), envF("PFLOOR", 0.03)) }   // area-proportional picks
     return m
 }
