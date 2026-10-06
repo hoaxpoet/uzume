@@ -670,7 +670,7 @@ let ruleO: Rule = {
     r.alpha = o("ALPHA", r.alpha); r.alpha1 = o("ALPHA1", r.alpha1)
     r.baseTurn = o("BT", r.baseTurn); r.baseTurn1 = o("BT1", r.baseTurn1); r.maxTurn = o("TURN", r.maxTurn)
     r.pinFront = o("PINF", r.pinFront); r.rampP = o("RAMPP", r.rampP); r.immature = o("IMM", r.immature)
-    r.sig1 = o("SIG1", r.sig1); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
+    r.sig1 = o("SIG1", r.sig1); r.leafPx = o("LEAFPX", r.leafPx); r.hookR = o("HOOKR", r.hookR); r.leafW = o("LEAFW", r.leafW); r.leafLen = o("LEAFLEN", r.leafLen); r.hairP = o("HAIRP", r.hairP); r.pExp1 = o("PEXP1", r.pExp1); r.immature1 = o("IMM1", r.immature1); r.maxTurn1 = o("TURN1", r.maxTurn1); r.curlOn = o("CURLON", r.curlOn); r.kapMin = o("KAPMIN", r.kapMin)
     return r
 }()
 var rule = rule0
@@ -681,7 +681,7 @@ func blendRule(_ w: Float) {
     rule.alpha = m(rule0.alpha, ruleO.alpha); rule.alpha1 = m(rule0.alpha1, ruleO.alpha1)
     rule.baseTurn = m(rule0.baseTurn, ruleO.baseTurn); rule.baseTurn1 = m(rule0.baseTurn1, ruleO.baseTurn1); rule.maxTurn = m(rule0.maxTurn, ruleO.maxTurn)
     rule.pinFront = m(rule0.pinFront, ruleO.pinFront); rule.rampP = m(rule0.rampP, ruleO.rampP); rule.immature = m(rule0.immature, ruleO.immature)
-    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
+    rule.sig1 = m(rule0.sig1, ruleO.sig1); rule.leafPx = m(rule0.leafPx, ruleO.leafPx); rule.hookR = m(rule0.hookR, ruleO.hookR); rule.leafW = m(rule0.leafW, ruleO.leafW); rule.leafLen = m(rule0.leafLen, ruleO.leafLen); rule.hairP = m(rule0.hairP, ruleO.hairP); rule.pExp1 = m(rule0.pExp1, ruleO.pExp1); rule.immature1 = m(rule0.immature1, ruleO.immature1); rule.maxTurn1 = m(rule0.maxTurn1, ruleO.maxTurn1); rule.curlOn = m(rule0.curlOn, ruleO.curlOn); rule.kapMin = m(rule0.kapMin, ruleO.kapMin)
 }
 var pxWorld: Float = 0.001
 var eyePos = SIMD3<Float>(0, 0, 0)
