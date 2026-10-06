@@ -143,7 +143,7 @@ func fern(_ u: Float, _ t: Float) -> Fern {
     let sway = envF("SWAY", 0.01) * (sin(t * 0.9) + 0.5 * sin(t * 1.7 + 1.3))
     // straight fern proportions (Barnsley-like; a slight natural bend)
     let sW = envF("SW", 0.86), hW = envF("HW", 1.6), bW = envF("BEND", 0.03) + sway
-    let sPin = L("SPIN", 0.24, 0.34), aPin = envF("APIN", 0.95), hPin = envF("HPIN", 1.6)   // arms puff out as it opens
+    let sPin = L("SPIN", 0.24, 0.42), aPin = envF("APIN", 1.0), hPin = envF("HPIN", 1.6)   // arms puff out as it opens
     let sP = envF("SP", 0.86), hP = envF("HP", 1.6)
     let sPP = L("SPP", 0.28, 0.32), aPP = envF("APP", 0.95), hPP = envF("HPP", 1.6)
     let stem = simd_float2x2(columns: (SIMD2(0, 0), SIMD2(0, envF("STEMW", 0.16))))
@@ -160,8 +160,8 @@ func fern(_ u: Float, _ t: Float) -> Fern {
     // rolls: where each level's rolling starts (fraction of its length), spiral b (growth e^{2πb} per turn)
     let lenW = hW / (1 - sW), lenP = hP / (1 - sP)
     let rw = Roll(a: L("RW", 0.10, 0.82), b: envF("BW", 0.16), len: lenW, dir: 1)
-    let rp = Roll(a: L("RP", 0.05, 0.62), b: envF("BP", 0.18), len: lenP, dir: 1)
-    let rpp = Roll(a: L("RPP", 0.05, 0.55), b: envF("BPP", 0.2), len: lenP, dir: 1)
+    let rp = Roll(a: L("RP", 0.05, 0.45), b: envF("BP", 0.18), len: lenP, dir: envF("DIRP", 1))
+    let rpp = Roll(a: L("RPP", 0.05, 0.30), b: envF("BPP", 0.2), len: lenP, dir: envF("DIRPP", 1))
     return Fern(maps: m, rw: rw, rp: rp, rpp: rpp)
 }
 
