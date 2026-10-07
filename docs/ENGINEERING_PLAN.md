@@ -387,14 +387,18 @@ Branch `claude/understory-development-2c507d`.
 | **UND.5** fiddleheads + vocals | ✅ built 2026-10-01 — live path pending (M7) | κ_max 0.45 (fitted to ref 02); voice = vocalsEnergyRel vetoed by brass/woodwind/string activity (the vocal stem carries trumpet); replay: sung 0.83 / 0.87 open, instrumental 0.00. Phrase timing + streaming path: cannot verify offline (design §12) |
 | **UND.6 / UND.7** M7 + certification | ⏸ | Matt's M7 PASS; NEW_PRESET_CHECKLIST §4 gates; 10-minute soak, watchdog silent |
 
-### Lane · Fiddlehead — one live fractal fern crozier ⏸ PARKED (2026-10-06)
+### Lane · Fiddlehead — an endless dive into a self-similar fern (reopened 2026-10-06; in the app at FH.16)
 
-Spike only: branch `claude/fiddlehead-fh1`, local and unpushed. Nothing reached the engine. Code and instruments are in `docs/presets/fiddlehead_spike/`; the state and lessons are in `BRIEF.md §FH.6`.
+Branch `claude/fiddlehead-fh1`, local and unpushed. Matt's direction (2026-10-06): recognisable as a fern in shape and texture, the fractal pattern at every level of zoom ("a staggering amount of detail"), the camera on a continuous zoom that reveals the pattern repeating and unfolding, fronds uncurling as the camera reaches them, music as nerve impulses running down the trunk and branches, "a vibrant light show — a bath of colour". Spikes and instruments: `docs/presets/fiddlehead_spike/` (`fern_descent.swift` is the reference implementation and test bed for FH.15+).
 
 | Increment | Status | Done-when / outcome |
 |---|---|---|
 | **FH.1–FH.5** IFS → 2D raster → live 3D L-system + per-pixel croziers | ❌ rejected by Matt (2026-10-05: *"looks like shit"*) | Matched the reference's fractal-detail metrics off-screen, but the read failed |
 | **FH.6** GPU chaos-game IFS: complete self-similarity, roll warps, spine walkers | ⏸ **PARKED**: failed the agreed gate (Matt 2026-10-06: *"one last try, then park"*) | Done-when: the plain open fern reads as ONE fern frond on the first check. Outcome: NO. The spines gave a clear stalk and 6–7 outer blades per side, but the centre stays a lattice of overlapping leaflet copies (a point-cloud IFS has no per-pinna band). Reopen only with a construction that confines each pinna to its own band |
+| **FH.7–FH.14** flexi IFS re-drive, ray-marched SDF crozier, nested fronds | ❌ superseded | Matt: the reference-matching 3-D crozier lacked the fractal intricacy ("nowhere near the level of detail"); a nested SDF cannot afford more than two levels |
+| **FH.15** per-pixel descent fern (spike) | ✅ approved direction 2026-10-07 (*"looks great"* after the tip fix) | ONE frond rule repeated per pixel until sub-pixel; seamless dive toward a child's fixed point; curl from on-screen size (unfurls as reached); colour bath (5 named palettes, stained glass default); beat-grid nerve impulses. Cut-off tips root-caused and fixed: the baked tree distance assumed one curl state per child — it must bound every state the renderer can put a child in (incl. all of them under the clamped open state) — 0.00 % missing vs exhaustive ground truth across a full cycle (was ~10 %) |
+| **FH.16** live in the app | ✅ built 2026-10-07 — live M7 pending | `FiddleheadFern` (`ParticleGeometry`) + `FiddleheadFern.metal` + `Fiddlehead` sidecar (`particles`, `certified: false`). Fields (~57 MB) baked lazily on a separate queue. Release, back-to-back, M2 Pro: full 1080p p50 16.7 / p95 17.7 ms → internal cap 80 % of 1080p's area: p50 13.6 / p95 14.3 ms. Motion gate 0 spikes / 300 frames incl. the loop seam. Audio: bass/treble deviations self-normalised, `spectralSurge` → exposure, pulses on cached-grid beat wraps. Not yet verified: real-music coupling live (the harness uses a synthetic beat clock), cold start, streaming path |
+| **FH.17** M7 + routes manifest + certification | ⏸ | Matt's live M7; declare `audio_routes` with replay coverage; colour/brightness tuning on real sessions; per-track palette choice if wanted |
 
 ### Lane · SCAN — Spotify playlists from the screen (D-260)
 
