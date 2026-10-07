@@ -268,5 +268,52 @@ struct FiddleheadFernTests {
         ff.waitUntilExit()
         print("FIDDLEHEAD replay \(w)x\(h) → \(out)")
     }
+
+    /// Palette candidates for curation: `FIDDLEHEAD_PALETTES=<file>` holds lines `name|r,g,b;r,g,b;…[|spread|lum]` (6 sRGB
+    /// anchors; optional hue spread and palette luminance target). Each renders the same stretch of a replayed session (`FIDDLEHEAD_REPLAY`) to `<out dir>/<name>.mp4`
+    /// — the anchors are written straight into the renderer's palette buffer, so the product code is untouched.
+    @Test("FIDDLEHEAD_PALETTES=<file>: the same replayed moment in each candidate palette",
+          .enabled(if: ProcessInfo.processInfo.environment["FIDDLEHEAD_PALETTES"] != nil))
+    func palettes() throws {
+        let env = ProcessInfo.processInfo.environment
+        let lines = try String(contentsOfFile: env["FIDDLEHEAD_PALETTES"] ?? "", encoding: .utf8).split(separator: "\n")
+        let rows = try SessionRows(dir: URL(fileURLWithPath: env["FIDDLEHEAD_REPLAY"] ?? ""))
+        let outDir = env["FIDDLEHEAD_OUT"] ?? FileManager.default.temporaryDirectory.path
+        let w = Int(env["FIDDLEHEAD_W"] ?? "") ?? 640, h = Int(env["FIDDLEHEAD_H"] ?? "") ?? 360
+        let start = Double(env["FIDDLEHEAD_START"] ?? "") ?? 8, seconds = Double(env["FIDDLEHEAD_SECONDS"] ?? "") ?? 15
+        let fps: Float = 30
+        for line in lines where line.contains("|") {
+            let parts = line.split(separator: "|")
+            var anchors = parts[1].split(separator: ";").map { triple -> SIMD4<Float> in
+                let v = triple.split(separator: ",").compactMap { Float($0.trimmingCharacters(in: .whitespaces)) }
+                return SIMD4(v[0], v[1], v[2], 0)
+            }
+            #expect(anchors.count == 6, "\(parts[0]) needs 6 anchors")
+            let rig = try Rig(width: w, height: h)
+            memcpy(rig.fern.paletteBuffer.contents(), &anchors, MemoryLayout<SIMD4<Float>>.stride * 6)
+            // optional per-look fields: |hue spread|palette luminance target
+            if parts.count > 2, let spread = Float(parts[2]) { rig.fern.hueSpread = spread }
+            if parts.count > 3, let lum = Float(parts[3]) { rig.fern.params.look.x = lum }
+            if parts.count > 4, let white = Float(parts[4]) { rig.fern.params.style.x = white }
+            if parts.count > 5, let glow = Float(parts[5]) { rig.fern.params.style.y = glow }
+            if parts.count > 6, let edge = Float(parts[6]) { rig.fern.params.style.z = edge }
+            // warm up through the replay from 0 so the music state at `start` is the session's own
+            let warm = Int(start * Double(fps))
+            #expect(rig.waitForBake(rows.features(at: 0, fps: fps)))
+            for i in 0..<warm { rig.frame(rows.features(at: Double(i) / Double(fps), fps: fps)) }
+            let ff = Process()
+            ff.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+            ff.arguments = ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", "\(w)x\(h)", "-r", "30",
+                            "-i", "-", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "\(outDir)/\(parts[0]).mp4"]
+            let pipe = Pipe(); ff.standardInput = pipe
+            try ff.run()
+            for i in warm..<(warm + Int(seconds * Double(fps))) {
+                rig.frame(rows.features(at: Double(i) / Double(fps), fps: fps))
+                pipe.fileHandleForWriting.write(Data(bytes: rig.readback.contents(), count: w * h * 4))
+            }
+            try pipe.fileHandleForWriting.close()
+            ff.waitUntilExit()
+        }
+    }
 }
 

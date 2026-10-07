@@ -30,6 +30,7 @@ struct FernParams {
     float4 look;     // palette luminance target, candidate window, LOD pixels, normals-from-lanes (1/0)
     float4 prev;     // the PREVIOUS frame's camera in this frame's level-0 coordinates: centre x, y, half-height, rotation
     float4 taa;      // sub-pixel jitter x, y (pixels), history weight, history valid (1/0)
+    float4 style;    // the palette's LOOK: white in the vein light, glow gain, edge gain, unused
 };
 struct FernChild { float2 root; float ang; float scale; float mirror; float s; float shift; float pad; };
 
@@ -275,13 +276,13 @@ kernel void fh_render(texture2d_array<float> F [[texture(0)]], texture2d_array<f
     // size (continuous: the loop stays seamless and colour shifts as each frond grows), flowing outward over time.
     float hue = hue0 + spread * r.phiC - 0.17 * log(r.scaleC / viewH) - flow * t;
     float mid = 1.0 - abs(r.across);
-    float3 c0 = fh_pal(hue, PL, lum), c1 = fh_pal(hue + 0.12, PL, lum), cv = mix(fh_pal(hue + 0.06, PL, lum), float3(1.0), 0.2);
+    float3 c0 = fh_pal(hue, PL, lum), c1 = fh_pal(hue + 0.12, PL, lum), cv = mix(fh_pal(hue + 0.06, PL, lum), float3(1.0), P.style.x);
     float relief = 0.25 + 0.75 * dif;
     // bass glow (P.au.x): every bass hit swells the WHOLE fern's light at once — zero lag, no grid needed
     float3 tissue = c0 * relief * (0.18 + 0.45 * mid * mid) * (0.6 + 0.6 * ripple) * (0.8 + 1.1 * P.au.x);
-    float3 glow = cv * r.vein * (0.7 + 0.6 * ripple + 2.4 * P.au.x + 7.0 * pulse);
+    float3 glow = cv * r.vein * (0.7 + 0.6 * ripple + 2.4 * P.au.x + 7.0 * pulse) * P.style.y;
     float rim = smoothstep(-pix * 2.5, -pix * 0.2, r.d) * cov;
-    float3 edge = c1 * rim * (1.1 + 0.8 * P.au.x + 3.0 * pulse + 1.6 * shimmer);
+    float3 edge = c1 * rim * (1.1 + 0.8 * P.au.x + 3.0 * pulse + 1.6 * shimmer) * P.style.z;
     float3 col = tissue * (1.0 + 3.5 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.4;
     // the bath behind: a slow drifting fog of palette light (black read as a void, not a bath)
     float fog = 0.5 + 0.5 * sin(uv.x * 2.3 + t * 0.21) * sin(uv.y * 1.7 - t * 0.17 + 1.3 * sin(uv.x * 1.1 + t * 0.09));

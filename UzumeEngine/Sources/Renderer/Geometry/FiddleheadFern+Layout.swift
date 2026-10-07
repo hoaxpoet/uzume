@@ -22,6 +22,7 @@ struct FernParams {
     var look: SIMD4<Float> = .zero      // palette luminance, candidate window, LOD pixels, lane normals on
     var prev: SIMD4<Float> = .zero      // previous frame's camera in this frame's level-0 coords: x, y, half, rot
     var taa: SIMD4<Float> = .zero       // jitter x, y (px), history weight, history valid
+    var style: SIMD4<Float> = SIMD4(0.2, 1, 1, 0)   // palette look: vein white mix, glow gain, edge gain
 }
 
 /// Mirrors `FernChild` in FiddleheadFern.metal (32 bytes).

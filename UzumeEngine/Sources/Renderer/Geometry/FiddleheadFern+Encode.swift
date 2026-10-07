@@ -91,7 +91,7 @@ extension FiddleheadFern {
         params.lift = frame.lift
         params.zc = frame.centre
         params.tm = SIMD4(clock, frame.phi0, 0.12, Float(fronts.count))
-        params.au = SIMD4(music.bassGlow, music.treble, 0.33, 1.4)
+        params.au = SIMD4(music.bassGlow, music.treble, 0.33, hueSpread)
         let prev = historyValid ? previousCamera(for: frame) : nil
         let jit = Self.jitter(frameIndex)
         params.prev = prev ?? frame.centre

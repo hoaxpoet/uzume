@@ -59,6 +59,9 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     private var bakeState = 0                       // 0 not started, 1 baking, 2 ready
     var drawableSize = SIMD2<Int>(1920, 1080)
     var clock: Float = 0
+    /// How many palette colours run along one stem of the impulse path (1.4: several colours per frame; lower = wider
+    /// single-colour bands). Part of a palette's LOOK, not the palette's anchors.
+    var hueSpread: Float = 1.4
 
     public init(device: MTLDevice, library: MTLLibrary, pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb,
                 palette: FernPalette = .stainedGlass) throws {
