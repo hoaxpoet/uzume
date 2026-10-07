@@ -91,7 +91,11 @@ extension FiddleheadFern {
         params.lift = frame.lift
         params.zc = frame.centre
         params.tm = SIMD4(clock, frame.phi0, 0.12, Float(fronts.count))
-        params.au = SIMD4(music.bassGlow, music.treble, 0.33, hueSpread)
+        let look = lookOverride ?? palettePlan.look(at: clock)
+        var anchors = look.anchors
+        params.au = SIMD4(music.bassGlow, music.treble, 0.33, look.spread)
+        params.look.x = look.luminance
+        params.style = SIMD4(look.veinWhite, look.glow, look.edge, 0)
         let prev = historyValid ? previousCamera(for: frame) : nil
         let jit = Self.jitter(frameIndex)
         params.prev = prev ?? frame.centre
@@ -110,7 +114,7 @@ extension FiddleheadFern {
         enc.setBuffer(childBuffer, offset: 0, index: 0)
         enc.setBytes(&params, length: MemoryLayout<FernParams>.stride, index: 1)
         enc.setBuffer(pulseBuffer, offset: 0, index: 2)
-        enc.setBuffer(paletteBuffer, offset: 0, index: 3)
+        enc.setBytes(&anchors, length: MemoryLayout<SIMD4<Float>>.stride * anchors.count, index: 3)
         // whole threadgroups: the relief normals read neighbours across SIMD lanes (see fh_render)
         let groups = MTLSize(width: (hdr.width + 15) / 16, height: (hdr.height + 15) / 16, depth: 1)
         enc.dispatchThreadgroups(groups, threadsPerThreadgroup: group)

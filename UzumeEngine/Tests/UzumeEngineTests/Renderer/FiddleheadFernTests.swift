@@ -77,6 +77,56 @@ struct FiddleheadFernTests {
         #expect(music.bassGlow < hit * 0.2)
     }
 
+    // MARK: Palette plan
+
+    @Test("energy picks the family, with hysteresis")
+    func familyFromEnergy() {
+        #expect(FernPalettePlan.family(for: 8, current: .jewel) == .bold)
+        #expect(FernPalettePlan.family(for: 5, current: .jewel) == .jewel)
+        #expect(FernPalettePlan.family(for: 2, current: .jewel) == .subtle)
+        #expect(FernPalettePlan.family(for: 6.7, current: .bold) == .bold)        // holds bold just below 7
+        #expect(FernPalettePlan.family(for: 6.7, current: .jewel) == .jewel)
+        #expect(FernPalettePlan.energy(level: 0, surge: 1) == 10)                  // unknown level → live loudness
+        #expect(FernPalettePlan.energy(level: 4, surge: 1) == 4)
+    }
+
+    /// Drives a plan at 60 fps with a downbeat every `bar` seconds.
+    private func run(_ plan: inout FernPalettePlan, from t0: Float, seconds: Float, energy: Float, bar: Float = 2) {
+        var t = t0
+        while t < t0 + seconds {
+            let downbeat = floor(t / bar) != floor((t - 1 / 60) / bar)
+            plan.update(time: t, energy: energy, trackKey: 0.37, downbeat: downbeat)
+            t += 1 / 60
+        }
+    }
+
+    @Test("a family change waits out the dwell, lands on a downbeat, and crossfades")
+    func familyChange() {
+        var plan = FernPalettePlan()
+        run(&plan, from: 0, seconds: 10, energy: 5)
+        #expect(plan.current.family == .jewel)
+        run(&plan, from: 10, seconds: 3, energy: 9)                                // a 3 s spike: under the dwell
+        #expect(plan.current.family == .jewel)
+        run(&plan, from: 13, seconds: 10, energy: 9)
+        #expect(plan.current.family == .bold)
+        #expect(plan.look(at: 40) == plan.current.look)                           // settled after the fade
+        #expect((13...30).contains { plan.look(at: Float($0)) != plan.current.look })   // and it DID fade
+    }
+
+    @Test("looks rotate within the family every 32 bars, the same way for the same track")
+    func rotation() {
+        var a = FernPalettePlan(), b = FernPalettePlan()
+        var seen: [FernPalette] = []
+        var t: Float = 0
+        for _ in 0..<4 {
+            run(&a, from: t, seconds: 64.5, energy: 5); run(&b, from: t, seconds: 64.5, energy: 5)
+            seen.append(a.current); #expect(a.current == b.current)
+            t += 64.5
+        }
+        #expect(Set(seen).count == 3)                                              // all three jewel looks come round
+        #expect(seen.allSatisfy { $0.family == .jewel })
+    }
+
     // MARK: GPU
 
     struct Rig {
@@ -206,6 +256,9 @@ struct FiddleheadFernTests {
     /// A recorded session's REAL feature rows (`features.csv`), resampled to the film's frame rate by wallclock and
     /// aligned to `raw_tap.wav`'s start, so the film plays with the audio the session heard (FA #27: real pipeline
     /// data, not synthetic envelopes). Only the fields FiddleheadFern reads are carried.
+    /// ⚠ NOT carried: `StemFeatures.energyLevel` — sessions do not record it (stems.csv has no column), so a replay
+    /// runs the palette plan on its live-loudness fallback. The session.log `ENERGY_LEVELS`/`KAGURA_SONG` lines show
+    /// what the live run's levels were.
     struct SessionRows {
         let wall: [Double], time: [Float], beat: [Float], bar: [Float], bass: [Float], treb: [Float], surge: [Float]
         let tapStart: Double
@@ -284,19 +337,15 @@ struct FiddleheadFernTests {
         let fps: Float = 30
         for line in lines where line.contains("|") {
             let parts = line.split(separator: "|")
-            var anchors = parts[1].split(separator: ";").map { triple -> SIMD4<Float> in
+            let anchors = parts[1].split(separator: ";").map { triple -> SIMD4<Float> in
                 let v = triple.split(separator: ",").compactMap { Float($0.trimmingCharacters(in: .whitespaces)) }
                 return SIMD4(v[0], v[1], v[2], 0)
             }
             #expect(anchors.count == 6, "\(parts[0]) needs 6 anchors")
             let rig = try Rig(width: w, height: h)
-            memcpy(rig.fern.paletteBuffer.contents(), &anchors, MemoryLayout<SIMD4<Float>>.stride * 6)
-            // optional per-look fields: |hue spread|palette luminance target
-            if parts.count > 2, let spread = Float(parts[2]) { rig.fern.hueSpread = spread }
-            if parts.count > 3, let lum = Float(parts[3]) { rig.fern.params.look.x = lum }
-            if parts.count > 4, let white = Float(parts[4]) { rig.fern.params.style.x = white }
-            if parts.count > 5, let glow = Float(parts[5]) { rig.fern.params.style.y = glow }
-            if parts.count > 6, let edge = Float(parts[6]) { rig.fern.params.style.z = edge }
+            func field(_ i: Int, _ fallback: Float) -> Float { parts.count > i ? Float(parts[i]) ?? fallback : fallback }
+            rig.fern.lookOverride = FernLook(anchors: anchors, spread: field(2, 1.4), luminance: field(3, 0.08),
+                                             veinWhite: field(4, 0.2), glow: field(5, 1), edge: field(6, 1))
             // warm up through the replay from 0 so the music state at `start` is the session's own
             let warm = Int(start * Double(fps))
             #expect(rig.waitForBake(rows.features(at: 0, fps: fps)))

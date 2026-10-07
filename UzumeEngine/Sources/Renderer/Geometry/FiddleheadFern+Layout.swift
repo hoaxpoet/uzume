@@ -138,30 +138,3 @@ struct FernShape {
         return min(max(Int((logOpen - logSize) / (logOpen - logRolled) * Float(states - 1) + 0.5), 0), states - 1)
     }
 }
-
-// MARK: - Palettes
-
-/// sRGB anchors, walked as a ping-pong gradient in the shader. Each anchored to a named look (FH.15 colour pass).
-public enum FernPalette: Int, CaseIterable, Sendable {
-    case psychedelic, bioluminescent, klimtGold, aurora, stainedGlass
-
-    var anchors: [SIMD4<Float>] {
-        switch self {
-        case .psychedelic:
-            return [[0.42, 0.12, 0.95, 0], [0.98, 0.12, 0.62, 0], [1.0, 0.58, 0.06, 0],
-                    [0.15, 0.92, 0.38, 0], [0.05, 0.82, 0.98, 0], [0.18, 0.30, 1.0, 0]]
-        case .bioluminescent:
-            return [[0.05, 0.10, 0.45, 0], [0.0, 0.45, 0.95, 0], [0.0, 0.95, 0.90, 0],
-                    [0.35, 0.95, 0.75, 0], [0.55, 0.25, 1.0, 0], [0.95, 0.20, 0.80, 0]]
-        case .klimtGold:
-            return [[0.02, 0.30, 0.35, 0], [0.05, 0.55, 0.40, 0], [0.55, 0.62, 0.15, 0],
-                    [1.0, 0.80, 0.25, 0], [1.0, 0.52, 0.08, 0], [0.80, 0.15, 0.08, 0]]
-        case .aurora:
-            return [[0.25, 0.10, 0.55, 0], [0.85, 0.25, 0.55, 0], [0.60, 0.20, 0.85, 0],
-                    [0.05, 0.70, 0.75, 0], [0.10, 0.95, 0.45, 0], [0.75, 1.0, 0.55, 0]]
-        case .stainedGlass:
-            return [[0.05, 0.15, 0.75, 0], [0.20, 0.25, 1.0, 0], [0.85, 0.05, 0.25, 0],
-                    [1.0, 0.25, 0.10, 0], [1.0, 0.75, 0.10, 0], [0.05, 0.65, 0.35, 0]]
-        }
-    }
-}

@@ -28,7 +28,10 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
 
     let device: MTLDevice
     let shape = FernShape()
-    let palette: FernPalette
+    /// Chooses the palette look each frame (FiddleheadFern+Palette).
+    var palettePlan = FernPalettePlan()
+    /// Harness override: render this look instead of the plan's (palette curation).
+    var lookOverride: FernLook?
     let dive: FernDive
     var music = FernMusic()
     private let logger = Logging.renderer
@@ -36,7 +39,6 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     // Shape on the GPU
     let childBuffer: MTLBuffer
     let spineBuffer: MTLBuffer
-    let paletteBuffer: MTLBuffer
     let pulseBuffer: MTLBuffer
     var params = FernParams()
     let fieldResolution = 640
@@ -59,14 +61,9 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     private var bakeState = 0                       // 0 not started, 1 baking, 2 ready
     var drawableSize = SIMD2<Int>(1920, 1080)
     var clock: Float = 0
-    /// How many palette colours run along one stem of the impulse path (1.4: several colours per frame; lower = wider
-    /// single-colour bands). Part of a palette's LOOK, not the palette's anchors.
-    var hueSpread: Float = 1.4
 
-    public init(device: MTLDevice, library: MTLLibrary, pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb,
-                palette: FernPalette = .stainedGlass) throws {
+    public init(device: MTLDevice, library: MTLLibrary, pixelFormat: MTLPixelFormat = .bgra8Unorm_srgb) throws {
         self.device = device
-        self.palette = palette
         func pso(_ name: String) throws -> MTLComputePipelineState {
             guard let fn = library.makeFunction(name: name) else { throw FiddleheadFernError.functionNotFound(name) }
             return try device.makeComputePipelineState(function: fn)
@@ -87,15 +84,14 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
 
         let built = shape.build()
         dive = FernDive(shape: shape, children: built.children)
-        var children = built.children, spines = built.spines, anchors = palette.anchors
+        var children = built.children, spines = built.spines
         guard let cb = device.makeBuffer(bytes: &children, length: MemoryLayout<FernChild>.stride * children.count),
               let sb = device.makeBuffer(bytes: &spines, length: MemoryLayout<SIMD2<Float>>.stride * spines.count),
-              let pb = device.makeBuffer(bytes: &anchors, length: MemoryLayout<SIMD4<Float>>.stride * anchors.count),
               let qb = device.makeBuffer(length: MemoryLayout<SIMD2<Float>>.stride * FernMusic.maxPulses,
                                          options: .storageModeShared) else {
             throw FiddleheadFernError.allocationFailed
         }
-        childBuffer = cb; spineBuffer = sb; paletteBuffer = pb; pulseBuffer = qb
+        childBuffer = cb; spineBuffer = sb; pulseBuffer = qb
 
         params.box = SIMD4(built.boxMin.x, built.boxMin.y, built.boxMax.x, built.boxMax.y)
         params.shape = SIMD4(shape.rachisWidth, shape.childScale, shape.eye, 2)
@@ -133,6 +129,11 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
         let dt = min(max(features.deltaTime, 0), 0.1)
         clock += dt
         music.update(features: features, time: clock, dt: dt, dive: dive)
+        let energy = FernPalettePlan.energy(level: stemFeatures.energyLevel, surge: features.spectralSurge)
+        palettePlan.update(time: clock,
+                           energy: energy,
+                           trackKey: features.trackHueAnchor01,
+                           downbeat: music.downbeatThisFrame)
         guard isReady else { return }
         if hdr == nil { ensureAllocated(width: drawableSize.x, height: drawableSize.y) }
         encodeFrame(into: commandBuffer)
@@ -149,8 +150,8 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
     }
 
-    /// New track: the music state starts over (the dive keeps falling).
-    public func resetForTrack() { music.reset() }
+    /// New track: the music state and the palette plan start over (the dive keeps falling).
+    public func resetForTrack() { music.reset(); palettePlan.reset() }
 
     // MARK: Internals
 

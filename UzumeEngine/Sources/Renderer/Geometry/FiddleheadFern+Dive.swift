@@ -91,6 +91,8 @@ struct FernMusic {
     private(set) var bassGlow: Float = 0
     private(set) var treble: Float = 0
     private(set) var level: Float = 0
+    /// True on the frame the cached grid's bar wrapped (the palette plan changes looks on it).
+    private(set) var downbeatThisFrame = false
 
     /// Impulse front speed in path units per second: an impulse crosses a stem in ~0.4 s and reaches the visible
     /// leaflet tips in about a second — inside one bar at any common tempo.
@@ -116,6 +118,7 @@ struct FernMusic {
         level += (min(max(features.spectralSurge, 0), 1) - level) * min(dt / 0.5, 1)
         let downbeat = features.barPhase01 + 0.5 < lastBarPhase
         lastBarPhase = features.barPhase01
+        downbeatThisFrame = downbeat
         if downbeat {
             // born at the stem of the frond that fills the view now (level 0 → 1 as the cycle advances), not above it
             // strength 0.95: Matt, live round 2 on Cherub Rock — "a little bright … reduce by 5%"
