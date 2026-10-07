@@ -1,8 +1,8 @@
 // FiddleheadFern+Palette — the palette LOOKS and the logic that chooses between them. Pure: no Metal, unit-testable.
 //
 // Matt (2026-10-07): keep several palettes, choose with decision logic, cycle through them. The nine looks are the
-// set he preferred ("quite nice" — several colours woven through every frame), each anchored to a named work, in
-// three families. The family follows the music's ENERGY (light most intense when the music is loud and driving —
+// "quite nice" set (several colours woven through every frame), each anchored to a named work, in families —
+// NOT yet approved: Matt wants them bolder and more playful overall (only the PLAYFUL family is approved). The family follows the music's ENERGY (light most intense when the music is loud and driving —
 // Matt); within a family the looks rotate every 32 bars on a downbeat, in a per-track order; every change crossfades.
 
 import Foundation
