@@ -45,7 +45,10 @@ public enum ParticleGeometryRegistry {
         "Alfvén",
         // KAG.2 — the point-light dancer (`KaguraDancer`): CPU choreography + a geometry-owned
         // trail texture, drawn fullscreen in the particles pass.
-        "Kagura"
+        "Kagura",
+        // FH.16 — `FiddleheadFern`: a per-pixel descent over baked curl-state fields (texture arrays) plus its own
+        // bloom — compute kernels and custom textures, which only this seam gives a preset.
+        "Fiddlehead"
     ]
 }
 
