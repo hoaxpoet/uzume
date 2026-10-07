@@ -79,56 +79,51 @@ struct FiddleheadFernTests {
 
     // MARK: Palette plan
 
-    @Test("energy picks the family up the intensity ladder, with hysteresis")
-    func familyFromEnergy() {
-        #expect(FernPalettePlan.family(for: 2, current: nil) == .subtle)
-        #expect(FernPalettePlan.family(for: 4.5, current: nil) == .jewel)
-        #expect(FernPalettePlan.family(for: 6, current: nil) == .bold)
-        #expect(FernPalettePlan.family(for: 8, current: nil) == .playful)
-        #expect(FernPalettePlan.family(for: 6.8, current: .playful) == .playful)    // must clearly drop below 7
-        #expect(FernPalettePlan.family(for: 7.3, current: .bold) == .bold)          // must clearly rise above 7
-        #expect(FernPalettePlan.family(for: 7.6, current: .bold) == .playful)
-        #expect(FernPalettePlan.energy(level: 0, surge: 1) == 10)                   // unknown level → live loudness
-        #expect(FernPalettePlan.energy(level: 4, surge: 1) == 4)
+    @Test("the rotation holds all fifteen looks, consecutive looks from different families")
+    func rotationOrder() {
+        let looks = FernPalette.rotation
+        #expect(looks.count == FernPalette.allCases.count && Set(looks).count == looks.count)
+        #expect(zip(looks, looks.dropFirst()).prefix(11).allSatisfy { $0.family != $1.family })
         #expect(FernFamily.allCases.allSatisfy { !FernPalette.members(of: $0).isEmpty })
-        #expect(FernPalette.members(of: .playful).count == 6)
     }
 
     /// Drives a plan at 60 fps with a downbeat every `bar` seconds.
-    private func run(_ plan: inout FernPalettePlan, from t0: Float, seconds: Float, energy: Float, bar: Float = 2) {
+    private func run(_ plan: inout FernPalettePlan, from t0: Float, seconds: Float, key: Float = 0.37, bar: Float = 2) {
         var t = t0
         while t < t0 + seconds {
             let downbeat = floor(t / bar) != floor((t - 1 / 60) / bar)
-            plan.update(time: t, energy: energy, trackKey: 0.37, downbeat: downbeat)
+            plan.update(time: t, trackKey: key, downbeat: downbeat)
             t += 1 / 60
         }
     }
 
-    @Test("a family change waits out the dwell, lands on a downbeat, and crossfades")
-    func familyChange() {
+    @Test("a look holds 32 bars, changes on a downbeat, and crossfades")
+    func lookChange() {
         var plan = FernPalettePlan()
-        run(&plan, from: 0, seconds: 10, energy: 5)
-        #expect(plan.current.family == .jewel)
-        run(&plan, from: 10, seconds: 3, energy: 9)                                // a 3 s spike: under the dwell
-        #expect(plan.current.family == .jewel)
-        run(&plan, from: 13, seconds: 10, energy: 9)
-        #expect(plan.current.family == .playful)
-        #expect(plan.look(at: 40) == plan.current.look)                           // settled after the fade
-        #expect((13...30).contains { plan.look(at: Float($0)) != plan.current.look })   // and it DID fade
+        run(&plan, from: 0, seconds: 1)
+        let first = plan.current
+        run(&plan, from: 1, seconds: 60)                                           // 30 bars
+        #expect(plan.current == first)
+        run(&plan, from: 61, seconds: 6)                                           // past bar 32
+        #expect(plan.current != first && plan.current.family != first.family)
+        #expect(plan.look(at: 200) == plan.current.look)                           // settled after the fade
+        #expect((61...67).contains { plan.look(at: Float($0)) != plan.current.look })   // and it DID fade
     }
 
-    @Test("looks rotate within the family every 32 bars, the same way for the same track")
-    func rotation() {
-        var a = FernPalettePlan(), b = FernPalettePlan()
-        var seen: [FernPalette] = []
+    @Test("the same track replays the same sequence; another track starts elsewhere")
+    func perTrackOrder() {
+        var a = FernPalettePlan(), b = FernPalettePlan(), c = FernPalettePlan()
+        run(&a, from: 0, seconds: 200); run(&b, from: 0, seconds: 200); run(&c, from: 0, seconds: 200, key: 0.81)
+        #expect(a.current == b.current)
+        #expect(a.current != c.current)
+    }
+
+    @Test("without a beat grid the look changes every 60 s")
+    func noGridRotation() {
+        var plan = FernPalettePlan()
         var t: Float = 0
-        for _ in 0..<4 {
-            run(&a, from: t, seconds: 64.5, energy: 5); run(&b, from: t, seconds: 64.5, energy: 5)
-            seen.append(a.current); #expect(a.current == b.current)
-            t += 64.5
-        }
-        #expect(Set(seen).count == 3)                                              // all three jewel looks come round
-        #expect(seen.allSatisfy { $0.family == .jewel })
+        while t < 61 { plan.update(time: t, trackKey: 0.2, downbeat: false); t += 1 / 60 }
+        #expect(plan.current != FernPalette.rotation[Int(0.2 * Float(FernPalette.rotation.count))])
     }
 
     // MARK: GPU

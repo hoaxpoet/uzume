@@ -1,9 +1,10 @@
-// FiddleheadFern+Palette — the palette LOOKS and the logic that chooses between them. Pure: no Metal, unit-testable.
+// FiddleheadFern+Palette — the palette LOOKS and the rotation that chooses between them. Pure: no Metal, unit-testable.
 //
-// Matt (2026-10-07): keep several palettes, choose with decision logic, cycle through them. The nine looks are the
-// "quite nice" set (several colours woven through every frame), each anchored to a named work, in families —
-// NOT yet approved: Matt wants them bolder and more playful overall (only the PLAYFUL family is approved). The family follows the music's ENERGY (light most intense when the music is loud and driving —
-// Matt); within a family the looks rotate every 32 bars on a downbeat, in a per-track order; every change crossfades.
+// Matt (2026-10-07): keep several palettes and cycle through them; make them "bolder and more playful overall"; then
+// "approve all, share the energy range". Fifteen looks, each anchored to a named work, in four families. No family
+// is tied to an energy band — they take turns across the whole range: the look changes every 32 bars on a downbeat
+// (every 60 s without a grid), stepping through a per-track order that interleaves the families so consecutive looks
+// always differ in character; every change crossfades over 3 s. Brightness, not palette, follows the music's level.
 
 import Foundation
 import simd
@@ -15,9 +16,9 @@ struct FernLook: Equatable {
     var anchors: [SIMD4<Float>]
     var spread: Float           // palette colours per stem of the impulse path (higher = more colours per frame)
     var luminance: Float        // the palette's evened brightness (linear luminance target)
-    var veinWhite: Float = 0.2  // white mixed into the vein light
-    var glow: Float = 1
-    var edge: Float = 1
+    var veinWhite: Float = 0    // white mixed into the vein light (0: the vein light is the palette's own colour)
+    var glow: Float = 1.2
+    var edge: Float = 1.2
 
     func mixed(with other: FernLook, _ amount: Float) -> FernLook {
         func lerp(_ from: Float, _ to: Float) -> Float { from + (to - from) * amount }
@@ -30,20 +31,23 @@ struct FernLook: Equatable {
     }
 }
 
-/// Ordered by intensity: the family follows the music's energy up this list (Matt: light most intense when loud).
-enum FernFamily: Int, CaseIterable { case subtle, jewel, bold, playful }
+/// Character groups. They share the whole energy range; the rotation interleaves them.
+enum FernFamily: Int, CaseIterable { case playful, bold, jewel, subtle }
 
-/// The catalogue (FH.16 palette round, the set Matt preferred). sRGB anchors.
+/// The approved catalogue (Matt, 2026-10-07: "approve all"). sRGB anchors, worn bold: no white in the vein light,
+/// glow and edges 1.2. The original nine were saturated ×1.35 around each anchor's grey for the bolder pass.
 public enum FernPalette: Int, CaseIterable, Sendable {
-    case flavin, moscoso, matisse, stainedGlass, afKlint, klimt, turrell, monet, rothko
-    case memphis, murakami, lisaFrank, warhol, peterMax, delaunay
+    case moscoso, flavin, matisse                                   // bold
+    case stainedGlass, afKlint, klimt                               // jewel
+    case turrell, monet, rothko                                     // subtle
+    case memphis, murakami, lisaFrank, warhol, peterMax, delaunay   // playful
 
     var family: FernFamily {
         switch self {
-        case .flavin, .moscoso, .matisse: return .bold
-        case .memphis, .murakami, .lisaFrank, .warhol, .peterMax, .delaunay: return .playful
+        case .moscoso, .flavin, .matisse: return .bold
         case .stainedGlass, .afKlint, .klimt: return .jewel
         case .turrell, .monet, .rothko: return .subtle
+        case .memphis, .murakami, .lisaFrank, .warhol, .peterMax, .delaunay: return .playful
         }
     }
 
@@ -51,153 +55,136 @@ public enum FernPalette: Int, CaseIterable, Sendable {
         FernLook(anchors: rgb.map { SIMD4($0[0], $0[1], $0[2], 0) }, spread: spread, luminance: luminance)
     }
 
-    private static func playful(_ rgb: [[Float]], spread: Float) -> FernLook {
-        var look = make(rgb, spread: spread, luminance: 0.13)
-        look.veinWhite = 0; look.glow = 1.2; look.edge = 1.2
-        return look
-    }
-
     var look: FernLook {
         switch self {
         case .moscoso:      // Victor Moscoso, 1967 Fillmore posters
-            return Self.make([[1.0, 0.10, 0.15], [0.10, 0.90, 0.40], [1.0, 0.10, 0.90],
-                              [1.0, 0.55, 0.0], [0.15, 0.25, 1.0], [1.0, 0.95, 0.10]],
+            return Self.make([[1.0, 0.0, 0.057], [0.0, 1.0, 0.377], [1.0, 0.0, 0.982],
+                              [1.0, 0.562, 0.0], [0.039, 0.174, 1.0], [1.0, 1.0, 0.0]],
                              spread: 0.6,
-                             luminance: 0.10)
+                             luminance: 0.12)
         case .flavin:       // Dan Flavin, fluorescent light works
-            return Self.make([[1.0, 0.10, 0.55], [1.0, 0.15, 0.10], [1.0, 0.90, 0.10],
-                              [0.20, 1.0, 0.25], [0.10, 0.50, 1.0], [0.50, 0.10, 1.0]],
+            return Self.make([[1.0, 0.0, 0.55], [1.0, 0.057, 0.0], [1.0, 0.982, 0.0],
+                              [0.101, 1.0, 0.168], [0.0, 0.488, 1.0], [0.488, 0.0, 1.0]],
                              spread: 0.45,
-                             luminance: 0.11)
+                             luminance: 0.13)
         case .matisse:      // Matisse, The Snail (1953)
-            return Self.make([[0.10, 0.20, 0.75], [1.0, 0.50, 0.05], [0.85, 0.10, 0.45],
-                              [0.10, 0.60, 0.25], [1.0, 0.85, 0.15], [0.95, 0.25, 0.10]],
+            return Self.make([[0.013, 0.147, 0.89], [1.0, 0.494, 0.0], [0.984, 0.0, 0.444],
+                              [0.024, 0.699, 0.227], [1.0, 0.914, 0.0], [1.0, 0.186, 0.0]],
                              spread: 0.6,
-                             luminance: 0.09)
+                             luminance: 0.12)
         case .stainedGlass: // Sainte-Chapelle
-            return Self.make([[0.05, 0.15, 0.75], [0.20, 0.25, 1.0], [0.85, 0.05, 0.25],
-                              [1.0, 0.25, 0.10], [1.0, 0.75, 0.10], [0.05, 0.65, 0.35]],
+            return Self.make([[0.0, 0.092, 0.902], [0.101, 0.168, 1.0], [1.0, 0.0, 0.203],
+                              [1.0, 0.18, 0.0], [1.0, 0.797, 0.0], [0.0, 0.755, 0.35]],
                              spread: 1.4,
-                             luminance: 0.08)
+                             luminance: 0.11)
         case .afKlint:      // Hilma af Klint, The Ten Largest (1907)
-            return Self.make([[0.95, 0.55, 0.45], [0.70, 0.55, 0.90], [1.0, 0.60, 0.20],
-                              [0.45, 0.65, 0.95], [1.0, 0.60, 0.75], [0.85, 0.70, 0.30]],
+            return Self.make([[1.0, 0.515, 0.38], [0.694, 0.492, 0.964], [1.0, 0.6, 0.06],
+                              [0.368, 0.638, 1.0], [1.0, 0.536, 0.738], [0.932, 0.729, 0.189]],
                              spread: 0.8,
-                             luminance: 0.08)
+                             luminance: 0.11)
         case .klimt:        // Klimt, gold period
-            return Self.make([[0.02, 0.30, 0.35], [0.05, 0.55, 0.40], [0.55, 0.62, 0.15],
-                              [1.0, 0.80, 0.25], [1.0, 0.52, 0.08], [0.80, 0.15, 0.08]],
+            return Self.make([[0.0, 0.327, 0.394], [0.0, 0.626, 0.423], [0.589, 0.683, 0.048],
+                              [1.0, 0.841, 0.098], [1.0, 0.515, 0.0], [0.96, 0.082, 0.0]],
                              spread: 1.0,
-                             luminance: 0.07)
+                             luminance: 0.10)
         case .turrell:      // James Turrell, Skyspace at dusk
-            return Self.make([[0.12, 0.10, 0.35], [0.40, 0.25, 0.60], [0.80, 0.45, 0.55],
-                              [0.95, 0.65, 0.50], [0.60, 0.70, 0.85], [0.25, 0.35, 0.60]],
+            return Self.make([[0.096, 0.069, 0.406], [0.394, 0.192, 0.664], [0.87, 0.398, 0.533],
+                              [1.0, 0.633, 0.43], [0.559, 0.694, 0.897], [0.198, 0.332, 0.67]],
                              spread: 0.5,
-                             luminance: 0.045)
+                             luminance: 0.08)
         case .monet:        // Monet, Water Lilies (Orangerie)
-            return Self.make([[0.65, 0.60, 0.85], [0.50, 0.65, 0.50], [0.30, 0.55, 0.60],
-                              [0.85, 0.60, 0.70], [0.55, 0.70, 0.85], [0.60, 0.70, 0.40]],
+            return Self.make([[0.633, 0.565, 0.902], [0.483, 0.685, 0.483], [0.236, 0.573, 0.641],
+                              [0.897, 0.559, 0.694], [0.498, 0.7, 0.902], [0.612, 0.747, 0.342]],
                              spread: 0.7,
-                             luminance: 0.05)
+                             luminance: 0.08)
         case .rothko:       // Rothko Chapel
-            return Self.make([[0.30, 0.10, 0.25], [0.45, 0.10, 0.12], [0.25, 0.12, 0.35],
-                              [0.10, 0.12, 0.30], [0.55, 0.15, 0.30], [0.35, 0.15, 0.50]],
+            return Self.make([[0.329, 0.059, 0.262], [0.529, 0.057, 0.084], [0.254, 0.078, 0.388],
+                              [0.074, 0.101, 0.344], [0.626, 0.086, 0.288], [0.356, 0.086, 0.558]],
                              spread: 0.4,
-                             luminance: 0.022)
-        // PLAYFUL (Matt 2026-10-07: "bolder and more playful colour stories", all six added): worn bolder than the
-        // rest — no white in the vein light, brighter, stronger glow and edges
+                             luminance: 0.05)
         case .memphis:      // Memphis Group (Ettore Sottsass, 1980s)
-            return Self.playful([[1.0, 0.40, 0.70], [0.20, 0.85, 0.80], [1.0, 0.85, 0.15],
-                                 [0.15, 0.30, 0.90], [1.0, 0.25, 0.20], [0.60, 0.30, 0.90]], spread: 0.8)
+            return Self.make([[1.0, 0.40, 0.70], [0.20, 0.85, 0.80], [1.0, 0.85, 0.15],
+                              [0.15, 0.30, 0.90], [1.0, 0.25, 0.20], [0.60, 0.30, 0.90]],
+                             spread: 0.8,
+                             luminance: 0.13)
         case .murakami:     // Takashi Murakami, Flowers
-            return Self.playful([[1.0, 0.30, 0.60], [1.0, 0.85, 0.10], [0.20, 0.80, 1.0],
-                                 [0.40, 0.90, 0.30], [0.65, 0.35, 1.0], [1.0, 0.55, 0.15]], spread: 1.1)
+            return Self.make([[1.0, 0.30, 0.60], [1.0, 0.85, 0.10], [0.20, 0.80, 1.0],
+                              [0.40, 0.90, 0.30], [0.65, 0.35, 1.0], [1.0, 0.55, 0.15]],
+                             spread: 1.1,
+                             luminance: 0.13)
         case .lisaFrank:    // Lisa Frank
-            return Self.playful([[1.0, 0.15, 0.75], [0.55, 0.15, 1.0], [0.10, 0.90, 0.95],
-                                 [0.55, 1.0, 0.20], [1.0, 0.95, 0.20], [1.0, 0.40, 0.10]], spread: 0.9)
+            return Self.make([[1.0, 0.15, 0.75], [0.55, 0.15, 1.0], [0.10, 0.90, 0.95],
+                              [0.55, 1.0, 0.20], [1.0, 0.95, 0.20], [1.0, 0.40, 0.10]],
+                             spread: 0.9,
+                             luminance: 0.13)
         case .warhol:       // Andy Warhol, Marilyn screenprints
-            return Self.playful([[1.0, 0.35, 0.65], [0.10, 0.85, 0.80], [1.0, 0.90, 0.20],
-                                 [1.0, 0.55, 0.15], [0.60, 0.95, 0.30], [0.95, 0.25, 0.45]], spread: 0.7)
+            return Self.make([[1.0, 0.35, 0.65], [0.10, 0.85, 0.80], [1.0, 0.90, 0.20],
+                              [1.0, 0.55, 0.15], [0.60, 0.95, 0.30], [0.95, 0.25, 0.45]],
+                             spread: 0.7,
+                             luminance: 0.13)
         case .peterMax:     // Peter Max, 1960s pop
-            return Self.playful([[1.0, 0.50, 0.0], [0.95, 0.15, 0.60], [0.50, 0.20, 0.85],
-                                 [1.0, 0.90, 0.15], [0.30, 0.70, 1.0], [0.95, 0.30, 0.20]], spread: 0.8)
+            return Self.make([[1.0, 0.50, 0.0], [0.95, 0.15, 0.60], [0.50, 0.20, 0.85],
+                              [1.0, 0.90, 0.15], [0.30, 0.70, 1.0], [0.95, 0.30, 0.20]],
+                             spread: 0.8,
+                             luminance: 0.13)
         case .delaunay:     // Sonia Delaunay, Rhythm
-            return Self.playful([[1.0, 0.55, 0.10], [0.10, 0.30, 0.85], [0.90, 0.15, 0.20],
-                                 [1.0, 0.85, 0.20], [0.15, 0.60, 0.40], [0.25, 0.55, 0.95]], spread: 0.6)
+            return Self.make([[1.0, 0.55, 0.10], [0.10, 0.30, 0.85], [0.90, 0.15, 0.20],
+                              [1.0, 0.85, 0.20], [0.15, 0.60, 0.40], [0.25, 0.55, 0.95]],
+                             spread: 0.6,
+                             luminance: 0.13)
         }
     }
 
     static func members(of family: FernFamily) -> [FernPalette] { allCases.filter { $0.family == family } }
+
+    /// Every look, interleaving the families round-robin (playful, bold, jewel, subtle, playful, …), so consecutive
+    /// entries always differ in family while the families have members left.
+    static let rotation: [FernPalette] = {
+        let groups = FernFamily.allCases.map(members(of:))
+        let longest = groups.map(\.count).max() ?? 0
+        return (0..<longest).flatMap { i in groups.compactMap { i < $0.count ? $0[i] : nil } }
+    }()
 }
 
 // MARK: - Choosing
 
-/// Chooses the look each frame. Family ← energy (the measured 1–10 section energy; live loudness when unknown), with
-/// hysteresis and a dwell so it never flaps; look within the family ← rotation every 32 bars on a downbeat (every
-/// 60 s without a grid), in a per-track order; every change crossfades over 3 s.
+/// Steps through `FernPalette.rotation` from a per-track start: one step every 32 bars on a downbeat (every 60 s
+/// without a grid); every change crossfades over 3 s.
 struct FernPalettePlan {
     private(set) var current: FernPalette = .stainedGlass
     private var previous: FernPalette = .stainedGlass
     private var fadeStart: Float = -100
-    private var family: FernFamily = .jewel
-    private var candidate: FernFamily = .jewel
-    private var candidateSince: Float = 0
+    private var index = 0
     private var barsInLook = 0
-    private var rotation = 0
-    private var sawDownbeat = false
     private var lookStart: Float = 0
-    private var trackSeed = 0
+    private var sawDownbeat = false
     private var seeded = false
 
     static let fadeSeconds: Float = 3
-    static let dwellSeconds: Float = 6
     static let barsPerLook = 32
+    static let secondsPerLookWithoutGrid: Float = 60
 
-    /// Energy on a 1–10 scale: the measured section energy, or live loudness (spectralSurge 0…1) when that is unknown.
-    static func energy(level: Float, surge: Float) -> Float { level > 0 ? level : 1 + 9 * min(max(surge, 0), 1) }
-
-    /// Upper energy edge of each family below the top one: subtle ≤ 3.5 < jewel ≤ 5.5 < bold < 7 ≤ playful.
-    static let edges: [Float] = [3.5, 5.5, 7.0]
-
-    /// Family for an energy (1–10), with 0.5 of hysteresis: an edge moves 0.5 AWAY from the current family, so it
-    /// must be clearly crossed before the family changes.
-    static func family(for energy: Float, current: FernFamily?) -> FernFamily {
-        var index = 0
-        for (i, edge) in edges.enumerated() {
-            // nil: a track's first pick, no hysteresis
-            let shifted = current.map { i < $0.rawValue ? edge - 0.5 : edge + 0.5 } ?? edge
-            if energy > shifted { index = i + 1 }
-        }
-        return FernFamily(rawValue: index) ?? .jewel
-    }
-
-    /// - Parameters: `trackKey` 0…1 identifies the track (seeds the rotation order); `downbeat` is true on the frame
-    ///   the cached grid's bar wraps.
-    mutating func update(time: Float, energy: Float, trackKey: Float, downbeat: Bool) {
+    /// - Parameters: `trackKey` 0…1 identifies the track (its starting point in the rotation); `downbeat` is true on
+    ///   the frame the cached grid's bar wraps.
+    mutating func update(time: Float, trackKey: Float, downbeat: Bool) {
+        let looks = FernPalette.rotation
         if !seeded {
-            trackSeed = Int(trackKey * 997)
-            family = Self.family(for: energy, current: nil)
-            candidate = family
-            current = Self.pick(family, rotation: 0, seed: trackSeed)
+            index = Int(min(max(trackKey, 0), 0.999) * Float(looks.count))
+            current = looks[index]
             previous = current
             lookStart = time
             seeded = true
             return
         }
-        let wanted = Self.family(for: energy, current: family)
-        if wanted != candidate { candidate = wanted; candidateSince = time }
         if downbeat { barsInLook += 1; sawDownbeat = true }
-        let familyDue = candidate != family && time - candidateSince >= Self.dwellSeconds
-        let rotationDue = sawDownbeat ? barsInLook >= Self.barsPerLook : time - lookStart >= 60
-        // with a grid, changes land on a downbeat; without one they land when due
-        guard (familyDue || rotationDue) && (downbeat || !sawDownbeat) else { return }
-        if familyDue { family = candidate; rotation = 0 } else { rotation += 1 }
-        let next = Self.pick(family, rotation: rotation, seed: trackSeed)
-        if next != current {
-            previous = current
-            current = next
-            fadeStart = time
-        }
+        let due = sawDownbeat
+            ? barsInLook >= Self.barsPerLook && downbeat
+            : time - lookStart >= Self.secondsPerLookWithoutGrid
+        guard due else { return }
+        index = (index + 1) % looks.count
+        previous = current
+        current = looks[index]
+        fadeStart = time
         barsInLook = 0
         lookStart = time
     }
@@ -207,11 +194,6 @@ struct FernPalettePlan {
         let raw = min(max((time - fadeStart) / Self.fadeSeconds, 0), 1)
         let eased = raw * raw * (3 - 2 * raw)
         return eased >= 1 ? current.look : previous.look.mixed(with: current.look, eased)
-    }
-
-    private static func pick(_ family: FernFamily, rotation: Int, seed: Int) -> FernPalette {
-        let members = FernPalette.members(of: family)
-        return members[(seed + rotation) % members.count]
     }
 
     mutating func reset() { self = FernPalettePlan() }

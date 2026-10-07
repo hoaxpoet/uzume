@@ -129,11 +129,7 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
         let dt = min(max(features.deltaTime, 0), 0.1)
         clock += dt
         music.update(features: features, time: clock, dt: dt, dive: dive)
-        let energy = FernPalettePlan.energy(level: stemFeatures.energyLevel, surge: features.spectralSurge)
-        palettePlan.update(time: clock,
-                           energy: energy,
-                           trackKey: features.trackHueAnchor01,
-                           downbeat: music.downbeatThisFrame)
+        palettePlan.update(time: clock, trackKey: features.trackHueAnchor01, downbeat: music.downbeatThisFrame)
         guard isReady else { return }
         if hdr == nil { ensureAllocated(width: drawableSize.x, height: drawableSize.y) }
         encodeFrame(into: commandBuffer)
