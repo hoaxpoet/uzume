@@ -85,7 +85,7 @@ for i in 0..<NST {
     let (p, th) = buildSpine(curlOf(i))
     spines += p
     for j in 0..<NS {
-        let s = Float(j) / Float(NS - 1), r = sigma(s) * 1.6 + 0.03
+        let s = Float(j) / Float(NS - 1), r = sigma(s) * envF("BBR", 1.6) + 0.03
         bmin = simd_min(bmin, p[j] - SIMD2(r, r)); bmax = simd_max(bmax, p[j] + SIMD2(r, r))
     }
     func at(_ s: Float) -> (SIMD2<Float>, Float) {
@@ -171,8 +171,14 @@ kernel void treeStep(texture2d_array<float> F [[texture(0)]], texture2d_array<fl
     float best = F.read(gid, uint(st)).w;
     for (int k = 0; k < NCHC; k++) {
         constant Child& c = ch[st * NCHC + k];
-        int j = min(st + int(c.shift + 0.5), NSTC - 1);
-        best = min(best, sampleT(T, toChild(q, c), j, P) * c.scale);
+        // a rendered child sits in state round(x + shift) where its parent sits in round(x): that is st + floor(shift) OR
+        // st + ceil(shift). Take BOTH, so T bounds whichever the renderer picks (one assumed state pruned real tips)
+        // state 0 is CLAMPED (fronds bigger than the screen are all 'fully open'), so its children can be in any state up to j1
+        int j0 = min(st + int(floor(c.shift)), NSTC - 1), j1 = min(j0 + 1, NSTC - 1);
+        float2 qc = toChild(q, c);
+        float tc = 1e9;
+        for (int j = (st == 0 ? 0 : j0); j <= j1; j++) { tc = min(tc, sampleT(T, qc, j, P)); }
+        best = min(best, tc * c.scale);
     }
     out.write(float4(best), gid);
 }
@@ -184,8 +190,11 @@ kernel void childField(texture2d_array<float> T [[texture(0)]], texture2d_array<
     float best = 1e9; int bi = -1;
     for (int k = 0; k < NCHC; k++) {
         constant Child& c = ch[st * NCHC + k];
-        int j = min(st + int(c.shift + 0.5), NSTC - 1);
-        float d = sampleT(T, toChild(q, c), j, P) * c.scale;
+        int j0 = min(st + int(floor(c.shift)), NSTC - 1), j1 = min(j0 + 1, NSTC - 1);
+        float2 qc = toChild(q, c);
+        float d = 1e9;
+        for (int j = (st == 0 ? 0 : j0); j <= j1; j++) { d = min(d, sampleT(T, qc, j, P)); }
+        d *= c.scale;
         if (d < best) { best = d; bi = k; }
     }
     out.write(float4(float(bi), best, 0.0, 0.0), gid, uint(st));
@@ -200,89 +209,80 @@ static int stateFor(float len, float viewH, constant Params& P) {
 // THE DESCENT — from a frame `q` whose frond has length `scale` (output units). PHI is the nerve-impulse path
 // coordinate: Σ arc fractions along each stem from the starting root (an impulse crosses every stem in the same time)
 struct Res { float d; float lvl; float s; float vein; float across; float h; float id; float nvein; float phi; float phiC; float scaleC; float flag; };   // flag (debug DBG=2): 1 sure-fill, 2 alt won, 3 outside bbox, 4 no child, 5 far   // phiC/scaleC: the frond that is a visible UNIT on screen (colour comes from it)
-// a path not taken: the runner-up child whose subtree ALSO contains the point (overlapping siblings)
-struct Alt { bool on; float2 q; float scale; float phi; int L; float id; float phiC; float scaleC; };
-static Res walk(float2 q, float scale, float phi0, int L0, float id0, float phiC0, float scaleC0, float viewH,
-               texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
-               constant Child* ch, constant Params& P, float pix, thread Alt& alt) {
-    Res r; r.d = 1e9; r.lvl = -1.0; r.s = 0.0; r.vein = 0.0; r.across = 0.0; r.h = 0.0; r.id = id0; r.nvein = 0.0; r.phi = phi0; r.phiC = phiC0; r.scaleC = scaleC0;
-    alt.on = false; r.flag = 0.0;
-    float phi = phi0, sure = 1e9, surePhi = phi0, sureS = 0.0; float sureL = 0.0;
+// THE DESCENT is a bounded depth-first search: every child whose subtree could still hold the point (its tree distance
+// is under a pixel) is explored, nearest surface wins. Following one path (plus a runner-up) clipped overlapping
+// siblings along hard edges — 'cut-off tips'. Candidates: the children near the lookup's pick along the stem (fast) or
+// ALL children (P.cam... debug ground truth, ALLCH=1).
+struct Fr { float2 q; float scale; float phi; float id; float phiC; float scaleC; int L; };
+static Res descendFrom(float2 q0, float scale0, float phi0, float viewH, texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
+                       constant Child* ch, constant Params& P, float pix) {
+    Res r; r.d = 1e9; r.lvl = -1.0; r.s = 0.0; r.vein = 0.0; r.across = 0.0; r.h = 0.0; r.id = 0.0; r.nvein = 0.0; r.phi = phi0;
+    r.phiC = phi0; r.scaleC = scale0; r.flag = 0.0;
+    float sure = 1e9, surePhi = phi0, sureS = 0.0, sureL = 0.0, sureId = 0.0, surePhiC = phi0, sureScaleC = scale0;
     float texel = 2.5 * (P.bmax.x - P.bmin.x) / float(\(TR));
-    int maxL = int(P.misc.y);
-    for (int L = L0; L <= maxL; L++) {
+    float slack = texel * \(envF("SLACK", 2));
+    int maxL = int(P.misc.y), Wn = int(P.misc.w);
+    bool all = P.au.w < 0.0;                                              // (sign of the hue spread doubles as the ground-truth switch)
+    Fr stack[\(Int(envF("STACK", 64)))]; int sp = 0;
+    Fr root; root.q = q0; root.scale = scale0; root.phi = phi0; root.id = 0.0; root.phiC = phi0; root.scaleC = scale0; root.L = 0;
+    stack[sp++] = root;
+    int budget = \(Int(envF("BUDGET", 64)));
+    while (sp > 0 && budget-- > 0) {
+        Fr fr = stack[--sp];
+        float2 q = fr.q; float scale = fr.scale;
         int st = stateFor(scale, viewH, P);
         float2 uv = uvOf(q, P); float o = outside(q, P);
-        float4 f = F.sample(lin, uv, uint(st)); f.x += o; f.w += o;
         float tq = T.sample(lin, uv, uint(st)).x + o;
-        if (scale >= viewH * P.curl.w) { r.phiC = phi + f.y; r.scaleC = scale; }
-        bool fine = texel * scale < pix * 1.5;                             // this level's outline is sharp on screen (coarse levels blur real gaps shut)
-        if (fine && tq < -texel && tq * scale < sure) { sure = tq * scale; surePhi = phi + f.y; sureS = f.y; sureL = float(L) + 0.5; }   // this level is SURE the point is in the tree
-        float rach = f.w * scale;                                          // this level's stem (a vein)
-        r.vein = max(r.vein, smoothstep(pix * 1.2, -pix * 0.5, rach) * (1.0 - 0.12 * float(L)));
-        if (rach < r.d) { r.d = rach; r.lvl = float(L); r.s = f.y; r.across = 0.0; r.phi = phi + f.y; }
-        { float wr = width(f.y, P); r.h = max(r.h, sqrt(max(wr * wr - f.x * f.x, 0.0)) * scale * 1.2); }   // stems are round
-        bool last = (L == maxL) || (scale * sigma(f.y, P) < pix * 2.5);  // children below ~2 px: draw the subtree's silhouette
+        // prune only when the subtree is far even allowing for the texture's error (≈ a texel, times this frond's size:
+        // without the slack, whole screen-filling fronds were pruned)
+        if ((tq - slack) * scale > min(r.d, pix * 1.5)) { continue; }
+        float4 f = F.sample(lin, uv, uint(st)); f.x += o; f.w += o;
+        float phiC = fr.phiC, scaleC = fr.scaleC;
+        if (scale >= viewH * P.curl.w) { phiC = fr.phi + f.y; scaleC = scale; }
+        bool fine = texel * scale < pix * 1.5;
+        if (fine && tq < -texel && tq * scale < sure) { sure = tq * scale; surePhi = fr.phi + f.y; sureS = f.y; sureL = float(fr.L) + 0.5;
+                                                       sureId = fr.id; surePhiC = phiC; sureScaleC = scaleC; }
+        float rach = f.w * scale;
+        r.vein = max(r.vein, smoothstep(pix * 1.2, -pix * 0.5, rach) * (1.0 - 0.12 * float(fr.L)));
+        if (rach < r.d) { r.d = rach; r.lvl = float(fr.L); r.s = f.y; r.across = 0.0; r.phi = fr.phi + f.y; r.id = fr.id; r.phiC = phiC; r.scaleC = scaleC; }
+        { float wr = width(f.y, P); r.h = max(r.h, sqrt(max(wr * wr - f.x * f.x, 0.0)) * scale * 1.2); }
+        bool last = (fr.L == maxL) || (scale * sigma(f.y, P) < pix * 2.5) || o > 0.0;
         if (last) {
             float blade = tq * scale;
-            if (blade < r.d) { r.d = blade; r.lvl = float(L) + 0.5; r.s = f.y; r.phi = phi + f.y;
+            if (blade < r.d) { r.d = blade; r.lvl = float(fr.L) + 0.5; r.s = f.y; r.phi = fr.phi + f.y; r.id = fr.id; r.phiC = phiC; r.scaleC = scaleC;
                                float lw = sigma(f.y, P) * 0.5 + width(f.y, P); r.across = clamp(f.x / lw, 0.0, 1.0) * f.z; }
             float ub = clamp(-tq / max(sigma(f.y, P) * 0.15, 1e-4), 0.0, 1.0);
-            r.h = max(r.h, sigma(f.y, P) * 0.12 * sqrt(ub) * scale);      // each leaflet a shallow dome
-            break;
+            r.h = max(r.h, sigma(f.y, P) * 0.12 * sqrt(ub) * scale);
+            continue;
         }
-        if (o > 0.0) { r.flag = 3.0; break; }
-        float4 c = C.read(uint2(clamp(uv, 0.0, 0.9999) * float(\(TR))), uint(st));
-        int k0 = int(c.x + 0.5);
-        if (k0 < 0 || c.y > 0.5) { r.flag = 4.0; break; }
-        // the lookup is texel-coarse: re-decide EXACTLY among its neighbours along the stem, both sides
-        int k = k0, k2 = -1; float bd = 1e9, bd2 = 1e9;
-        int Wn = int(P.misc.w);
-        for (int j = -Wn; j <= Wn + 1; j++) {
-            int kk = (k0 & ~1) + j;
-            if (kk < 0 || kk >= NCHC) { continue; }
+        int k0 = int(C.read(uint2(clamp(uv, 0.0, 0.9999) * float(\(TR))), uint(st)).x + 0.5);
+        int lo = all ? 0 : max((k0 & ~1) - Wn, 0), hi = all ? NCHC - 1 : min((k0 & ~1) + Wn + 1, NCHC - 1);
+        // push candidates; the nearest is pushed LAST so it is explored first (tightens the bound for the rest)
+        int kb = -1; float db = 1e9;
+        for (int kk = lo; kk <= hi; kk++) {
             constant Child& cc = ch[st * NCHC + kk];
-            int sj = stateFor(scale * cc.scale, viewH, P);
             float2 qc = toChild(q, cc);
-            float dk = (T.sample(lin, uvOf(qc, P), uint(sj)).x + outside(qc, P)) * cc.scale;
-            if (dk < bd) { bd2 = bd; k2 = k; bd = dk; k = kk; } else if (dk < bd2) { bd2 = dk; k2 = kk; }
+            float dk = (T.sample(lin, uvOf(qc, P), uint(stateFor(scale * cc.scale, viewH, P))).x + outside(qc, P)) * scale * cc.scale;
+            if (dk - slack * scale * cc.scale > min(r.d, pix * 1.5)) { continue; }
+            if (dk < db) {
+                if (kb >= 0 && sp < \(Int(envF("STACK", 64)))) { constant Child& cb = ch[st * NCHC + kb]; Fr c; c.q = toChild(q, cb); c.scale = scale * cb.scale; c.phi = fr.phi + cb.s;
+                    c.id = fract(fr.id * 7.31 + float(kb) * 0.1373 + 0.17); c.phiC = phiC; c.scaleC = scaleC; c.L = fr.L + 1; stack[sp++] = c; }
+                kb = kk; db = dk;
+            } else if (sp < \(Int(envF("STACK", 64)))) {
+                Fr c; c.q = qc; c.scale = scale * cc.scale; c.phi = fr.phi + cc.s; c.id = fract(fr.id * 7.31 + float(kk) * 0.1373 + 0.17);
+                c.phiC = phiC; c.scaleC = scaleC; c.L = fr.L + 1; stack[sp++] = c;
+            }
         }
-        if (bd > 0.25) { r.flag = 5.0; break; }
-        if (bd > 0.0 && tq < 0.0 && fine) {                                       // no candidate holds the point, yet the tree here does: draw this level's outline
+        if (kb >= 0 && sp < \(Int(envF("STACK", 64)))) { constant Child& cb = ch[st * NCHC + kb]; Fr c; c.q = toChild(q, cb); c.scale = scale * cb.scale; c.phi = fr.phi + cb.s;
+            c.id = fract(fr.id * 7.31 + float(kb) * 0.1373 + 0.17); c.phiC = phiC; c.scaleC = scaleC; c.L = fr.L + 1; stack[sp++] = c; }
+        else if (kb < 0 && tq < 0.0 && fine) {                          // no candidate holds the point, yet this level's outline does
             float blade = tq * scale;
-            if (blade < r.d) { r.d = blade; r.lvl = float(L) + 0.5; r.s = f.y; r.phi = phi + f.y; r.across = 0.0; }
-            r.flag = 5.0; break;
+            if (blade < r.d) { r.d = blade; r.lvl = float(fr.L) + 0.5; r.s = f.y; r.phi = fr.phi + f.y; r.across = 0.0; r.id = fr.id; r.phiC = phiC; r.scaleC = scaleC; r.flag = 5.0; }
         }
-        if (!alt.on && k2 >= 0 && k2 != k && bd2 < 0.0) {                // the point is inside the runner-up's subtree too: remember that path
-            constant Child& K2 = ch[st * NCHC + k2];
-            alt.on = true; alt.q = toChild(q, K2); alt.scale = scale * K2.scale; alt.phi = phi + K2.s; alt.L = L + 1;
-            alt.id = fract(r.id * 7.31 + float(k2) * 0.1373 + 0.17); alt.phiC = r.phiC; alt.scaleC = r.scaleC;
-        }
-        constant Child& K = ch[st * NCHC + k];
-        phi += K.s;
-        q = toChild(q, K);
-        scale *= K.scale;
-        r.id = fract(r.id * 7.31 + float(k) * 0.1373 + 0.17);
     }
-    // a coarser level was sure it is inside but the path fell into a gap (texture-resolution dead end): trust the coarse level
-    if (r.d > 0.0 && sure < 0.0) { r.d = sure; r.phi = surePhi; r.s = sureS; r.lvl = sureL; r.flag = 1.0; }
+    if (budget <= 0 || sp >= \(Int(envF("STACK", 64)))) { r.flag = 4.0; }   // ran out: flagged (DBG=2 magenta)
+    if (r.d > 0.0 && sure < 0.0) { r.d = sure; r.phi = surePhi; r.s = sureS; r.lvl = sureL; r.id = sureId; r.phiC = surePhiC; r.scaleC = sureScaleC; r.flag = 1.0; }
     return r;
-}
-
-// the descent proper: the nearest path, then up to NALT runner-up paths where siblings overlap; the nearest surface wins
-// (one path alone clipped overlapping fronds along straight boundaries — 'tips cut off')
-static Res descendFrom(float2 q, float scale, float phi0, float viewH, texture2d_array<float> F, texture2d_array<float> T, texture2d_array<float> C,
-                       constant Child* ch, constant Params& P, float pix) {
-    Alt alt;
-    Res best = walk(q, scale, phi0, 0, 0.0, phi0, scale, viewH, F, T, C, ch, P, pix, alt);
-    for (int n = 0; n < int(P.shape.w) && alt.on; n++) {
-        Alt a = alt;
-        Res r = walk(a.q, a.scale, a.phi, a.L, a.id, a.phiC, a.scaleC, viewH, F, T, C, ch, P, pix, alt);
-        float vein = max(best.vein, r.vein), h = max(best.h, r.h);
-        if (r.d < best.d) { best = r; best.flag = max(best.flag, 2.0); }
-        best.vein = vein; best.h = h;
-    }
-    return best;
 }
 
 // screen uv → descent. Stills: the top frond placed in the world. ZOOM: the camera rides the dive point (host-computed),
@@ -341,7 +341,7 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
             float head = exp(-dphi * dphi / 0.0016), tail = dphi > 0.0 ? exp(-dphi / 0.08) : 0.0;
             pulse += pulses[i].y * (head * 1.0 + tail * 0.25);
         }
-        float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phiC * P.au.w * 2.0 - P.tm.z * t * 2.0));   // light rides the colour bands
+        float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phiC * abs(P.au.w) * 2.0 - P.tm.z * t * 2.0));   // light rides the colour bands
         float shimmer = step(1.0 - 0.25 * P.au.y, hsh(float2(r.id * 97.0 + floor(r.s * 9.0), floor(t * 18.0))));
         // COLOUR BATH: the fern GLOWS (emissive, not lit) in a curated psychedelic palette. Hue runs along the impulse path
         // and steps per level, so the branching reads as bands of colour; it flows outward over time (colour pours down
@@ -350,7 +350,7 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
         // hue from the visible unit: its path position + its on-screen size (continuous, so the loop is seamless and
         // colour shifts as each frond grows toward the camera); finer levels vary brightness, not hue (sub-pixel hue mixing → grey)
         float viewH = pix * res.y;
-        float hue = hue0 + P.au.w * r.phiC - 0.17 * log(r.scaleC / viewH) - P.tm.z * t;   // bands of colour pour down the branches
+        float hue = hue0 + abs(P.au.w) * r.phiC - 0.17 * log(r.scaleC / viewH) - P.tm.z * t;   // bands of colour pour down the branches
         float mid = 1.0 - abs(r.across);
         float3 c0 = pal(hue, PL), c1 = pal(hue + 0.12, PL), cv = mix(pal(hue + 0.06, PL), float3(1.0), 0.2);
         float relief = 0.25 + 0.75 * dif;
@@ -421,7 +421,7 @@ var P = Params(bmin: bmin, bmax: bmax,
                top: [envF("TX", -0.5), envF("TY", -1.55), envF("TA", 1.75), envF("TL", 3.4)],
                shape: [W0, CS, SINF, envF("NALT", 3)],
                misc: [Float(NCH), envF("MAXL", 14), envF("DBG", 0), envF("CW", 4)],   // CW: candidate window either side
-               curl: [LOPEN, LCURL, 0, envF("CUNIT", 0.15)], lift: [0, 0, 0, 1], zc: .zero, tm: .zero, au: [0, 0, envF("HUE", 0.33), envF("HSPREAD", 1.4)])
+               curl: [LOPEN, LCURL, 0, envF("CUNIT", 0.15)], lift: [0, 0, 0, 1], zc: .zero, tm: .zero, au: [0, 0, envF("HUE", 0.33), envF("HSPREAD", 1.4) * (envF("ALLCH", 0) > 0.5 ? -1 : 1)])
 
 let F = tex(.rgba32Float, TR, TR, slices: NST), T = tex(.r32Float, TR, TR, slices: NST), C = tex(.rgba32Float, TR, TR, slices: NST)
 let TA = tex(.r32Float, TR, TR), outT = tex(.rgba8Unorm, W, H)
