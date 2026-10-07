@@ -246,7 +246,7 @@ static Res descendFrom(float2 q0, float scale0, float phi0, float viewH, texture
         r.vein = max(r.vein, smoothstep(pix * 1.2, -pix * 0.5, rach) * (1.0 - 0.12 * float(fr.L)));
         if (rach < r.d) { r.d = rach; r.lvl = float(fr.L); r.s = f.y; r.across = 0.0; r.phi = fr.phi + f.y; r.id = fr.id; r.phiC = phiC; r.scaleC = scaleC; }
         { float wr = width(f.y, P); r.h = max(r.h, sqrt(max(wr * wr - f.x * f.x, 0.0)) * scale * 1.2); }
-        bool last = (fr.L == maxL) || (scale * sigma(f.y, P) < pix * 2.5) || o > 0.0;
+        bool last = (fr.L == maxL) || (scale * sigma(f.y, P) < pix * \(envF("LASTPX", 2.5))) || o > 0.0;
         if (last) {
             float blade = tq * scale;
             if (blade < r.d) { r.d = blade; r.lvl = float(fr.L) + 0.5; r.s = f.y; r.phi = fr.phi + f.y; r.id = fr.id; r.phiC = phiC; r.scaleC = scaleC;
@@ -316,19 +316,22 @@ static float hsh(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) *
 kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<float> T [[texture(1)]], texture2d_array<float> C [[texture(2)]],
                    texture2d<float, access::write> out [[texture(3)]],   // HDR
                    constant Child* ch [[buffer(0)]], constant Params& P [[buffer(1)]], constant float2* pulses [[buffer(2)]], constant float4* PL [[buffer(3)]],
-                   uint2 gid [[thread_position_in_grid]]) {
-    if (gid.x >= \(W)u || gid.y >= \(H)u) { return; }
+                   uint2 gid [[thread_position_in_grid]], ushort lane [[thread_index_in_simdgroup]]) {
+    // no early return: every lane must reach the shuffles below (out-of-range threads compute, then skip the write)
     float2 res = float2(\(W).0, \(H).0);
     float t = P.tm.x, hue0 = P.au.z;
     float3 acc = 0.0;
     const float2 o4[4] = { float2(0.25, 0.25), float2(0.75, 0.25), float2(0.25, 0.75), float2(0.75, 0.75) };
-    for (int a = 0; a < 4; a++) {
-        float2 uv = (float2(gid) + o4[a] - 0.5 * res) / res.y * float2(1.0, -1.0);
+    const int NSS = \(Int(envF("SS", 1)));
+    for (int a = 0; a < NSS; a++) {
+        float2 uv = (float2(gid) + (NSS > 1 ? o4[a] : float2(0.5)) - 0.5 * res) / res.y * float2(1.0, -1.0);
         float pix;
         Res r = look(uv, P, F, T, C, ch, res.y, pix);
-        float px1 = 1.0 / res.y, pd;
-        Res rx = look(uv + float2(px1, 0.0), P, F, T, C, ch, res.y, pd), ry = look(uv + float2(0.0, px1), P, F, T, C, ch, res.y, pd);
-        float3 n = normalize(float3(-(rx.h - r.h) / pix, -(ry.h - r.h) / pix, 1.0));
+        // RELIEF NORMAL from the neighbouring pixels' heights: a 16-wide threadgroup puts two pixel rows in one SIMD
+        // group, so lane^1 is the horizontal neighbour and lane^16 the vertical one (two extra descents per pixel before)
+        float hn = simd_shuffle_xor(r.h, ushort(1)), hv = simd_shuffle_xor(r.h, ushort(16));
+        float dhx = (lane & 1) ? r.h - hn : hn - r.h, dhy = (lane & 16) ? hv - r.h : r.h - hv;   // +x right, +y up
+        float3 n = normalize(float3(-dhx / pix, -dhy / pix, 1.0));
         float3 Ld = normalize(float3(-0.5, 0.55, 0.65));
         float dif = clamp(dot(n, Ld), 0.0, 1.0);
         float spec = pow(clamp(dot(reflect(-Ld, n), float3(0.0, 0.0, 1.0)), 0.0, 1.0), 30.0);
@@ -369,8 +372,8 @@ kernel void render(texture2d_array<float> F [[texture(0)]], texture2d_array<floa
         float3 bg = P.misc.z > 0.5 ? float3(0.01, 0.012, 0.015) : pal(hue0 + 0.35 * uv.x + 0.25 * fog - P.tm.z * t, PL) * (0.012 + 0.05 * fog * fog);
         acc += mix(bg, col, cov);
     }
-    acc *= 0.25;
-    out.write(float4(acc, 1.0), gid);
+    acc /= float(NSS);
+    if (gid.x < \(W)u && gid.y < \(H)u) { out.write(float4(acc, 1.0), gid); }
 }
 
 // BLOOM: bright parts → quarter resolution → wide separable Gaussian, added back; the light spills into the dark (a bath)
@@ -477,7 +480,7 @@ func renderFrame() -> Double {
     let cb = queue.makeCommandBuffer()!, ce = cb.makeComputeCommandEncoder()!
     ce.setComputePipelineState(renderPSO); ce.setTexture(F, index: 0); ce.setTexture(T, index: 1); ce.setTexture(C, index: 2); ce.setTexture(hdrT, index: 3)
     ce.setBuffer(chBuf, offset: 0, index: 0); ce.setBytes(&P, length: MemoryLayout<Params>.stride, index: 1); ce.setBuffer(pulseBuf, offset: 0, index: 2); ce.setBuffer(palBuf, offset: 0, index: 3)
-    ce.dispatchThreads(MTLSize(width: W, height: H, depth: 1), threadsPerThreadgroup: tg)
+    ce.dispatchThreadgroups(MTLSize(width: (W + 15) / 16, height: (H + 15) / 16, depth: 1), threadsPerThreadgroup: tg)   // whole groups: the lane layout the normals rely on
     let q4 = MTLSize(width: W / 4, height: H / 4, depth: 1)
     ce.setComputePipelineState(brightPSO); ce.setTexture(hdrT, index: 0); ce.setTexture(bA, index: 1); ce.dispatchThreads(q4, threadsPerThreadgroup: tg)
     var dh = SIMD2<Int32>(1, 0), dv = SIMD2<Int32>(0, 1)
@@ -588,15 +591,16 @@ if args.count > 2 && args[1] == "still" {
         + (env["AUDIO"].map { ["-i", $0, "-c:a", "aac", "-b:a", "192k", "-shortest"] } ?? [])
         + ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", args[2]]
     let pipe = Pipe(); ff.standardInput = pipe; try! ff.run()
-    var worst = 0.0
+    var worst = 0.0, times: [Double] = []
     for i in 0..<Int(secs * fps) {
         let t = Float(i) / fps + envF("T0", 0)
         setZoom(time: t); setMusic(time: t)
-        worst = max(worst, renderFrame())
+        let ms = renderFrame(); worst = max(worst, ms); times.append(ms)
         pipe.fileHandleForWriting.write(Data(bytes: readback.contents(), count: W * H * 4))
     }
     try! pipe.fileHandleForWriting.close(); ff.waitUntilExit()
-    FileHandle.standardError.write(String(format: "worst frame %.1f ms\n", worst).data(using: .utf8)!)
+    times.sort()
+    FileHandle.standardError.write(String(format: "frame p50 %.1f  p95 %.1f  worst %.1f ms\n", times[times.count / 2], times[times.count * 95 / 100], worst).data(using: .utf8)!)
 } else {
     print("usage: fernd still <out.png> | fernd video <out.mp4> <seconds>")
 }
