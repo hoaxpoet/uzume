@@ -58,7 +58,7 @@ struct FiddleheadFernTests {
         music.update(features: f, time: 1.0, dt: 1 / 60, dive: dive)
         f.beatPhase01 = 0.01; f.barPhase01 = 0.01                           // the downbeat
         music.update(features: f, time: 1.02, dt: 1 / 60, dive: dive)
-        #expect(music.pulses.count == 1 && music.pulses[0].amp == 1)
+        #expect(music.pulses.count == 1 && music.pulses[0].amp == FernMusic.impulseStrength)
     }
 
     @Test("bass glow attacks instantly and decays")

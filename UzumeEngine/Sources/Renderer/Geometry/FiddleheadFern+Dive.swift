@@ -96,6 +96,7 @@ struct FernMusic {
     /// leaflet tips in about a second — inside one bar at any common tempo.
     let speed: Float = 2.5
     static let maxPulses = 32
+    static let impulseStrength: Float = 0.95
 
     /// A deviation primitive, self-normalised against its own slow mean (treble deviation runs ~100× below bass;
     /// tuning either against an absolute is FA #31). Mean level → 0.25, 3× → 0.5, 10× → 0.77.
@@ -117,7 +118,8 @@ struct FernMusic {
         lastBarPhase = features.barPhase01
         if downbeat {
             // born at the stem of the frond that fills the view now (level 0 → 1 as the cycle advances), not above it
-            pulses.append(Pulse(phi: (time / dive.period) * dive.arcStar, time: time, amp: 1))
+            // strength 0.95: Matt, live round 2 on Cherub Rock — "a little bright … reduce by 5%"
+            pulses.append(Pulse(phi: (time / dive.period) * dive.arcStar, time: time, amp: Self.impulseStrength))
         }
         pulses.removeAll { time - $0.time > 4 }
         if pulses.count > Self.maxPulses { pulses.removeFirst(pulses.count - Self.maxPulses) }
