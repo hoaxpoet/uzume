@@ -94,6 +94,7 @@ extension VisualizerEngine {
         // jumping to its new place. The cached forest (`backdrop`) is the same place for every
         // track and is kept. No-op unless Understory is active.
         understoryField?.reseed(currentSkeinSeed())
+        fiddleheadFern?.resetForTrack()                      // FH.16: pulses + self-normalising envelopes start over
         // NB.4: settle Nimbus into the new track. Zeroing the bloom follower shrinks/dims the
         // body to its floor and the flow phase re-seeds; the dim settle-in masks the gas re-seed
         // so the body blooms back UP into the new track rather than popping (DESIGN §1.5).
