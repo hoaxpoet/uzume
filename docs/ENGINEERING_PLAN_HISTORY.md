@@ -5,6 +5,196 @@ Completed-increment narratives moved out of `ENGINEERING_PLAN.md` at RB.3 (2026-
 
 ## Recently Completed
 
+### Increment BUG138.2 — the prose that restates a gated fact is now gated ✅ (2026-09-22)
+
+**Done-when:** BUG-138(b) fixed everywhere it occurs; a gate exists for prose size claims and one for
+sidecar description drift; both proven red against the real shipped strings and green after; full
+suite and lint clean.
+
+**Delivered.** The `48 floats / 192 bytes` claim was in **eight** places, not the two AUDIO.1 found —
+`Common.metal`, `AnalyzedFrame.swift`, `SpectralCartograph.metal`, four `ARCHITECTURE.md` lines, and
+`FeatureVector`'s own doc comment carrying its own wrong number (`52 / 208`). **That last one is the
+whole argument for gating:** it is the comment that states FTR.6's finding — *"nothing caught it,
+because no gate reads prose"* — and FTR.6's remedy was to delete that copy rather than gate the
+pattern. It grew back in eight places, inside the lecture included.
+
+Two gates, each with negative controls, each verified red against the exact shipped strings:
+`CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout` (expected values **derived from
+`MemoryLayout`** so the gate cannot become the ninth stale copy; double-quoted numbers are citations,
+not claims, so the comments that correctly quote the old value stay legal) and
+`SidecarDescriptionDriftTests` (a field named in a `description` must be declared in `audio_routes`
+or read by the preset's own `.metal` **with comments stripped**).
+
+**★ The correction that shaped the gate.** BUG138.1 recorded VolumetricLithograph as having the
+*opposite* drift — prose right, routes incomplete — on a grep that found `stems.drums_beat` in its
+shader. **That grep did not strip comments, and all eight occurrences are comments.** VL reads
+neither field in any executable line; its peaks ride `pulse_beat_index + pulse_phase01` with the four
+`*_onset_rate` fields for polish. Same drift as FFO, fixed the same way. *"References found"* is no
+more evidence than *"no references found"* until comments are stripped — the gate does, and its
+negative control pins it, because that mistake survived a first pass of this investigation.
+
+**Recorded, not fixed here — both closed the next day at BUG138.3:** VL reads eight fields it does not
+declare (a route-coverage matter); and two `ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)"
+when every encoder binds it at buffer(0) — seen while editing those lines, deliberately not widened into.
+
+### Increment BUG138.1 — the Ferrofluid Ocean sidecar stops being a routing table ✅ (2026-09-22)
+
+**Done-when:** `FerrofluidOcean.json`'s `description` no longer asserts audio routing the shader does
+not have; the sidecar still parses, the preset still renders identically and stays certified; BUG-138
+records what is fixed and what is not.
+
+**Delivered.** The description named **three** retired mechanisms, not the one AUDIO.1 found:
+`bass_energy_dev → spike height` (removed D-153), the `accumulated_audio_time × arousal` aurora-drift
+product (removed BUG-047 — it retroactively rescaled history), and the raw `vocals_pitch_hz` palette
+read (replaced D-158 — it strobed). Rewritten to describe the LOOK and defer to `audio_routes` and the
+`FerrofluidOcean.metal` header for primitives, with a tombstone saying why. **The point is not the
+refreshed wording — it is that the field is no longer a second, ungated copy of a gated surface**, so
+the next retired route cannot strand a sentence there. One line changed; no engine, shader or route
+change.
+
+**Found while fixing, recorded not fixed.** `VolumetricLithograph.json` has the *opposite* drift: its
+description correctly names `drums_beat` and `drums_attack_ratio`, its shader reads both, and its
+`audio_routes` declares neither. So the obvious gate — *a primitive named in prose must be declared in
+`audio_routes`* — **would go red on VL the day it landed**. A gate that needs an exemption immediately
+is worse than no gate; the rule to build instead is *named in prose ⇒ present in the shader's own read
+set (comments stripped) or in `audio_routes`*, which passes VL and still catches FFO. Only 3 of 27
+sidecars name a primitive in prose at all, so the surface is small.
+
+**Still open on BUG-138:** the `48 floats / 192 bytes` claim in `ARCHITECTURE.md` + `Common.metal:11`
+(it is 56 / 224), and that gate.
+
+### Increment AUDIO.1 — what the shaders actually receive ✅ (2026-09-22)
+
+**Done-when:** `docs/` holds a document naming the exact fields a shader receives at render time,
+where each comes from, which audio paths populate them, and a verdict on five published uzume.io
+captions. Read-only — no engine, shader or sidecar change.
+
+**Delivered.** [`docs/AUDIO_CONTRACT.md`](AUDIO_CONTRACT.md) (374 lines, every claim cited to
+file:line at `84a5f889`). Headline: **stem-separated features DO reach shader parameters at render
+time, on both audio paths** — `StemFeatures` is fragment `buffer(3)`, 64 floats, uploaded by every
+encoder. The paths differ in *when*, not *whether*: a local file plays against a pre-analysed
+`StemFeatureSeries` sampled at the playback second (**0 latency**, 43 Hz grid, LFSTEM.1), while the
+system-audio path runs Open-Unmix live on the tap every 2 s (**≈2.5 s latency**, structural —
+`chunk 10 − (chunk − period − margin) = period + margin`). `FeatureVector`'s 56 floats are **entirely
+full-mix**; `MIRPipeline` never sees a stem.
+
+**Caption verdicts** (§4): Skein, Murmuration, Nacre **supportable**; Ferrofluid Ocean and Nimbus
+**need rewording**. FFO's *"Bass raises the spikes"* is false — spike height is the D-153 four-beat
+grid pulse scaled by `total_energy_smoothed`, and bass survives only as a per-track constant worth
++3 %/+1 % on the two tracks measured. Nimbus's *"Drums punch"* is the beat clock
+(`max(antic(beat_phase01), max(beat_bass, beat_composite))`), not the drums stem, and its third
+direction belongs to `other`, not bass or lead. Nacre is the only one of the five that is identical
+and zero-latency on streaming, because its route is full-mix chroma.
+
+**Defect found.** **BUG-138** (P2, `documentation-drift`) — `FerrofluidOcean.json`'s `description`
+still claims the retired `bass_energy_dev → spike height` route while its own machine-checked
+`audio_routes` block correctly omits it; and `ARCHITECTURE.md` §Buffer Binding Layout plus
+`Common.metal:11` both state `FeatureVector` is 48 floats/192 bytes when it is **56/224**. Filed with
+verification criteria, not fixed (a sidecar edit is outside a read-only increment, and the fix should
+land with the gate that stops it recurring).
+
+**Learning (durable).** A preset sidecar has two descriptions of the same shader and only one of them
+is gated. `audio_routes` is checked by `AudioRouteSchemaTests` / `RouteCoverageTests`; the
+`description` prose is checked by nothing, and it is the half a human reads first — which is how a
+route retired in June reached a published marketing caption in September.
+
+**Amendment, same day — the site had already moved.** The increment prompt described a homepage with
+its stem-separation claim removed; the live homepage instead claims it accurately, streaming caveat
+included. Nimbus's caption had already been corrected to *"the beat punches through it… bass, lead and
+the rest of the mix heave it down, up and sideways"* — both faults gone. Nacre is no longer published.
+Four captions the increment was never asked about were live and are now adjudicated (§4.7, all four
+supportable), as are the homepage's own four claims and the gallery's steady-luminance claim (§4.8, all
+accurate). **One recommendation survives: Ferrofluid Ocean's "Bass raises the spikes" is unchanged and
+still false.** One optional refinement: Nimbus assigns brightening to overall energy alone, but the
+beat's pop is `kNimbusKickBright = 0.72` on top of bloom — the larger of the two.
+
+**Correction to a stale memory, found here.** *"Aurora Veil's `other_energy_dev` route is load-bearing,
+never drop it"* is superseded: `AuroraVeil.metal:182` is `(void)stems; // unused`. AV.7's faithful
+nimitz port deleted every stem route and Matt signed off. Aurora Veil and Nacre are therefore the two
+published scenes whose behaviour is identical and zero-latency on streaming.
+
+**Not verified.** Whether the 2.5 s streaming stem lag is perceptible in these presets; real-world
+Open-Unmix separation quality; the live path's current stem update rate (12.8 Hz is from BUG-109 and
+predates LFSTEM.1e). Listed in §5 rather than guessed.
+
+### Increment VOCAB.2 — the maintainer-doc prose sweep, and where it stops ✅ (2026-09-22)
+
+**Done-when:** the living maintainer references named in VOCABULARY.md §1 say *scene* in prose, or
+the file is excluded with a recorded reason.
+
+**Delivered — four of eight swept, four excluded permanently.**
+
+Swept: `CLAUDE.md`, `docs/RUNBOOK.md` (including its §Certifying a scene heading and the one
+cross-reference to it in `NEW_PRESET_CHECKLIST.md`), `docs/PUBLISHING.md`,
+`docs/QUALITY/KNOWN_ISSUES.md`.
+
+**Excluded, and this is the increment's finding.** `docs/SHADER_CRAFT.md` (31 pre-existing uses of
+"scene"), `docs/ARCHITECTURE.md` (20), `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` (20) and
+`docs/CAPABILITY_REGISTRY/PRESETS.md` (3) document the renderer, where **`scene` already means the
+3D scene** — and the two meanings share sentences. ARCHITECTURE's mv_warp paragraph reads
+"alpha-blend current *scene* onto composeTexture … rendered directly by the *preset's* fragment
+shader". SHADER_CRAFT §17 says "Preferred *scene* duration" two rows above "ray-march *scene*
+setup" and the `scene_*` keys. The mechanical pass also produced "The **Scenes** module" for an SPM
+target literally named `Presets`. **Sweeping these makes them wrong, not clearer** — so the sweep
+was reverted on all four and the reason recorded in VOCABULARY.md §1.
+
+This is the D-250 collision (VOCABULARY §5.3) surfacing in prose rather than in identifiers, and it
+is a second, independent reason not to pursue Option C: the documentation cannot adopt one word
+while the renderer holds the other.
+
+**Three restorations after the mechanical pass**, each a name rather than prose: PUBLISHING's
+verbatim quote of the D-111/D-113 wording; KNOWN_ISSUES' 8 defect-taxonomy cells
+(`preset.fidelity` / `.routing` / `.render` are controlled vocabulary in `DEFECT_TAXONOMY.md`); and
+SHADER_CRAFT §17's heading, so `#17-preset-metadata-format-json-sidecar` stays valid in all three
+citing docs.
+
+**Gates:** doc gates 16/16 (CLAUDE.md 3,453 est. tokens against the 7,000 cap); full evidence block
+in the closeout. Docs-only — no code, no data, no sidecar touched.
+
+### Increment VOCAB.1 — presets become scenes (prose + what the app displays) ✅ (2026-09-22)
+
+**Done-when:** a contributor reads the same word on uzume.io, in this repo's guides, and on screen
+in the app; code identifiers, type names, file paths and data keys still say `preset`; the boundary
+and the map to Option C are written down; the website's generator still runs clean.
+
+**Delivered.** Scope was Option B, as specified — prose and displayed strings only.
+
+- **Group (a), the contributor path:** `CONTRIBUTING.md` (the destination of uzume.io's "Write a
+  scene" button) rewritten end to end, plus `README.md`, `docs/GLOSSARY.md` (new **Scene** row
+  naming the boundary outright), `docs/CREDITS.md`, `docs/PRESET_SESSION_CHECKLIST.md`,
+  `docs/presets/YOUR_FIRST_PRESET.md`, `docs/presets/NEW_PRESET_CHECKLIST.md`.
+- **Group (b), displayed strings:** 9 values in `Localizable.strings` (every *key* unchanged, so no
+  lookup moved) + the DEBUG cycle toast. `docs/UX_SPEC.md` rewritten outside backticks so
+  identifiers survived. Verified in the built bundle, not just the source.
+- **Task 4:** `NimbusState.swift` kickPunch comment claimed a drums-stem refinement that `_tick`
+  never had; it now describes `max(anticipatory beatPhase01 ramp, max(beatBass, beatComposite))`.
+- **`docs/VOCABULARY.md` (new)** — the rule, the group (c)/(d) inventory with paths, and the
+  Option C scope/break map.
+
+**Three prompt premises corrected against the tree.** (1) There is no "Preset Eligibility Picker";
+the surface is the family blocklist — UX_SPEC's "Preset family blocklist", shipped as "Hidden preset
+families" via `PresetCategoryBlocklistPicker`. Both strings renamed. (2) Sidecars carry **no `slug`
+key**; `generate_presets.py` slugifies the `name` *value*, so `name` — not a slug field — is the
+cross-repo join key. (3) **No sidecar key contains "preset" at all**, so the data-side Option C
+exposure is the directory and the `name` value, not key names.
+
+**The finding that decides Option C:** `Scene` is already taken — `SceneUniforms` / `SceneCamera` /
+`SceneLight`, the `scene_*` sidecar keys, the documented "scene → warp → compose → swap" dispatch
+order, 336 uses in `*.swift`. `Preset` → `Scene` is a collision, not a rename, and resolving it is
+upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3 — and on the strength of that scoping Matt **declined Option C** (D-250): the boundary is the destination, not a waypoint, and §5 is now a contingency plan rather than queued work.
+
+**Deliberately not done:** living maintainer references still say `preset` in prose
+(ARCHITECTURE 374, RENDER_CAPABILITY_REGISTRY 312, SHADER_CRAFT 231, KNOWN_ISSUES 200,
+CAPABILITY_REGISTRY/PRESETS 188, RUNBOOK 30, CLAUDE.md 27, PUBLISHING 5) — a follow-on prose sweep,
+listed in VOCABULARY.md §1. Append-only records (DECISIONS, ENGINEERING_PLAN, release notes,
+prompts/, archive/) are frozen by design: rewriting them would falsify the record.
+
+**Gates:** swiftlint `--strict` 0 violations / 555 files; `check_user_strings.sh` clean; app build
+SUCCEEDED; engine suite 1980 tests green apart from the time-based DOC.6 rotation gate, rotated in
+its own `[DOC.6]` commit. `generate_presets.py --check` exits 0 / 8 entries, unchanged before and
+after; zero sidecars touched.
+
+
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after
