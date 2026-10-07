@@ -30,15 +30,18 @@ struct FernLook: Equatable {
     }
 }
 
-enum FernFamily: Int, CaseIterable { case subtle, jewel, bold }
+/// Ordered by intensity: the family follows the music's energy up this list (Matt: light most intense when loud).
+enum FernFamily: Int, CaseIterable { case subtle, jewel, bold, playful }
 
 /// The catalogue (FH.16 palette round, the set Matt preferred). sRGB anchors.
 public enum FernPalette: Int, CaseIterable, Sendable {
     case flavin, moscoso, matisse, stainedGlass, afKlint, klimt, turrell, monet, rothko
+    case memphis, murakami, lisaFrank, warhol, peterMax, delaunay
 
     var family: FernFamily {
         switch self {
         case .flavin, .moscoso, .matisse: return .bold
+        case .memphis, .murakami, .lisaFrank, .warhol, .peterMax, .delaunay: return .playful
         case .stainedGlass, .afKlint, .klimt: return .jewel
         case .turrell, .monet, .rothko: return .subtle
         }
@@ -46,6 +49,12 @@ public enum FernPalette: Int, CaseIterable, Sendable {
 
     private static func make(_ rgb: [[Float]], spread: Float, luminance: Float) -> FernLook {
         FernLook(anchors: rgb.map { SIMD4($0[0], $0[1], $0[2], 0) }, spread: spread, luminance: luminance)
+    }
+
+    private static func playful(_ rgb: [[Float]], spread: Float) -> FernLook {
+        var look = make(rgb, spread: spread, luminance: 0.13)
+        look.veinWhite = 0; look.glow = 1.2; look.edge = 1.2
+        return look
     }
 
     var look: FernLook {
@@ -95,6 +104,26 @@ public enum FernPalette: Int, CaseIterable, Sendable {
                               [0.10, 0.12, 0.30], [0.55, 0.15, 0.30], [0.35, 0.15, 0.50]],
                              spread: 0.4,
                              luminance: 0.022)
+        // PLAYFUL (Matt 2026-10-07: "bolder and more playful colour stories", all six added): worn bolder than the
+        // rest — no white in the vein light, brighter, stronger glow and edges
+        case .memphis:      // Memphis Group (Ettore Sottsass, 1980s)
+            return Self.playful([[1.0, 0.40, 0.70], [0.20, 0.85, 0.80], [1.0, 0.85, 0.15],
+                                 [0.15, 0.30, 0.90], [1.0, 0.25, 0.20], [0.60, 0.30, 0.90]], spread: 0.8)
+        case .murakami:     // Takashi Murakami, Flowers
+            return Self.playful([[1.0, 0.30, 0.60], [1.0, 0.85, 0.10], [0.20, 0.80, 1.0],
+                                 [0.40, 0.90, 0.30], [0.65, 0.35, 1.0], [1.0, 0.55, 0.15]], spread: 1.1)
+        case .lisaFrank:    // Lisa Frank
+            return Self.playful([[1.0, 0.15, 0.75], [0.55, 0.15, 1.0], [0.10, 0.90, 0.95],
+                                 [0.55, 1.0, 0.20], [1.0, 0.95, 0.20], [1.0, 0.40, 0.10]], spread: 0.9)
+        case .warhol:       // Andy Warhol, Marilyn screenprints
+            return Self.playful([[1.0, 0.35, 0.65], [0.10, 0.85, 0.80], [1.0, 0.90, 0.20],
+                                 [1.0, 0.55, 0.15], [0.60, 0.95, 0.30], [0.95, 0.25, 0.45]], spread: 0.7)
+        case .peterMax:     // Peter Max, 1960s pop
+            return Self.playful([[1.0, 0.50, 0.0], [0.95, 0.15, 0.60], [0.50, 0.20, 0.85],
+                                 [1.0, 0.90, 0.15], [0.30, 0.70, 1.0], [0.95, 0.30, 0.20]], spread: 0.8)
+        case .delaunay:     // Sonia Delaunay, Rhythm
+            return Self.playful([[1.0, 0.55, 0.10], [0.10, 0.30, 0.85], [0.90, 0.15, 0.20],
+                                 [1.0, 0.85, 0.20], [0.15, 0.60, 0.40], [0.25, 0.55, 0.95]], spread: 0.6)
         }
     }
 
@@ -127,13 +156,19 @@ struct FernPalettePlan {
     /// Energy on a 1–10 scale: the measured section energy, or live loudness (spectralSurge 0…1) when that is unknown.
     static func energy(level: Float, surge: Float) -> Float { level > 0 ? level : 1 + 9 * min(max(surge, 0), 1) }
 
-    /// Family for an energy, with ±0.5 hysteresis around the current family's edges.
-    static func family(for energy: Float, current: FernFamily) -> FernFamily {
-        let boldAt: Float = current == .bold ? 6.5 : 7.0
-        let subtleAt: Float = current == .subtle ? 4.0 : 3.5
-        if energy >= boldAt { return .bold }
-        if energy <= subtleAt { return .subtle }
-        return .jewel
+    /// Upper energy edge of each family below the top one: subtle ≤ 3.5 < jewel ≤ 5.5 < bold < 7 ≤ playful.
+    static let edges: [Float] = [3.5, 5.5, 7.0]
+
+    /// Family for an energy (1–10), with 0.5 of hysteresis: an edge moves 0.5 AWAY from the current family, so it
+    /// must be clearly crossed before the family changes.
+    static func family(for energy: Float, current: FernFamily?) -> FernFamily {
+        var index = 0
+        for (i, edge) in edges.enumerated() {
+            // nil: a track's first pick, no hysteresis
+            let shifted = current.map { i < $0.rawValue ? edge - 0.5 : edge + 0.5 } ?? edge
+            if energy > shifted { index = i + 1 }
+        }
+        return FernFamily(rawValue: index) ?? .jewel
     }
 
     /// - Parameters: `trackKey` 0…1 identifies the track (seeds the rotation order); `downbeat` is true on the frame
@@ -141,7 +176,7 @@ struct FernPalettePlan {
     mutating func update(time: Float, energy: Float, trackKey: Float, downbeat: Bool) {
         if !seeded {
             trackSeed = Int(trackKey * 997)
-            family = Self.family(for: energy, current: .jewel)
+            family = Self.family(for: energy, current: nil)
             candidate = family
             current = Self.pick(family, rotation: 0, seed: trackSeed)
             previous = current

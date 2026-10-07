@@ -79,15 +79,19 @@ struct FiddleheadFernTests {
 
     // MARK: Palette plan
 
-    @Test("energy picks the family, with hysteresis")
+    @Test("energy picks the family up the intensity ladder, with hysteresis")
     func familyFromEnergy() {
-        #expect(FernPalettePlan.family(for: 8, current: .jewel) == .bold)
-        #expect(FernPalettePlan.family(for: 5, current: .jewel) == .jewel)
-        #expect(FernPalettePlan.family(for: 2, current: .jewel) == .subtle)
-        #expect(FernPalettePlan.family(for: 6.7, current: .bold) == .bold)        // holds bold just below 7
-        #expect(FernPalettePlan.family(for: 6.7, current: .jewel) == .jewel)
-        #expect(FernPalettePlan.energy(level: 0, surge: 1) == 10)                  // unknown level → live loudness
+        #expect(FernPalettePlan.family(for: 2, current: nil) == .subtle)
+        #expect(FernPalettePlan.family(for: 4.5, current: nil) == .jewel)
+        #expect(FernPalettePlan.family(for: 6, current: nil) == .bold)
+        #expect(FernPalettePlan.family(for: 8, current: nil) == .playful)
+        #expect(FernPalettePlan.family(for: 6.8, current: .playful) == .playful)    // must clearly drop below 7
+        #expect(FernPalettePlan.family(for: 7.3, current: .bold) == .bold)          // must clearly rise above 7
+        #expect(FernPalettePlan.family(for: 7.6, current: .bold) == .playful)
+        #expect(FernPalettePlan.energy(level: 0, surge: 1) == 10)                   // unknown level → live loudness
         #expect(FernPalettePlan.energy(level: 4, surge: 1) == 4)
+        #expect(FernFamily.allCases.allSatisfy { !FernPalette.members(of: $0).isEmpty })
+        #expect(FernPalette.members(of: .playful).count == 6)
     }
 
     /// Drives a plan at 60 fps with a downbeat every `bar` seconds.
@@ -108,7 +112,7 @@ struct FiddleheadFernTests {
         run(&plan, from: 10, seconds: 3, energy: 9)                                // a 3 s spike: under the dwell
         #expect(plan.current.family == .jewel)
         run(&plan, from: 13, seconds: 10, energy: 9)
-        #expect(plan.current.family == .bold)
+        #expect(plan.current.family == .playful)
         #expect(plan.look(at: 40) == plan.current.look)                           // settled after the fade
         #expect((13...30).contains { plan.look(at: Float($0)) != plan.current.look })   // and it DID fade
     }
