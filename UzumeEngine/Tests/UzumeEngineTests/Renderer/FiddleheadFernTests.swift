@@ -44,22 +44,37 @@ struct FiddleheadFernTests {
         }
     }
 
-    @Test("a beat-phase wrap fires one pulse; a bar wrap makes it a downbeat")
-    func pulsesOnGridWraps() {
+    @Test("an impulse fires once per bar (barPhase01 wrap), not on every beat")
+    func pulsesOnBarWraps() {
         let shape = FernShape()
         let dive = FernDive(shape: shape, children: shape.build().children)
         var music = FernMusic(), f = FeatureVector()
-        f.beatPhase01 = 0.9; f.barPhase01 = 0.95
+        f.beatPhase01 = 0.95; f.barPhase01 = 0.2
         music.update(features: f, time: 0, dt: 1 / 60, dive: dive)
+        f.beatPhase01 = 0.02; f.barPhase01 = 0.26                           // a beat inside the bar: no impulse
+        music.update(features: f, time: 0.1, dt: 1 / 60, dive: dive)
         #expect(music.pulses.isEmpty)
-        f.beatPhase01 = 0.02; f.barPhase01 = 0.01
-        music.update(features: f, time: 1 / 60, dt: 1 / 60, dive: dive)
-        #expect(music.pulses.count == 1 && music.pulses[0].amp > 0.5)
-        f.beatPhase01 = 0.95; f.barPhase01 = 0.25
-        music.update(features: f, time: 0.3, dt: 1 / 60, dive: dive)
-        f.beatPhase01 = 0.01; f.barPhase01 = 0.26
-        music.update(features: f, time: 0.5, dt: 1 / 60, dive: dive)
-        #expect(music.pulses.count == 2 && music.pulses[1].amp < 0.5)
+        f.beatPhase01 = 0.97; f.barPhase01 = 0.98
+        music.update(features: f, time: 1.0, dt: 1 / 60, dive: dive)
+        f.beatPhase01 = 0.01; f.barPhase01 = 0.01                           // the downbeat
+        music.update(features: f, time: 1.02, dt: 1 / 60, dive: dive)
+        #expect(music.pulses.count == 1 && music.pulses[0].amp == 1)
+    }
+
+    @Test("bass glow attacks instantly and decays")
+    func bassGlowEnvelope() {
+        let shape = FernShape()
+        let dive = FernDive(shape: shape, children: shape.build().children)
+        var music = FernMusic(), f = FeatureVector()
+        for i in 0..<120 { f.bassDev = 0.05; music.update(features: f, time: Float(i) / 60, dt: 1 / 60, dive: dive) }
+        let base = music.bassGlow
+        f.bassDev = 0.6
+        music.update(features: f, time: 2.0, dt: 1 / 60, dive: dive)
+        #expect(music.bassGlow > base + 0.3)
+        let hit = music.bassGlow
+        f.bassDev = 0
+        for i in 1...30 { music.update(features: f, time: 2.0 + Float(i) / 60, dt: 1 / 60, dive: dive) }
+        #expect(music.bassGlow < hit * 0.2)
     }
 
     // MARK: GPU
@@ -185,4 +200,73 @@ struct FiddleheadFernTests {
         print(String(format: "FIDDLEHEAD %dx%d GPU ms p50 %.1f p95 %.1f max %.1f → %@", w, h,
                      times[times.count / 2], times[times.count * 95 / 100], times[times.count - 1], dir.path))
     }
+
+    // MARK: Session replay
+
+    /// A recorded session's REAL feature rows (`features.csv`), resampled to the film's frame rate by wallclock and
+    /// aligned to `raw_tap.wav`'s start, so the film plays with the audio the session heard (FA #27: real pipeline
+    /// data, not synthetic envelopes). Only the fields FiddleheadFern reads are carried.
+    struct SessionRows {
+        let wall: [Double], time: [Float], beat: [Float], bar: [Float], bass: [Float], treb: [Float], surge: [Float]
+        let tapStart: Double
+
+        init(dir: URL) throws {
+            let text = try String(contentsOf: dir.appendingPathComponent("features.csv"), encoding: .utf8)
+            let lines = text.split(separator: "\n")
+            let head = lines[0].split(separator: ",").map(String.init)
+            func col(_ name: String) -> Int { head.firstIndex(of: name) ?? -1 }
+            let idx = ["wallclock_s", "time", "beatPhase01", "barPhase01_permille", "bassDev", "treb_dev", "spectral_surge"].map(col)
+            var cols = [[Double]](repeating: [], count: idx.count)
+            for line in lines.dropFirst() {
+                let f = line.split(separator: ",", omittingEmptySubsequences: false)
+                for (k, i) in idx.enumerated() { cols[k].append(i >= 0 && i < f.count ? Double(f[i]) ?? 0 : 0) }
+            }
+            wall = cols[0]; time = cols[1].map(Float.init); beat = cols[2].map(Float.init)
+            bar = cols[3].map { Float($0 / 1000) }; bass = cols[4].map(Float.init); treb = cols[5].map(Float.init)
+            surge = cols[6].map(Float.init)
+            let log = try String(contentsOf: dir.appendingPathComponent("session.log"), encoding: .utf8)
+            let tag = "raw tap capture started"
+            let line = log.split(separator: "\n").first { $0.contains(tag) }.map(String.init) ?? ""
+            tapStart = line.components(separatedBy: "wallclock=").last.flatMap { Double($0.trimmingCharacters(in: .whitespaces)) } ?? wall[0]
+        }
+
+        func features(at t: Double, fps: Float) -> FeatureVector {
+            let target = tapStart + t
+            var lo = 0, hi = wall.count - 1
+            while lo < hi { let mid = (lo + hi + 1) / 2; if wall[mid] <= target { lo = mid } else { hi = mid - 1 } }
+            var f = FeatureVector()
+            f.time = time[lo]; f.deltaTime = 1 / fps
+            f.beatPhase01 = beat[lo]; f.barPhase01 = bar[lo]
+            f.bassDev = bass[lo]; f.trebDev = treb[lo]; f.spectralSurge = surge[lo]
+            return f
+        }
+    }
+
+    @Test("FIDDLEHEAD_REPLAY=<session dir>: real-session film with its audio, at the fullscreen drawable size",
+          .enabled(if: ProcessInfo.processInfo.environment["FIDDLEHEAD_REPLAY"] != nil))
+    func replay() throws {
+        let env = ProcessInfo.processInfo.environment
+        let dir = URL(fileURLWithPath: env["FIDDLEHEAD_REPLAY"] ?? "")
+        let w = Int(env["FIDDLEHEAD_W"] ?? "") ?? 3840, h = Int(env["FIDDLEHEAD_H"] ?? "") ?? 2160
+        let fps: Float = 30, seconds = Double(env["FIDDLEHEAD_SECONDS"] ?? "") ?? 30
+        let out = env["FIDDLEHEAD_OUT"] ?? FileManager.default.temporaryDirectory.appendingPathComponent("fiddlehead_replay.mp4").path
+        let rows = try SessionRows(dir: dir)
+        let rig = try Rig(width: w, height: h)
+        #expect(rig.waitForBake(rows.features(at: 0, fps: fps)))
+        let ff = Process()
+        ff.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        ff.arguments = ["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", "\(w)x\(h)", "-r", "30", "-i", "-",
+                        "-i", dir.appendingPathComponent("raw_tap.wav").path, "-c:a", "aac", "-b:a", "192k", "-shortest",
+                        "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p", out]
+        let pipe = Pipe(); ff.standardInput = pipe
+        try ff.run()
+        for i in 0..<Int(seconds * Double(fps)) {
+            rig.frame(rows.features(at: Double(i) / Double(fps), fps: fps))
+            pipe.fileHandleForWriting.write(Data(bytes: rig.readback.contents(), count: w * h * 4))
+        }
+        try pipe.fileHandleForWriting.close()
+        ff.waitUntilExit()
+        print("FIDDLEHEAD replay \(w)x\(h) → \(out)")
+    }
 }
+
