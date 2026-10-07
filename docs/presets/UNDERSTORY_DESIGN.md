@@ -606,3 +606,30 @@ flashes/s, 0 transitions**, regional and red safe, frame-mean luminance 0.057…
   flashes/s on the replays and under the worst-case train (135 shimmers, luma Δ0.010). Drum-flick
   alignment: the far frond's bend changes **2.5–3.6×** more across a hit than at random moments;
   41–71 % of hits exceed the random p90 (chance 10 %). Films: `/Volumes/Extreme SSD/understory/und6/`.
+
+### UND.6 — round 1 live review, and the turn to one fiddlehead (2026-10-05)
+
+Matt watched the merged build live (Developer-ID developer-flavor build of local `main` `d7fb461c`,
+`/Users/Shared/Understory/Uzume.app`). His words:
+
+> *"there is a clear, obvious seam in the middle of the background layer, running vertically down the
+> middle. the ripple radiating through the ferns is musical but the overall motion of the fern is not.
+> I think we should commit what we have and pick up work to simplify the preset in a fresh session. I'm
+> thinking we reduce down to a single, screen-filling fiddlehead that curls and uncurls, sways, and
+> shimmers with the music."*
+
+- **Seam (BUG-180, open).** A vertical seam down the centre of the cached `backdrop` forest. Not seen
+  in any offline film, so it may depend on the live drawable size. Cause not diagnosed. Candidates, in
+  the order to check: the backdrop's coherent 8×8 tile build (tile turns, partial-tile edges at an odd
+  width), the trunk/fern placement grid in `understory_forest` (a cell boundary at x = 0), the lens or
+  sample jitter (a sign flip at the centre). Capture the live drawable size first and reproduce it in
+  `UnderstoryStagedHarnessTests` at that size.
+- **Motion verdict.** What works: the shimmer travelling through the fronds (UND.4) reads as musical.
+  What doesn't: the fern's overall motion (the Flexi springs plus the UND.6 drum/bass/voice pulses)
+  does not read as musical.
+- **New direction (Matt's, for a fresh session).** A **single, screen-filling fiddlehead** that curls
+  and uncurls, sways, and shimmers with the music. His reference screenshot (shown in chat, not
+  persisted): one large frond sweeping across the frame and ending in a tight spiral crozier,
+  self-luminous gold, green and teal with sparkle points and bar-like glows along the leaflets, on a
+  dark mossy ground. Keep the shimmer (the part that works). The field layout, the per-row instrument
+  motion and possibly the forest are candidates to remove. **Ask Matt before deleting any of it.**

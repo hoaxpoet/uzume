@@ -385,7 +385,9 @@ Branch `claude/understory-development-2c507d`.
 | **UND.3** colour + path-length stamp + trails | 🔨 2026-10-01 — colour/stamp/trails done; **forest backdrop (Matt's request) in a fidelity push** | Stamp verified (monotone 100 %, speckle ≤ 0.35 %); stem-position bands; palette on fifths gated by consonance; trails 0.50–0.82 by arousal. Forest: cached `backdrop` stage (2.57 ms @1080p total); Matt: "good first pass… fidelity low" → drawn, push detail (design §12) |
 | **UND.4** shimmer sequencer | ✅ built 2026-10-01 | `UnderstoryShimmer`: downbeat → lead, beats 2…N → left-to-right mid set rotating every 4 bars, beat place from bar phase; grid-trust gate; drum fallback. Replay 101/101 grid beats, 0 off-grid, 25/25 downbeats on lead; 0.00 flashes/s (design §12). Look: M7 eye call |
 | **UND.5** fiddleheads + vocals | ✅ built 2026-10-01 — live path pending (M7) | κ_max 0.45 (fitted to ref 02); voice = vocalsEnergyRel vetoed by brass/woodwind/string activity (the vocal stem carries trumpet); replay: sung 0.83 / 0.87 open, instrumental 0.00. Phrase timing + streaming path: cannot verify offline (design §12) |
-| **UND.6 / UND.7** M7 + certification | ⏸ | Matt's M7 PASS; NEW_PRESET_CHECKLIST §4 gates; 10-minute soak, watchdog silent |
+| **UND.6** band in the fronds + live round 1 | ✅ built 2026-10-01 · live round 1 2026-10-05: **not passed** | Drum flick / bass push / vocal sway built and measured (design §12). Matt live: the shimmer reads musical; the overall fern motion does not; a vertical seam down the backdrop's centre (BUG-180). Merged to local `main` only, unpushed |
+| **UND.8** simplify to one fiddlehead | ⏸ next, fresh session | Matt's direction: a single screen-filling fiddlehead that curls and uncurls, sways, and shimmers with the music (design §12, 2026-10-05). Fix or remove the BUG-180 seam with it. Ask before deleting field/forest code |
+| **UND.7** certification | ⏸ | Matt's M7 PASS; NEW_PRESET_CHECKLIST §4 gates; 10-minute soak, watchdog silent |
 
 ### Lane · Fiddlehead — an endless dive into a self-similar fern (reopened 2026-10-06; in the app at FH.16)
 
