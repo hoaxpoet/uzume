@@ -42,13 +42,19 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     let fieldResolution = 640
 
     // Pipelines
-    let spinePSO, seedPSO, stepPSO, childPSO, renderPSO, brightPSO, blurPSO: MTLComputePipelineState
+    let spinePSO, seedPSO, stepPSO, childPSO, renderPSO, resolvePSO, brightPSO, blurPSO: MTLComputePipelineState
     let displayPipeline: MTLRenderPipelineState?
     let laneNormals: Bool
 
     // Fields (lazy) and frame targets (drawable-sized)
     var fieldF: MTLTexture?, fieldT: MTLTexture?, fieldC: MTLTexture?
     var hdr: MTLTexture?, bloomA: MTLTexture?, bloomB: MTLTexture?
+    /// TAA history ping-pong (the resolved picture the bloom and display read), and the previous frame's camera.
+    var history: [MTLTexture] = []
+    var historyIndex = 0
+    var historyValid = false
+    var lastCamera: (centre: SIMD4<Float>, cycle: Float)?
+    var frameIndex = 0
     private let bakeLock = NSLock()
     private var bakeState = 0                       // 0 not started, 1 baking, 2 ready
     var drawableSize = SIMD2<Int>(1920, 1080)
@@ -63,7 +69,7 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
             return try device.makeComputePipelineState(function: fn)
         }
         spinePSO = try pso("fh_spine_field"); seedPSO = try pso("fh_tree_seed"); stepPSO = try pso("fh_tree_step")
-        childPSO = try pso("fh_child_field"); renderPSO = try pso("fh_render")
+        childPSO = try pso("fh_child_field"); renderPSO = try pso("fh_render"); resolvePSO = try pso("fh_resolve")
         brightPSO = try pso("fh_bright"); blurPSO = try pso("fh_blur")
         laneNormals = renderPSO.threadExecutionWidth == 32                  // the normals' lane layout assumes 32
         if let vfn = library.makeFunction(name: "fh_display_vertex"),
@@ -115,6 +121,8 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
         hdr = makeTexture(.rgba16Float, width, height)
         bloomA = makeTexture(.rgba16Float, max(width / 4, 1), max(height / 4, 1))
         bloomB = makeTexture(.rgba16Float, max(width / 4, 1), max(height / 4, 1))
+        history = [makeTexture(.rgba16Float, width, height), makeTexture(.rgba16Float, width, height)].compactMap { $0 }
+        historyValid = false
     }
 
     public func update(features: FeatureVector, stemFeatures: StemFeatures, commandBuffer: MTLCommandBuffer) {
@@ -128,11 +136,11 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     }
 
     public func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {
-        guard isReady, let displayPipeline, let hdr, let bloomA else { return }
+        guard isReady, let displayPipeline, history.count == 2, let bloomA else { return }
         // bloom, white point, exposure (← the passage's section level)
         var display = SIMD4<Float>(1.0, 2.5, 2.8 * (0.55 + 0.55 * music.level), 0)
         encoder.setRenderPipelineState(displayPipeline)
-        encoder.setFragmentTexture(hdr, index: 0)
+        encoder.setFragmentTexture(history[historyIndex], index: 0)   // the resolved picture
         encoder.setFragmentTexture(bloomA, index: 1)
         encoder.setFragmentBytes(&display, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)

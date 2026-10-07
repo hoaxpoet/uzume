@@ -84,16 +84,17 @@ struct FernMusic {
     struct Pulse { var phi: Float; var time: Float; var amp: Float }
 
     private(set) var pulses: [Pulse] = []
-    private var lastBeatPhase: Float = 0
     private var lastBarPhase: Float = 0
     private var bassMean: Float = 0
     private var trebMean: Float = 0
-    private(set) var bass: Float = 0
+    /// Bass hits: instant attack, ~0.2 s decay — the whole fern's glow swells on every kick (zero lag, no grid).
+    private(set) var bassGlow: Float = 0
     private(set) var treble: Float = 0
     private(set) var level: Float = 0
 
-    /// Pulse front speed in path units per second (≈ one stem per 2 s).
-    let speed: Float = 0.5
+    /// Impulse front speed in path units per second: an impulse crosses a stem in ~0.4 s and reaches the visible
+    /// leaflet tips in about a second — inside one bar at any common tempo.
+    let speed: Float = 2.5
     static let maxPulses = 32
 
     /// A deviation primitive, self-normalised against its own slow mean (treble deviation runs ~100× below bass;
@@ -103,19 +104,22 @@ struct FernMusic {
         return value / (value + 3 * max(mean, 1e-5))
     }
 
+    /// FH.16 round 2 (Matt, live: "connection to music is unclear"): measured on the TNT session, a per-beat impulse
+    /// born one level ABOVE the screen moved the frame 3 % (chance p95 2.4 %) and peaked 0.2 s late; at 2–2.7 beats/s
+    /// they overlapped into a constant shimmer. Matt's pick: bass glow on every hit + ONE impulse per bar, born on
+    /// screen. A bar = `barPhase01` wrapping on the cached grid.
     mutating func update(features: FeatureVector, time: Float, dt: Float, dive: FernDive) {
-        bass = Self.squash(max(features.bassDev, 0), mean: &bassMean, dt: dt)
+        let bass = Self.squash(max(features.bassDev, 0), mean: &bassMean, dt: dt)
+        bassGlow = max(bass, bassGlow * exp(-dt / 0.18))
         treble = Self.squash(max(features.trebDev, 0), mean: &trebMean, dt: dt)
         level += (min(max(features.spectralSurge, 0), 1) - level) * min(dt / 0.5, 1)
-        // a beat = beatPhase01 wrapping; a downbeat = barPhase01 wrapping on the same frame
-        let beat = features.beatPhase01 + 0.5 < lastBeatPhase
         let downbeat = features.barPhase01 + 0.5 < lastBarPhase
-        lastBeatPhase = features.beatPhase01
         lastBarPhase = features.barPhase01
-        if beat {
-            pulses.append(Pulse(phi: (time / dive.period - 1) * dive.arcStar, time: time, amp: downbeat ? 0.7 : 0.3))
+        if downbeat {
+            // born at the stem of the frond that fills the view now (level 0 → 1 as the cycle advances), not above it
+            pulses.append(Pulse(phi: (time / dive.period) * dive.arcStar, time: time, amp: 1))
         }
-        pulses.removeAll { time - $0.time > 8 }
+        pulses.removeAll { time - $0.time > 4 }
         if pulses.count > Self.maxPulses { pulses.removeFirst(pulses.count - Self.maxPulses) }
     }
 

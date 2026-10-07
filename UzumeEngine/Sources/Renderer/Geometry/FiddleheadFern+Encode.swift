@@ -56,16 +56,48 @@ extension FiddleheadFern {
 
     // MARK: Frame
 
-    /// The fern into `hdr` at the internal resolution, then bright → blur H → blur V into `bloomA`.
+    /// The previous frame's camera expressed in THIS frame's level-0 coordinates. Within a cycle the level-0 frame is
+    /// the same; across the seam the old level-0 frond became the new level -1, so the old camera maps through the
+    /// inverse of child k* (x ↦ o + R(a)·s·x at the end of the old cycle).
+    func previousCamera(for frame: FernDive.Frame) -> SIMD4<Float>? {
+        guard let last = lastCamera else { return nil }
+        guard last.cycle != frame.cycle else { return last.centre }
+        guard frame.cycle == last.cycle + 1 else { return nil }
+        let child = dive.step(level: 0, frac: 1)
+        let delta = SIMD2(last.centre.x - child.origin.x, last.centre.y - child.origin.y)
+        let cosA = cos(-child.angle), sinA = sin(-child.angle)
+        let centre = SIMD2(cosA * delta.x - sinA * delta.y, sinA * delta.x + cosA * delta.y) / child.scale
+        return SIMD4(centre.x, centre.y, last.centre.z / child.scale, last.centre.w - child.angle)
+    }
+
+    /// Halton(2, 3) sub-pixel jitter, 8-frame cycle, centred on 0.
+    static func jitter(_ index: Int) -> SIMD2<Float> {
+        func halton(_ i: Int, _ base: Int) -> Float {
+            var weight: Float = 1, value: Float = 0, rest = i
+            while rest > 0 { weight /= Float(base); value += weight * Float(rest % base); rest /= base }
+            return value
+        }
+        let i = index % 8 + 1
+        return SIMD2(halton(i, 2) - 0.5, halton(i, 3) - 0.5)
+    }
+
+    /// The fern into `hdr` (jittered) at the internal resolution, resolved into the TAA history, then
+    /// bright → blur H → blur V from the resolved picture into `bloomA`.
     func encodeFrame(into cmd: MTLCommandBuffer) {
-        guard let fieldF, let fieldT, let fieldC, let hdr, let bloomA, let bloomB,
+        guard let fieldF, let fieldT, let fieldC, let hdr, let bloomA, let bloomB, history.count == 2,
               let enc = cmd.makeComputeCommandEncoder() else { return }
         let frame = dive.frame(time: clock)
         var fronts = music.fronts(at: clock)
         params.lift = frame.lift
         params.zc = frame.centre
         params.tm = SIMD4(clock, frame.phi0, 0.12, Float(fronts.count))
-        params.au = SIMD4(music.bass, music.treble, 0.33, 1.4)
+        params.au = SIMD4(music.bassGlow, music.treble, 0.33, 1.4)
+        let prev = historyValid ? previousCamera(for: frame) : nil
+        let jit = Self.jitter(frameIndex)
+        params.prev = prev ?? frame.centre
+        params.taa = SIMD4(jit.x, jit.y, 0.12, prev == nil ? 0 : 1)
+        lastCamera = (frame.centre, frame.cycle)
+        frameIndex += 1
         if !fronts.isEmpty {
             memcpy(pulseBuffer.contents(), &fronts, MemoryLayout<SIMD2<Float>>.stride * fronts.count)
         }
@@ -82,9 +114,19 @@ extension FiddleheadFern {
         // whole threadgroups: the relief normals read neighbours across SIMD lanes (see fh_render)
         let groups = MTLSize(width: (hdr.width + 15) / 16, height: (hdr.height + 15) / 16, depth: 1)
         enc.dispatchThreadgroups(groups, threadsPerThreadgroup: group)
+        let resolved = history[1 - historyIndex]
+        enc.setComputePipelineState(resolvePSO)
+        enc.setTexture(hdr, index: 0)
+        enc.setTexture(history[historyIndex], index: 1)
+        enc.setTexture(resolved, index: 2)
+        enc.setBytes(&params, length: MemoryLayout<FernParams>.stride, index: 1)
+        let full = MTLSize(width: resolved.width, height: resolved.height, depth: 1)
+        enc.dispatchThreads(full, threadsPerThreadgroup: group)
+        historyIndex = 1 - historyIndex
+        historyValid = true
         let quarter = MTLSize(width: bloomA.width, height: bloomA.height, depth: 1)
         enc.setComputePipelineState(brightPSO)
-        enc.setTexture(hdr, index: 0)
+        enc.setTexture(resolved, index: 0)
         enc.setTexture(bloomA, index: 1)
         enc.dispatchThreads(quarter, threadsPerThreadgroup: group)
         var horizontal = SIMD2<Int32>(1, 0), vertical = SIMD2<Int32>(0, 1)

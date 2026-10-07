@@ -28,6 +28,8 @@ struct FernParams {
     float4 tm;       // time, phi of the lifted ancestor's root, colour flow speed, pulse count
     float4 au;       // bass, treble, hue base, hue spread along the impulse path
     float4 look;     // palette luminance target, candidate window, LOD pixels, normals-from-lanes (1/0)
+    float4 prev;     // the PREVIOUS frame's camera in this frame's level-0 coordinates: centre x, y, half-height, rotation
+    float4 taa;      // sub-pixel jitter x, y (pixels), history weight, history valid (1/0)
 };
 struct FernChild { float2 root; float ang; float scale; float mirror; float s; float shift; float pad; };
 
@@ -239,7 +241,7 @@ kernel void fh_render(texture2d_array<float> F [[texture(0)]], texture2d_array<f
                       uint2 gid [[thread_position_in_grid]], ushort lane [[thread_index_in_simdgroup]]) {
     float2 res = float2(out.get_width(), out.get_height());
     float t = P.tm.x, hue0 = P.au.z, flow = P.tm.z, spread = P.au.w, lum = P.look.x;
-    float2 uv = (float2(gid) + 0.5 - 0.5 * res) / res.y * float2(1.0, -1.0);
+    float2 uv = (float2(gid) + 0.5 + P.taa.xy - 0.5 * res) / res.y * float2(1.0, -1.0);   // jittered: TAA integrates it
     float half_ = P.zc.z, pix = 2.0 * half_ / res.y, viewH = 2.0 * half_;
     float2 q = P.lift.xy + fh_rot((P.zc.xy + fh_rot(uv * 2.0 * half_, P.zc.w)) * P.lift.w, P.lift.z);
     FernHit r = fh_descend(q, 1.0 / P.lift.w, P.tm.y, viewH, F, T, C, ch, P, pix);
@@ -260,11 +262,14 @@ kernel void fh_render(texture2d_array<float> F [[texture(0)]], texture2d_array<f
     int np = int(P.tm.w);
     for (int i = 0; i < np; i++) {
         float dphi = pulses[i].x - r.phi;
-        float head = exp(-dphi * dphi / 0.0016), tail = dphi > 0.0 ? exp(-dphi / 0.08) : 0.0;
-        pulse += pulses[i].y * (head + tail * 0.25);
+        // a WAVE, not a line: a thin head lit only a few big stems (FH.16 round 2); this band sweeps the leaflets
+        float head = exp(-dphi * dphi / 0.012), tail = dphi > 0.0 ? exp(-dphi / 0.35) : 0.0;
+        pulse += pulses[i].y * (head + tail * 0.45);
     }
-    float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phiC * spread * 2.0 - flow * t * 2.0));   // light rides the colour bands
-    float shimmer = step(1.0 - 0.25 * P.au.y, fh_hash(float2(r.id * 97.0 + floor(r.s * 9.0), floor(t * 18.0))));
+    float ripple = 0.5 + 0.5 * sin(6.2831853 * (r.phiC * spread * 2.0 - flow * t * 2.0));   // light rides the colour bands (decorative)
+    // treble: a SMOOTH per-leaflet twinkle (a per-frame random sparkle read as grain at fullscreen, FH.16 round 2)
+    float tw = 0.5 + 0.5 * sin(t * 5.0 + 6.2831853 * fh_hash(float2(r.id * 97.0 + floor(r.s * 9.0), 3.0)));
+    float shimmer = P.au.y * smoothstep(0.6, 1.0, tw);
 
     // COLOUR BATH: the fern glows (emissive). Hue runs along the impulse path of the visible unit and with its on-screen
     // size (continuous: the loop stays seamless and colour shifts as each frond grows), flowing outward over time.
@@ -272,15 +277,47 @@ kernel void fh_render(texture2d_array<float> F [[texture(0)]], texture2d_array<f
     float mid = 1.0 - abs(r.across);
     float3 c0 = fh_pal(hue, PL, lum), c1 = fh_pal(hue + 0.12, PL, lum), cv = mix(fh_pal(hue + 0.06, PL, lum), float3(1.0), 0.2);
     float relief = 0.25 + 0.75 * dif;
-    float3 tissue = c0 * relief * (0.18 + 0.45 * mid * mid) * (0.5 + 0.9 * ripple) * (0.8 + 0.4 * P.au.x);
-    float3 glow = cv * r.vein * (0.7 + 2.2 * P.au.x * ripple + 7.0 * pulse);   // bass swells the ripple light
+    // bass glow (P.au.x): every bass hit swells the WHOLE fern's light at once — zero lag, no grid needed
+    float3 tissue = c0 * relief * (0.18 + 0.45 * mid * mid) * (0.6 + 0.6 * ripple) * (0.8 + 1.1 * P.au.x);
+    float3 glow = cv * r.vein * (0.7 + 0.6 * ripple + 2.4 * P.au.x + 7.0 * pulse);
     float rim = smoothstep(-pix * 2.5, -pix * 0.2, r.d) * cov;
-    float3 edge = c1 * rim * (1.1 + 3.0 * pulse + 2.0 * shimmer);
-    float3 col = tissue * (1.0 + 2.5 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.4;
+    float3 edge = c1 * rim * (1.1 + 0.8 * P.au.x + 3.0 * pulse + 1.6 * shimmer);
+    float3 col = tissue * (1.0 + 3.5 * pulse) + glow + edge + float3(1.0, 0.95, 0.9) * spec * 0.4;
     // the bath behind: a slow drifting fog of palette light (black read as a void, not a bath)
     float fog = 0.5 + 0.5 * sin(uv.x * 2.3 + t * 0.21) * sin(uv.y * 1.7 - t * 0.17 + 1.3 * sin(uv.x * 1.1 + t * 0.09));
     float3 bg = fh_pal(hue0 + 0.35 * uv.x + 0.25 * fog - flow * t, PL, lum) * (0.012 + 0.05 * fog * fog);
     if (gid.x < uint(res.x) && gid.y < uint(res.y)) { out.write(float4(mix(bg, col, cov), 1.0), gid); }
+}
+
+// MARK: - Temporal resolve
+
+/// TAA: this frame's jittered sample blended into the realigned history. The dive's camera is known exactly, so the
+/// previous frame is found by mapping this pixel's level-0 point through the previous camera; the history is clamped
+/// to this frame's 3×3 neighbourhood (unfurl and impulses change the picture; clamping stops them smearing).
+kernel void fh_resolve(texture2d<float> cur [[texture(0)]], texture2d<float> hist [[texture(1)]],
+                       texture2d<float, access::write> out [[texture(2)]], constant FernParams& P [[buffer(1)]],
+                       uint2 gid [[thread_position_in_grid]]) {
+    if (gid.x >= out.get_width() || gid.y >= out.get_height()) { return; }
+    float2 res = float2(out.get_width(), out.get_height());
+    float3 c = cur.read(gid).rgb, mn = c, mx = c, cm = 0.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        float3 n = cur.read(uint2(clamp(int2(gid) + int2(i, j), int2(0), int2(res) - 1))).rgb;
+        mn = min(mn, n); mx = max(mx, n); cm += n / 9.0;
+    }
+    if (P.taa.w < 0.5) { out.write(float4(c, 1.0), gid); return; }
+    float2 uv = (float2(gid) + 0.5 - 0.5 * res) / res.y * float2(1.0, -1.0);
+    float2 q0 = P.zc.xy + fh_rot(uv * 2.0 * P.zc.z, P.zc.w);
+    float2 uvp = fh_rot(q0 - P.prev.xy, -P.prev.w) / (2.0 * P.prev.z);
+    float2 pp = uvp * float2(1.0, -1.0) * res.y + 0.5 * res;
+    if (any(pp < 0.0) || any(pp >= res)) { out.write(float4(c, 1.0), gid); return; }
+    float3 h = clamp(hist.sample(fh_lin, pp / res).rgb, mn, mx);
+    // follow LIGHT changes (bass glow, impulses) within a frame or two; keep integrating the fine detail
+    // compared on 3×3 MEANS: per-pixel speckle must not count as a light change (it re-admitted the grain)
+    float3 hm = 0.0;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { hm += hist.sample(fh_lin, (pp + float2(i, j)) / res).rgb / 9.0; }
+    float lc = dot(cm, float3(0.2126, 0.7152, 0.0722)), lh = dot(hm, float3(0.2126, 0.7152, 0.0722));
+    float a = mix(P.taa.z, 0.75, smoothstep(0.15, 0.5, abs(lc - lh) / (lh + 0.05)));
+    out.write(float4(mix(h, c, a), 1.0), gid);
 }
 
 // MARK: - Bloom + display

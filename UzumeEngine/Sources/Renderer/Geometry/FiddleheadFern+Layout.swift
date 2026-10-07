@@ -20,6 +20,8 @@ struct FernParams {
     var tm: SIMD4<Float> = .zero        // time, phi of the lifted root, colour flow, pulse count
     var au: SIMD4<Float> = .zero        // bass, treble, hue base, hue spread
     var look: SIMD4<Float> = .zero      // palette luminance, candidate window, LOD pixels, lane normals on
+    var prev: SIMD4<Float> = .zero      // previous frame's camera in this frame's level-0 coords: x, y, half, rot
+    var taa: SIMD4<Float> = .zero       // jitter x, y (px), history weight, history valid
 }
 
 /// Mirrors `FernChild` in FiddleheadFern.metal (32 bytes).
