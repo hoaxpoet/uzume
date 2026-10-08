@@ -242,6 +242,20 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Nebula", samples: try await flashLuma("Nebula"))
     }
 
+    @Test("Fiddlehead is flash-safe (bass glow + bar impulses on the worst-case train, real headless render)")
+    func fiddleheadIsFlashSafe() async throws {
+        // FH.17 — Fiddlehead reaches this harness because the single-pass gate would REFUSE it: its
+        // fragment is the bake-time ground only, so the FeatureVector harness renders it static. The
+        // fern is `FiddleheadFern`'s compute render through the particles seam.
+        //
+        // Load-bearing: Fiddlehead's music response IS light. Every bass hit swells the whole fern's
+        // glow (instant attack, 0.18 s decay) and every bar sends a bright impulse out through the
+        // branches. The worst-case train spikes `bassDev` to its p99 at 4.5 Hz — above the 3/s Harding
+        // limit — with a bar wrap every 4 accents, so it drives both routes harder than real music does.
+        // 60 settle frames let the bass-glow follower and the TAA history reach steady state.
+        assertFlashSafe(name: "Fiddlehead", samples: try await flashLuma("Fiddlehead", settle: 60, frames: 900))
+    }
+
     @Test("Alfvén is flash-safe (worst-case beat train, real headless solver render)")
     func alfvenIsFlashSafe() async throws {
         // ALFVEN.CERT — Alfvén reaches this harness because the single-pass gate correctly

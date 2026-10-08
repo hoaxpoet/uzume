@@ -122,6 +122,15 @@ struct PhotosensitivityCertificationTests {
                            // first 20 s discarded — 4 patches taking turns, one per beat — 0.00 flashes/s,
                            // 0 transitions, relative luminance 0.015…0.037 (Δ0.022). 1080p D-157 on the
                            // four captures: max Δ frame-mean luma 0.0071 / 0.0117 / 0.0047 / 0.0043.
+        ,
+        "Fiddlehead"       // particles; the fern is `FiddleheadFern`'s compute render through the particles seam
+                           // and `fiddlehead_ground_fragment` is only the bake-time ground, so this single-pass
+                           // harness renders it static. Measured for real by
+                           // MultiPassFlashHarnessTests.fiddleheadIsFlashSafe (FH.17): worst-case train (bassDev
+                           // p99 spikes at 4.5 Hz, a bar wrap every 4), 60 settle + 900 frames — 0.00 flashes/s,
+                           // 0 transitions, luma ~0.11…0.25 (Δ≤0.143); regional peak 1.50–2.00/s across runs (limit 3), red 0.00. First
+                           // run measured 0.50/s: ONE transition, the bass normaliser's cold-start sag — fixed
+                           // at the cause (running-average warm-up), not tuned away.
     ]
 
     // MARK: - Gate
