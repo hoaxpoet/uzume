@@ -29,8 +29,27 @@
     "tier1": 16.0,
     "tier2": 12.0
   },
-  "certified": false,
+  "certified": true,
   "rubric_profile": "lightweight",
-  "audio_routes": [],
+  "audio_routes": [
+    {
+      "route": "bass_glow",
+      "primitive": "bassDev",
+      "kind": "continuous",
+      "note": "FH.16 r2 — every bass hit swells the whole fern's light: bassDev self-normalised against its own running mean (FernMusic.squash), instant attack, 0.18 s decay (FiddleheadFern+Dive). Read on the CPU; the shader receives it as P.au.x."
+    },
+    {
+      "route": "leaflet_twinkle",
+      "primitive": "trebDev",
+      "kind": "continuous",
+      "note": "FH.16 r2 — trebDev self-normalised (it runs ~100x below bassDev), gating a smooth per-leaflet twinkle on the leaflet edges (P.au.y). Never a per-frame random sparkle: that read as grain at fullscreen."
+    },
+    {
+      "route": "bar_impulse",
+      "primitive": "barPhase01",
+      "kind": "accent",
+      "note": "FH.16 r2 — each wrap of the cached grid's barPhase01 is a downbeat: ONE nerve impulse per bar, born on the stem filling the view and racing out to the leaflet tips in about a second (Matt's pick over per-beat impulses, which measured 3 % and 0.2 s late). Palette looks also step every 32 of these bars. Not declared: spectralSurge -> exposure (the passage's loudness), because the replay harness does not carry it (ReplayHarnessRouteCoverageTests.carriedPrimitives); it is exercised by FiddleheadFernTests instead."
+    }
+  ],
   "exclude_from_cycling": false
 }
