@@ -119,7 +119,7 @@ extension PlaylistSource {
 /// **Spotify** — delegates to `SpotifyWebAPIConnector`, which handles
 /// client-credentials auth, pagination, and all Spotify-specific error mapping.
 ///
-/// `appleScriptReader` is injectable for tests — no real AppleScript is executed
+/// `appleScriptReader` and `isAppRunning` are injectable for tests — no real AppleScript is executed
 /// in unit tests. Spotify I/O is injectable via `SpotifyWebAPIConnector.networkFetcher`.
 public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
 
@@ -127,6 +127,11 @@ public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
 
     /// Override in tests to return canned AppleScript output.
     var appleScriptReader: (@Sendable (String) async throws -> String?)?
+
+    /// Override in tests so the Music.app guard doesn't depend on the host.
+    var isAppRunning: @Sendable (String) -> Bool = { bundleID in
+        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+    }
 
     private let spotifyConnector: any SpotifyWebAPIConnecting
 
@@ -242,10 +247,6 @@ public final class PlaylistConnector: PlaylistConnecting, @unchecked Sendable {
     }
 
     // MARK: - Helpers
-
-    private func isAppRunning(_ bundleID: String) -> Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
-    }
 
     /// Throws `.automationPermissionDenied` on −1743; every other AppleScript error → nil.
     private func executeAppleScript(_ source: String) async throws -> String? {

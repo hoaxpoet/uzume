@@ -29,7 +29,9 @@ private func makeConnector(
         tokenProvider: StubTokenProvider(token: "stub")
     )
 ) -> PlaylistConnector {
-    PlaylistConnector(spotifyConnector: spotifyConnector)
+    let connector = PlaylistConnector(spotifyConnector: spotifyConnector)
+    connector.isAppRunning = { _ in true }
+    return connector
 }
 
 /// Build a minimal Spotify track JSON object.
@@ -84,6 +86,15 @@ struct PlaylistConnectorTests {
         #expect(tracks[0].title == "Breathe")
         #expect(tracks[1].title == "Money")
         #expect(tracks[2].title == "Time")
+    }
+
+    @Test func appleMusicPlaylist_notRunning_throwsNotRunning() async throws {
+        let connector = makeConnector()
+        connector.isAppRunning = { _ in false }
+        connector.appleScriptReader = { _ in Issue.record("reader called while Music not running"); return nil }
+        await #expect(throws: PlaylistConnectorError.appleMusicNotRunning) {
+            _ = try await connector.connect(source: .appleMusicCurrentPlaylist)
+        }
     }
 
     /// BR.10 (C6): Automation denied surfaces as its own error, not an empty playlist.
