@@ -33,12 +33,13 @@ Matt's direction supersedes these images as a fidelity target (2026-10-06/07). I
 
 ## Musical role
 
-The dive is the bed; **every beat on the cached grid is a nerve impulse that leaves the trunk and fans out to every leaflet tip**, downbeats brighter, while bass deviation swells the light riding the colour bands and the passage's loudness sets the exposure.
+The dive is the bed; **every bar on the cached grid sends one nerve impulse down the stem filling the view and out to the leaflet tips**, every bass hit swells the whole fern's light, treble twinkles the leaflet edges, and the passage's loudness sets the exposure (FH.16 r2 — per-beat impulses measured 3 % and 0.2 s late, and Matt picked this).
 
 ## Temporal contract
 
 - Continuous: one zoom level per 7 s, seamless; colour bands flow outward along the branches.
-- Per beat (grid): an impulse front crosses one stem in ~2 s.
-- Per bar: downbeat impulses at 0.7 strength vs 0.3.
+- Per bass hit: the whole fern's light swells (instant attack, 0.18 s decay).
+- Per bar (grid): one impulse crosses the stem in about a second.
+- Every 32 bars: the palette look changes on a downbeat, with a 3 s crossfade (every 60 s without a grid).
 - Section scale: exposure follows `spectralSurge`.
-- Silence: the dive keeps falling and the colour keeps flowing at low exposure; no impulses (no beats). It coasts, it does not freeze — Matt's call to confirm at M7.
+- Silence: the dive keeps falling and the colour keeps flowing at low exposure; no impulses (no beats). It coasts, it does not freeze.

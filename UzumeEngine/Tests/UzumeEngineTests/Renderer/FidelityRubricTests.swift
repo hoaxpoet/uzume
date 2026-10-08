@@ -454,7 +454,10 @@ struct FidelityRubricGateTests {
         // does for local files"* — the streaming grid sits ~100–160 ms off Billie Jean's onsets while
         // the swarm locks to that grid (replay: lock 8.5 s, turn share 0.987), the engine's known
         // streaming limit (BUG-065). Accepted at certification (Matt: "a").
-        "Fireflies"]
+        "Fireflies",
+        // FH.17 (2026-10-08) — Matt's live verdict on build 9003 (session 2026-10-07T22-33-03Z, Dance Yrself
+        // Clean, scene pinned): *"perfect. love it. ship it."*; certification requested in chat.
+        "Fiddlehead"]
 
     @Test func automatedGate_uncertifiedPresetsAreUncertified() async {
         let store = PresetCertificationStore()

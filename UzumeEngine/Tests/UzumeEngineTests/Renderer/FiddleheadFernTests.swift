@@ -4,7 +4,8 @@
 // Default-on: shape + dive invariants, and one rendered frame that must be a fern (not black, not clipped, varied).
 // `FIDDLEHEAD_FILM=1` additionally renders a sequence at 1080p to `$TMPDIR/fiddlehead_film/` (PNG frames) and prints
 // GPU frame-time percentiles — run it with `-c release`; it uses a SYNTHETIC beat clock (a beatPhase01 ramp), so it
-// judges look, motion and cost, never music coupling (FA #27).
+// judges look, motion and cost, never music coupling (FA #27). `FIDDLEHEAD_SOAK=1` runs ten minutes of scene time at
+// 1080p (FH.17 certification soak).
 
 import Testing
 import Foundation
@@ -15,6 +16,7 @@ import ImageIO
 import UniformTypeIdentifiers
 @testable import Renderer
 @testable import Shared
+import Diagnostics
 
 @Suite("Fiddlehead fern (FH.16)")
 struct FiddleheadFernTests {
@@ -248,6 +250,35 @@ struct FiddleheadFernTests {
         times.sort()
         print(String(format: "FIDDLEHEAD %dx%d GPU ms p50 %.1f p95 %.1f max %.1f → %@", w, h,
                      times[times.count / 2], times[times.count * 95 / 100], times[times.count - 1], dir.path))
+    }
+
+    @Test("FIDDLEHEAD_SOAK=1: ten minutes of scene time — memory flat, every minute still a lit fern, cost steady",
+          .enabled(if: ProcessInfo.processInfo.environment["FIDDLEHEAD_SOAK"] == "1"))
+    func soak() throws {
+        let rig = try Rig(width: 1920, height: 1080)
+        #expect(rig.waitForBake(Self.features(frame: 0)))
+        let perMinute = 1800                                     // features(frame:) runs at 30 fps
+        var baseline: MemorySnapshot?, firstP50 = 0.0, lastMean = -1.0
+        for minute in 0..<10 {
+            var times: [Double] = []
+            // one autorelease pool per frame, as the app's draw loop drains one (else Metal's autoreleased
+            // descriptors pile up in the test and read as a leak)
+            for i in 0..<perMinute {
+                autoreleasepool { times.append(rig.frame(Self.features(frame: minute * perMinute + i))) }
+            }
+            times.sort()
+            let s = rig.stats(), p50 = times[times.count / 2]
+            let mem = MemoryReporter.snapshot()
+            if minute == 0 { baseline = mem; firstP50 = p50 }
+            let growth = (Double(mem?.residentBytes ?? 0) - Double(baseline?.residentBytes ?? 0)) / (1024 * 1024)
+            print(String(format: "FIDDLEHEAD SOAK min %d: luma %.1f std %.1f white %.3f | GPU p50 %.1f ms | +%.1f MB",
+                         minute + 1, s.mean, s.std, s.white, p50, growth))
+            #expect(s.mean > 20 && s.mean < 200 && s.white < 0.05 && s.std > 15, "minute \(minute + 1): \(s)")
+            #expect(s.mean != lastMean, "minute \(minute + 1): frame identical to the last sample — frozen?")
+            #expect(growth < 25, "minute \(minute + 1): resident +\(growth) MB since minute 1")
+            #expect(p50 < firstP50 * 1.5, "minute \(minute + 1): GPU p50 \(p50) ms vs \(firstP50) ms in minute 1")
+            lastMean = s.mean
+        }
     }
 
     // MARK: Session replay

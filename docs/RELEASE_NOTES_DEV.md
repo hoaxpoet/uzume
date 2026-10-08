@@ -10,6 +10,10 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-08-200116] FH.17 — Fiddlehead certified (the 28th): an endless dive into a fern, lit by the music
+
+Fiddlehead is certified on Matt's live check (build 9003, Dance Yrself Clean: *"perfect. love it. ship it."*). The camera falls forever into a fern whose every leaflet is the same fern again, each frond uncurling as the camera reaches it. Every bass hit swells the fern's light, treble twinkles the leaflet edges, and every bar sends one nerve impulse racing down the stem to the leaflet tips. Fifteen palettes, each after a named work (Memphis to Rothko), take turns every 32 bars with a 3 s crossfade, starting at a different one per track. It now enters planned sessions like the other certified scenes. Flash-safe on a real render (0.00 flashes/s); a ten-minute soak holds memory flat and cost steady (13.6 ms per frame at 1080p, Release, M2 Pro).
+
 ### [dev-2026-10-01-221600] NACRE.7 — Nacre's colour no longer jumps when the key is unclear (BUG-179)
 
 - **Nacre's colour could jump by up to a third of the colour wheel in one frame** when a song's key was hazy. love_rehab did it 289 times in 30 s. The same recipe caused Understory's colour pop. Nacre now follows the key only when it reads clearly, and its colour moves at most a quarter-turn a second.
