@@ -87,6 +87,7 @@ struct FernMusic {
     private var lastBarPhase: Float = 0
     private var bassMean: Float = 0
     private var trebMean: Float = 0
+    private var heard: Float = 0
     /// Bass hits: instant attack, ~0.2 s decay — the whole fern's glow swells on every kick (zero lag, no grid).
     private(set) var bassGlow: Float = 0
     private(set) var treble: Float = 0
@@ -102,8 +103,11 @@ struct FernMusic {
 
     /// A deviation primitive, self-normalised against its own slow mean (treble deviation runs ~100× below bass;
     /// tuning either against an absolute is FA #31). Mean level → 0.25, 3× → 0.5, 10× → 0.77.
-    private static func squash(_ value: Float, mean: inout Float, dt: Float) -> Float {
-        mean += (value - mean) * min(dt / 8, 1)
+    /// The mean is a plain running average over everything heard until 8 s have passed, then an 8 s follower: started
+    /// at zero, the follower made the first seconds of every track read every hit as huge, and the light then sagged
+    /// once as the mean caught up — the one whole-frame flash transition FH.17's photosensitivity gate measured.
+    private static func squash(_ value: Float, mean: inout Float, heard: Float, dt: Float) -> Float {
+        mean += (value - mean) * min(dt / max(min(heard, 8), dt), 1)
         return value / (value + 3 * max(mean, 1e-5))
     }
 
@@ -112,9 +116,10 @@ struct FernMusic {
     /// they overlapped into a constant shimmer. Matt's pick: bass glow on every hit + ONE impulse per bar, born on
     /// screen. A bar = `barPhase01` wrapping on the cached grid.
     mutating func update(features: FeatureVector, time: Float, dt: Float, dive: FernDive) {
-        let bass = Self.squash(max(features.bassDev, 0), mean: &bassMean, dt: dt)
+        heard += dt
+        let bass = Self.squash(max(features.bassDev, 0), mean: &bassMean, heard: heard, dt: dt)
         bassGlow = max(bass, bassGlow * exp(-dt / 0.18))
-        treble = Self.squash(max(features.trebDev, 0), mean: &trebMean, dt: dt)
+        treble = Self.squash(max(features.trebDev, 0), mean: &trebMean, heard: heard, dt: dt)
         level += (min(max(features.spectralSurge, 0), 1) - level) * min(dt / 0.5, 1)
         let downbeat = features.barPhase01 + 0.5 < lastBarPhase
         lastBarPhase = features.barPhase01
