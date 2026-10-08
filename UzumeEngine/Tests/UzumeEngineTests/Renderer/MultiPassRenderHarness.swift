@@ -84,7 +84,11 @@ struct MultiPassRenderHarness {
         // FF.1 — Fireflies: the `particles`-only shape (no feedback), which production draws
         // through `drawDirect` → `encodePresetVisualization`: world fragment, then the sprites
         // into the same encoder.
-        "Fireflies"
+        "Fireflies",
+        // FH.17 — Fiddlehead: `FiddleheadFern` draws the whole scene through the particles seam (the
+        // Alfvén shape) after baking its curl-state fields on its own queue; the sidecar fragment is
+        // only the ground shown while they bake.
+        "Fiddlehead"
     ]
 
     /// Render `presetName` over `features`/`stems` (row-aligned), returning `reduce(bgra)`
@@ -163,6 +167,7 @@ struct MultiPassRenderHarness {
                                        cameraTimeOffset: firefliesCameraTimeOffset,
                                        freezeCamera: firefliesFreezeCamera, reduce)
         case "Alfvén":       return try renderAlfven(features, stems, reduce)
+        case "Fiddlehead":   return try renderFiddlehead(features, stems, settle: settle, reduce)
         case "Mitosis":      return try renderMitosis(features, stems, reduce)
         case "Cytokinesis":  return try renderCytokinesis(features, stems, reduce)
         case "Lumen Mosaic": return try renderLumenMosaic(features, stems, reduce)
@@ -555,6 +560,33 @@ struct MultiPassRenderHarness {
                                       configuration: AlfvenSolverConfiguration())
         return try particleLoop(ctx, drive, stems, reduce) { i, enc in solver.render(encoder: enc, features: drive[i]) }
             update: { i, cmd in solver.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
+    }
+
+    /// Fiddlehead (FH.17): the fern is drawn by `FiddleheadFern` through the particles seam, so the
+    /// single-pass harness sees only `fiddlehead_ground_fragment` (the dark ground shown while the
+    /// fields bake) and would measure a static frame. Production bakes on the geometry's OWN queue and
+    /// draws nothing until `isReady`; the harness waits for that (bounded) before any measured frame,
+    /// or every frame would be the ground and the measurement vacuous.
+    private func renderFiddlehead<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
+                                     settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
+        let ctx = try MetalContext()
+        let lib = try ShaderLibrary(context: ctx)
+        let fern = try FiddleheadFern(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat)
+        fern.ensureAllocated(width: width, height: height)
+        for _ in 0..<1000 where !fern.isReady {
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { break }
+            fern.update(features: drive[0], stemFeatures: stems[0], commandBuffer: cmd)
+            cmd.commit(); cmd.waitUntilCompleted()
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        guard fern.isReady else { throw HarnessError.setupFailed("Fiddlehead fields never baked") }
+        for i in 0..<settle {
+            guard let cmd = ctx.commandQueue.makeCommandBuffer() else { continue }
+            fern.update(features: drive[i % drive.count], stemFeatures: stems[i % stems.count], commandBuffer: cmd)
+            cmd.commit(); cmd.waitUntilCompleted()
+        }
+        return try particleLoop(ctx, drive, stems, reduce) { i, enc in fern.render(encoder: enc, features: drive[i]) }
+            update: { i, cmd in fern.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
     }
 
     private func renderMitosis<T>(_ drive: [FeatureVector], _ stems: [StemFeatures],
