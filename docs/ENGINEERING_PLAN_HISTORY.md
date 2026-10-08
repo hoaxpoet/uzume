@@ -5,6 +5,384 @@ Completed-increment narratives moved out of `ENGINEERING_PLAN.md` at RB.3 (2026-
 
 ## Recently Completed
 
+### Increment BUG139.1 — the tap teardown deadlock, root-caused from source ✅ (2026-09-23)
+
+**Done-when:** the CoreAudio tap teardown cannot block while holding `stateLock`; a deterministic
+gate pins the property; the defect's root cause is proven rather than hypothesised.
+
+**Delivered.** BUG-139 was filed the same day with a captured stack and an explicit "not diagnosed".
+Read against the source the next step, it resolved completely: `SystemAudioCapture.swift:407` — the
+exact line the sample was parked on — is `AudioDeviceStop(agg, proc)`, called with `stateLock` held
+since line 401. `AudioDeviceStop` blocks until the IO proc drains; the IO proc block runs on the
+CoreAudio real-time thread and calls `probeInstallRMS`, whose body is `stateLock.withLock`. Teardown
+waits for the IO proc, the IO proc waits for the lock. Both halves of the captured sample are
+accounted for.
+
+**Fix.** Teardown splits into `claimTapResourcesForTeardown()` (takes the handles and zeroes the
+fields in one locked step, then returns) and `destroyTapResources(_:)` (blocking HAL work, no lock
+held). The destroy half is `nonisolated static` over a value type deliberately: it **cannot** reach
+`stateLock`, so the compiler enforces the property rather than a comment. Zeroing under the lock also
+makes teardown idempotent against a racing `stopCapture()`/`deinit`.
+
+**This is BUG-021's lesson in a second place** — "no AVFoundation teardown under the provider lock",
+one layer down in the tap path. The comment above `probeInstallRMS` asserted *"the uncontended
+per-buffer stateLock"*; that word was the defect. Worth carrying forward: the rule is not
+provider-specific, it is *never hold a lock across a blocking audio-stack call that the audio thread
+can contend*.
+
+**Domain tag corrected** from `audio.capture / test-infrastructure` to `audio.capture`: it was filed
+from where it was observed (a test run), but the deadlocking code is the shipped teardown reached by
+`stopCapture()`, `performReinstall()` and `deinit`.
+
+**Gates:** `SystemAudioCaptureTeardownTests` (4 tests), plus a **negative control that was actually
+run** — reintroducing the lock-held return wedged the suite, the exact signature BUG-139 produces.
+swiftlint `--strict` 0/555.
+
+**5× full-suite streak: 3 of 5 exit 0 — and the numbers that matter are clean.** No hang in any run
+(the defect's own signature), 0 new `.ips`, and this increment's gate green 5/5. The two reds were
+different wall-clock tests in unrelated subsystems: `PlayheadAnalysisClockTests` (exact delivered-tick
+count, 106 vs 100) and `StagedPersistenceTests` (cost-growth ratio, 2.32 vs < 2.0). Both added to
+KNOWN_ISSUES §Pre-existing Flakes, whose own note says untracked flakes get "re-litigated from
+scratch" every run. Not fixed here — the remedy for both is the established
+deterministic-over-budget-widening treatment (CLEAN.7.9–7.14), which is its own increment.
+
+⚠ **Manual validation outstanding** — the shipped streaming path needs one app-level session plus an
+output-device change, which needs Screen Recording on real hardware. Structurally proven, not yet
+live-validated; tracked in the KNOWN_ISSUES entry's criteria as the one unticked box.
+### Increment U.11a — UX_SPEC §4.4 describes the connector U.11 shipped ✅ (2026-09-23)
+
+**Done-when:** §4.4 states the OAuth connector that is in the build, and the divergences it
+cannot state as settled are recorded rather than deleted.
+
+**Delivered.** §4.4 opened with *"`SpotifyWebAPIConnector` is URL-paste only in v1. No OAuth. v1
+supports **public playlists only** — private-playlist access requires user OAuth and is a v2
+feature."* Every clause of that was false from the moment U.11 landed. The build wires
+`SpotifyOAuthPlaylistConnector` around `SpotifyWebAPIConnector(tokenProvider: oauth)`,
+`SpotifyOAuthTokenProvider` runs Authorization Code + PKCE with scopes `playlist-read-private
+playlist-read-collaborative` against `uzume://spotify-callback`, and the refresh token sits in the
+Keychain for silent reuse. §4.4 now says so, adds the three login states the section never had
+(`.requiresLogin`, `.waitingForCallback`, `.authFailure`) and the two reachability states
+(`.notFound`, `.privatePlaylist`), and reframes the rate-limit note from client-credentials to the
+user token — the copy and the `[2 s, 5 s, 15 s]` backoff were correct and are unchanged.
+
+**Two spec promises the build does not keep, recorded in §4.4 rather than quietly dropped.** The
+preview card was specified as *"Found [Playlist Name] — [N] tracks"* and renders "Spotify playlist
+recognized" above the playlist **ID** in monospace — the user confirms their paste by reading a
+base-62 string. And there is no logout: Keychain credentials with no UI to clear them, the only
+route being Keychain Access. `RUNBOOK.md` calls that a developer workaround, which is not the same
+as a product decision. Both are Matt's to rule on; neither is invented here.
+
+**How it was found, and the part worth keeping.** Not by a gate — nothing reads prose, which is
+BUG-138's finding restated in a different doc. It surfaced from *outside the repo*: the website
+was writing a Spotify sentence and had to source it against both `UX_SPEC.md` and `RUNBOOK.md`,
+which disagreed. `RUNBOOK.md` was current throughout. **A second reader of the same fact is what
+caught this**, and the cheap version of that is keeping the site's claims table sourced to specific
+sections — it reads these docs adversarially every time it publishes a product sentence.
+
+### Increment BUG103.1 — a raising `play()` becomes a Swift error, not process death ✅ (2026-09-23)
+
+**Done-when:** the local-file start path cannot abort the process when `AVAudioPlayerNode.play()`
+raises; a deterministic gate proves it; the full parallel engine suite runs 5× clean with no new
+`.ips`.
+
+**Delivered.** `AVAudioPlayerNode.play()` reports some failures by raising an ObjC NSException.
+Swift cannot catch one, and a raise unwinding past a Swift frame calls `abort()` — which is why the
+parallel suite died with SIGABRT and **no failing test line** (fourteen crash reports on
+2026-08-25), and why the shipped local-file start path could hard-crash the app on playback start.
+
+Adds `Sources/ObjCShim/UZExceptionCatch.{h,m}` — the repo's **only** Objective-C target, justified
+solely by there being no pure-Swift way to catch an NSException. Both `play()` sites route through
+it. `_startLocked()` throws on a raise, carrying the half-built refs out on a private `StartAborted`
+so `start()` can tear down the still-running engine **after** unlocking — honouring BUG-021 (no
+AVFoundation teardown under the provider lock) without reopening BUG-078 (never leak a running
+engine). `resume()` is non-throwing public API, so it logs and carries on.
+
+**★ The filed candidate fix was falsified before any code was written.** BUG-103 offered "check
+`engine.isRunning` after `engine.start()`". Nine engine states were probed directly against
+AVFoundation first, and **every `isRunning == false` state returned from `play()` normally** — the
+guard would have covered a condition that never raises. It would have compiled, reviewed well, and
+left the contract gap shipping. Only the detached-player state raises deterministically, and that is
+what the gate uses.
+
+**The trigger remains unreproduced, deliberately.** `'player did not see an IO cycle'` is a race
+against the HAL IO thread; BUG-103's two candidate shapes are still unseparated. This increment
+removes the trigger's ability to kill the process rather than claiming to explain it. If it fires in
+the wild it now surfaces as a logged Swift error with a call stack — the instrument that was
+missing.
+
+**Gates:** `PlayerNodeExceptionContractTests` (3 tests, deterministic, no sleeps; negative control =
+the same unwrapped `play()` aborts). Full engine suite **4/5 exit 0 with 0 new
+`swiftpm-testing-helper` `.ips` across all five** — the `.ips` half is the half that speaks to
+BUG-103 and it is clean; run 3's red was `PostProcessChainTests.test_fullChain_under2ms_at1080p`, a
+GPU wall-clock budget (10.57 ms vs a 5 ms assert) that runs 1/2/4/5 passed and that this diff cannot
+reach (no renderer or Metal file in it). Logged as not-met-as-written rather than waved through.
+swiftlint `--strict` 0/555. Doc gates 16/16. No capability-registry row: this is audio
+playback, not renderer/harness/certification surface.
+### Increment BUG139.2 — the blocking-call-under-lock rule is now a gate ✅ (2026-09-23)
+
+**Done-when:** a repo lint flags a blocking audio-stack call made inside a locked region; it is
+verified against both historical cases; it is wired into the closeout evidence block.
+
+**Delivered.** `Scripts/check_blocking_calls_under_lock.sh`. D-161's ratchet — a rule violated twice
+gets mechanized, not restated — and this one was violated twice, four months apart, in two files:
+BUG-021 (`LocalFilePlaybackProvider`, AVFoundation teardown under the provider's NSLock while the
+`scheduleFile` completion callback took it) and BUG-139 (`SystemAudioCapture`, `stateLock` held
+across `AudioDeviceStop` while the IO proc took the same lock). Both were caught only after they bit.
+
+**Verified against both, as historical checkouts, not by assertion:**
+
+| Tree | Result |
+|---|---|
+| `8eeb9ac6^` (BUG-139 pre-fix) | flags `SystemAudioCapture.swift:407 AudioDeviceStop` + 409/411/414 |
+| `8eeb9ac6` (post-fix) | **exit 0** — the negative control |
+| `18d1ea4c^` (BUG-021 pre-fix) | flags `LocalFilePlaybackProvider.swift:230 player.stop()`, the site the fix commit names as the hang |
+
+BUG-021's shape is one frame deeper than lexical — the blocking call sits in `_stopLocked()`, called
+from `lock.withLock { }`. It is caught only because the script treats the body of any `func *Locked`
+as a locked region, which is this repo's naming convention and nothing stronger. **The script cannot
+see a blocking call inside an ordinarily-named helper called from a locked region.** That is the
+harder half of the real rule, no grep can reach it, and the header says so rather than implying the
+gate is complete (the `check_user_strings.sh` scope-limit convention).
+
+**One allowlist entry**, `LocalFilePlaybackProvider._startLocked`'s `try engine.start()`: the engine
+and player are local and freshly constructed, `self.engine`/`self.playerNode` are not assigned until
+after `_scheduleFileLoopLocked`, and the completion callback guards on `self.playerNode === player` —
+so no callback for this engine exists yet to block on. `start()` also brings a render thread *up*;
+there is no prior IO cycle to drain. BUG-021 and BUG-139 are both teardown-direction defects. Entries
+are regexes over `path:line:code`, so they survive line drift; this one is void if `engine.start()`
+ever moves below the `self.engine = engine` assignment.
+
+**The gate is RED on `main` and that is correct, not a false positive.** `main` (42dc7d4a) still
+carries BUG-139 — the fix `8eeb9ac6` is on the unmerged `claude/bug-139-tap-teardown`, checked out in
+another worktree. Four hits, all real. **Deliberately NOT wired into the CI fast-gate** for that
+reason (Matt's call): enrolling it now would block every PR on another session's in-flight branch.
+Closeout-only until BUG139.1 merges; `docs/RUNBOOK.md` §CI fast gate records the asymmetry and the
+condition that closes it. Closeout-stronger-than-CI is the safe direction — step 4b exists because
+the reverse produced six false-green pushes — but it is still an asymmetry and it is meant to close.
+
+**Next:** when BUG139.1 merges, add the one CI line and delete the RUNBOOK caveat.
+
+### Increment BUG138.3 — VolumetricLithograph declares what it reads; FeatureVector's binding index is right ✅ (2026-09-23)
+
+**Done-when:** the eight fields VL reads are declared and proven to fire; no `ARCHITECTURE.md` line
+misstates `FeatureVector`'s binding; full suite and lint clean.
+
+**Delivered.** VL's `audio_routes` went 6 → 13. The eight added (`drums/bass/vocals/otherOnsetRate`,
+`midDev`, `midAttRel`, `pulseBeatIndex`, `valence`) are each anchored to an executable line of
+`VolumetricLithograph.metal` with comments stripped, and `RouteCoverageTests` proves every one fires:
+**236 → 243 routes, 0 red**. `FeatureVector` is now described as fragment `buffer(0)` — `buffer(1)` on
+the particle compute kernels — in both places that said `buffer(2)`, which is the *waveform*.
+
+**★ Two things found while fixing, both the same defect wearing different clothes.**
+
+1. **A dead route — over-declaration, the mirror image.** VL declared `camera_dolly_speed ← bass`. The
+   shader reads no `f.bass` anywhere and has no audio-driven dolly at all; the flight is free-running
+   on `f.time`. Removed. It had stood for three months and `RouteCoverageTests` never objected, because
+   that gate proves a declared primitive has **activity in the session**, not that the shader **reads**
+   it. Under- and over-declaration are both invisible to it — worth knowing before citing a green
+   route-coverage run as evidence that routing is correct.
+2. **BUG138.2 repeated two unverified claims, in prose I wrote.** Rewriting VL's `description` the day
+   before, I carried over "terrain depth follows the lead/vocal stem" and "the camera dolly scales with
+   bass" from the very table I was replacing, without checking either. Both are false. The increment
+   whose whole subject was ungated prose reintroduced ungated prose. Corrected; the description now
+   states only what an executable line supports.
+
+**Method note worth keeping.** `grep '"bassOnsetRate"'` reported the primitive missing from
+`AudioRoutePrimitives.map`; it is present, composed by a loop as `stem + suffix`. A literal grep cannot
+see a constructed identifier — the same failure shape as grepping a `.metal` without stripping
+comments. Derive the set and compare; do not grep for the spelling.
+
+
+### Increment BUG138.2 — the prose that restates a gated fact is now gated ✅ (2026-09-22)
+
+**Done-when:** BUG-138(b) fixed everywhere it occurs; a gate exists for prose size claims and one for
+sidecar description drift; both proven red against the real shipped strings and green after; full
+suite and lint clean.
+
+**Delivered.** The `48 floats / 192 bytes` claim was in **eight** places, not the two AUDIO.1 found —
+`Common.metal`, `AnalyzedFrame.swift`, `SpectralCartograph.metal`, four `ARCHITECTURE.md` lines, and
+`FeatureVector`'s own doc comment carrying its own wrong number (`52 / 208`). **That last one is the
+whole argument for gating:** it is the comment that states FTR.6's finding — *"nothing caught it,
+because no gate reads prose"* — and FTR.6's remedy was to delete that copy rather than gate the
+pattern. It grew back in eight places, inside the lecture included.
+
+Two gates, each with negative controls, each verified red against the exact shipped strings:
+`CommonLayoutTest.proseSizeClaims_agreeWithMemoryLayout` (expected values **derived from
+`MemoryLayout`** so the gate cannot become the ninth stale copy; double-quoted numbers are citations,
+not claims, so the comments that correctly quote the old value stay legal) and
+`SidecarDescriptionDriftTests` (a field named in a `description` must be declared in `audio_routes`
+or read by the preset's own `.metal` **with comments stripped**).
+
+**★ The correction that shaped the gate.** BUG138.1 recorded VolumetricLithograph as having the
+*opposite* drift — prose right, routes incomplete — on a grep that found `stems.drums_beat` in its
+shader. **That grep did not strip comments, and all eight occurrences are comments.** VL reads
+neither field in any executable line; its peaks ride `pulse_beat_index + pulse_phase01` with the four
+`*_onset_rate` fields for polish. Same drift as FFO, fixed the same way. *"References found"* is no
+more evidence than *"no references found"* until comments are stripped — the gate does, and its
+negative control pins it, because that mistake survived a first pass of this investigation.
+
+**Recorded, not fixed here — both closed the next day at BUG138.3:** VL reads eight fields it does not
+declare (a route-coverage matter); and two `ARCHITECTURE.md` lines call `FeatureVector` "GPU buffer(2)"
+when every encoder binds it at buffer(0) — seen while editing those lines, deliberately not widened into.
+
+### Increment BUG138.1 — the Ferrofluid Ocean sidecar stops being a routing table ✅ (2026-09-22)
+
+**Done-when:** `FerrofluidOcean.json`'s `description` no longer asserts audio routing the shader does
+not have; the sidecar still parses, the preset still renders identically and stays certified; BUG-138
+records what is fixed and what is not.
+
+**Delivered.** The description named **three** retired mechanisms, not the one AUDIO.1 found:
+`bass_energy_dev → spike height` (removed D-153), the `accumulated_audio_time × arousal` aurora-drift
+product (removed BUG-047 — it retroactively rescaled history), and the raw `vocals_pitch_hz` palette
+read (replaced D-158 — it strobed). Rewritten to describe the LOOK and defer to `audio_routes` and the
+`FerrofluidOcean.metal` header for primitives, with a tombstone saying why. **The point is not the
+refreshed wording — it is that the field is no longer a second, ungated copy of a gated surface**, so
+the next retired route cannot strand a sentence there. One line changed; no engine, shader or route
+change.
+
+**Found while fixing, recorded not fixed.** `VolumetricLithograph.json` has the *opposite* drift: its
+description correctly names `drums_beat` and `drums_attack_ratio`, its shader reads both, and its
+`audio_routes` declares neither. So the obvious gate — *a primitive named in prose must be declared in
+`audio_routes`* — **would go red on VL the day it landed**. A gate that needs an exemption immediately
+is worse than no gate; the rule to build instead is *named in prose ⇒ present in the shader's own read
+set (comments stripped) or in `audio_routes`*, which passes VL and still catches FFO. Only 3 of 27
+sidecars name a primitive in prose at all, so the surface is small.
+
+**Still open on BUG-138:** the `48 floats / 192 bytes` claim in `ARCHITECTURE.md` + `Common.metal:11`
+(it is 56 / 224), and that gate.
+
+### Increment AUDIO.1 — what the shaders actually receive ✅ (2026-09-22)
+
+**Done-when:** `docs/` holds a document naming the exact fields a shader receives at render time,
+where each comes from, which audio paths populate them, and a verdict on five published uzume.io
+captions. Read-only — no engine, shader or sidecar change.
+
+**Delivered.** [`docs/AUDIO_CONTRACT.md`](AUDIO_CONTRACT.md) (374 lines, every claim cited to
+file:line at `84a5f889`). Headline: **stem-separated features DO reach shader parameters at render
+time, on both audio paths** — `StemFeatures` is fragment `buffer(3)`, 64 floats, uploaded by every
+encoder. The paths differ in *when*, not *whether*: a local file plays against a pre-analysed
+`StemFeatureSeries` sampled at the playback second (**0 latency**, 43 Hz grid, LFSTEM.1), while the
+system-audio path runs Open-Unmix live on the tap every 2 s (**≈2.5 s latency**, structural —
+`chunk 10 − (chunk − period − margin) = period + margin`). `FeatureVector`'s 56 floats are **entirely
+full-mix**; `MIRPipeline` never sees a stem.
+
+**Caption verdicts** (§4): Skein, Murmuration, Nacre **supportable**; Ferrofluid Ocean and Nimbus
+**need rewording**. FFO's *"Bass raises the spikes"* is false — spike height is the D-153 four-beat
+grid pulse scaled by `total_energy_smoothed`, and bass survives only as a per-track constant worth
++3 %/+1 % on the two tracks measured. Nimbus's *"Drums punch"* is the beat clock
+(`max(antic(beat_phase01), max(beat_bass, beat_composite))`), not the drums stem, and its third
+direction belongs to `other`, not bass or lead. Nacre is the only one of the five that is identical
+and zero-latency on streaming, because its route is full-mix chroma.
+
+**Defect found.** **BUG-138** (P2, `documentation-drift`) — `FerrofluidOcean.json`'s `description`
+still claims the retired `bass_energy_dev → spike height` route while its own machine-checked
+`audio_routes` block correctly omits it; and `ARCHITECTURE.md` §Buffer Binding Layout plus
+`Common.metal:11` both state `FeatureVector` is 48 floats/192 bytes when it is **56/224**. Filed with
+verification criteria, not fixed (a sidecar edit is outside a read-only increment, and the fix should
+land with the gate that stops it recurring).
+
+**Learning (durable).** A preset sidecar has two descriptions of the same shader and only one of them
+is gated. `audio_routes` is checked by `AudioRouteSchemaTests` / `RouteCoverageTests`; the
+`description` prose is checked by nothing, and it is the half a human reads first — which is how a
+route retired in June reached a published marketing caption in September.
+
+**Amendment, same day — the site had already moved.** The increment prompt described a homepage with
+its stem-separation claim removed; the live homepage instead claims it accurately, streaming caveat
+included. Nimbus's caption had already been corrected to *"the beat punches through it… bass, lead and
+the rest of the mix heave it down, up and sideways"* — both faults gone. Nacre is no longer published.
+Four captions the increment was never asked about were live and are now adjudicated (§4.7, all four
+supportable), as are the homepage's own four claims and the gallery's steady-luminance claim (§4.8, all
+accurate). **One recommendation survives: Ferrofluid Ocean's "Bass raises the spikes" is unchanged and
+still false.** One optional refinement: Nimbus assigns brightening to overall energy alone, but the
+beat's pop is `kNimbusKickBright = 0.72` on top of bloom — the larger of the two.
+
+**Correction to a stale memory, found here.** *"Aurora Veil's `other_energy_dev` route is load-bearing,
+never drop it"* is superseded: `AuroraVeil.metal:182` is `(void)stems; // unused`. AV.7's faithful
+nimitz port deleted every stem route and Matt signed off. Aurora Veil and Nacre are therefore the two
+published scenes whose behaviour is identical and zero-latency on streaming.
+
+**Not verified.** Whether the 2.5 s streaming stem lag is perceptible in these presets; real-world
+Open-Unmix separation quality; the live path's current stem update rate (12.8 Hz is from BUG-109 and
+predates LFSTEM.1e). Listed in §5 rather than guessed.
+
+### Increment VOCAB.2 — the maintainer-doc prose sweep, and where it stops ✅ (2026-09-22)
+
+**Done-when:** the living maintainer references named in VOCABULARY.md §1 say *scene* in prose, or
+the file is excluded with a recorded reason.
+
+**Delivered — four of eight swept, four excluded permanently.**
+
+Swept: `CLAUDE.md`, `docs/RUNBOOK.md` (including its §Certifying a scene heading and the one
+cross-reference to it in `NEW_PRESET_CHECKLIST.md`), `docs/PUBLISHING.md`,
+`docs/QUALITY/KNOWN_ISSUES.md`.
+
+**Excluded, and this is the increment's finding.** `docs/SHADER_CRAFT.md` (31 pre-existing uses of
+"scene"), `docs/ARCHITECTURE.md` (20), `docs/ENGINE/RENDER_CAPABILITY_REGISTRY.md` (20) and
+`docs/CAPABILITY_REGISTRY/PRESETS.md` (3) document the renderer, where **`scene` already means the
+3D scene** — and the two meanings share sentences. ARCHITECTURE's mv_warp paragraph reads
+"alpha-blend current *scene* onto composeTexture … rendered directly by the *preset's* fragment
+shader". SHADER_CRAFT §17 says "Preferred *scene* duration" two rows above "ray-march *scene*
+setup" and the `scene_*` keys. The mechanical pass also produced "The **Scenes** module" for an SPM
+target literally named `Presets`. **Sweeping these makes them wrong, not clearer** — so the sweep
+was reverted on all four and the reason recorded in VOCABULARY.md §1.
+
+This is the D-250 collision (VOCABULARY §5.3) surfacing in prose rather than in identifiers, and it
+is a second, independent reason not to pursue Option C: the documentation cannot adopt one word
+while the renderer holds the other.
+
+**Three restorations after the mechanical pass**, each a name rather than prose: PUBLISHING's
+verbatim quote of the D-111/D-113 wording; KNOWN_ISSUES' 8 defect-taxonomy cells
+(`preset.fidelity` / `.routing` / `.render` are controlled vocabulary in `DEFECT_TAXONOMY.md`); and
+SHADER_CRAFT §17's heading, so `#17-preset-metadata-format-json-sidecar` stays valid in all three
+citing docs.
+
+**Gates:** doc gates 16/16 (CLAUDE.md 3,453 est. tokens against the 7,000 cap); full evidence block
+in the closeout. Docs-only — no code, no data, no sidecar touched.
+
+### Increment VOCAB.1 — presets become scenes (prose + what the app displays) ✅ (2026-09-22)
+
+**Done-when:** a contributor reads the same word on uzume.io, in this repo's guides, and on screen
+in the app; code identifiers, type names, file paths and data keys still say `preset`; the boundary
+and the map to Option C are written down; the website's generator still runs clean.
+
+**Delivered.** Scope was Option B, as specified — prose and displayed strings only.
+
+- **Group (a), the contributor path:** `CONTRIBUTING.md` (the destination of uzume.io's "Write a
+  scene" button) rewritten end to end, plus `README.md`, `docs/GLOSSARY.md` (new **Scene** row
+  naming the boundary outright), `docs/CREDITS.md`, `docs/PRESET_SESSION_CHECKLIST.md`,
+  `docs/presets/YOUR_FIRST_PRESET.md`, `docs/presets/NEW_PRESET_CHECKLIST.md`.
+- **Group (b), displayed strings:** 9 values in `Localizable.strings` (every *key* unchanged, so no
+  lookup moved) + the DEBUG cycle toast. `docs/UX_SPEC.md` rewritten outside backticks so
+  identifiers survived. Verified in the built bundle, not just the source.
+- **Task 4:** `NimbusState.swift` kickPunch comment claimed a drums-stem refinement that `_tick`
+  never had; it now describes `max(anticipatory beatPhase01 ramp, max(beatBass, beatComposite))`.
+- **`docs/VOCABULARY.md` (new)** — the rule, the group (c)/(d) inventory with paths, and the
+  Option C scope/break map.
+
+**Three prompt premises corrected against the tree.** (1) There is no "Preset Eligibility Picker";
+the surface is the family blocklist — UX_SPEC's "Preset family blocklist", shipped as "Hidden preset
+families" via `PresetCategoryBlocklistPicker`. Both strings renamed. (2) Sidecars carry **no `slug`
+key**; `generate_presets.py` slugifies the `name` *value*, so `name` — not a slug field — is the
+cross-repo join key. (3) **No sidecar key contains "preset" at all**, so the data-side Option C
+exposure is the directory and the `name` value, not key names.
+
+**The finding that decides Option C:** `Scene` is already taken — `SceneUniforms` / `SceneCamera` /
+`SceneLight`, the `scene_*` sidecar keys, the documented "scene → warp → compose → swap" dispatch
+order, 336 uses in `*.swift`. `Preset` → `Scene` is a collision, not a rename, and resolving it is
+upstream of any mechanical sweep. Recorded in VOCABULARY.md §5.3 — and on the strength of that scoping Matt **declined Option C** (D-250): the boundary is the destination, not a waypoint, and §5 is now a contingency plan rather than queued work.
+
+**Deliberately not done:** living maintainer references still say `preset` in prose
+(ARCHITECTURE 374, RENDER_CAPABILITY_REGISTRY 312, SHADER_CRAFT 231, KNOWN_ISSUES 200,
+CAPABILITY_REGISTRY/PRESETS 188, RUNBOOK 30, CLAUDE.md 27, PUBLISHING 5) — a follow-on prose sweep,
+listed in VOCABULARY.md §1. Append-only records (DECISIONS, ENGINEERING_PLAN, release notes,
+prompts/, archive/) are frozen by design: rewriting them would falsify the record.
+
+**Gates:** swiftlint `--strict` 0 violations / 555 files; `check_user_strings.sh` clean; app build
+SUCCEEDED; engine suite 1980 tests green apart from the time-based DOC.6 rotation gate, rotated in
+its own `[DOC.6]` commit. `generate_presets.py --check` exits 0 / 8 entries, unchanged before and
+after; zero sidecars touched.
+
+
 ### BUG-137 — capture mode waits for a busy encoder ✅ **LIVE-MEASURED 2026-09-16**
 
 **Done-when:** a `UZUME_RECORD_VIDEO=capture` session recorded under CPU load writes every frame after

@@ -1,0 +1,36 @@
+{
+  "name": "Fiddlehead",
+  "description": "An endless dive into a self-similar fern: every frond is lined with smaller copies of itself, and each one unfurls as the camera reaches it. The fern glows in a stained-glass colour bath that flows down its branches; bass swells the light riding the colour bands, treble glitters on the leaflet edges, the passage's loudness sets the exposure, and every beat on the cached beat grid sends a nerve impulse from the trunk out to the leaflet tips, downbeats stronger. Rendered by a compute descent; this fragment is only the dark ground shown while its fields bake.",
+  "author": "Uzume engine",
+  "family": "hypnotic",
+  "passes": [
+    "particles"
+  ],
+  "stages": [],
+  "vertex_function": "fullscreen_vertex",
+  "fragment_function": "fiddlehead_ground_fragment",
+  "duration": 30,
+  "visual_density": 0.8,
+  "motion_intensity": 0.45,
+  "color_temperature_range": [
+    0.2,
+    0.7
+  ],
+  "fatigue_risk": "medium",
+  "transition_affordances": [
+    "crossfade"
+  ],
+  "section_suitability": [
+    "ambient",
+    "buildup",
+    "peak"
+  ],
+  "complexity_cost": {
+    "tier1": 16.0,
+    "tier2": 12.0
+  },
+  "certified": false,
+  "rubric_profile": "lightweight",
+  "audio_routes": [],
+  "exclude_from_cycling": false
+}

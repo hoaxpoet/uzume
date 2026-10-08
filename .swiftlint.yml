@@ -7,6 +7,7 @@ excluded:
   - UzumeTools/.build
   - UzumeEngine/Tests
   - tools
+  - docs/presets/fiddlehead_spike   # offline spike scripts (swiftc -O one-file tools), like tools/
 
 disabled_rules:
   - trailing_comma

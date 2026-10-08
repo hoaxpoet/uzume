@@ -322,6 +322,8 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     var mitosisGeometry: (any ParticleGeometry)?
     /// Alfvén's MHD solver (ALFVEN.4) — a compute pipeline, not a fragment path.
     var alfvenSolver: (any ParticleGeometry)?
+    /// FH.16 — the Fiddlehead fern's compute renderer (fields baked lazily on first use).
+    var fiddleheadFern: FiddleheadFern?
 
     /// Vibrating-sand Chladni simulation for the Cymatic Resonance preset —
     /// attached via `ParticleGeometry` (D-097, CR.2 rebuild). Built eagerly.
@@ -1043,6 +1045,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         self.filigreeGeometry = Self.makeFiligreeGeometry(context: ctx, library: lib)
         self.mitosisGeometry = Self.makeMitosisGeometry(context: ctx, library: lib)
         self.alfvenSolver = Self.makeAlfvenSolver(context: ctx, library: lib)
+        self.fiddleheadFern = Self.makeFiddleheadFern(context: ctx, library: lib)
         self.cytokinesisGeometry = Self.makeCytokinesisGeometry(context: ctx, library: lib)
         self.ricercarGeometry = Self.makeRicercarGeometry(context: ctx, library: lib)
         self.cymaticSandGeometry = Self.makeCymaticSandGeometry(context: ctx, library: lib)
@@ -1404,6 +1407,22 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// The Fiddlehead fern (FH.16). Construction is cheap — the CPU shape and pipelines; the ~57 MB of curl-state
+    /// fields are allocated and baked on the preset's first frame, off the frame's own command buffer.
+    private static func makeFiddleheadFern(
+        context: MetalContext,
+        library: Renderer.ShaderLibrary
+    ) -> FiddleheadFern? {
+        do {
+            return try FiddleheadFern(device: context.device,
+                                      library: library.library,
+                                      pixelFormat: context.pixelFormat)
+        } catch {
+            Logging.renderer.error("FiddleheadFern unavailable: \(error)")
+            return nil
+        }
+    }
+
     /// Build the reaction–diffusion cell colony for the Mitosis preset
     /// (`MitosisGeometry` + `Mitosis.metal`, MITOSIS.1). Returns
     /// `any ParticleGeometry` (D-097, siblings not subclasses).
@@ -1500,6 +1519,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             "Stave": staveGeometry,
             "Fireflies": firefliesGeometry,
             "Alfvén": alfvenSolver,
+            "Fiddlehead": fiddleheadFern,
             "Kagura": kaguraGeometry,
         ]
         return table[name].flatMap { $0 }
