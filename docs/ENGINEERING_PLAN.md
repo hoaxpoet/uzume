@@ -21,6 +21,16 @@ For anything inventory-shaped, read the artifact, not a prose copy of it:
 - Phase status: the phase headers below.
 - Open defects: [`docs/QUALITY/KNOWN_ISSUES.md`](QUALITY/KNOWN_ISSUES.md) §Open Index.
 
+## Phase UND-R — Understory resource stability 🔨 (2026-10-08→; BUG-176)
+
+- **UND.R0 — measured-launch instrumentation ✅ (2026-10-08).** A Debug real-music run
+  reached 42.6 GB and ended the session, so all subsequent Understory live checks are gated
+  by `Scripts/memrepro.sh`. The watchdog isolates/restores the content-addressed stem cache,
+  confirms the exact binary, samples `phys_footprint` every two seconds and kills Uzume at
+  8 GB. This increment deliberately contains no renderer fix and launches no real music.
+  **Next:** diagnose the render/preparation interaction, then implement BUG-176's bounded
+  production-path rewrite and its headless soak/frame-budget gates.
+
 ## Phase CENSUS — Corpus batch-analysis harness + calibration census 🔨 (2026-07-07; scoped from docs/research/CORPUS_ML_OPPORTUNITIES.md §10 item 1, Matt's go-ahead 2026-07-07)
 
 Walk Matt's 27,639-track local archive (`/Volumes/Extreme SSD`; survey in CORPUS_ML_OPPORTUNITIES.md §Appendix) through the **existing** analysis pipeline — no new ML — to turn anecdote-scale calibration into distribution-scale: D-154's `assessBeatIrregularity` 10 % threshold (calibrated on 38 tracks, "thin observed gap 9.2 vs 11.3") gets a real octave-folded disagreement histogram; the MoodClassifier's `mood_scaler.json` z-stats (DEAM-derived) get re-estimated against the deployment distribution; the 3-way BPM disagreement logging becomes a per-genre error census; K-S key estimation ("unreliable" per code comment) gets its accuracy measured against external DB values later (§8.5 enrichment, separate phase). **Scope guard: the census MEASURES; every retune ships as its own increment with a DECISIONS entry — no threshold changes land inside CENSUS.**

@@ -33,6 +33,7 @@ belongs in the second table, not the first.
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
+| BUG-176 | P0 | perf / renderer / Understory | One Debug Understory build grew to 42.6 GB while preparing a single nine-minute local track, exhausted memory and swap, and ended the session. | Diagnose allocations and GPU queue depth before another real-music run; all later runs require the 8 GB watchdog. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
 | BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
 | BUG-084 | P3 | dsp.stem | Stem deviation spikes to 35 against a ~3.4 ceiling. The one consumer is soft-kneed, so there is no visible effect. | After the beta. |
@@ -83,7 +84,41 @@ passes, the entry moves to §Resolved (recent).
 
 ---
 
+
 ## Open
+
+### BUG-176 — Understory build exhausts memory during local-file preparation (2026-10-08)
+
+**Severity:** P0 · **Domain:** `perf` / `renderer` (Understory) · **Failure class:** `resource-management` · **Status:** Open; diagnosis in progress · **Introduced:** uncommitted Understory worktree build · **Resolved:** — · **Found by:** live local-file check, 2026-10-08
+
+**Expected.** With Understory pinned while a nine-minute local track prepares and then plays, process footprint stays below **3 GB** and, after the first minute, remains within **±50 MB**. GPU work remains bounded when a frame exceeds the 16.7 ms display interval; frame-time p50 stays below **16.7 ms** in a quoted Release 1080p configuration. No GPU resource, command-buffer backlog, pulse/history collection, cache, or staged layer grows with frame count.
+
+**Actual.** The Debug app at `/private/tmp/uzume-understory-live/Build/Products/Debug/Uzume.app` grew to **42.6 GB** and exhausted physical memory and swap about **2.5 minutes** after launch while preparing LCD Soundsystem, “Dance Yrself Clean” (9 minutes). macOS suspended the process and the machine had to be restarted. Contemporary logs showed sustained MPSGraph activity and severe memory pressure; no crash report was written. Control runs supplied on 2026-10-08 are bounded: current main Release with fresh prep peaked at **2.6 GB** then held **1.7 GB**; current main Debug with fresh prep peaked at **2.45 GB** then held **1.3 GB**; current Debug with Understory pinned but no full prep held **640–735 MB** for 90 seconds. The growth therefore requires this Understory build plus the real preparation/render workload; prep alone does not reproduce it.
+
+**Reproduction.** Build the current Understory tree to a named isolated products directory. Put the licensed track at `/Users/Shared/memrepro/01 Dance Yrself Clean.mp3`, move its persistent stem-cache entry aside, and launch the exact binary with `UZUME_LOCAL_FILE_PLAYBACK` and `UZUME_PIN_SCENE=Understory`. Every reproduction must run under `Scripts/memrepro.sh`, which samples `phys_footprint` every two seconds and terminates the app at **8 GB**. Confirm the executable using `ps -Ao pid,lstart,command | grep "Uzume.*\\.app/Contents/MacOS"`. Restore the cache entry in a trap even when the app exits or the watchdog fires.
+
+**Minimum reproducer.** One fresh preparation of the named nine-minute track while Understory is pinned. An unmeasured real-music launch is forbidden.
+
+**Session artifacts.** The failed run used process PID 53855 from the isolated Debug build above and ended around 08:34:48 local time. No crash report exists. The original run was not sampled by the new watchdog, so per-minute footprint rows are unavailable; **42.6 GB at approximately 150 seconds** is the terminal observation. The next live artifact must include the watchdog CSV, exact binary path, `ps` confirmation, build configuration and source commit.
+
+**Suspected failure class.** `resource-management`.
+
+**Evidence for this class.** Hundreds of megabytes per second of monotonic growth is consistent with per-frame Metal resource allocation retained by unfinished command buffers, or with frames being queued faster than the GPU completes them. The bounded current-main prep baselines and bounded 90-second Understory-only run make the combined render/preparation path the relevant interaction. This is a class hypothesis, not yet a root-cause claim; allocations and in-flight depth must be inspected before fix code.
+
+**Verification criteria (written before diagnosis or implementation).**
+
+- [ ] A headless, production-path Understory soak drives 10 minutes of scene time at 1920×1080, wraps every frame in `autoreleasepool {}`, and reports each minute. Resident growth from minute 1 is **<25 MB**, GPU p50 remains within **1.5×** minute 1, and every sample window is lit and changing.
+- [ ] All Understory GPU resources and pipeline states are allocated only at initialization or drawable-size change, released on resize/scene exit, and reused per frame. Every state collection has a hard cap plus an explicit overwrite or eviction rule.
+- [ ] Encoded-but-unfinished frames are bounded by the renderer’s frame-in-flight contract; a deliberately slow frame cannot grow queue depth with elapsed time.
+- [ ] `PresetFrameBudgetTests` passes in a quoted **Release, 1920×1080** configuration: Understory p50 is **≤8×** the roster median, **<60 ms**, and separately meets the product target of **≤16.7 ms**.
+- [ ] A fresh-prep live run under the 8 GB watchdog holds Understory for at least five playback minutes, peaks below **3 GB**, and is flat within **±50 MB** after minute 1. Report per-minute footprint, exact build path, configuration, commit and executable confirmation.
+- [ ] Manual check: at normal playback speed, the accepted fern look and music response remain intact after the resource rewrite.
+
+**Manual validation required:** Yes — the resource gates are automated/measured, but the rewrite must not regress the accepted visual endpoints or felt response.
+
+**Fix scope.** Instrument and diagnose first. The expected implementation area is bounded reusable GPU resources, bounded frame submission and fixed-capacity preset state. Do not tune around the watchdog or reduce fidelity merely to hide growth.
+
+**Related:** BUG-175; `FiddleheadFernTests`; `MemorySoakGateTests`; `PresetFrameBudgetTests`; user-supplied “Understory rewrite: resource-stability requirements” (2026-10-08).
 
 ### BUG-174 — Cytokinesis stops for four seconds before it regrows, and it reads as a freeze (2026-09-30)
 
@@ -2555,5 +2590,3 @@ The 96 kHz Superstition file sits highest (143) because its 10.7 ms frames reach
 2. Manual: none required (no felt surface; Regenerate's behaviour is unchanged for users).
 
 ---
-
-
