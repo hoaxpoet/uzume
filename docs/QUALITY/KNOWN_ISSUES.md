@@ -33,6 +33,7 @@ belongs in the second table, not the first.
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
+| BUG-175 | P2 | preset.fidelity / Understory | The current Understory worktree is still a manual-review candidate and has not passed final fern fidelity or music-response validation. | Complete the existing Understory M7/M8 review after BUG-176 validation. |
 | BUG-176 | P0 | ml.stem / resource-management | Fresh full-file stem preparation retains MPSGraph temporaries across the long stem-series sweep; the watchdog reproduced 8.52 GB before playback. | Add a per-window lifetime boundary, then rerun fresh preparation under the 8 GB watchdog before any Understory playback check. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
 | BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
@@ -123,6 +124,26 @@ passes, the entry moves to §Resolved (recent).
 **Fix implementation.** Commit `133298aa` wraps each `SessionPreparer.analyzeStemSeries` window in `autoreleasepool`, keeps the separator, graph, command queue and fixed Metal buffers outside that scope, and lets only value-type feature frames escape. The isolated gate is opt-in as `BUG176_STEM_SWEEP=1` because process footprint is meaningful only without parallel suites.
 
 **Related:** BUG-175; `FiddleheadFernTests`; `MemorySoakGateTests`; `PresetFrameBudgetTests`; user-supplied “Understory rewrite: resource-stability requirements” (2026-10-08).
+
+### BUG-175 — Understory fern fidelity and music response remain under review (2026-10-06)
+
+**Severity:** P2 · **Domain:** `preset.fidelity` (Understory) · **Failure class:** `algorithm` · **Status:** Open; detailed M7/M8 work remains uncommitted · **Introduced:** Understory look spike · **Resolved:** — · **Found by:** Matt's review against the supplied closed and open fern references
+
+**Expected.** One jewel-lit recursive fiddlehead visibly uncurls through an advancing release front, reveals previously occluded pinnae and pinnules, and responds continuously to independent musical signals without whole-image warp or prerecorded-pose stepping.
+
+**Actual.** The preserved Understory worktree has improved through multiple reviewed candidates, but its final visual, motion, and real-music acceptance gates have not been completed or committed. BUG-176 blocked the requested full-track music check before playback.
+
+**Reproduction.** Render the production Understory path with `RENDER_VISUAL=1`, compare its closed/open endpoints against `docs/VISUAL_REFERENCES/understory/`, and review the full motion cycle at normal speed. Real-music checks remain gated by `Scripts/memrepro.sh` until BUG-176 validation passes.
+
+**Session artifacts.** The detailed round-by-round evidence, local preview paths, and pre-written verification criteria remain in the preserved uncommitted Understory ledger and design files. This committed stub maintains defect-number continuity without absorbing that work into the resource-stability increment.
+
+**Verification criteria.** The reference comparison passes for fern anatomy and fractal detail; uncurling reveals occluded detail through articulated geometry; route-isolation tests distinguish vocal, drum, spectral-balance and beat behavior; Matt approves the normal-speed real-music result.
+
+**Manual validation required:** Yes — this is a visual-fidelity and musical-feel defect.
+
+**Fix scope.** Resume the existing Understory M7/M8 work only after BUG-176's fresh-preparation watchdog validation; do not trade fern fidelity for lower resource use.
+
+**Related:** UND; BUG-176; `docs/VISUAL_REFERENCES/understory/`; `docs/presets/UNDERSTORY_DESIGN.md`.
 
 ### BUG-174 — Cytokinesis stops for four seconds before it regrows, and it reads as a freeze (2026-09-30)
 
