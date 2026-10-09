@@ -77,6 +77,9 @@ extension SessionPreparer {
         )
     }
 
+    // The sixth argument is the test-only scope injector; the body retains the pre-existing
+    // sweep's branch structure plus one early exit when a separator returns unusable stems.
+    // swiftlint:disable cyclomatic_complexity function_parameter_count
     /// Test seam for BUG-176's resource contract. Production always supplies one
     /// `autoreleasepool` per separation window; tests replace it with a counting scope so a
     /// future loop refactor cannot silently return to one pool for the entire track.
@@ -188,4 +191,5 @@ extension SessionPreparer {
         guard !frames.isEmpty else { return .empty }
         return StemFeatureSeries(frames: frames, hopSeconds: Double(hop) / Double(sampleRate))
     }
+    // swiftlint:enable cyclomatic_complexity function_parameter_count
 }
