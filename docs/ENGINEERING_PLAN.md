@@ -30,6 +30,14 @@ For anything inventory-shaped, read the artifact, not a prose copy of it:
   8 GB. This increment deliberately contains no renderer fix and launches no real music.
   **Next:** diagnose the render/preparation interaction, then implement BUG-176's bounded
   production-path rewrite and its headless soak/frame-budget gates.
+- **UND.R1 — fresh-preparation memory diagnosis ✅ (2026-10-08).** The watchdog
+  reproduced 8.52 GB before playback. A 29-second interval of the full-file stem-series
+  sweep grew by 7.27 GB while 71 forward and 568 inverse MPSGraph dispatches reused the
+  same fixed Metal buffers. The sweep has no per-window autorelease boundary, so graph
+  wrapper/result temporaries follow the 538-second detached task instead of one separation.
+  Evidence: `docs/diagnostics/BUG176_UNDERSTORY_RESOURCE_DIAGNOSIS_2026-10-08.md`.
+  **Next:** implement the bounded lifetime fix and long-sweep regression, then rerun fresh
+  preparation under the watchdog before any Understory playback or frame-budget review.
 
 ## Phase CENSUS — Corpus batch-analysis harness + calibration census 🔨 (2026-07-07; scoped from docs/research/CORPUS_ML_OPPORTUNITIES.md §10 item 1, Matt's go-ahead 2026-07-07)
 
