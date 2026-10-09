@@ -38,6 +38,13 @@ For anything inventory-shaped, read the artifact, not a prose copy of it:
   Evidence: `docs/diagnostics/BUG176_UNDERSTORY_RESOURCE_DIAGNOSIS_2026-10-08.md`.
   **Next:** implement the bounded lifetime fix and long-sweep regression, then rerun fresh
   preparation under the watchdog before any Understory playback or frame-budget review.
+- **UND.R2 — bounded stem-sweep lifetime fix ✅ (2026-10-09; `133298aa`).** Every
+  production separation window, including waveform analysis, now completes inside its own
+  autorelease pool; only value-type `StemFeatures` escape. A structural regression requires
+  one boundary per window, and an isolated 30-window production-MPSGraph soak reported
+  −122.6 MB final / 0 MB peak post-warmup growth (limits: <128 / <256 MB).
+  **Next:** validate a fresh full “Dance Yrself Clean” preparation under `memrepro.sh`, then
+  separate preparation stability from Understory's still-pending render soak/frame budget.
 
 ## Phase CENSUS — Corpus batch-analysis harness + calibration census 🔨 (2026-07-07; scoped from docs/research/CORPUS_ML_OPPORTUNITIES.md §10 item 1, Matt's go-ahead 2026-07-07)
 

@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-09-140939] UND.R2 — full-track preparation stays bounded (BUG-176)
+
+- **Long local tracks no longer retain every stem-analysis graph result until preparation ends.** Each two-second separation window now releases its temporary MPSGraph wrappers and result objects before the next window begins, while the expensive graph, queue and Metal buffers remain reusable.
+- A production-MPSGraph regression runs 30 separation windows and samples memory after every five drained windows. The fix measured −122.6 MB final growth and 0 MB peak growth after warmup; the pre-fix real-track run grew approximately 271 MB/s.
+- Live validation on the complete nine-minute “Dance Yrself Clean” file remains gated by the 8 GB watchdog and is the next increment. This change does not alter Understory's fern geometry or music-response routing.
+
 ### [dev-2026-09-30-170203] PROMO.1 — the LinkedIn launch video
 
 - **A 32-second square video is ready to post:** Kagura doing the twist, Ferrofluid Ocean, Cymatic Resonance, Fractal Tree (zoomed out so the whole tree shows) and Fireflies, cut on the song's bars, scored with the first 32 s of *Sherman's March to the Sea*, ending on "Uzume / uzume.io". It's at `~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4`, with three cover stills to pick a thumbnail from.

@@ -89,7 +89,7 @@ passes, the entry moves to §Resolved (recent).
 
 ### BUG-176 — Understory build exhausts memory during local-file preparation (2026-10-08)
 
-**Severity:** P0 · **Domain:** `ml.stem` / `perf` · **Failure class:** `resource-management` · **Status:** Open; root-caused, no fix in tree · **Introduced:** present on the current branch; first exposed while testing the uncommitted Understory worktree · **Resolved:** — · **Found by:** live local-file check, 2026-10-08
+**Severity:** P0 · **Domain:** `ml.stem` / `perf` · **Failure class:** `resource-management` · **Status:** Fix implemented; live validation pending · **Introduced:** present on the current branch; first exposed while testing the uncommitted Understory worktree · **Resolved:** code fix `133298aa` (UND.R2); defect remains open until the watchdog validation increment · **Found by:** live local-file check, 2026-10-08
 
 **Expected.** With Understory pinned while a nine-minute local track prepares and then plays, process footprint stays below **3 GB** and, after the first minute, remains within **±50 MB**. GPU work remains bounded when a frame exceeds the 16.7 ms display interval; frame-time p50 stays below **16.7 ms** in a quoted Release 1080p configuration. No GPU resource, command-buffer backlog, pulse/history collection, cache, or staged layer grows with frame count.
 
@@ -107,6 +107,8 @@ passes, the entry moves to §Resolved (recent).
 
 **Verification criteria (written before diagnosis or implementation).**
 
+- [x] Every full-file separation and its waveform analysis run inside one explicit per-window lifetime boundary; the structural regression observes exactly one boundary per separation.
+- [x] An isolated 30-window production-MPSGraph soak samples footprint after every five drained windows and stays below **128 MB final** / **256 MB peak** post-warmup growth. UND.R2 measured **−122.6 MB final / 0 MB peak**.
 - [ ] A headless, production-path Understory soak drives 10 minutes of scene time at 1920×1080, wraps every frame in `autoreleasepool {}`, and reports each minute. Resident growth from minute 1 is **<25 MB**, GPU p50 remains within **1.5×** minute 1, and every sample window is lit and changing.
 - [ ] All Understory GPU resources and pipeline states are allocated only at initialization or drawable-size change, released on resize/scene exit, and reused per frame. Every state collection has a hard cap plus an explicit overwrite or eviction rule.
 - [ ] Encoded-but-unfinished frames are bounded by the renderer’s frame-in-flight contract; a deliberately slow frame cannot grow queue depth with elapsed time.
@@ -117,6 +119,8 @@ passes, the entry moves to §Resolved (recent).
 **Manual validation required:** Yes — the resource gates are automated/measured, but the rewrite must not regress the accepted visual endpoints or felt response.
 
 **Fix scope.** First bound the full-file stem sweep: drain per-window MPSGraph temporaries while retaining the existing fixed graph, command queue and Metal buffers, and add a long-sweep footprint regression. Re-run fresh preparation under the watchdog before evaluating playback. Understory's separate headless soak and Release frame-budget work remains required; do not reduce fern fidelity to hide either cost.
+
+**Fix implementation.** Commit `133298aa` wraps each `SessionPreparer.analyzeStemSeries` window in `autoreleasepool`, keeps the separator, graph, command queue and fixed Metal buffers outside that scope, and lets only value-type feature frames escape. The isolated gate is opt-in as `BUG176_STEM_SWEEP=1` because process footprint is meaningful only without parallel suites.
 
 **Related:** BUG-175; `FiddleheadFernTests`; `MemorySoakGateTests`; `PresetFrameBudgetTests`; user-supplied “Understory rewrite: resource-stability requirements” (2026-10-08).
 
