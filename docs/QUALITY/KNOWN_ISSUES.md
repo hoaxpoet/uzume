@@ -33,7 +33,7 @@ belongs in the second table, not the first.
 | BUG-159 | P3 | app / settings | The Settings "record sessions" switch does nothing. | BR.15 (hide). |
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
-| BUG-175 | P2 | preset.fidelity / Understory | The current Understory worktree is still a manual-review candidate and has not passed final fern fidelity or music-response validation. | Complete the existing Understory M7/M8 review after BUG-176 validation. |
+| BUG-175 | P1 | preset.fidelity / Understory | “Dance Yrself Clean” proves a response inversion: the fern closes and loses motion as the full band arrives, and the closed-biased form no longer reads clearly as a fern. | UND.M9F: replace the vocal-only posture and deviation-only sustained-motion mapping, then replay before another live review. |
 | BUG-176 | P0 | ml.stem / resource-management | The fresh-preparation P0 is fixed and its five-minute live watchdog gate passes; Understory's 1080p soak, frame budget, resource audit and manual check remain open. | Complete UND.R4's renderer and manual resource-stability gates. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
 | BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
@@ -129,25 +129,27 @@ The live run was Debug at 900×600 and recorded no review video. It therefore do
 
 **Related:** BUG-175; `FiddleheadFernTests`; `MemorySoakGateTests`; `PresetFrameBudgetTests`; user-supplied “Understory rewrite: resource-stability requirements” (2026-10-08).
 
-### BUG-175 — Understory fern fidelity and music response remain under review (2026-10-06)
+### BUG-175 — Understory closes and stills as the full band arrives (2026-10-06; escalated 2026-10-09)
 
-**Severity:** P2 · **Domain:** `preset.fidelity` (Understory) · **Failure class:** `algorithm` · **Status:** Open; detailed M7/M8 work remains uncommitted · **Introduced:** Understory look spike · **Resolved:** — · **Found by:** Matt's review against the supplied closed and open fern references
+**Severity:** P1 · **Domain:** `preset.fidelity` / `dsp.stem` (Understory) · **Failure class:** `pipeline-wiring` · **Status:** Diagnosed in UND.M9D; no fix code yet · **Introduced:** Understory look spike · **Resolved:** — · **Found by:** Matt's review against the supplied references and “Dance Yrself Clean”
 
-**Expected.** One jewel-lit recursive fiddlehead visibly uncurls through an advancing release front, reveals previously occluded pinnae and pinnules, and responds continuously to independent musical signals without whole-image warp or prerecorded-pose stepping.
+**Expected.** One jewel-lit recursive fiddlehead visibly uncurls through an advancing release front, reveals previously occluded pinnae and pinnules, and responds continuously to independent musical signals without whole-image warp or prerecorded-pose stepping. Sustained full-band energy must open the subject into a recognizable fern and maintain at least as much local motion as the preceding sparse passage. Silence may remain partially curled, but the rachis, at least six pinnae and recursive pinnules must stay legible.
 
-**Actual.** The preserved Understory worktree has improved through multiple reviewed candidates, but its final visual, motion, and real-music acceptance gates have not been completed or committed. BUG-176 blocked the requested full-track music check before playback.
+**Actual.** In the first watchdog-safe full-track review, the fern remains mostly curled and becomes less active after the full band enters. Matt: *“The fern sits in a mostly curled position. After the full band enters and the music becomes energetic, the fern actually moves less … you can't really tell that this is a fern … Not viable as currently designed.”* Exact replay confirms the inversion. Comparing 120–180 s with 210–270 s, mean curl rises **0.600→0.763**, ruffle falls **0.262→0.126**, and mean absolute bend falls **0.04386→0.01570**, while spectral surge rises **0.387→0.827** and waveform occupancy rises **0.027→0.076**.
 
-**Reproduction.** Render the production Understory path with `RENDER_VISUAL=1`, compare its closed/open endpoints against `docs/VISUAL_REFERENCES/understory/`, and review the full motion cycle at normal speed. Real-music checks remain gated by `Scripts/memrepro.sh` until BUG-176 validation passes.
+**Reproduction.** Pin Understory and play `/Users/Shared/memrepro/01 Dance Yrself Clean.mp3` through `Scripts/memrepro.sh`; compare 120–180 s with 210–270 s. The minimum non-live reproducer replays the matching 17,820 aligned rows from session `2026-10-09T14-36-34Z` through the production `UnderstoryState` equations.
 
-**Session artifacts.** The detailed round-by-round evidence, local preview paths, and pre-written verification criteria remain in the preserved uncommitted Understory ledger and design files. This committed stub maintains defect-number continuity without absorbing that work into the resource-stability increment.
+**Session artifacts.** The chain-health verdict is `clean`; the session contains 17,820 feature rows and 17,820 stem rows through 297.4 s. Full evidence, replay method and 15-second observations: `docs/diagnostics/BUG175_UNDERSTORY_DANCE_RESPONSE_DIAGNOSIS_2026-10-09.md`.
 
-**Verification criteria.** The reference comparison passes for fern anatomy and fractal detail; uncurling reveals occluded detail through articulated geometry; route-isolation tests distinguish vocal, drum, spectral-balance and beat behavior; Matt approves the normal-speed real-music result.
+**Root cause evidence.** Curl reads only `vocalsEnergyRel`; low-relative-vocal and instrumental passages explicitly target `curl = 0.92`. Ruffle reads `drumsEnergyDev`, and bend reads `bassDev − trebDev`; both deviation routes fade after their followers adapt to a sustained section. This is wrong wiring, not insufficient gain. Multiplying those routes would strengthen the same inverse relationship. The recorded full-mix arrival/density primitives already move in the required direction.
+
+**Verification criteria (written before UND.M9F).** Replay all aligned rows and require the 210–270 s mean curl to be at least 0.25 below the 120–180 s mean and no greater than 0.30; require sustained local motion in 210–270 s not to fall below 120–180 s; require sidecar/state route parity and isolation; require zero >3× motion spikes through the production path; compare resting, pre-band and full-band frames against every mandatory reference trait; and obtain Matt's normal-speed approval that the entrance visibly opens and energizes a clearly recognizable fern.
 
 **Manual validation required:** Yes — this is a visual-fidelity and musical-feel defect.
 
-**Fix scope.** Resume the existing Understory M7/M8 work only after BUG-176's fresh-preparation watchdog validation; do not trade fern fidelity for lower resource use.
+**Fix scope.** Replace the vocal-only posture and deviation-only sustained-motion mapping; do not merely increase gain. Preserve the forward-kinematic uncurl, source-registered open endpoint, recursive detail, bounded beat-path light and BUG-176 resource constraints. Replay before another live run.
 
-**Related:** UND; BUG-176; `docs/VISUAL_REFERENCES/understory/`; `docs/presets/UNDERSTORY_DESIGN.md`.
+**Related:** UND.M9D; BUG-176; `docs/VISUAL_REFERENCES/understory/`; `docs/presets/UNDERSTORY_DESIGN.md`.
 
 ### BUG-174 — Cytokinesis stops for four seconds before it regrows, and it reads as a freeze (2026-09-30)
 

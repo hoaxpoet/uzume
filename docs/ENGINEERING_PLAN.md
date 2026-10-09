@@ -57,6 +57,22 @@ For anything inventory-shaped, read the artifact, not a prose copy of it:
   gate and normal-speed manual visual/music-response check. BUG-176 remains open until
   those renderer and manual gates pass.
 
+## Phase UND-M — Understory musical response 🔨 (2026-10-09→; BUG-175)
+
+- **UND.M9D — “Dance Yrself Clean” response-inversion diagnosis ✅ (2026-10-09).**
+  The first watchdog-safe full-track review rejected the preset: the fern stays mostly
+  curled and becomes less active after the full band enters. Exact replay of 17,820 aligned
+  feature/stem rows proves the routing inversion. From 120–180 s to 210–270 s, mean curl
+  rises 0.600→0.763 while ruffle falls 0.262→0.126 and mean absolute bend falls
+  0.04386→0.01570, even as spectral surge rises 0.387→0.827 and waveform occupancy rises
+  0.027→0.076. Root cause: vocal-relative energy is the only curl driver, while both
+  geometry-motion routes use deviation signals that decay after a sustained arrival.
+  Evidence and pre-fix gates:
+  `docs/diagnostics/BUG175_UNDERSTORY_DANCE_RESPONSE_DIAGNOSIS_2026-10-09.md`.
+  **Next (UND.M9F):** replace the vocal-only posture and deviation-only sustained-motion
+  mapping, replay the captured track through the production state/render path, and request
+  another live review only after direction, range, continuity and fern-read gates pass.
+
 ## Phase CENSUS — Corpus batch-analysis harness + calibration census 🔨 (2026-07-07; scoped from docs/research/CORPUS_ML_OPPORTUNITIES.md §10 item 1, Matt's go-ahead 2026-07-07)
 
 Walk Matt's 27,639-track local archive (`/Volumes/Extreme SSD`; survey in CORPUS_ML_OPPORTUNITIES.md §Appendix) through the **existing** analysis pipeline — no new ML — to turn anecdote-scale calibration into distribution-scale: D-154's `assessBeatIrregularity` 10 % threshold (calibrated on 38 tracks, "thin observed gap 9.2 vs 11.3") gets a real octave-folded disagreement histogram; the MoodClassifier's `mood_scaler.json` z-stats (DEAM-derived) get re-estimated against the deployment distribution; the 3-way BPM disagreement logging becomes a per-genre error census; K-S key estimation ("unreliable" per code comment) gets its accuracy measured against external DB values later (§8.5 enrichment, separate phase). **Scope guard: the census MEASURES; every retune ships as its own increment with a DECISIONS entry — no threshold changes land inside CENSUS.**
