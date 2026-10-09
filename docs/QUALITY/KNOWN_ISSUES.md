@@ -34,7 +34,7 @@ belongs in the second table, not the first.
 | BUG-036 | P2 | audio.capture / performance | Memory allocations on the real-time audio thread (three sites). A glitch risk under memory pressure; never observed. | During the beta, if a tester reports audio glitches. |
 | BUG-174 | P3 | preset.fidelity / Cytokinesis | Cytokinesis stops for 4 s before it regrows. The designed hold reads as a freeze (audit K8). | During the beta. |
 | BUG-175 | P2 | preset.fidelity / Understory | The current Understory worktree is still a manual-review candidate and has not passed final fern fidelity or music-response validation. | Complete the existing Understory M7/M8 review after BUG-176 validation. |
-| BUG-176 | P0 | ml.stem / resource-management | Fresh full-file stem preparation retains MPSGraph temporaries across the long stem-series sweep; the watchdog reproduced 8.52 GB before playback. | Add a per-window lifetime boundary, then rerun fresh preparation under the 8 GB watchdog before any Understory playback check. |
+| BUG-176 | P0 | ml.stem / resource-management | The fresh-preparation P0 is fixed and its five-minute live watchdog gate passes; Understory's 1080p soak, frame budget, resource audit and manual check remain open. | Complete UND.R4's renderer and manual resource-stability gates. |
 | OBS-DS6-1 | P3 | preset.fidelity / Ferrofluid Ocean | Ferrofluid Ocean went black for a few seconds of near-silence once (2026-09-03). | Only if seen again. |
 | BUG-149 | P3 | dsp.mir / key | Most songs read "F♯ minor" (35 % of 993 tracks). Display-only. BUG-054 merged here. | After the beta. |
 | BUG-084 | P3 | dsp.stem | Stem deviation spikes to 35 against a ~3.4 ceiling. The one consumer is soft-kneed, so there is no visible effect. | After the beta. |
@@ -90,7 +90,7 @@ passes, the entry moves to §Resolved (recent).
 
 ### BUG-176 — Understory build exhausts memory during local-file preparation (2026-10-08)
 
-**Severity:** P0 · **Domain:** `ml.stem` / `perf` · **Failure class:** `resource-management` · **Status:** Fix implemented; live validation pending · **Introduced:** present on the current branch; first exposed while testing the uncommitted Understory worktree · **Resolved:** code fix `133298aa` (UND.R2); defect remains open until the watchdog validation increment · **Found by:** live local-file check, 2026-10-08
+**Severity:** P0 · **Domain:** `ml.stem` / `perf` · **Failure class:** `resource-management` · **Status:** Fresh-preparation fix validated; renderer/manual gates pending · **Introduced:** present on the current branch; first exposed while testing the uncommitted Understory worktree · **Resolved:** code fix `133298aa` (UND.R2); defect remains open through UND.R4 · **Found by:** live local-file check, 2026-10-08
 
 **Expected.** With Understory pinned while a nine-minute local track prepares and then plays, process footprint stays below **3 GB** and, after the first minute, remains within **±50 MB**. GPU work remains bounded when a frame exceeds the 16.7 ms display interval; frame-time p50 stays below **16.7 ms** in a quoted Release 1080p configuration. No GPU resource, command-buffer backlog, pulse/history collection, cache, or staged layer grows with frame count.
 
@@ -114,7 +114,7 @@ passes, the entry moves to §Resolved (recent).
 - [ ] All Understory GPU resources and pipeline states are allocated only at initialization or drawable-size change, released on resize/scene exit, and reused per frame. Every state collection has a hard cap plus an explicit overwrite or eviction rule.
 - [ ] Encoded-but-unfinished frames are bounded by the renderer’s frame-in-flight contract; a deliberately slow frame cannot grow queue depth with elapsed time.
 - [ ] `PresetFrameBudgetTests` passes in a quoted **Release, 1920×1080** configuration: Understory p50 is **≤8×** the roster median, **<60 ms**, and separately meets the product target of **≤16.7 ms**.
-- [ ] A fresh-prep live run under the 8 GB watchdog holds Understory for at least five playback minutes, peaks below **3 GB**, and is flat within **±50 MB** after minute 1. Report per-minute footprint, exact build path, configuration, commit and executable confirmation.
+- [x] A fresh-prep live run under the 8 GB watchdog holds Understory for at least five playback minutes, peaks below **3 GB**, and is flat within **±50 MB** after minute 1. UND.R3 measured a **2,145 MB** preparation peak and **784–795 MB** after playback minute 1, with exact build, source-state and executable identification.
 - [ ] Manual check: at normal playback speed, the accepted fern look and music response remain intact after the resource rewrite.
 
 **Manual validation required:** Yes — the resource gates are automated/measured, but the rewrite must not regress the accepted visual endpoints or felt response.
@@ -122,6 +122,10 @@ passes, the entry moves to §Resolved (recent).
 **Fix scope.** First bound the full-file stem sweep: drain per-window MPSGraph temporaries while retaining the existing fixed graph, command queue and Metal buffers, and add a long-sweep footprint regression. Re-run fresh preparation under the watchdog before evaluating playback. Understory's separate headless soak and Release frame-budget work remains required; do not reduce fern fidelity to hide either cost.
 
 **Fix implementation.** Commit `133298aa` wraps each `SessionPreparer.analyzeStemSeries` window in `autoreleasepool`, keeps the separator, graph, command queue and fixed Metal buffers outside that scope, and lets only value-type feature frames escape. The isolated gate is opt-in as `BUG176_STEM_SWEEP=1` because process footprint is meaningful only without parallel suites.
+
+**Live validation.** UND.R3 used a named isolated Debug build from `b54e065a` plus the preserved dirty Understory worktree and confirmed PID 41976 against that exact executable. Fresh preparation peaked at **2,145 MB**, ready arrived at 211 s, and five playback minutes completed. After minute 1, 117 samples stayed at **784–795 MB** (11 MB span). The clean session contains 17,820 feature rows and 17,820 stem rows; GPU allocation remained 359 MB and the final drawable heartbeat reported zero failures or unpresented frames. Full build hashes, per-minute measurements, route ranges, limitations and the raw watchdog trace are in `docs/diagnostics/BUG176_UNDERSTORY_LIVE_VALIDATION_2026-10-09.md` and `docs/diagnostics/BUG176/bug176-validation-b54e065a.csv`.
+
+The live run was Debug at 900×600 and recorded no review video. It therefore does not satisfy or stand in for the open Release 1920×1080 frame-budget, 10-minute headless soak, complete resource audit, slow-frame queue-depth test or manual visual/music-response gates.
 
 **Related:** BUG-175; `FiddleheadFernTests`; `MemorySoakGateTests`; `PresetFrameBudgetTests`; user-supplied “Understory rewrite: resource-stability requirements” (2026-10-08).
 

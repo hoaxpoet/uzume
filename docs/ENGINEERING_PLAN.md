@@ -45,6 +45,17 @@ For anything inventory-shaped, read the artifact, not a prose copy of it:
   −122.6 MB final / 0 MB peak post-warmup growth (limits: <128 / <256 MB).
   **Next:** validate a fresh full “Dance Yrself Clean” preparation under `memrepro.sh`, then
   separate preparation stability from Understory's still-pending render soak/frame budget.
+- **UND.R3 — full-track watchdog validation ✅ (2026-10-09).** A named fresh Debug
+  build prepared “Dance Yrself Clean”, reached ready and rendered pinned Understory for five
+  playback minutes under `Scripts/memrepro.sh`. Preparation peaked at 2,145 MB; after the
+  first playback minute footprint stayed at 784–795 MB (11 MB span), with fixed 359 MB GPU
+  allocation and a balanced final drawable heartbeat. The captured feature/stem routes are
+  nonconstant and session chain health is clean. Evidence:
+  `docs/diagnostics/BUG176_UNDERSTORY_LIVE_VALIDATION_2026-10-09.md`.
+  **Next (UND.R4):** complete the allocation/bounded-state audit, deliberately slowed
+  frame-in-flight test, 10-minute headless 1920×1080 soak, Release 1920×1080 frame-budget
+  gate and normal-speed manual visual/music-response check. BUG-176 remains open until
+  those renderer and manual gates pass.
 
 ## Phase CENSUS — Corpus batch-analysis harness + calibration census 🔨 (2026-07-07; scoped from docs/research/CORPUS_ML_OPPORTUNITIES.md §10 item 1, Matt's go-ahead 2026-07-07)
 
