@@ -219,6 +219,34 @@ struct StemFeatureSeriesTests {
                 """)
     }
 
+    // MARK: - BUG-176 — bound MPSGraph temporary lifetimes per separation
+
+    @Test("Every full-file separation window receives its own lifetime boundary")
+    func stemSeries_boundsEverySeparationWindowLifetime() throws {
+        let samples = Self.silenceThenTone(totalSeconds: 6.0, changeSecond: 5.0)
+        let separator = FixedWindowSeparator(windowSamples: 10 * Self.sampleRate)
+        var lifetimeBoundaryCount = 0
+
+        let series = try SessionPreparer.analyzeStemSeries(
+            samples: samples,
+            sampleRate: Self.sampleRate,
+            separator: separator,
+            analyzer: StemAnalyzer(sampleRate: Float(Self.sampleRate)),
+            hopSeconds: 2.0,
+            windowLifetimeScope: { body in
+                lifetimeBoundaryCount += 1
+                try body()
+            }
+        )
+
+        #expect(!series.isEmpty)
+        #expect(separator.separateCallCount == 3, "six seconds at a two-second hop uses three windows")
+        #expect(lifetimeBoundaryCount == separator.separateCallCount, """
+                each expensive separation must finish inside its own lifetime boundary; got \
+                \(lifetimeBoundaryCount) boundaries for \(separator.separateCallCount) windows
+                """)
+    }
+
     // MARK: - Edges
 
     @Test("Too little audio yields an empty series rather than a partial one")

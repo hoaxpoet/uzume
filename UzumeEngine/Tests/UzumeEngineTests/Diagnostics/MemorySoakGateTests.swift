@@ -16,6 +16,8 @@ import Metal
 @testable import Audio
 @testable import DSP
 @testable import Diagnostics
+@testable import ML
+@testable import Session
 @testable import Shared
 
 // `phys_footprint` is process-wide, so this gate is only meaningful run ISOLATED:
@@ -101,6 +103,69 @@ struct MemorySoakGateTests {
         let grownStr = String(format: "%.1f", grown)
         #expect(grown < Self.leakBudgetMB,
             "StemAnalyzer grew \(grownStr) MB over 1.2K frames after warmup — possible leak (CLEAN.4.7 / GAP-16 gate)")
+    }
+
+    // MARK: - BUG-176 — full-file MPSGraph sweep
+
+    @Test("Full-file stem sweep drains each MPSGraph window before the next")
+    func fullFileStemSweep_residentGrowthBounded() throws {
+        guard ProcessInfo.processInfo.environment["BUG176_STEM_SWEEP"] == "1" else { return }
+        guard let device = MTLCreateSystemDefaultDevice() else { throw MemorySoakError.noMetalDevice }
+
+        let sampleRate = 44_100
+        let separator = try StemSeparator(device: device)
+        let analyzer = StemAnalyzer(sampleRate: Float(sampleRate))
+
+        // Compile and populate the graph's legitimate persistent caches before measuring.
+        let warm = [Float](repeating: 0, count: StemSeparator.requiredMonoSamples)
+        try autoreleasepool {
+            _ = try separator.separate(
+                audio: warm, channelCount: 1, sampleRate: Float(sampleRate))
+        }
+
+        // Thirty production windows are long enough to distinguish BUG-176's measured
+        // ~271 MB/s monotonic growth from allocator noise without putting an unfixed run near
+        // the live watchdog's 8 GB ceiling. Sample only after each autorelease pool drains.
+        let samples = [Float](repeating: 0, count: 60 * sampleRate)
+        var postDrainSnapshots: [MemorySnapshot] = []
+        var windowCount = 0
+        let series = try SessionPreparer.analyzeStemSeries(
+            samples: samples,
+            sampleRate: sampleRate,
+            separator: separator,
+            analyzer: analyzer,
+            hopSeconds: 2.0,
+            windowLifetimeScope: { body in
+                try autoreleasepool(invoking: body)
+                windowCount += 1
+                if windowCount.isMultiple(of: 5), let snapshot = MemoryReporter.snapshot() {
+                    postDrainSnapshots.append(snapshot)
+                }
+            }
+        )
+
+        #expect(!series.isEmpty)
+        #expect(windowCount == 30)
+        #expect(postDrainSnapshots.count == 6)
+        guard let first = postDrainSnapshots.first, let last = postDrainSnapshots.last else {
+            Issue.record("BUG-176 footprint snapshots unavailable")
+            return
+        }
+
+        let lateGrowthMB = growthMB(from: first, to: last)
+        let peakGrowthMB = postDrainSnapshots
+            .map { growthMB(from: first, to: $0) }
+            .max() ?? 0
+        print(String(format: "[BUG-176] 30-window post-drain growth: final %.1f MB, peak %.1f MB",
+                     lateGrowthMB, peakGrowthMB))
+        #expect(lateGrowthMB < 128, """
+                full-file stem sweep grew \(String(format: "%.1f", lateGrowthMB)) MB after \
+                warmup; per-window MPSGraph temporaries may still be accumulating
+                """)
+        #expect(peakGrowthMB < 256, """
+                full-file stem sweep peaked \(String(format: "%.1f", peakGrowthMB)) MB above \
+                its post-warmup baseline
+                """)
     }
 }
 

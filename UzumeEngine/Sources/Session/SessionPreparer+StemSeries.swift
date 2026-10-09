@@ -65,6 +65,29 @@ extension SessionPreparer {
         analyzer: any StemAnalyzing,
         hopSeconds: Double = 2.0
     ) throws -> StemFeatureSeries {
+        try analyzeStemSeries(
+            samples: samples,
+            sampleRate: sampleRate,
+            separator: separator,
+            analyzer: analyzer,
+            hopSeconds: hopSeconds,
+            windowLifetimeScope: { body in
+                try autoreleasepool(invoking: body)
+            }
+        )
+    }
+
+    /// Test seam for BUG-176's resource contract. Production always supplies one
+    /// `autoreleasepool` per separation window; tests replace it with a counting scope so a
+    /// future loop refactor cannot silently return to one pool for the entire track.
+    nonisolated static func analyzeStemSeries(
+        samples: [Float],
+        sampleRate: Int,
+        separator: any StemSeparating,
+        analyzer: any StemAnalyzing,
+        hopSeconds: Double,
+        windowLifetimeScope: (_ body: () throws -> Void) throws -> Void
+    ) throws -> StemFeatureSeries {
         let hop = Self.seriesAnalysisHop
         guard sampleRate > 0, hopSeconds > 0 else { return .empty }
 
@@ -109,42 +132,55 @@ extension SessionPreparer {
         var spanStart = 0
 
         while spanStart < sampleCount {
-            // Place the kept span at the window's end where the audio allows it — but leave
-            // ONE analysis frame of room past the span, or the frame starting on the span's
-            // last sample has no 1024 samples left inside the window and is silently dropped.
-            // That cost 10 of 1292 frames over 30 s before `stemSeries_spanBoundariesDoNotDrift`
-            // caught it: a per-span shortfall, invisible in any single span, compounding.
-            let windowStart = windowSamples > 0
-                ? max(0, spanStart + hopSamples + hop - windowSamples)
-                : 0
-            let windowEnd = windowSamples > 0
-                ? min(sampleCount, windowStart + windowSamples)
-                : sampleCount
-            let window = Array(samples[windowStart..<max(windowStart, windowEnd)])
+            var hasUsableStemData = true
 
-            // The separator pads-or-truncates to its own window, so the result's length IS the
-            // window length — read it rather than hard-coding a constant from another module.
-            let result = try separator.separate(
-                audio: window, channelCount: 1, sampleRate: Float(sampleRate))
-            let stems = result.stemWaveforms
-            guard let stemLength = stems.first?.count, stemLength >= hop else { return .empty }
-            if windowSamples == 0 { windowSamples = stemLength }
+            // BUG-176 — MPSGraph returns autoreleased tensor-data wrappers, feed/result
+            // dictionaries and model outputs on every separation. Without a pool here those
+            // objects follow this entire 538-second sweep and grow the process by ~271 MB/s.
+            // Keep the returned waveforms and their analysis inside the same window boundary;
+            // only value-type `StemFeatures` escape into `frames`.
+            try windowLifetimeScope {
+                // Place the kept span at the window's end where the audio allows it — but leave
+                // ONE analysis frame of room past the span, or the frame starting on the span's
+                // last sample has no 1024 samples left inside the window and is silently dropped.
+                // That cost 10 of 1292 frames over 30 s before `stemSeries_spanBoundariesDoNotDrift`
+                // caught it: a per-span shortfall, invisible in any single span, compounding.
+                let windowStart = windowSamples > 0
+                    ? max(0, spanStart + hopSamples + hop - windowSamples)
+                    : 0
+                let windowEnd = windowSamples > 0
+                    ? min(sampleCount, windowStart + windowSamples)
+                    : sampleCount
+                let window = Array(samples[windowStart..<max(windowStart, windowEnd)])
 
-            // Emit every frame of the global 1024-sample grid whose start falls in this span.
-            // Indexing globally (rather than counting within the span) keeps the grid uniform
-            // even though hopSamples is not a whole number of analysis frames.
-            let firstFrame = Int(ceil(Double(spanStart) / Double(hop)))
-            let spanEnd = min(spanStart + hopSamples, sampleCount)
-            var frameIndex = max(firstFrame, frames.count)
-            while frameIndex * hop < spanEnd {
-                let absolute = frameIndex * hop
-                guard absolute + hop <= sampleCount else { break }
-                let offset = absolute - windowStart
-                guard offset >= 0, offset + hop <= stemLength else { break }
-                let slice = stems.map { Array($0[offset..<(offset + hop)]) }
-                frames.append(analyzer.analyze(stemWaveforms: slice, fps: fps))
-                frameIndex += 1
+                // The separator pads-or-truncates to its own window, so the result's length IS
+                // the window length — read it rather than hard-coding another module's constant.
+                let result = try separator.separate(
+                    audio: window, channelCount: 1, sampleRate: Float(sampleRate))
+                let stems = result.stemWaveforms
+                guard let stemLength = stems.first?.count, stemLength >= hop else {
+                    hasUsableStemData = false
+                    return
+                }
+                if windowSamples == 0 { windowSamples = stemLength }
+
+                // Emit every frame of the global 1024-sample grid whose start falls in this span.
+                // Indexing globally (rather than counting within the span) keeps the grid uniform
+                // even though hopSamples is not a whole number of analysis frames.
+                let firstFrame = Int(ceil(Double(spanStart) / Double(hop)))
+                let spanEnd = min(spanStart + hopSamples, sampleCount)
+                var frameIndex = max(firstFrame, frames.count)
+                while frameIndex * hop < spanEnd {
+                    let absolute = frameIndex * hop
+                    guard absolute + hop <= sampleCount else { break }
+                    let offset = absolute - windowStart
+                    guard offset >= 0, offset + hop <= stemLength else { break }
+                    let slice = stems.map { Array($0[offset..<(offset + hop)]) }
+                    frames.append(analyzer.analyze(stemWaveforms: slice, fps: fps))
+                    frameIndex += 1
+                }
             }
+            guard hasUsableStemData else { return .empty }
 
             spanStart += hopSamples
         }
