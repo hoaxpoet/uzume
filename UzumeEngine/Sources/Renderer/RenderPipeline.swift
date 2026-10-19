@@ -383,10 +383,6 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// cheaper and the soft gas tolerates the upscale. Set per-preset in
     /// `applyPreset`; reset to 1.0 on every preset change.
     private var _directRenderScale: Float = 1.0
-    /// EFB.1 — a ceiling on the direct path's rendered pixel count, or nil. A fixed scale costs
-    /// in proportion to the drawable, so one that fits a 1080p window drops frames fullscreen on a
-    /// 4K display; a budget renders the same pixel count on every display. Guarded by the scale lock.
-    private var _directRenderPixelBudget: Double?
     private let directRenderScaleLock = NSLock()
 
     /// Set the direct-preset render scale (1.0 = full res; e.g. 0.5 = half-res
@@ -425,39 +421,13 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         // 1.00 for a ray-march preset rendering at 0.5 (VL does), and this line exists precisely so
         // `frame_gpu_ms` is interpretable after the fact — a scale the log does not carry is a 4×
         // cost difference nobody can attribute later, which is the gap that let BUG-098 hide.
-        let directScale = effectiveDirectRenderScale(drawableWidth: pixelWidth, drawableHeight: pixelHeight)
-        let scaleText = String(format: "%.2f", min(directScale, rayMarchRenderScale))
+        let scaleText = String(format: "%.2f", min(directRenderScale, rayMarchRenderScale))
         let mpText = String(format: "%.2f", megapixels)
         return "width=\(pixelWidth) height=\(pixelHeight) megapixels=\(mpText) render_scale=\(scaleText)"
     }
 
     var directRenderScale: Float {
         directRenderScaleLock.withLock { _directRenderScale }
-    }
-
-    /// Cap the direct path's rendered pixels at `pixels` (the scale shrinks to fit any larger
-    /// drawable), or nil for no cap. Reset to nil on every preset change.
-    public func setDirectRenderPixelBudget(_ pixels: Double?) {
-        directRenderScaleLock.withLock { _directRenderPixelBudget = pixels }
-        // Pre-allocate the offscreen target now, as `setDirectRenderScale` does (NB.8 polish: the lazy
-        // first-frame allocation was a visible hitch on the switch).
-        let size = mvWarpDrawableSize
-        let width = max(Int(size.width), 1), height = max(Int(size.height), 1)
-        let scale = effectiveDirectRenderScale(drawableWidth: width, drawableHeight: height)
-        if scale < 0.999 { _ = halfResTarget(drawableWidth: width, drawableHeight: height, scale: scale) }
-    }
-
-    /// The scale `drawDirect` renders at for this drawable: the preset's scale, lowered so the
-    /// rendered area stays within the pixel budget.
-    func effectiveDirectRenderScale(drawableWidth: Int, drawableHeight: Int) -> Float {
-        let (scale, budget) = directRenderScaleLock.withLock { (_directRenderScale, _directRenderPixelBudget) }
-        return Self.directRenderScale(scale, budget: budget, drawablePixels: Double(drawableWidth * drawableHeight))
-    }
-
-    /// Pure: `scale`, capped so `drawablePixels · scale²` does not exceed `budget`.
-    static func directRenderScale(_ scale: Float, budget: Double?, drawablePixels: Double) -> Float {
-        guard let budget, drawablePixels > 0 else { return scale }
-        return min(scale, Float((budget / drawablePixels).squareRoot()))
     }
 
     /// The ray-march path's scale, for the session record. Mirrors what `applyPreset` pushed into
