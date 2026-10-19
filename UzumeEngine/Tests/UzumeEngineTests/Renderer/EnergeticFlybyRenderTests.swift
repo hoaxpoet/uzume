@@ -261,8 +261,9 @@ struct EnergeticFlybyRenderTests {
             fv.deltaTime = 1 / Self.fps
             return fv
         }
-        for (label, width, height) in [("1080p", 1920, 1080), ("1080p@0.75", 1440, 810),
-                                       ("1080p@0.5", 960, 540), ("4K", 3840, 2160)] {
+        for (label, width, height) in [("1080p", 1920, 1080), ("1080p@0.75", 1440, 810), ("1080p@0.6", 1152, 648),
+                                       ("1080p@0.5", 960, 540), ("1440p@0.6", 1536, 864),
+                                       ("1440p@0.5", 1280, 720), ("4K", 3840, 2160)] {
             var harness = MultiPassRenderHarness(width: width, height: height, readback: false)
             let log = GPUTimeLog()
             harness.gpuTimes = log

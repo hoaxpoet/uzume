@@ -314,7 +314,8 @@ extension RenderPipeline {
         // fragment to a scale×drawable offscreen texture, then bilinearly upscale
         // to the drawable (~4× cheaper at 0.5×; the soft gas tolerates it).
         // scale == 1.0 (every other preset) → the normal full-res path below.
-        let scale = directRenderScale
+        let scale = effectiveDirectRenderScale(drawableWidth: drawable.texture.width,
+                                               drawableHeight: drawable.texture.height)
         if scale < 0.999,
            let halfTex = halfResTarget(drawableWidth: drawable.texture.width,
                                        drawableHeight: drawable.texture.height,

@@ -199,6 +199,7 @@ extension VisualizerEngine {
         pipeline.setDirectPresetFragmentBuffer2(nil)
         pipeline.setDirectPresetFragmentBuffer3(nil)
         pipeline.setDirectRenderScale(1.0)   // NB.8: full-res unless a preset opts into half-res below
+        pipeline.setDirectRenderPixelBudget(nil)   // EFB.1: no pixel cap unless a preset sets one below
         pipeline.setRayMarchPresetHeightTexture(nil)
         pipeline.setPostProcessChain(nil)
         pipeline.setRayMarchPipeline(nil)
@@ -896,10 +897,14 @@ extension VisualizerEngine {
             pipeline.setMeshPresetTick { [weak state] features, stems in
                 state?.tick(deltaTime: features.deltaTime, features: features, stems: stems)
             }
-            // EFB.1, Matt's pick (2026-10-19) on the timing stills: half resolution + bilinear upscale.
-            // Kali's 200-step march is p95 34.6 ms at full 1080p, 20.9 ms at 0.75x and 10.2 ms at 0.5x
-            // (Release, M2 Pro); only 0.5x fits the frame. Reset to 1.0 at the top of applyPreset.
-            pipeline.setDirectRenderScale(0.5)
+            // EFB.1: render at most 1152×648 (0.75 MP) and upscale, whatever the display. Kali's march
+            // costs by pixel (Release, M2 Pro, p50 / p95): 0.75 MP 10.6 / 14.3 ms; 0.92 MP 12.4 / 16.9;
+            // 1.33 MP 17.2 / 22.8; full 1080p 25.7 / 35.2. A fixed scale cannot serve both a window and
+            // a 4K TV (Matt: "needs to be capable of running fullscreen on a 4k tv"): 0.6x fits a 1080p
+            // window and drops frames on the Tier-1 2560×1440 drawable a 4K TV gets. The budget is 0.6x
+            // in a 1080p window and ~0.45x fullscreen there. MetalFX spatial upscaling was tried and
+            // sharpened the stair-steps instead of hiding them. Reset at the top of applyPreset.
+            pipeline.setDirectRenderPixelBudget(1152 * 648)
         } else {
             logger.error("EnergeticFlybyState: failed to allocate state for preset '\(desc.name)'")
         }
