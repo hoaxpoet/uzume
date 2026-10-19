@@ -58,6 +58,9 @@ struct EFBMarch {
 };
 
 constant float kEFBDet = .001;
+/// EFB: radius around each sphere centre whose rod light the downbeat burst brightens (Kali's spiked
+/// shell is ~.16 across). Larger = a bigger flare and more of the frame moving on the beat.
+constant float kEFBCoreRadius = .25;
 
 // MARK: - Kali's functions (verbatim)
 
@@ -134,6 +137,7 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
     float2 uv = float2(atan2(dir.x, dir.y) + time * .5, length(dir.xy) + sin(time * .2));
     float3 col = efb_fractal(uv, time);
     float d = 0., td = 0., g = 0., ref = 0., ltd = 0., li = 0.;
+    float gCore = 0.;   // EFB: the rod glow gathered near the cluster centres (the burst's footprint)
     float3 p = from;
     // EFB (design §5, the white-out fix): when a spinning rod sweeps through the camera every ray
     // starts inside it and `g` saturates the whole frame for one frame (05_anti_whole_frame_whiteout).
@@ -161,17 +165,22 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         td += d;
         g += .1 / (.1 + k.br * 13.);
         li += .1 / (.1 + k.tub * 5.);
+        // EFB: the burst lights the cluster, not the frame. Kali's rod glow builds up along every ray
+        // (measured: a rods-only burst still moved the frame-mean 0.157/frame, 1.5 flashes/s), so the
+        // burst reads only the part of it gathered near the three sphere centres.
+        float3 c = p - k.sphpos;
+        float near = min(dot(c, c), min(dot(c + .7, c + .7), dot(c - .7, c - .7)));
+        gCore += .1 / (.1 + k.br * 13.) * exp(-near / (kEFBCoreRadius * kEFBCoreRadius));
     }
-    // EFB: Kali scaled the WHOLE glow by (.5 + so*1.5). The scene's burst lights only the sphere rods
-    // (`g`); the tunnel light (`li`) sits at the energy floor, so the frame's luminance holds steady
-    // on the downbeat (D-157, design §5).
-    float burstGain = st.glowBase + st.burst * 1.5;
+    // EFB: Kali scaled the WHOLE glow by (.5 + so*1.5). The scene's burst adds only the cluster's own
+    // light (`gCore`); the rods and the tunnel light (`li`) sit at the energy floor, so the frame's
+    // luminance holds steady on the downbeat (D-157, design §5).
     float glowScale;
     if (st.faithful > .5) {
         g = max(g, li * .15);
-        glowScale = burstGain;
+        glowScale = st.glowBase + st.burst * 1.5;
     } else {
-        g = max(g * burstGain, li * .15 * st.glowBase);
+        g = max(g * st.glowBase + gCore * st.burst * 1.5, li * .15 * st.glowBase);
         glowScale = mix(.3, 1., camGlow);
     }
     float f = 1. - td / 3.;
