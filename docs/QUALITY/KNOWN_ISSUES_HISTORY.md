@@ -4,6 +4,374 @@ Resolved entries rotated out of [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §Resolved 
 
 ---
 
+### BUG-156 — the local-file end-of-track tests wait on a thread pool the suite keeps busy (2026-09-29)
+
+**Resolved 2026-10-01 — live check passed (build 10 and the PREP.3 build, Matt):** Next and seek while preparation ran never stalled.
+
+**Severity:** P3 (test flake; the product risk below is open and unobserved) · **Domain:** `test-infra` / `audio.playback` · **Failure class:** `concurrency` (a wall-clock deadline on a callback delivered through a starved pool) · **Status:** Fixed (BUG156.1, `35abbcf1`) · **Introduced:** LFSEEK.1 (`2639294d`, 2026-09-28 09:08), which switched the queue-advance completion to `.dataPlayedBack`. The flake first appeared eight hours later. · **Related:** BUG-103 (the same suite's other face), BUG-151 (why `.dataPlayedBack`), BUG-154 (same fix shape)
+
+**Expected:** `SessionLifecycleChurnTests.onFileEnded_queueAdvanceChurn_neverHangs` passes however loaded the test process is. A missing `onFileEnded` still fails it.
+**Actual:** it failed once in a full engine run on `ff-5` (`b706c315`, 2026-09-28 17:09): *"failed after 10.317 seconds with 1 issue"*. It then passed 5/5 alone (~2.75 s each), and the next full run was 2107/2107. Reproduced first-hand on 2026-09-28 with a probe in the test: **2 of 2 full runs stalled at advance 0.** A peer session's engine suite was running at the same time, so this is not a clean "no peer" repro; the mechanism below does not depend on it.
+
+**What the stall looks like** (probe snapshot at the 5 s timeout): engine running, player playing, playhead at sample 219 957 of an 11 025-frame file (0.25 s of audio, played 20 times over), no stale reschedule, no config change, and **AVFAudio's completion handler never invoked.** The playhead kept advancing in real time. The callback arrived **late, not lost:** after 20.0 s in run 1 and 14.9 s in run 2.
+
+**Mechanism (established).**
+1. A `sample` of the test process taken during the stall shows no thread running AVFAudio's played-back timer. `LocalFileSeekTests.seekMovesThePlayhead` sat the whole 2 s in `-[AVAudioPlayerNode stop]` → `StopImpl` → `AVAEDispatchQueueTimer::CancelTimer()` → `semaphore_wait`. About eight of the ten `com.apple.root.default-qos.cooperative` threads were busy in CPU-bound synchronous tests (Mitosis, Skein, Witchlight luma loops).
+2. A controlled experiment in one process (a 0.25 s file, 2 × ncpu spinner blocks for 8 s) isolates it:
+
+   | spinners at | `.dataPlayedBack` latency | `.dataConsumed` latency |
+   |---|---|---|
+   | none | 0.317 s | 0.007 s |
+   | background / utility | 0.316 / 0.315 s | — |
+   | **default / userInitiated** | **8.50 / 8.55 s** (released with the spinners) | 0.002–0.010 s |
+
+   The caller's QoS doesn't matter: `play()` from a userInteractive, userInitiated or default thread all waited ~8.3–8.5 s. With the spinners never released, the completion never came, and the `player.stop()` after it blocked in `CancelTimer` for **14 h** (sampled, then killed).
+
+So `.dataPlayedBack` completions are delivered from a timer in the process's constrained default-QoS dispatch pool. The parallel suite fills that pool with Swift Testing's synchronous CPU-bound tests; in one run it stayed saturated for **212 s**. A 5 s deadline on the callback was measuring the neighbours. External CPU load (`yes` × 20, plus audio churn in another process) did **not** reproduce it, 15/15 green: the pool is per process. `.dataConsumed`, the type before LFSEEK.1, doesn't go through it, which is why the suite was quiet until 2026-09-28.
+
+**Reproduction.** A full `swift test --package-path UzumeEngine` with a probe logging the provider state at the timeout; or the in-process spinner experiment above, which is deterministic.
+
+**Fix (test-only).** `awaitPlayedBackEnd` (`Tests/UzumeEngineTests/Audio/PlayedBackWait.swift`) replaces the bare `wait(5 s)` in the churn test and in `LocalFileSeekTests.seekMovesThePlayhead`, the sibling caught in the stall sample. After the 5 s budget it queues a canary on the default-QoS pool, behind the overdue completion. While the canary is pending, the pool hasn't had its turn, so a callback that lands then passes the moment it lands. Once the canary has run, the completion has been dequeued; the callback gets the same 5 s again, and missing it means lost. The verdict is an ordering. **No timeout was widened.** A lost callback still fails, 5 s after the pool proves it has had its turn. `LocalFilePlaybackProvider` is unchanged.
+
+**Verification.**
+1. ✅ Deterministic gate: `PlayedBackWaitTests`. A suspended queue stands in for the starved pool, and a callback landing at 4× the budget passes; with a live pool, a callback that never comes fails. **Negative control:** the bare `wait(budget)` fails the first test (run 2026-09-29).
+2. ✅ Three consecutive full engine runs on the fixed tree (a temporary late-path log line added for evidence, removed before commit): **runs 2 and 3 green, 2117/2117.** In run 1 the churn test passed through the late path in 13.1 s, where the old wait would have failed at 5 s. Run 1 went red on `StemSeparatorConcurrencyTests` (see *Sibling* below): same mechanism, not this change.
+3. Manual: none (test-only change).
+
+**Sibling, same mechanism (fixed separately as BUG-157, BUG157.1).** `StemSeparatorConcurrencyTests.concurrentSeparations_returnPerCallerOwnStems` dispatches its eight separations to a private concurrent queue at default QoS, the pool above, and asserts a fixed `group.wait(timeout: 180 s)`. In run 1 of this increment's verification that wait timed out (198 s), and all three assertions after it failed on the empty collector. It was in the BUG-156 stall sample too, blocked at line 101. The remedy has the same shape: its work is not stuck, it is queued. Its wait could be ordered the same way, or the queue given a QoS above the saturated band.
+
+**Open — product risk, not observed.** The app depends on the same pool. With `onFileEnded` set, the local-file queue advance waits for that completion, and `stop()` (Next, Stop, a seek) calls `player.stop()`, which waits in `CancelTimer` while a played-back timer is pending. If the process's default-and-above pool is saturated during local-file playback, a track advance would be late, and a MainActor `stop()` could stall for as long as the saturation lasts. `SessionPreparer` runs its analysis as `Task.detached(priority: .userInitiated)`, a band the experiment shows delays the completion just as much. **Not established:** whether preparation ever overlaps local-file playback with enough parallel CPU work to saturate the pool, and no app session has shown a late advance or a Next-press stall. Evidence needed before any provider change: a live local-file session with preparation running, timing `onFileEnded` against the file's end and `stop()` on the MainActor.
+
+### BUG-148 — stored valence is negative on every beta-playlist song (2026-09-26)
+
+**Resolved 2026-10-01 — live check passed (build 10, Matt):** scene choice *"Looks good. Good variety overall."*
+
+**Severity:** P2 · **Domain:** `ml.mood` → `orchestrator` · **Failure class:** `algorithm` (a model that does not generalise beyond its 12 training songs) · **Status:** Fixed by replacement (D-259, NRG.1–3, 2026-09-27); Matt's live check pending · **Found by:** Matt's BUG-144 check, 2026-09-26: *"all of the moods were listed as 'restless'"* · **Related:** BUG-144, BUG-149, OBS-DS4-1, BUG-066, DYN.6.2
+
+**Expected:** stored valence spreads with the music: cheerful songs (Penny Lane) positive, dark ones negative. **Actual:** the app's own cache after the BUG-144/145/146 build (schema v16, 2026-09-26 14:48–14:59) stores negative valence on **10/10** songs: Dance Yrself Clean −0.41, B.O.B. −0.34, Superstition −0.37, Teen Spirit −0.83, Penny Lane −0.25, Take Five −0.22, Pyramid Song −0.03, Teardrop −0.27, Moonlight I −0.02, Warszawa −0.03. The label is only a quadrant (`EmotionalState.quadrant`: negative valence with positive arousal reads "restless", negative with negative reads "wistful"). By these values Penny Lane and Moonlight I should read "wistful".
+
+**Consumers:** `PresetScorer.moodSubScore`. Valence → colour-temperature target (0.5 + 0.4·v), half of the mood term, which is 40 % of each score. Also the preparation view's mood word.
+
+**First facts (diagnosis in progress; no root cause asserted).**
+- The shipping model was trained at `d586e57` (2026-04-07) on **818 frames from 12 hand-labelled songs** (`~/phosphene_features_annotated.csv`), recorded from the live path at the time.
+- At the scaler's mean feature vector the model outputs valence **−0.42**, arousal +0.41. An "average" input reads restless.
+- Replayed on its own training features, it still separates valence: Love Shack +0.45, Love Rehab +0.68, No Surprises +0.22, Pyramid Song −0.50. With the pre-DYN.6.2 flux scaler those read +0.66 / +0.71 / +0.43, so the corpus flux re-fit trims valence by 0.1–0.2 without flipping it.
+- The open question is what differs in the features preparation feeds the model today (post BUG-066 / DYN.4–7 / BUG-146).
+
+**Diagnosis (2026-09-26).** Evidence is in `~/Documents/uzume_spikes/bug148/`: the Python replica `mood_mlp.py`, `loso.py`, the per-frame inputs `feat/`, and the uncommitted recorder patch.
+1. **Instrument.** `PrepTimingRunner` with a recording classifier captured every frame's 10 inputs and output on the ten songs (Release, shipping pipeline). A Python replica of the model, parsed from `MoodClassifier+Weights.swift` and the scaler, reproduces the app's per-frame state to **3×10⁻⁵** on all ten.
+2. **Input shift.** Against the 12 training songs, today's preparation inputs sit within ±0.3 training σ on bands and centroid. Flux sits **+2.5 σ** (median 0.75 vs 0.23; beta max 1.71 vs training max 0.43), and both key correlations sit about **−0.75 σ**.
+3. **No single input explains it.** Resetting one input group to its typical-training value swings valence erratically in both directions: flux takes Dance Yrself Clean −0.42 → +0.59 but Penny Lane −0.25 → −0.42. The typical-training input vector itself reads −0.56.
+4. **The model does not generalise.** Leave-one-song-out with the exact `train_mood_from_live.py` recipe, 3 seeds, 12 held-out songs. Valence sign agreement is **42 %** (chance 50 %), Pearson r **−0.30**, MAE 0.62. Arousal sign agreement is **50 %**, r −0.04, MAE 0.50. The seed spread is small (0.13). The shipping recipe's validation split shuffles frames, so its validation frames came from the training songs; the `d586e57` "✓ per-track accuracy" measured memorisation.
+5. **Library scale** (census proxy: the model applied to each track's mean inputs, `full_results.csv`, n = 27,638): median valence **−0.15**, 61.5 % negative. Labels would read restless 43.5 %, bright 33.0 %, wistful 18.1 %, calm 5.5 %.
+
+**Root cause:** the valence (and arousal) the model outputs on unseen music is not better than chance. It was trained on 818 frames of 12 hand-labelled songs, validated on frames of those same songs, and today's flux runs far outside the range it saw. The beta playlist's 10/10 negative valence and the library's 61.5 % are that model's bias, not a measurement. A 12-song held-out test is itself small, so the chance-level result is a floor on the evidence, not a precise estimate.
+
+**Verification criteria for any fix (written before the fix).**
+1. Automated: leave-one-song-out (or a held-out-artist split) on the training set, reporting sign agreement and r against their chance levels. It must clearly beat chance: valence sign ≥ 70 %, r ≥ 0.5.
+2. Beta playlist: Penny Lane reads positive valence; Teen Spirit and Pyramid Song read negative.
+3. Library proxy: the quadrant split is reported, not asserted.
+4. Manual: Matt's mood check on the beta playlist.
+
+**Resolution (D-259, 2026-09-27).** Matt judged the mood taxonomy itself unusable and chose a measured energy value instead. Nothing was retrained, and valence and arousal left scene choice:
+- NRG.1 (#290) measures each song's energy curve.
+- NRG.2 (#292) puts it on a library-calibrated 1–10 scale in the preparation view.
+- NRG.3 makes the planner score scenes and transitions against the energy of each stretch, and removes the mood-driven live override. Reactive mode stops scoring mood.
+
+**Still reading the model:** the live classifier's `valence` / `arousal` inside about a dozen certified scenes, and Lumen Mosaic's palette pick (Matt: *"leave the certified scenes alone for now"*). The verification criteria above for a retrained model no longer apply to scene choice.
+
+### BUG-176 — Membrane and Waveform flashed in part of the screen at fast tempos (2026-09-30)
+
+**Resolved 2026-10-01 — both halves passed live (build 10).** Membrane on B.O.B. (session 1), Matt: *"No flickers."* Waveform for 23 s with music in session `2026-10-01T18-05-22Z` (from 18:13:12Z), Matt: *"Waveform did not flicker."*
+
+*(Numbering: filed as BUG-175 on `br-20`; renumbered to BUG-176 when #342 merged first with its own BUG-175.)*
+
+**Severity:** P1 (photosensitivity) · **Domain:** renderer / photosensitivity · **Failure class:** `render-state` · **Status:** Fixed 2026-09-30 (BR.20) — pending the felt check in listening session 1 · **Found by:** the flash check v2 (BR.20 / audit I8)
+
+**Expected.** No region of the frame the size of WCAG's small-safe area (a ninth of the screen) flashes more than three times a second, under the 270 BPM worst-case beat train the gate uses.
+**Actual.** The whole-frame check (v1) passed both; the new regional check did not. **Membrane** (certified) — 4.0 regional flashes/s: each strike ring's bright crest and dark trough sweeping across a patch of skin. **Waveform** (uncertified, but the launch screen and the fallback) — 5.0: its 64 bars read the raw spectrum, so a kick's bars jumped to full and dropped straight back.
+**Diagnosis (measured, two premises falsified on the way).** Membrane: capping strikes to every other beat above 180 BPM made it WORSE (5.0 — a longer-lived ring crosses more of the frame); fixing the bass weight left it at 5.0; the ring's lighting contrast is the lever. Waveform: freezing the bars removed the flash (0.0), so the bars are the source; the first-approved 0.15 s fall still flashed.
+**Fix (Matt, 2026-09-30).** Membrane: `kMembraneStrikeContrast = 0.8` scales the ring's crest gain, trough loss and glint — sweep 1.0 / 0.9 → 4.0, 0.8 and below → 3.0 (at the limit, allowed); approved from a before/after on Speed Of Life (the light/dark pair stays, ~20 % softer; palette untouched). Waveform: `WaveformState` holds the bars — instant rise, 0.6 s fall (sweep 0.15–0.5 → 5.0, 0.6 / 0.75 → 0.0; option A′).
+**Gates.** `PhotosensitivityCertificationTests` + `MultiPassFlashHarnessTests` now assert regional and saturated-red safety for every measured scene; `WaveformStateTests`.
+
+### BUG-173 — pausing Spotify / Music for more than ~2 s counted as a new song (2026-09-29)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** A 44 s Spotify pause (18:10:01–18:10:45Z) resumed on the same song with no track change; the next change (18:11:31Z) was the real next song.
+
+*(Numbering: filed as BUG-168 on `br-11`; renumbered to BUG-173 behind BR.6b, BR.7, BR.8, BR.9 and BR.10.)*
+
+**Severity:** P1 (every tester pauses; each time is a visible reset) · **Domain:** audio / session · **Failure class:** `api-contract` (a paused player answers like a stopped one) · **Status:** Fixed 2026-09-29 (BR.11, `1a160ba0`) — **pending live check** (listening session 2: pause Spotify for 30 s or more, then resume)
+
+**Actual** (audit E2, re-verified ✔︎). Both AppleScripts answer only `if player state is playing`. So a paused player returned nothing, and `StreamingMetadata` cleared `lastTrackIdentity`. On resume, the same song fired `TrackChangeEvent(previous: nil, …)`, which the BUG-020 same-title gate doesn't catch. Every pause over ~2 s then:
+- reset MIR and reinstalled the grid (beat-locked scenes re-entered cold start);
+- wiped Skein's canvas and settled Nimbus, Witchlight and Kagura;
+- cut the song's first planned scene back in;
+- restarted the track clock at 0, so every later planned change landed offset.
+
+A single failed poll mid-song did the same.
+
+**Fix.** A poll that finds nothing playing no longer forgets the song (only `stopObserving` does), so the same song returning is a resume. The last-played track survives too, so a real change after a pause keeps its `previous`.
+
+**Gates.** `PauseIsNotANewSongTests`: A, pause, A → one track change; A, pause, B → two, with B's `previous` = A. Both are red on the old behaviour.
+
+### BUG-171 — background preparation disturbed the live visuals' drivers (2026-09-29)
+
+**Resolved 2026-10-01 — listening session 2 (`2026-10-01T18-05-22Z`).** *Start now* with 7 of 40 songs prepared; the other 33 finished behind playback. Matt saw no twitch as songs finished preparing.
+
+*(Numbering: filed as BUG-167 on `br-9`; renumbered to BUG-171 behind BR.6a, BR.6b, BR.7 and BR.8.)*
+
+**Severity:** P1 (the primary visual drivers jump during normal streaming sessions) · **Domain:** session / `dsp.stem` · **Failure class:** `concurrency` (shared mutable analysis state) · **Status:** Fixed 2026-09-29 (BR.9). Visibility was never measured live; see the listening note below.
+
+**Actual** (audit C3/G3, re-verified ✔︎). `makeSessionManager` handed the engine's live `StemAnalyzer` and `MoodClassifier` to `SessionPreparer`, "to avoid double-loading the ML weights". Neither object has weights. Preparation runs about 430 `analyze` frames and about 1,300 `classify` calls per track on them, with no reset. That happens behind playback every few seconds, for minutes. So the live AGC level was ~97 % replaced and the deviation EMA moved ~38 %: live `bass` / `drums` energy and the `*Dev` drivers jumped or flattened for 1–2 s, and live mood snapped to the other song.
+
+**Fix.** The preparer builds its own through `VisualizerEngine.makePreparerAnalysis()`. `makeSessionManager` no longer accepts the live instances.
+
+**Gates.** `PreparerAnalysisIsolationTests` (app): fresh instances; the factory takes no analyzer or classifier and uses `makePreparerAnalysis`. `PreparerAnalyzerIsolationTests` (engine): a 400-frame live drums-deviation trace with two 430-frame preparation bursts on a **separate** analyzer is bit-identical to the baseline; the same bursts on the **shared** analyzer move it (negative control, the pre-fix wiring).
+
+### BUG-157 — the StemSeparator concurrency test waited on a thread pool the suite keeps busy (2026-09-29)
+
+**Severity:** P3 · **Domain:** `test-infra` (UzumeEngineTests, `ml.stem`) · **Failure class:** `concurrency` (a wall-clock wait on pooled work) · **Status:** Fixed (BUG157.1, `f0078ebb`) · **Related:** BUG-156 (same mechanism; its KNOWN_ISSUES entry named this test as a sibling), BUG-031 (what the test guards)
+
+**Expected:** the test passes however loaded the machine is, and fails only on cross-caller contamination or a real hang in `separate()`.
+**Actual:** 2026-09-29, one full `swift test --package-path UzumeEngine` run (BUG156.1 verification, run 1). `group.wait(timeout: .now() + 180)` returned `.timedOut` after 198 s, and all three assertions after it failed on the empty collector. The next two full runs passed. The BUG-156 stall sample caught the same test blocked at the wait.
+**Cause:** the eight separations went to a private concurrent `DispatchQueue` at default QoS. Its workers come from the process's default-QoS pool, and the parallel suite keeps that pool saturated with CPU-bound synchronous tests (212 s measured once). The jobs didn't start until the pool freed up, so the wait was timing the neighbouring tests.
+
+**Reproduction (in-process, not committed).** Saturate the default-QoS pool with 4 × ncpu spinners for 10 s, then time the start of 8 jobs. On a private default-QoS concurrent queue they started at 9.79 s. On `Thread.detachNewThread` they started in 0.1 ms. Under 60 s of the same saturation, eight real `separate()` calls on detached threads took 0.97 s, against 0.90 s with the pool idle. `separate()` itself does not wait on that pool, so thread placement is the whole defect.
+
+**Fix.** Each caller runs on its own detached thread, not a pooled queue. The 180 s wait is unchanged and is a hang detector again (about 200× the work). All eight callers now overlap from the start, which is at least as much contention as the pool gave. `StemSeparator` is unchanged: no evidence of a product defect.
+
+**Verification.**
+1. ✅ Automated: the test passes alone (3.5 s). It still detects BUG-031. With the lock defeated (a per-call `NSLock()`, not committed), the new version went red 7 of 9 runs and the old queue version 5 of 6. Detection is probabilistic either way; this change didn't make it so. Two full engine runs passed it. Instrumented under full load, the body took 3.45 s, and the eight jobs started 0.1 ms after dispatch. The 157–170 s Swift Testing reports for this test is the time before the body gets a thread, which no in-test timeout covers.
+2. Manual: none required (test-only change).
+
+---
+
+### BUG-158 — a new user is asked for Documents-folder access at first launch (2026-09-29)
+
+**Severity:** P2 · **Domain:** app / diagnostics · **Failure class:** `api-contract` (macOS privacy / TCC) · **Status:** Resolved 2026-09-29 (`2340d771`) — public build keeps no session records; no Documents question on Matt's rehearsal (build 4) or the fresh-account re-run (build 5)
+
+**Expected.** A new user of the public (notarized) build answers only the permission questions onboarding explains: Screen & System Audio Recording, and Apple Music when they connect a playlist.
+
+**Actual.** The first question macOS asks, at launch, is "Uzume would like to access files in your Documents folder", with generic wording that gives no reason. Seen on the CLEAN.2.5b Task 7 rehearsal (notarized build 2, launched from `/Applications` after `tccutil reset` of ScreenCapture + AudioCapture on Matt's account). TCC log: `09:29:52.829 AUTHREQ_PROMPTING service=kTCCServiceSystemPolicyDocumentsFolder subject=io.uzume.mac`, then `09:30:36 Modify service=kTCCServiceScreenCapture` (the expected grant). Every tester would see it; Matt never did, because his Mac already held the grant.
+
+**Reproduction.** On an account that has never granted Uzume Documents access, launch the notarized app.
+
+**Cause.** The diagnostic session recorder lives in `~/Documents/uzume_sessions`. `UzumeApp.init` prunes that folder at every launch (`SessionRecorderRetentionPolicy.apply`), and every session creates its folder there (`SessionRecorder`, `VisualizerEngine`). Settings → Diagnostics and the Ended screen open it.
+
+**Decision (Matt, 2026-09-29).** *"For the public release, why do we need a diagnostic record of every session? We need to start distinguishing between the developer version of the app and the public release, which would have few features."* The public build records no sessions and never touches Documents; developer builds (Debug and Release) keep recording.
+
+**Verification criteria (written before the fix).** (1) Automated: `BuildFlavorTests` — the developer flavor records sessions, the public flavor does not — and `Scripts/release.sh` fails unless the exported app's Info.plist says `UzumeBuildFlavor = public`. (2) Manual: Task 8 on a fresh account shows no Documents question, and the rehearsal on Matt's account after resetting the Documents grant shows none either.
+
+---
+
+### BUG-160 — Ready never advanced when music started within 1.5 s of the tap coming up (2026-09-29)
+
+**Severity:** P1 (the streaming hand-off hangs until the user clicks Start session) · **Domain:** audio.capture / session · **Failure class:** `pipeline-wiring` · **Status:** Resolved 2026-09-29 (`35cc3be7`, collapsed diagnose+fix with Matt's approval) — live-verified on the Task 8 re-run (build 5, fresh account): Matt waited at Ready, pressed play, Ready advanced by itself (*"Passes all steps."*)
+
+**Expected.** Ready → press play in Spotify → visuals within about a second (UX_SPEC §6.3, FirstAudioDetector ≥ 250 ms).
+
+**Actual.** Seen twice on the "Uzume Test" account (notarized build 4, 11:54; developer-flavor diagnostic build, 17:32 UTC). Ready never advanced; "Haven't heard anything for a while" appeared; after **Start session** the overlay showed SIGNAL green, peak −2 dBFS, health healthy. First filed as a silent tap — the log disproved that.
+
+**Evidence** (`/Volumes/Extreme SSD/uzume_screens_testing/2026-09-29T17-30-29Z/session.log`): `startListeningForFirstAudio → SYSTEM-AUDIO TAP at .ready` at 17:32:14; `tap RMS … t=+2.6s rms=0.000000`, then audio from +3.6 s rising to peak 0.43; `signal quality → green`; **zero `audio signal →` lines for the whole session** (every `AudioSignalState` change is logged). `sessionState=playing` at 17:32:21 is the Start-session click. Both TCC services were granted at tap start (log `authValue=2` for AudioCapture and ScreenCapture) — not a permission failure.
+
+**Root cause.** `SilenceDetector` starts at `.active` and emits only transitions. At `.ready` the engine forces `CaptureStateSurface` to `.silent` (BUG-112 / DS.5) but left the detector at `.active`. Music that begins before `suspectDuration` (1.5 s) of silence never produces a transition, so the surface stays `.silent` and FirstAudioDetector never fires. Waiting ≥ 3 s before pressing play (silent → recovering → active) hid it — why it rarely showed on Matt's own runs.
+
+**Fix.** `SilenceDetector.resetToSilent()` + `AudioInputRouter.markAwaitingFirstAudio()`, called in `startListeningForFirstAudio` after the tap starts: the first audio now always arrives as `.recovering → .active`. The emitted `.silent` also arms the BUG-057 reinstall ladder for a cold tap that never delivers (slightly earlier than before: at Ready rather than after 3 s of silence).
+
+**Gates.** `SilenceDetectorTests`: `test_resetToSilent_musicWithinSuspectWindow_isReported` (the log's shape → `[.silent, .recovering, .active]`), the control `test_withoutReset_…_isNeverReported` (pins the old behaviour), `test_resetToSilent_whenAlreadySilent_doesNotReEmit`; `ReadyFirstAudioWiringTests` (source shape: the call sits in `startListeningForFirstAudio`, after the tap starts).
+
+**Closes on** a passing fresh-account run: press play within a second of Ready and Ready advances.
+
+---
+
+### BUG-161 — crash on the scan review's Continue (2026-09-29)
+
+**Severity:** P1 (crash on the main tester path) · **Domain:** app / UI · **Failure class:** `render-state` (SwiftUI/AppKit presentation lifetime) · **Status:** Resolved 2026-09-29 (`b49a9722`, collapsed with Matt's approval) — live-verified on the Task 8 re-run (build 5): scan → review → Continue, no crash, no crash report
+
+**Actual.** "Uzume Test" account, notarized build 4, 12:06:45: Spotify scan → review → **Continue** → crash. Report `Uzume-2026-09-29-120709.ips` (copy on `/Volumes/Extreme SSD/uzume_screens_testing/`): `EXC_BAD_ACCESS (SIGSEGV) KERN_INVALID_ADDRESS at 0x0`, pc 0, main thread; `UC::DriverCore::continueProcessing()` (UpdateCycle) ← CFRunLoop observer ← `-[NSMoveHelper _doAnimation]` ← `-[NSSheetMoveHelper closeSheet]` ← `NSWindowEndWindowModalSession` ← SwiftUI `SheetBridge.updateSheetPresentations` teardown ← `NSHostingView.layout`. No Uzume frame.
+
+**Cause.** `IdleView`'s connector sheet started the session inside `ConnectorPickerView`'s callback ("no explicit dismiss needed"). The state flip to `.connecting` made ContentView replace IdleView while its sheet was still presented, so SwiftUI tore the sheet down from a departing host and AppKit's close animation ran a nested run loop into a null UpdateCycle callback. Intermittent (animation timing): the 11:24 Apple Music connect on the same build survived.
+
+**Fix.** The callback stores the choice and closes the sheet; `.sheet(…, onDismiss: startPendingConnection)` starts the session once AppKit has finished closing it. Covers Apple Music connects as well.
+
+**Gate.** `ConnectorSheetDismissOrderTests` (source shape: the session starts from `onDismiss`, never inside the picker callback).
+
+**Closes on** a passing fresh-account run through Continue.
+
+---
+
+### BUG-164 — Fractal Tree on M1-family Macs is a full-screen field that flashes with the music (2026-09-29)
+
+**Severity:** P1 (photosensitivity) · **Domain:** renderer / orchestrator · **Failure class:** `api-contract` (GPU family capability) · **Status:** Fixed by exclusion 2026-09-29 (BR.1, `c5f33aa1`, Matt's decision 3). The Apple7 fallback is unchanged and still unmeasured — it cannot be driven on an Apple8 host; gating the native path on Apple7 waits for an M1.
+
+**Actual** (audit K1/D1, re-verified ✔︎). `PresetLoader+Mesh.swift` and `MeshGenerator.swift` take the mesh path only on `.apple8`; M1/M1 Pro/Max/Ultra are Apple7. The fallback `fractal_tree_fallback_vertex` is a full-screen triangle whose fragment brightness follows `bass_dev` and jumps with every onset — the whole-frame flash D-157 removed from the real tree. The planner had no capability gate.
+
+**Fix.** `VisualizerEngine.capableCatalog(_:supportsNativeMeshShaders:)` drops `.meshShader` scenes when the device lacks `.apple8`; `plannableCatalog` feeds the planner (build + regenerate), reactive mode and the Shift+→ walk.
+
+**Gate.** `MeshCapabilityCatalogTests`: stubbed capability (Apple7 drops Fractal Tree, Apple8 keeps it) + source shape (every catalog site reads the gated catalog).
+
+---
+
+### BUG-165 — a streaming song change reset renderer and analysis state from a background thread (2026-09-29)
+
+**Severity:** P1 (memory corruption / crash risk on every streaming song change) · **Domain:** app / concurrency · **Failure class:** `concurrency` · **Status:** Fixed 2026-09-29 (BR.3, `1fb1dbe4` + `773f6a24`). TSan-clean under stress. Not user-observable on demand (the audit could not measure a crash frequency), so there is no live check; BUG-085's unexplained ~3.6 min freeze stays a lead, not a closure.
+
+**Expected.** Renderer and geometry state is touched only by the render loop's thread (main); MIR and mood state only by the analysis queue.
+
+**Actual** (audit G1, re-verified ✔︎). `StreamingMetadata` polls on a Swift concurrency pool thread. The engine's track-change closure (`VisualizerEngine+Capture.swift`) wrapped only its UI publish in `Task { @MainActor }`; `mir.reset()`, `pipeline.resetAccumulatedAudioTime()`, `resetPerTrackPresetState()` (Witchlight path, Meniscus surface, Kagura, Skein, Nimbus) and `resetStemPipeline` (mood accumulator, stem series) ran inline on the pool thread. Same closure: unsynchronized reads of `skeinState`, `nimbusState`, `lumenPatternEngine` and a write of `lastResolvedTrackIdentity`.
+
+**Reproduction (instrumented).** `TrackChangeResetStressTests` under `--sanitize=thread`: the render loop advances a `WitchlightPath` on main and MIR runs on an analysis queue while a detached "poller" fires 80 song changes. Resetting inline (the pre-fix shape): **100 ThreadSanitizer data-race reports**, first `WitchlightPath.reset()` (poller) vs `WitchlightPath.advance` → `advanceHarmonicPhase` (render loop).
+
+**Fix.** `TrackChangeResetRouter.route(analysisQueue:analysis:main:)` (engine `Shared`): `mir.reset()` → analysis queue; the publish, renderer clock, identity, per-track preset/geometry and stem-pipeline resets → main, in their old order. `resetStemPipeline`'s `moodAccumulator.reset()` hops to the analysis queue (the local-file callers are on main too).
+
+**Gates.** `TrackChangeResetRouterTests` (called from a detached task: the main closure runs on main, the analysis closure on the analysis queue); `TrackChangeResetStressTests` in `Scripts/tsan_stress.sh` — **VERDICT: TSAN CLEAN, 0 race lines**; `StreamingTrackChangeRoutingTests` (source shape; origin/main's callback fails it).
+
+---
+
+### BUG-169 — one failed track among the first three hid "Start now" (2026-09-29)
+
+*(Numbering: filed as BUG-167 on `br-7`; renumbered to BUG-169 when BR.6a (#320, BUG-167) and BR.6b (#325, BUG-168) merged first.)*
+
+**Severity:** P1 (a common session strands the tester) · **Domain:** session / preparation · **Failure class:** `algorithm` · **Status:** Fixed 2026-09-29 (BR.7, `ad30a7b2`)
+
+**Actual** (audit C2, re-verified ✔︎). `computeReadiness` counted a run of `.ready` tracks from position 1, and any `.failed` or `.partial` track ended it. About 8 % of scanned rows get no verified preview, so roughly one Spotify-scan session in five had a failure in rows 1–3. "Start now" then stayed hidden until every track was terminal: about 3.5 min for 40 tracks, 10 for 100. Only Cancel was on screen, with no explanation.
+
+**Fix.** The prefix counts `.ready` tracks from position 1 and **skips** terminal non-ready ones (`.failed`, `.partial`); only a track still in flight ends it. Only `.ready` counts (PUB.6 unchanged).
+
+**Gates.** `ProgressiveReadinessTests`: one failure at position 0 / 1 / 2 with three ready → `readyForFirstTracks` (red on the old rule, all three); a queued track still ends the prefix; the older cases renamed to the new semantics.
+
+---
+
+### BUG-170 — a playlist over ~64 tracks lost its preparation before it played (2026-09-29)
+
+*(Numbering: filed as BUG-167 on `br-8`; renumbered to BUG-170 behind BR.6a, BR.6b and BR.7.)*
+
+**Severity:** P1 · **Domain:** session / cache · **Failure class:** `resource-management` · **Status:** Fixed 2026-09-29 (BR.8, `6d78eaf3`)
+
+**Actual** (audit C1, re-verified ✔︎). `StemCache.defaultMaxEntries = 64`, evicting LRU. Each entry held ~7 MB of separated stems. Streaming preparation is never paced, so it runs about 30× ahead of playback. On a 120-track playlist, tracks ~6–56 were evicted before they played. They then played live-only: no prepared grid, no planned scene (the plan is built only from cached profiles), and "52 tracks not yet prepared" on screen. Nothing re-prepares an evicted track.
+
+**Fix.** `StemCache.store` keeps each entry **without its stem waveforms** (`CachedTrackData.withoutStemWaveforms()`). Nothing at playback reads them: the cache-hit branch uses the stem features, grids, stem series and profile. The on-disk `PersistentStemCache` is written from the preparation outcome and is unchanged. With small entries, the count cap is now a 2048 safety bound.
+
+**Gates.** `LongPlaylistCacheTests`: 120 tracks stored → all 120 still planned (red at the old 64 cap); stored entries drop the audio but keep the playback fields. Four tests that asserted the in-memory entry held 4 waveforms now assert it holds none.
+
+---
+
+### BUG-153 — a live scan keeps the first, edge-of-frame reading of a row (2026-09-28)
+
+**Severity:** P2 · **Domain:** `session` (playlist scan) · **Failure class:** `algorithm` · **Status:** Fixed `832e8102`, live-verified 2026-09-28 · **Found by:** Matt's SCAN.4 live check · **Related:** D-260, SCAN.1 (`PlaylistScanAccumulator`)
+
+**Expected:** every row in the review list shows the title and artist Spotify shows for it; for TC 27 row 9, "Prizefighter — Youth Lagoon".
+**Actual:** Matt, live Release scan of TC 27 2023.12.16 Los Angeles (fixture playlist 3, 38 rows, 15:09:44–15:09:53): *"it just misread one track (Prizefighter - has the wrong artist, which should be Youth Lagoon)."* One row of 38; the other 37 correct by his read. The wrong text itself was not logged (the scan logged frame counts only).
+
+**Reproduction / artifacts.**
+- Frame log (`io.uzume.mac`/`SpotifyScan`, 15:09:45–53): rows #1–#7, #1–#7, **#1–#9** (15:09:46.39 — #9 first seen as the frame's bottom row), then #1–#12 onward.
+- Fixture captures of the same playlist (`playlist 3`, capture 1): #9 is the bottom row with its artist line cut off (read with an empty artist, confidence 0.5; complete in capture 2). Live, the clip line falls differently frame to frame.
+- Mechanism in code: `PlaylistScanAccumulator.add` keeps the held reading unless the new one is *strictly* more confident; Vision reports confidence 1.0 for most text, including text cut by the frame edge. So a clipped but confidently misread artist, seen first, is never replaced by the ~10 complete readings that follow.
+
+**Suspected failure class:** `algorithm`.
+
+**Verification (written before the fix).**
+1. Automated: an accumulator test where a row's first reading comes from a frame edge with a wrong artist and later interior readings agree on the right one — the review keeps the right one; and a one-off misread among agreeing readings loses. The fixture gate (`PlaylistScanFixtureTests`) must not lose any row it had.
+2. Manual: Matt re-scans TC 27 in the instrumented Release build; the logged review diffs clean against the CSV (row 9 "Prizefighter — Youth Lagoon").
+
+**Fix (`832e8102`).** Identical readings of a row pool their confidence and the most-supported reading wins (ties: the more confident single reading); a frame's first and last rows count ×0.8 (the last row is whole when the Recommended shelf shows). `PlaylistScanAccumulatorTests.oneOffMisreadOutvoted` fails on the old accumulator ("NikkiR" sticks) and passes now; the fixture gate is unchanged (144/144, 124/125, 0 wrong).
+
+**Verification.** 1. ✅ Automated, above. 2. ✅ Manual: Matt's re-scan (Release, 15:21:30–15:21:36, 22 frames, 5.3 s) — the logged review diffs 38/38 against the Exportify CSV, 0 differing, 0 missing; row 9 "Prizefighter — Youth Lagoon" from 8 readings; row 16 "Nikki" (the offline bench's one misread) also right. The per-row log lines added to diagnose it (`ScanDiagnostics`) were removed after verification; the per-frame timing line stays.
+
+---
+
+### BUG-154 — the network-recovery tests assert before the debounce fires (2026-09-28)
+
+**Severity:** P3 · **Domain:** `test-infra` (UzumeAppTests) · **Failure class:** `concurrency` (a wall-clock wait for async work) · **Status:** Fixed (BUG154.1, `83fb016a`) · **Numbering:** 154, because 152 and 153 are taken by `scan` (merged #305) · **Related:** BUG-150 (same fix shape: await the task, don't sleep), BUG-142
+
+**Expected:** the `NetworkRecoveryCoordinator` tests pass however loaded the machine is.
+**Actual:** observed 2026-09-28 in `Scripts/closeout_evidence.sh` on branch `scan` (`6ec6b7e1`): the full app suite failed `test_online_preparing_countsAttempt` with `(recoveryAttemptCount → 0) == 1` and `test_resetForNewSession_resetsCount` with `→ 2 == 3`. The suite then passed 3/3 alone and 491/491 on a full re-run. Every wait slept `recoveryDebounceSecs + 1 s` (3 s) after `setOnline(true)` and asserted. The coordinator's `debounceTask` sleeps 2 s and then hops back to the main actor; under full-suite main-actor load that hop can land after the assert. In the looping tests the next cycle's `setOnline(true)` then cancels the late task, so the count comes up short (`2 == 3`).
+
+**Reproduction.** A 1.5 s extra sleep inside the debounce task (not committed) fails 4 of 7 old tests with the observed shapes (`0 == 1`, `0 == 3`).
+
+**Fix.** `debounceTask` becomes `private(set)` (internal), and each wait is `await coordinator.debounceTask?.value`. The cancellation test captures the task before `resetForNewSession()` and awaits it to its end. The state-guard test used to sleep 50 ms before asserting zero, which would pass even with a broken guard; it now awaits the task too. No budget widened. Production behaviour is unchanged.
+
+**Verification.**
+1. ✅ Automated: under the 1.5 s probe the suite passes 7/7 (4/7 failed before). Three consecutive full `xcodebuild -scheme UzumeApp test` runs pass (see BUG154.1 in `ENGINEERING_PLAN.md`); SwiftLint strict clean on both files.
+2. Manual: none required (test-only change).
+
+---
+
+### BUG-155 — a seek inside a song made Kagura flick through dozens of dances (2026-09-28)
+
+**Severity:** P3 (a brief rendering artifact on an edge case; it recovers by itself) · **Domain:** `preset.fidelity` (Kagura) · **Failure class:** `algorithm` (the clip-change schedule assumed a continuous playhead) · **Status:** Fixed + live-verified (KAG.5, `90ec6189`; M7 `2026-09-28T22-22-30Z`) · **Found:** Matt's KAG.5 M7, session `2026-09-28T21-31-31Z` · **Related:** LFSEEK.1 (the local-file seek bar), KAG.3
+
+**Expected:** after a seek, the dancer settles at the new position within about a bar, with no pops.
+**Actual:** `WIRING: seekLocalFile to=181.6s` in Dance Yrself Clean, from 71 s. Then 36 `KAGURA_PICK` lines between playback 181.61 and 182.20 s: one clip change per frame for 0.6 s.
+**Cause:** the next clip change is scheduled as a beat index. A forward seek leaves it behind the playhead, so it fires at once; the next one is planned from the old entry beat, so it fires on the next frame, until the schedule catches up. On a backward seek the scheduled beat lies ahead, so the current clip holds past its end until playback reaches it (0.13 m pose pop in the harness). Pre-existing since KAG.3; the seek bar (LFSEEK.1) made it reachable.
+**Fix:** a beat position that moves more than one beat in a frame, either way, is a seek (a playing clock moves ≤ ~0.14 beat per frame). The stranded cut is dropped, and the dancer fades to its rest over one beat, the path a replaced grid already uses. It rejoins at the next bar line from where playback landed.
+
+**Verification.**
+1. ✅ Automated: `KaguraRestTests.seekRejoins` jumps +110 s and −40 s mid-clip at 120 BPM. Without the fix: 23 clip changes in one second forward, and a 0.96 m / 0.13 m pose step. With it: one clip change (the rejoin), the rest within two frames, dancing again within a bar, every frame under the per-dance bound, no frozen frames.
+2. ✅ Manual: Matt's KAG.5 M7 round 2 (`2026-09-28T22-22-30Z`, *"Looks good"*): two seeks in Dance Yrself Clean (to 98.9 s and 174.4 s), each followed by one rejoin pick 1.6–2 s later, no burst.
+
+---
+
+### BUG-150 — the Spotify connection tests assert before the connect finishes (2026-09-26)
+
+**Severity:** P3 · **Domain:** `test-infra` (UzumeAppTests) · **Failure class:** `concurrency` (a wall-clock wait for async work) · **Status:** Fixed (BUG150.1, `55c62b90`), merged #291 (`5327841f`) · **Numbering:** 150, because 148 and 149 were already taken on `claude/bug148-valence` (merged #290) · **Related:** BUG-143 (the same `closeout_evidence.sh` step), BUG-142 (same fix shape: await the task, don't sleep)
+
+**Expected:** the Spotify connection view-model tests pass however loaded the machine is.
+**Actual:** observed 2026-09-25 in `Scripts/closeout_evidence.sh`, with the app tests running straight after the full engine suite: `connectLoginRequiredUnauthenticated` failed at `#expect(vm.state == .requiresLogin)` with `(vm.state → .preview(playlistID: "abc")) == .requiresLogin`. Re-running the suite alone passed 12/12. The test sets `vm.text`, sleeps 1500 ms for the 300 ms debounce, calls `vm.connect`, sleeps 400 ms, then asserts. `runConnect` leaves the state at `.preview` until the connector returns and `applyResult` runs, and the connect path hops off and back onto the main actor twice (the connector, then the OAuth provider actor). On a contended main actor that takes longer than 400 ms. The other connect and login tests in both suites (sleeps of 200–700 ms) and every debounce wait (1500 ms, already widened once "for parallel-suite contention") had the same weakness.
+
+**Reproduction.** Plain CPU load (40 busy loops, 3 runs) did not trip it, because macOS keeps the main thread responsive. The mechanism was confirmed by injecting 500 ms of latency into `MockOAuthConnector.connect` (not committed): 3 of 4 OAuth tests failed, `connectLoginRequiredUnauthenticated` with the exact observed message.
+
+**Fix.** Each wait now awaits the VM's own task: `await vm.debounceTask?.value` after setting `text`, and `await vm.connectTask?.value` after `connect` / `login`. `debounceTask` becomes internal, like `connectTask`, which was already exposed for this reason. `retryOutsideErrorIsNoOp` drops its sleep, because `retry` returns synchronously outside `.error`. No budget was widened, and the suites no longer sleep (about 15 s saved).
+
+**Verification.**
+1. ✅ Automated: with 500 ms of latency injected into both mock connectors, both suites pass 16/16 (before the fix, 3/4 OAuth tests failed). Full app suite 476/476; SwiftLint strict clean.
+2. Manual: none required (test-only change; the VM's behaviour is unchanged).
+
+---
+
+### BUG-146 — preparation-time mood depends on the file's sample rate (2026-09-25)
+
+**Severity:** P3 (a single song measured; raise if 48 kHz shifts prove common) · **Domain:** `dsp.mir` · **Failure class:** `sample-rate` · **Status:** Fixed (BUG146.2, 2026-09-26) · **Related:** BUG-141 (the same class, in the stem analyzers)
+
+**Evidence.** Superstition, the same shipping local pipeline, with the per-frame median after the first sixth:
+
+| Source | Median arousal | Median valence |
+|---|---|---|
+| Original FLAC, **96 kHz** | **+0.21** | −0.13 |
+| ffmpeg-resampled to 48 kHz | +0.45 | −0.36 |
+| ffmpeg-resampled to 44.1 kHz | +0.52 | −0.46 |
+| Production chain, 44.1 kHz windows (KAG.0g) | +0.51 | — |
+
+`analyzeMIR` runs a fixed 1024-point FFT at the file's rate. At 96 kHz that means 93.75 fps and 93.75 Hz bins, against ~43 of each at 44.1 kHz. Per BUG-141, about 14 % of the pilot corpus is 48 kHz and about 2 % is 96 kHz.
+
+**Diagnosis (2026-09-26).** `CorpusCensusRunner --dual-rate --window-seconds 120` on Superstition gives the ten mood-feature means at native 96 kHz and resampled to 44.1 and 48 kHz. Shift at 96 vs 44.1 kHz, in scaler σ:
+
+| Feature | Shift (σ) |
+|---|---|
+| Six band energies | within ±0.23 |
+| `spectralCentroid` | **−0.87**: it is normalised by Nyquist, so the same Hz reads half (0.068 vs 0.133) |
+| Raw flux | **−0.40**: a sum over twice as many bins, each twice as wide |
+| Major key correlation | **+1.62** |
+| Minor key correlation | **+1.94**: chroma from 93.75 Hz bins cannot resolve pitch in the low register |
+
+48 kHz sits much closer to 44.1 kHz on every feature. The rate this path should run at is settled by existing decisions: the stems are 44.1 kHz (`StemSeparator.modelSampleRate`, BUG-141), and D-128's sample-rate note records LF analysis at 44.1 kHz. (The DEAM classifier was trained at 48 kHz; that cross-path delta is the ~9 % centroid skew CENSUS.3 measured and D-128 accepts, and it is out of scope here.)
+
+**Verification criteria (before the fix).**
+1. Automated: the same synthetic tone mix sampled at 44.1 kHz and at 96 kHz, prepared through `analyzePreview`, stores the same `spectralCentroidAvg` (±5 %) and mood (±0.05). It fails on current code, where the centroid halves.
+2. Real file: Superstition's 96 kHz FLAC through the shipping pipeline stores arousal within 0.05 of its 44.1 kHz resample (today 0.21 vs 0.52). Its 48 kHz resample does likewise.
+3. Cache schema bump.
+4. No change on 44.1 kHz files: the beta-playlist gates (ρ, BPM spread) still pass.
+
+**Fix (BUG146.2).** Before `analyzeMIR`, `analyzePreview` resamples the preview to `StemSeparator.modelSampleRate` with `BeatThisPreprocessor.resample`; 44.1 kHz input passes through untouched. This is an engineering call with no product decision: the rate is the one the stems and D-128 already use. Folded into this branch's schema v16.
+**Verification.**
+1. ✅ `MIRSampleRateTests`: a tone mix sampled at 44.1 and 96 kHz stores the same centroid and mood. It **failed** on the old code (centroid off 50 %, mood outside ±0.05) and passes.
+2. ✅ Real file, Release `PrepTimingRunner`, Superstition. Stored arousal: 96 kHz original **0.494** (was 0.21), 48 kHz resample 0.499 (was 0.45), 44.1 kHz resample 0.517 (unchanged). All within 0.023. **Residual:** valence at 96 kHz is −0.37 vs −0.46 at 44.1 kHz (0.09 apart; it was 0.33 apart). This is the resampling path itself, not diagnosed further.
+3. ✅ Cache schema v16.
+4. ✅ Beta playlist on the final code: the nine 44.1 kHz songs are unchanged to three decimals; the BPM gate still passes; the BUG-144 ρ **rises 0.855 → 0.927** because Superstition now matches the production chain (0.494 vs 0.51).
+
+---
+
+
 ### BUG-145 — `TrackProfile.bpm` reads 130–143 on every song (2026-09-25)
 
 > **Reconciled 2026-09-30 (BR.KI ledger pass).** Resolved 2026-09-26: criterion 4 passed ("the BPMs look right"). The "outstanding" status line is stale.

@@ -1784,599 +1784,65 @@ only worth doing if it is ever wired. **New presets** — Matt's call above.
 ## Recently Completed
 
 ### Increment NACRE.7 — Nacre's colour stops jumping on an unclear key (BUG-179) ⏳ pending live M7 (2026-10-01)
-
-**Delivered.** `NacreHueState` (`RenderPipeline+Nacre.swift`) replaces the TONAL.3 inline hue math and the
-`nacreFifthsVec` / `nacrePaletteDrift` pair. The fifths mean steers the palette only as its length ramps 0.15 → 0.4,
-and the palette is slewed at 0.25 turns/s along the shortest arc of `nacrePalette`'s true period (2π/0.437). This is
-the same recipe as Understory's UND.5 fix. love_rehab replay: largest step 0.377 → 0.0058 turns. Gate:
-`NacreHueStateTests`. **Done when:** Matt's live M7 passes on Nacre (a hazy-key song and a clear-key song).
-
 ### Increment PROMO.1 — the LinkedIn launch cut from the REC.2 takes ✅ (2026-09-30)
-
-**Delivered.** `tools/promo/cut_promo.py` + `edit.json` rebuild
-`~/Documents/uzume_promo/linkedin-2026-10/uzume-linkedin-2026-10.mp4` in one command: 32.167 s, 1080×1080, 30 fps
-CFR, H.264 High CRF 16 (7.2 Mbps), AAC-LC 48 kHz 256 kbps, true peak −1.1 dBTP. Matt's order, hard cuts on
-offline bars: Kagura 0–8.71, Ferrofluid Ocean –14.56, Cymatic Resonance –20.39, Fractal Tree –26.28, Fireflies
-–32.16. End tag "Uzume / uzume.io" from 30.21, picture to black over the last 0.5 s, audio out over 1.0 s.
-**Kagura is retimed, not live (Matt, 2026-09-30).** In the first cut Kagura only swayed over 0–8.71 ("warm-up
-exercises … not synced"). Kagura makes no dance pick before 16.47 s of this song. The engine's beat grid for the
-quiet intro is uneven (half-beats at 1.9–2.6 s, a missed beat near 5 s; 16-beat interval CV > 0.08 until ≈ 13 s),
-so `KaguraSafetyNet` holds the rest sway until it has 8 steady beats. A reshoot gives the same result. Matt kept
-Kagura as the opener: `source_offset_s` 23.27 moves its twist (engine bar 24.22, `KAGURA_PICK` beat 51) onto the
-intro's first audible bar at 0.95, and its next engine bars land exactly on 4.85 and 6.80. That gives the twist at
-0.95–4.85 and the cabbage patch at 4.85–8.71, which also cancels the engine's ≈ 0.09 s early lead there. The dance
-keeps the louder section's arm reach. Frame 0 now shows Kagura, not black. **Fractal Tree is zoomed out**
-(`crop_width_px` 2240, offset −36): its grown crown (source x 254–2234) is wider than a 1440 square, so the slice is
-scaled to 1080 wide and padded with the scene's own black (pad Y = 16 = background). **Open lead:** live, Kagura
-cannot dance through an intro whose beat grid is uneven. That is beat-sync territory, not filed. Also written: `contact_sheet.png`, `cover_1..3.png`. `--self-test` checks the frame rule on a
-synthetic map with a drop and a cut between frames; it fails with the pre-fix `[from, to)` rule.
-**Matt's calls (2026-09-30), from stop conditions in the prompt.** (1) **Offline bars, not the engine's
-downbeats:** the engine ran 23–123 ms early, and a low-band onset check of the song put the kick on the offline
-bars (8.700, 26.290, 30.230 s). The engine counts 3 bars between consecutive cuts, all `beat_in_bar` 1; both sets
-are recorded in `edit.json`. (2) **Black where no take covers the song:** the takes start at ≈ 0.51–0.57 s (REC.2), so frames the chosen
-take can't cover are black. With Kagura retimed, none are. (3) **End tag
-by CoreText:** Homebrew's ffmpeg 8.1 / 9.0.2 is built without freetype, so there is no `drawtext`; `render_text.swift`
-draws a PNG that ffmpeg overlays. The face is **Alumni Sans SemiBold** (uzume-site `--font-display`, BRAND.md
-wordmark), not UX_SPEC's Clash Display: the site wins.
-**Findings.** The takes are 2560×1440, not 1920×1080, so each frame is a full-height 1440² crop scaled to 1080;
-all crop offsets 0. The song's true peak was +0.3 dBTP; one −1.4 dB step (0.1 dB margin) took it to −1.1.
-CRF 16–18 gave 7.0 / 5.9 / 5.0 Mbps, all under the ≈ 12 Mbps target, so CRF 16 (the nearest) was kept.
-**Done-when:** ✅ every verification command; ✅ duration 32.167 vs end 32.16 (+6.7 ms); ✅ A/V within one frame;
-✅ each segment's first frame within ½ frame of its cut (−13.3 … +10.0 ms); ✅ last frame Y = 16 (black); ✅ tag
-legible at 360 px.
-
 ### Increment REC.2 — pinned-scene capture for promo footage ✅ (2026-09-30)
-
-**Delivered.** `UZUME_PIN_SCENE=<scene id>` (RUNBOOK §Diagnostic Session Captures): `engageScenePin()` engages
-`diagnosticPresetLocked` before audio starts, and `applyFirstScene` applies the pin through `applyPresetByID` in the
-same main-thread step, on both first-scene sites (`handleLocalFileReady`, `startAudio`). An unknown id logs the valid
-scenes and starts no session; the launch `.task` checks it before preparation begins. The reactive (ad-hoc) apply now
-honours the same hold. It had ignored it, so the `L` key never held a system-audio session without a plan. Tests:
-`OrchestratorWiringRegressionTests.test_scenePin_resolution` (pinned / unknown / unset) and `test_scenePin_wiring`.
-**Capture.** Five takes of `track.mp3` (Sherman's March to the Sea), Release build, fullscreen on the LG. Each
-`session.log` has exactly one `preset →` (its pinned scene), capture dropped 0 and render 59.79–59.93 fps:
-`15-45-51Z` Kagura, `15-48-37Z` Ferrofluid Ocean, `15-49-26Z` Cymatic Resonance, `15-50-14Z` Fractal Tree,
-`15-51-02Z` Fireflies. The trimmed H.264 mp4s, frame maps and `ALIGNMENT.md` are in
-`~/Documents/uzume_promo/linkedin-2026-10/`. The first Kagura run (`15-43-59Z`) finished its countdown before the
-window went fullscreen and relocked mid-take; it is kept as a record, not used.
-**Done-when:** ✅ pin applies the named scene first and sets the hold; ✅ unknown applies nothing and logs; ✅ unset
-unchanged; ✅ one scene per take, no switches; ✅ five mp4s + maps, one map row per frame. ⚠ **Clip start moved:**
-capture begins after the writer's 30 stable frames (REC.1, not changed), so no take has track time 0–0.51 s. Matt
-chose to start each clip at its first real frame (≈ 0.51–0.57 s → 34.000 s), not to hold a frame or change REC.1.
-**Measurement learnings (durable).** (1) Fullscreen on the LG 4K ("looks like" 1920×1080) the drawable is
-**2560×1440**, not 1080p: REC.1's "1920×1080" was the display setting. (2) Video frame *k* is `features.csv` row
-29 + *k* when capture drops are 0. Three things agree on that: the lock rule, the row/frame counts, and interval
-walking. (3) `playback_time_s` **steps** against wallclock during start-up (≈ +10 ms near 1 s, ≈ +15 ms near
-6–7 s), so a single linear clock fit leaves 34 ms residuals. Use a rolling median of the offset. (4) Recorder
-wallclock stamps jitter by milliseconds. Resampling to CFR on those raw stamps made spurious repeat/skip pairs (66
-of each on Fireflies); snapping to the 60 Hz refresh slot with a rolling phase leaves only real late renders.
-
 ### Increment CLEAN.2.5c — release.sh refuses symlinked weights ✅ (2026-09-30)
-
-**Delivered.** Build 0.9.0 (8) was archived from a worktree whose ML weights were symlinks into the primary checkout (`link_fixtures.sh`). `fetch_weights.sh` follows links, so step 2 passed; the app bundle got the links, the DMG was 9 MB, and deep `codesign` + Gatekeeper rejected it at step 9, after archive, export and notarization (~10 min, one burned build number). Step 2 of `Scripts/release.sh` now dies on any symlink under `UzumeEngine/Sources/ML/Weights`, before the build-number bump, and names both fixes (release from the primary checkout, or a copy-over-link one-liner). Step 9 adds a check that `UzumeEngine_ML.bundle` is ≥ 150 MB (`du -sk`, which doesn't follow links), which also catches a bundle that is validly signed but missing its weights. RUNBOOK §Release build updated.
-**Done-when:** ✅ the step-2 guard run against this worktree (479 links) prints the count and both fixes and exits 1; ✅ the one-liner, run on a scratch link, leaves a regular file and no links; ✅ the step-9 size check's commands run against real bundles: shipped 0.9.0 (7) `UzumeEngine_ML.bundle` = 171,432 KB → pass; worktree builds with linked weights = 188 KB → fail; missing bundle → fail; ✅ `bash -n`. ✗ Not run end to end: a full release run spends a build number and a notarization.
-
 ### Increment CLEAN.2.5b — a signed, notarized Uzume a stranger can install ✅ (2026-09-29, branch `clean-2-5b`, pushed; PR open)
-
-**Delivered.** Uzume is signed by Plait & Pattern, LLC (`TYK3BXQ5D4`). `Scripts/release.sh` is one command: clean-tree + untracked-input check → weights → build number bump (committed, never reused) → Release archive (arm64) → Developer ID export (`Scripts/ExportOptions.plist`) → notarize + staple app → DMG → sign, notarize, staple DMG → 15 self-checks (signature, authority, team, hardened runtime, exact entitlements, Gatekeeper app + DMG, staples, arm64, public flavor, embedded git SHA, dSYM UUID). Floor macOS 15.0, Apple Silicon only, 0.9.0, "Copyright © 2026 Plait & Pattern." `NSAudioCaptureUsageDescription` declared — on macOS 26 a new account is asked for system audio separately, so without it a tester's tap would be silent. New **developer vs public build** (`BuildFlavor`, D-261 §8): the public build keeps no session records (no Documents question, BUG-158). The fresh-account run found and fixed two pre-existing P1s (collapsed with Matt's approval): **BUG-160** Ready never advanced when music began within 1.5 s of the tap (the silence detector was never told Ready assumed silence) and **BUG-161** a crash on the scan review's Continue (session started inside a closing sheet). Also: the per-frame stem-series publish moved out from behind the recorder guard (the public build would have lost local-file stems).
-**Matt's verdict (Task 8, fresh standard account, build 0.9.0 (5)):** *"Passes all steps."*
-**Done-when:** ✅ team TYK3BXQ5D4, automatic signing, Debug + Release green; ✅ audio-capture key in the built plist; ✅ `LSMinimumSystemVersion` 15.0, `lipo` arm64; ✅ 0.9.0 + build number + copyright in the plist; ✅ `release.sh --allow-branch` produces a stapled DMG (runs 3–6 end-to-end; run 1 failed at archive on x86_64 package slices, run 2 on a wrong `codesign -dv` check — both fixed); ✅ every self-check passes; ✅ Task 7 rehearsal on Matt's account; ✅ Task 8 fresh account, all seven steps; ✅ docs (SECURITY_POSTURE §1/§3, RUNBOOK §Release build, UX_SPEC §3.3a, D-261, KNOWN_ISSUES, release notes).
-**Decisions built (defaults, D-261):** 1 → A, one onboarding screen; Matt kept the system-audio question on Ready. 2 → A, macOS 15.0. 3 → A, Plait & Pattern.
-**Follow-ups:** Sparkle auto-update; a tester feedback/crash path (BR.5 Report a Problem); publishing to GitHub Releases (and H14's "Latest" pointer); the uzume.io download page; retype `VisualizerEngine.router` from `Any`; BUG-159 (record-sessions switch unwired, developer builds).
-
 ### Increment TESTFLAKE.3 — the chrome and Ready tests await the timer, not the clock ✅ (2026-09-29)
-
-**Delivered.** Seven app tests failed once each under full-suite load during CLEAN.2.5b and passed on immediate rerun: `PlaybackChromeViewModelTests` `firstShow_waitsForTheArrival_thenThreeSeconds`, `overlayAutoHides_afterDelay` and `onActivity_fromHidden_restoresTheChrome`, and `ReadyViewModelTests` `firstAudioDetected_emitsAdvanceSignal`, `audioDetectedBeforeTimeout_hasDetectedAudioFlips` and `retry_resetsDetectorAndClearsTimeout`. Each slept a fixed 50–1500 ms and then asserted on main-actor timer work. Every fixed sleep in the two files, and the same 1500 ms sleep in `ReadyViewTimeoutIntegrationTests`, is now an ordering. The tests await the `@Published` value (`.values`) or the `RecordingDelay`'s new `requests` stream. The `receive(on: .main)` deliveries are awaited with `drainMainQueue()`, a FIFO main-queue barrier. The Ready view models take `InstantDelay`, since the 250 ms confirmation is `FirstAudioDetectorTests`' job. Each suite has a one-minute `.timeLimit`, so an event that never arrives fails instead of hanging. Test-only change; no product code changed.
-**Done-when:** ✅ the focused suites pass (27 tests in 0.013 s); ✅ a mutant that re-arms the timer on the first track fails `firstTrack_doesNotResetTheArrivalTimer` (`count → 2 == 1`), so the barrier catches it; ✅ three consecutive full app-suite runs, with another session's Release archive loading the host; ✅ SwiftLint strict; ✅ KNOWN_ISSUES §Pre-existing Flakes + release notes. No wait widened.
-
 ### Increment BR.18 — streaming fidelity for the newest scenes ✅ (2026-09-30; landed on Matt's streaming review 2026-10-01)
-
-**Delivered.** K6c: `RenderPipeline.warmedUpLiveStems` + `liveStemWarmup01` — the eight live stem deviation routes (all four stems' `EnergyRel` / `EnergyDev`) ramp in quadratically over each track's first 10 s when no local-file series is installed; the aurora driver skips its own gate on those frames. K6a: **no change**, per Matt (2026-09-30, option A of three: keep the preview level / live energy measure / treat as unknown).
-**Done-when:** ✅ the warm-up caps the track-start overswing on the real BUG-041 series (red arm without it); ✅ only the stem routes are gated, and never on the local-file series (tests); ✅ full engine suite green (2160 + 216). ⏸ **Stop and report:** Matt's streaming review of the top ten scenes decides whether it lands.
-**Not done:** a live energy level for streaming (declined for the beta).
-
 ### Increment BR.MEM — local-file preparation stops running the Mac out of memory ✅ (2026-09-30)
-
-**Delivered.** BUG-177 (P1, Matt's listening session 1): `StemSeparator.separate` drains its MPSGraph autoreleased objects per call; the stem-FFT probe's per-call lines drop to info.
-**Evidence.** `PrepTimingRunner` (Release): Dance Yrself Clean 23.3 GB → 1.41 GB peak, 4 long songs 1.50 GB, prepared cache byte-identical, ~10 % faster; the pre-BR code measured 26.3 GB (pre-existing). `StemSeparatorMemoryTests` 2 MB fixed / 646 MB unfixed.
-**Follow-up (gate determinism).** The gate read process-wide footprint, so concurrent suites in a filtered parallel run pushed it to 170 MB (1 of 2 runs failed on unmodified `main`). It now takes the minimum over up to 3 batches of 20; the bound is unchanged. Pool removed: [642, 639, 708] MB, fails; filtered parallel run 5/5 green.
-**Not done:** the live re-run of session 1 (build 10).
-
 ### Increment BR.20 — flash check v2 ✅ (2026-09-30)
-
-**Delivered.** Audit I8: regional (13 regions, each a ninth of the frame) and saturated-red flash analysis in `FlashAnalyzer`, negative-controlled, asserted by both flash harnesses for every measured scene. The roster run found two scenes over the limit → **BUG-176**, fixed on Matt's calls: Membrane's strike contrast 0.8 (A2, approved from a before/after), Waveform's bars held — instant rise, 0.6 s fall (A′, `WaveformState`).
-**Done-when:** ✅ regional and red detection, each negative-controlled; ✅ run across the roster, results recorded (below); ✅ both harness suites green (38 tests).
-**Roster (worst-case 270 BPM train; peak flashes/s, limit 3):** regional — Fata Morgana 2.5, Dragon Bloom 2.0, Floret 2.0, Fireflies 1.5, Nacre 1.5, Glaze 1.0, Cytokinesis 0.5, Ferrofluid Ocean 0.5, **Membrane 4.0 → 3.0**, **Waveform 5.0 → 0.0**, every other scene 0.0 (Alfvén, Aurora Veil, Cymatic Resonance, Filigree, Fractal Tree, Gossamer, Kagura ×3, Lumen Mosaic, Meniscus, Mitosis, Murmuration, Nebula, Nimbus, Ricercar, Skein, Stave, Volumetric Lithograph, Witchlight). Red — Fata Morgana 3.0 (at the limit), Dragon Bloom 1.0, Floret 0.5, all others 0.0.
-**Not done:** feedback accumulation in the single-pass gate (unchanged, documented limit); a per-scene tempo-aware worst case (the gate uses 270 BPM for all).
-
 ### Increment BR.19 — the right song, reliably ✅ (2026-09-30)
-
-**Delivered.** BUG-152 (every track through `ScreenReadMatchPolicy`), C7 (`PreviewResolver.retryDelays` backoff, non-JSON 200s transient), C8 / A10 (`ITunesStorefront.country` on the preview, artwork and metadata requests).
-**Done-when:** ✅ before/after on the four SCAN playlists (ScanBench): wrong song 11 → 0, right 125 → 129, no preview 8 → 15; ✅ transient failures retried then uncached, captive-portal HTML uncached (tests); ✅ the request names the storefront, unknown → US (tests); ✅ the offline SCAN gate re-pinned (127/129, 0 wrong) and no longer backs off on a cache miss.
-**Not done:** a region without an iTunes store gets no preview (no US second try); the metadata fetcher (`ITunesSearchFetcher`) still takes its own first hit for genre/BPM hints.
-
 ### Increment BR.17 — output devices as testers have them ✅ (2026-09-30, pending live check)
-
-**Delivered.** Audit I4/B7, G4, B9 as P2 lines under AUDIT-2026-09-29. `OutputLatency` (in `DefaultOutputDeviceMonitor.swift`) + `VisualizerEngine.applyOutputLatency()` on an `outputLatencyMonitor`; `VisualizerEngine.makeStemSampleBuffer()` (192 kHz × 13 s); `HighRateDecimator` + `FFTProcessor.processMono` (in `FFTProcessor.swift`).
-**Done-when:** ✅ offset = max(50 ms, device latency), trim kept, `UZUME_DEVICE_LATENCY=0` arm (tests); ✅ every stem / beat / recalibration window fits at 44.1–192 kHz (test, negative-controlled); ✅ high-rate tones land in the 48 kHz bin (test, negative-controlled). ⏳ AirPods: visual accents on the beat, with `UZUME_DEVICE_LATENCY=0` as the before — listening session 2.
-**BeatBench (offline-grid, all five suites):** identical before (`main`) and after (`br-17`) — the prep-time grid is untouched; both changes are on the live path, which BeatBench's session-replay mode (not built) would be needed to score.
-
-| suite | track | F | Cemgil | AMLt | downbeat F |
-|---|---|---|---|---|---|
-| 1 | billie_jean | 0.97 | 0.96 | 0.97 | 0.90 |
-| 2 | pyramid_song / solsbury_hill / take_five / yyz | 0.52 / 0.97 / 0.99 / 0.58 | 0.37 / 0.95 / 0.91 / 0.43 | 0.75 / 1.00 / 1.00 / 0.21 | — / 0.15 / 0.26 / 0.15 |
-| 3 | bohemian_rhapsody / money | 0.47 / 0.44 | 0.32 / 0.31 | 0.48 / 0.43 | 0.25 / 0.21 |
-| 4 | bleed | 0.99 | 0.96 | 1.00 | 0.08 |
-| 5 | clair_de_lune | 0.16 | 0.09 | 0.01 | 0.00 |
-
-**Not done:** a real anti-alias filter for the decimation; the latency read has not seen a Bluetooth device.
-
 ### Increment BR.16 — honest copy and credits ✅ (2026-09-30)
-
-**Delivered.** Audit A7, C13, K7/H9 and part of F16, as P2 lines under AUDIT-2026-09-29. Decision 9's privacy line on every permission surface; `RateGate` (in `MusicBrainzFetcher.swift`) holds MusicBrainz to 1 request/s process-wide; `AboutSettingsSection.acknowledgements` + strings; the licence line corrected; CREDITS.md gains Stave and names the in-app surface.
-**Done-when:** ✅ no "nothing leaves / nothing sent" copy left in the app, Info.plist or UX_SPEC; ✅ a burst of five lookups takes ≥ 4 intervals (test); ✅ every acknowledgement resolves and links, and the named credits are present (test); ✅ CREDITS.md lists all eight Milkdrop-inspired scenes.
-**Also:** F16 — `LICENSE` and the About box both name Plait & Pattern (Matt, 2026-09-30).
-**Not done:** the Acknowledgements page was checked by test, not by eye.
-
 ### Increment BR.15 — controls that do nothing, hidden for the beta ✅ (2026-09-30)
-
-**Delivered.** Audit F5/E5, E4, E14 as P2 lines under AUDIT-2026-09-29, per decision 6 (hide for the beta, wire after). `BuildFlavor.exposesUnwiredControls` (developer only) gates Settings' tier / quality ceiling and family blocklist / toast toggle, and `PlaybackShortcutRegistry.unwiredIDs` (`+` `-` `.` `←` `→` `⌘R`). Tester notes updated.
-**Done-when:** ✅ public registry lacks the six keys, developer keeps them, ⇧← ⇧→ ⌘Z remain (test); ✅ the four Settings controls sit behind the flag (source test).
-**Also:** adaptation toasts off until turned on (Matt 2026-09-30; reverses U.6b) — bridge and Settings toggle now agree (test, negative-controlled).
-**Not done:** the wiring (after the beta); a public-flavor build was not run (by test).
-
 ### Increment BR.14 — window, keys, cursor, Settings ✅ (2026-09-30, pending live checks)
-
-**Delivered.** Audit F4/D7, F9, F14, F19, F6, D8 as P2 lines under AUDIT-2026-09-29. `HostWindowReader` (in `FullscreenObserver.swift`) hands `PlaybackView.attachWindow` the window it is in; `PlaybackKeyMonitor.window` + `targetsPlayback` pass other windows' keys through; Esc closes help first; `VisualizerEngine.handleWindowClosed()` ends a live session; `PlaybackChromeViewModel.hideCursor` hides the pointer with the chrome; a `Settings` scene + Idle `SettingsLink`; `DisplayManager.menuBarScreen`.
-**Done-when:** ✅ window from the view, other windows' keys pass through, Esc over help (tests); ✅ window close ends a live session (test); ✅ pointer hides with the chrome (tests); ✅ ⌘, opens Settings (test + live Debug run); ✅ primary = menu-bar screen (test). ⏳ ⌘F / Esc with Spotify frontmost, and "Move to primary" from the secondary display — listening session 2.
-**Not done:** the pointer only hides while Uzume is the active app (`setHiddenUntilMouseMoves`); F14 ends the session rather than quitting (the audit allowed either).
-
 ### Increment BR.13 — local-file transport ✅ (2026-09-29, pending live checks)
-
-**Delivered.** Audit B3 (extends BUG-056), B4, B10 as P2 lines under AUDIT-2026-09-29. `LocalFilePlaybackProvider` restarts on a device change at `PlayheadAnalysisClock.lastKnownPlayheadSeconds` (wrapped into the file), keeps a listener pause (`userPaused` / one-shot `startPaused`, so a paused restart or seek never plays), and retries once after 0.5 s before a `provider.restart FAILED` diagnostic. `VisualizerEngine.stopSessionAudio()` runs on every session boundary (`stopsSessionAudio`: Connecting, Preparing, Idle, End; deduplicated). `LoopingFileReader` always emits stereo.
-**Done-when:** ✅ device change mid-song resumes at the playhead, still playing; ✅ while paused stays paused at the same point; ✅ resume point wraps (tests; negative control: 3 failures); ✅ session boundaries stop audio (test); ✅ mono emitted as stereo (test; negative control: 500 failures). ⏳ AirPods swap mid-song and while paused, and opening a second source while one plays — listening session 1.
-**Not done:** surfacing a twice-failed restart to the listener (it is logged and in the session log; the stall card covers the silence).
-
 ### Increment BR.12 — one audio-capture lifecycle ✅ (2026-09-29, pending live checks)
-
-**Delivered.** Audit G2/B14, G8, B5, B6, G6 as P2 lines under AUDIT-2026-09-29. `SystemAudioCapture` runs start / stop / reinstall on one serial `lifecycleQueue` with a generation token (stop bumps it; a stale reinstall no-ops). A failed reinstall keeps the mode and the monitor. `DefaultOutputDeviceMonitor` listens for `kAudioHardwarePropertyServiceRestarted`, re-registers and reinstalls. `AudioInputRouter.holdColdInstallLadder()` / `releaseColdInstallLadder()` / `reinstallTapNow()`; the app holds the ladder while Ready listens and Ready's Retry reinstalls. Tap sample rates must be finite and positive.
-**Done-when:** ✅ serial lifecycle + generation token, end-during-reinstall race-free (TSan stress; negative control 10 races); ✅ failed reinstall keeps intent + monitor (test); ✅ service-restart listener reinstalls (test); ✅ no cold-install recreate while Ready waits (test); ✅ bad tap rate rejected (test). ⏳ AirPods swap during a session end, and `killall coreaudiod` mid-session — listening session 2.
-**Not done:** a tap that dies silently without a Core Audio restart (B5's ladder-after-first-audio half); the stall card's in-app "Restart listening" (audit line 127) — the router action exists, the card button does not.
-
 ### Increment BR.11 — real listening habits ✅ (2026-09-29, pending live checks)
-
-**Delivered.** Audit E2 → BUG-173 (a pause is not a new song), plus E7 (off-plan songs run reactive), E8/B2 (the local-file clock follows the playhead; loops and repeat-one keep their scene timeline), E6 (ad-hoc sessions start with no stale plan), E3 (a failed file doesn't shift the plan) and G7 (late async results are dropped by track generation).
-**Done-when:** ✅ a paused player is not a track change (test, negative-controlled); ✅ off-plan songs get reactive scenes (wiring); ✅ loops and repeat-one keep their scene timeline (test, negative-controlled); ✅ the local-file clock follows the playhead (tests); ✅ ad-hoc sessions start with no stale plan (wiring); ✅ a failed file doesn't shift the plan (test); ✅ late async results are dropped by generation (wiring).
-**Not done:** the live loop and pause checks (sessions 1 and 2); streaming repeat-one still relies on the planned-length wrap (the player position isn't read for streaming).
-
 ### Increment BR.10 — the "control Spotify / Music" permission and its fallbacks ✅ (2026-09-29, pending live check)
-
-**Delivered.** Audit E1, I3/A6/C6/F12 → BUG-172, plus E12/E14. −1743 is detected on both paths: Apple Music shows its permission screen; a streaming session runs reactive with a toast that names the app and the Automation setting. Only the session's own app is polled, and nothing in local-file sessions. The Automation prompt copy is reworded.
-**Done-when:** ✅ −1743 detected on both paths, and the existing permission screen (Apple Music) or a toast (streaming) appears (tests); ✅ a streaming session with no now-playing falls back to reactive mode (wired on denial; source-shape test); ✅ only the session's own source is polled (tests); ✅ `NSAppleEventsUsageDescription` reworded.
-**Not done:** reactive fallback when now-playing is merely *absent* (web player, another app) without a denial — the session still waits for a matching track then; an "Open Automation settings" button in the toast (toasts carry no action).
-
 ### Increment BR.9 — background preparation gets its own analyzers ✅ (2026-09-29)
-
-**Delivered.** Audit C3/G3 → BUG-171. The preparer builds its own `StemAnalyzer` and `MoodClassifier` (`makePreparerAnalysis`); `makeSessionManager` can no longer be handed the live ones.
-**Done-when:** ✅ the preparer holds its own instances (identity test + factory source shape); ✅ the replay: a live stem trace with preparation bursts on a separate analyzer is identical to the baseline, and moves when the analyzer is shared (engine test, synthetic stems).
-**Not done:** a recorded-session replay comparison; the live effect was never measured before the fix.
-
 ### Increment BR.8 — long playlists keep their preparation ✅ (2026-09-29)
-
-**Delivered.** Audit C1 → BUG-170. The in-memory `StemCache` keeps no separated stem audio (nothing read it at playback), so its 64-entry cap, which evicted tracks ~6–56 of a 120-track playlist before they played, becomes a 2048 safety bound.
-**Done-when:** ✅ a 120-track synthetic session keeps every prepared track planned (test, red at the old cap); ✅ stem audio is no longer held in the cache.
-**Not done:** memory was not measured on a real 120-track session (entries are now features, grids and profile only).
-
 ### Increment BR.7 — preparation never strands the tester ✅ (2026-09-29)
-
-**Delivered.** Audit C2 → BUG-169 (a failed track among the first three no longer hides Start now), plus F10/C11 (no Ready with nothing prepared: the §9.3 recovery screen holds), F13 (the recovery screen's reactive escape is wired; no "offline" for local files), F11 (Cancel during Connecting sticks) and C10 (missing ML weights say so at launch).
-**Done-when:** ✅ a failed track in 1–3 doesn't block Start now; ✅ no `.ready` with nothing prepared; ✅ the reactive-mode escape is wired; ✅ no offline screen for local files; ✅ missing weights say so (live: Weights folder hidden → notice + log line); ✅ Cancel during Connecting sticks (gated-connector test, both branches). Every engine-side change is negative-controlled.
-**Not done:** the preparation banners' own reactive/retry buttons; a build-phase weights check.
-
 ### Increment BR.4 — the public build shows testers only tester things ✅ (2026-09-29)
-
-**Delivered.** `BuildFlavor.showsDeveloperDiagnostics` (developer only) gates the rest of the developer surface. The no-audio card has no Terminal step and stays quiet before any audio (a frozen tap still raises it). No developer keys or bug IDs; `+` fires on US/UK keyboards; `.` has one binding. The three raw Settings keys have strings, and a test checks every referenced key exists. The Ended screen shows the real playing time and a pluralised count. No `~/uzume_diag.log`. A one-page [`TESTER_RELEASE_NOTES.md`](TESTER_RELEASE_NOTES.md).
-**Done-when:** ✅ stall card (tests); ✅ keys, help, `+`, `.` (tests); ✅ string keys + existence test (negative-controlled); ✅ Ended screen (tests); ✅ no diag log (test); ✅ hot-reload folder off (BR.1); ✅ tester note.
-**Not done:** a public-flavor build was not run (all by test); the developer build's double `.` binding.
-
 ### Increment BR.6b — tier-1 render cap and Alfvén exclusion ✅ (2026-09-29, measurement pending)
-
-**Delivered.** Audit D4/K2 → BUG-168. Tier-1 Macs cap the drawable at ~2560×1440 (compositor-upscaled) and don't get Alfvén (decision 4). Release harness numbers at 1080p / 1440p / 4K on the M2 Pro are in the audit (§BR.6).
-**Done-when:** ✅ tier-1 cap (tests, incl. a real-window delegate check); ✅ Alfvén excluded on tier 1 (test); ⏳ M4 MacBook Pro Retina (battery, Low Power Mode on/off) + 4K sessions with `RENDER_TARGET` / `frame_gpu_ms`, and a cold first launch after a fresh install — Matt's sessions; ⏳ whether a cap applies above tier 1 → DECISION-NEEDED with those numbers.
-**Note:** the M2 Pro Mac mini is tier 1 by the name match, so its 4K display now renders at 2560×1440 and is upscaled.
-
 ### Increment BR.6a — CI builds Release and compiles every shader ✅ (2026-09-29)
-
-**Delivered.** Audit H1 → BUG-167 (mitigated), plus H8. `ci.yml` gains **Build Release (arm64)** and the **shader compile gate** (`ShaderCompileGateTests`). The gate compiles the renderer library (`ShaderLibrary`) and every scene `.metal` (`PresetLoader`) through the app's own source assembly, with the runtime compiler on the runner's paravirtual Metal device. It fails, never skips, without a device, and names each dropped file.
-**Done-when:** ✅ a CI step builds Release and compiles every shader through the app's source assembly; ✅ red on a deliberately broken shader, then reverted (PR #320: `a03d5da8` → `8be6121e`); ✅ green on the merged-main head.
-**Not done:** the macOS 15 launch of the notarized DMG (BR.6b / DIST-LIM); a precompiled `.metallib` (Tier 3).
-
 ### Increment BR.5 — evidence from testers ✅ (2026-09-29, pending live check)
-
-**Delivered.** Audit H3/F16 → BUG-166, plus D3 and H7. Help › Report a Problem (consent-first zip + pre-filled GitHub issue); an abnormal-exit marker that makes the public build offer the report after an unclean exit; `MainThreadWatchdog` (own thread, STALL at 1 s, `sample` at 3 s); the drawable watchdog's main-actor hop removed; the hang scripts and the closeout's BUG-072 check look for `Uzume`.
-**Done-when:** ✅ the zip after consent, with log, `Uzume*.ips`/`.hang`, hardware/OS/GPU and build + SHA (test on fakes + live Debug run); ✅ pre-filled issue link; ✅ marker set at launch / cleared on quit / next launch offers (test); ✅ the watchdog doesn't hop to main and logs STALL with main blocked (test); ✅ samples past 3 s; ✅ `capture_hang.sh` + `window_state.swift` look for `Uzume` (live run); ✅ SHA in Info.plist (release.sh, CLEAN.2.5b). ⏳ the public build's unclean-exit offer — listening session 3.
-**Not done:** MetricKit payloads (the audit's optional extra); a progress indicator while the zip builds (~4 s).
-
 ### Increment BR.3 — a streaming song change resets state on its owners' threads ✅ (2026-09-29)
-
-**Delivered.** Audit G1 → BUG-165. The Now Playing callback (poller pool thread) routes its resets through `TrackChangeResetRouter`: MIR to the analysis queue; the publish, renderer clock, identity, per-track preset/geometry and stem-pipeline resets to main. `moodAccumulator.reset()` hops to the analysis queue.
-**Done-when:** ✅ preset / geometry / identity on main, `mir` and mood on the analysis queue (thread-probe test); ✅ TSan stress case with Witchlight active in `Scripts/tsan_stress.sh`: 0 races (negative control: inline resets → 100 reports); ✅ the torn reads in the same closure now run on main.
-**TSan:** `Scripts/tsan_stress.sh` — 7 tests in 5 suites, 0 ThreadSanitizer lines, VERDICT: TSAN CLEAN.
-**Not done:** Meniscus has no TSan case of its own (same `resetPerTrackPresetState` path as Witchlight).
-
 ### Increment BR.1 — photosensitivity safety ✅ (2026-09-29, pending live checks)
-
-**Delivered.** Audit F1/F1b → BUG-163 (Reduce Motion + Dim Flashing Lights reach the engine at launch), K1/D1 → BUG-164 (mesh-shader scenes excluded on pre-Apple8 GPUs), and P2 lines under AUDIT-2026-09-29 for F7 (notice gates every path), F6 (notice sets in-app Reduced motion), K3/E13/F15/A13 (public build reaches only checked scenes) and K4 (flash measurements + G-buffer guard).
-**Done-when:** ✅ Reduce Motion on at launch reaches the engine on subscribe (test); ✅ Dim Flashing Lights acts like Reduce Motion (test); ✅ no route to `.playing` without the acknowledgement, local-file path included (test + live Debug run); ✅ the notice button sets "Always on" (test); ✅ Fractal Tree excluded without `.apple8` (stubbed test); ✅ flash harness measures Fractal Tree, Ferrofluid Ocean lit and Waveform — 0.00 flashes/s each — and fails on a G-buffer pipeline (negative control: Ferrofluid back in the single-pass set → red); ✅ public flavor: Shift+→ certified + non-diagnostic only, uncertified toggle and user-preset folder off (tests).
-**Flash table (320×180, 3 s worst-case train at 4.5 Hz):** Fractal Tree 0.00 flashes/s, Δ0.005 (tree box) · Ferrofluid Ocean 0.00, Δ0.073 · Waveform 0.00, Δ0.081 · Volumetric Lithograph (unchanged, lit) 0.00, Δ0.058.
-**Found on the way:** Volumetric Lithograph's single-pass flash line was also a G-buffer draw.
-**Not done:** Murmuration birds, Gossamer/Membrane feedback (K4's remaining holes); the Apple7 fallback's own flash rate (no Apple7 host); a public-flavor build was not run.
 ### Increment BR.2 — the display stays awake during a session ✅ (2026-09-29, pending live check)
-
-**Delivered.** Audit B1 → BUG-162. `DisplaySleepGuard` holds a `.idleDisplaySleepDisabled` activity from `.ready` through `.playing` while the window is open, and releases it on `.ended`, `.idle` and window close. The state→assertion mapping sits behind a `DisplaySleepAsserting` seam and is unit-tested (`DisplaySleepGuardTests`).
-**Done-when:** ✅ held Ready → Playing, released on end / idle / window close; ✅ unit test through the seam; ⏳ `pmset -g assertions` names Uzume mid-session on the M4 MacBook Pro on battery — Matt's check, queued into listening session 2 (streaming).
-**Not done:** the audit's "pause-timeout" release — no pause timeout exists; a paused streaming session keeps the display on while Uzume is on screen, which matches a visualizer left running.
-
 ### Increment AUDIT.2 — beta readiness review and improvement plan ✅ (2026-09-29)
-
-**Delivered.** A read-only review of the codebase ahead of the Oct 15 beta — eleven lanes (security/privacy/distribution, audio, preparation/network/ML, renderer/performance, orchestrator, app UX, crash/concurrency, build/release, abandoned work, known issues, scene roster) — combined with the known-issues ledger and a documentation sweep into one tiered plan: [`BETA_READINESS_AUDIT_2026-09-29.md`](diagnostics/BETA_READINESS_AUDIT_2026-09-29.md), evidence in [`diagnostics/BETA_READINESS_2026-09-29/`](diagnostics/BETA_READINESS_2026-09-29/). Proposed follow-ups are Phase BR (BR.0–BR.20). Headline findings: Reduce Motion ignored at launch and the notice skipped on the local-file path; Fractal Tree a full-screen flashing field on M1-family Macs; no display-sleep assertion; streaming song-change resets off-main (crash risk); no evidence path from testers; "Start now" blocked by one early failure; >64-track playlists lose preparation; nothing measured on tester hardware or macOS 15. The release branch `clean-2-5b` already fixes notarization, the audio-capture permission and session recording in the public build. No product code changed; no BUG-numbers filed (the BUG-157 collision between `main` and `clean-2-5b` would have made a third claimant).
-**Done-when:** ✅ every lane's most severe claims re-read against code or artifacts by the synthesizing session (list in the review's §Reliability); ✅ plan tiers, sequence to Oct 15, three grouped listening sessions, per-item abandoned-work explanations, thirteen decisions with defaults; ✅ KNOWN_ISSUES index row `AUDIT-2026-09-29`.
-
 ### Increment BUG157.1 — the StemSeparator concurrency test runs its callers on their own threads ✅ (2026-09-29)
-
-**Delivered.** BUG-157 (P3) was filed from one 198 s timeout of `StemSeparatorConcurrencyTests.concurrentSeparations_returnPerCallerOwnStems` and fixed in one increment, as P3 allows. It is the sibling named in BUG-156. The eight separations were queued on a default-QoS dispatch queue behind a pool the parallel suite keeps saturated. They now run on detached threads. Test-only; `StemSeparator` is unchanged; the 180 s budget is unchanged.
-**Done-when:** ✅ mechanism reproduced in-process (queued jobs start 9.79 s into 10 s of saturation; threads start in 0.1 ms; eight real separations take 0.97 s saturated vs 0.90 s idle); ✅ BUG-031 detection kept (lock defeated: red 7/9 on threads vs 5/6 on the old queue); ✅ two full engine runs (2115 tests): the test passed both. An instrumented run timed the body at 3.45 s under full load, with jobs starting at +2.03 s and the wait done at +3.45 s. The 157–170 s Swift Testing reports is the wait before the body gets a thread, which no in-test timeout covers. The only other failures were DocIntegrity: the BUG-number hole at 156 (cleared by rebasing onto main after #310) and the date-driven DOC.6 rotation (already rotated on main); ✅ KNOWN_ISSUES + release notes.
-
 ### Increment BUG156.1 — the end-of-track tests wait on an ordering, not the clock ✅ (2026-09-29)
-
-**Delivered.** BUG-156 (P3) was filed from one `onFileEnded_queueAdvanceChurn_neverHangs` failure on `ff-5` and fixed in one increment, as P3 allows. Root cause, measured: since LFSEEK.1 the queue-advance completion is `.dataPlayedBack`, which AVFAudio delivers from a timer in the process's default-QoS dispatch pool, and the parallel suite keeps that pool saturated. The churn test and `LocalFileSeekTests.seekMovesThePlayhead` now wait with `awaitPlayedBackEnd`: after the 5 s budget, a canary on the same pool decides between late and lost. Test-only; `LocalFilePlaybackProvider` is unchanged. Open product risk (unobserved) recorded in KNOWN_ISSUES.
-**Done-when:** ✅ reproduced 2/2 in full runs with a probe (callback 14.9–20.0 s late, never lost); ✅ mechanism isolated in-process (default/userInitiated saturation delays `.dataPlayedBack` 8.5 s; `.dataConsumed` and lower-QoS load don't); ✅ `PlayedBackWaitTests` + negative control; ✅ 3 full engine runs: 2 green (2117/2117); run 1 red only on the same-class sibling `StemSeparatorConcurrencyTests`, churn test passed via the late path in 13.1 s; ✅ KNOWN_ISSUES + release notes. No timeout widened.
-
 ### Increment KAG.5 — Kagura: the dances follow the song's measured energy ✅ (2026-09-28, branch `kag-5`; **M7 PASSED**)
-
-**Delivered (D-259 §4 amendment).**
-- Song energy is the measured 1–10 level of the stretch playing: energy = (level − 1) / 9. `energyReference` and the arousal read are gone from Kagura.
-- `TrackProfile.energySections` cuts a whole-track curve at the NRG.4 energy changes and judges each stretch by its loud end, the 90th-percentile level. Matt picked the loud end after task 1: the median put Dance Yrself Clean's drop at 8, where its tempo does not earn the twist. A preview is one section; a cache miss is none.
-- The app pushes the sections at track start, and Kagura reads the one at its playback position. A new section's repertoire takes effect at the next clip change.
-- The calm rest reads the section (ballet at ≤ 3). The Charleston is earned by tempo (Matt, B). `KAGURA_SONG` prints `curve=`, the dancer's tempo and each section; `KAGURA_PICK` prints `level=`.
-
-**Evidence.** The task 1 table on Matt's v17 entries reproduces NRG.2's readouts exactly (KAGURA_DESIGN §16). Dance Yrself Clean: calm three and ballet in the hush, breakdown and fade; twist trio at the drop and re-entry. Take Five: Egyptian / macarena / Charleston, with a ballet rest. Macarena share 21 % → 20 %. New harness tests: a 2 → 9 step switches at the first clip change (2 s after the step at 120 BPM) within the per-dance bounds, with no frozen frames. Warszawa's opening silence rests in ballet and its body's silence in the sway.
-
-**M7 round 1 (session `2026-09-28T21-31-31Z`):** *"I saw the macarena for everything I played. Otherwise, looks good."* Fixed on Matt's calls:
-- Songs open on the calm dance for 4 bars (option A). Every song had opened on its middle dance, the macarena on calm sets.
-- BUG-155: a seek replayed every skipped clip change, one per frame (36 in 0.6 s). It now fades to the rest and rejoins at the next bar line.
-
-**Done-when:** ✅ tests + table; ✅ **M7 PASSED (Matt, 2026-09-28, round 2, beta playlist on local files, session `2026-09-28T22-22-30Z`):** *"Looks good."* The log shows the macarena on 5 of 44 picks (11 %; round 1: 23 of 68), Dance Yrself Clean and Superstition opening on the Egyptian walk, and each of Matt's two seeks (to 98.9 s and 174.4 s) followed by a single rejoin 1.6–2 s later. Chain health `clean`.
-
 ### Increment FF.5 — Fireflies: patches take turns, a smooth glow; certified, the 27th ✅ (2026-09-28, branch `ff-5`)
-
-**Matt's look check** (the 1080p films): *"yes to both, go ahead"* — the patches read as a coordinated rhythm, and the pixelation is gone. The DECISION (thin the meadow in quiet music): *"A"*.
-**Matt's M7** (`2026-09-28T19-18-24Z`, the beta playlist as local files): *"Fireflies is a strong pass - I love it (and more importantly my wife loves it)"*.
-**Streaming pass** (`2026-09-28T21-39-06Z`, Spotify): *"streaming does not sync to the beat on billie jean - it's close, but does not lock to the beat as it does for local files"*; Matt's call on the options: *"a"* — certify with the limit recorded.
-
-| evidence | |
-|---|---|
-| chain_health | M7 **clean** (peak −5.7 dBFS). Streaming **degraded** (`signal_health_band_low`, `tap_reinstalls(1)`), flagged per D-184: the low band is the quiet Take Five / Money stretch from 21:43:05 and the reinstall is the end-of-session pause (skipped by design); Billie Jean's window is `healthy` throughout (peaks −1.4 to −3.6 dBFS) |
-| live (M7) | Fireflies on DYC for 186 s, 11,139 frames: song 1:14–1:21, a seek to 3:03, then through the 3:08 drop to 6:01. B.O.B. ~1 s under Fireflies |
-| frame rate | **59.9 fps** median (Debug build of this worktree, 1920×1080 render target) |
-| GPU | p50 2.89 ms / p95 3.69 ms (max 4.28) vs 16.6 ms |
-| drawable | **0 failures, 0 unpresented** |
-| beat clarity | `stems.beatClarity01` 1.00 on DYC and B.O.B. (both lock) |
-| the lock (M7 replay, 20 seeds, `m7LockReplay`) | DYC 3 strips, lock 11.1 s [9.6, 13.9] after the pick, per-strip R 0.937, whole R 0.055, turn share 0.985 (chance 0.33); B.O.B. 4 strips, 8.7 s [7.5, 9.2], 0.954 / 0.049 / 0.985 (chance 0.25) |
-| energy | `ENERGY_LEVELS` on every M7 track: whole-song curves (DYC 539 s, levels 1–9) |
-| streaming | Billie Jean replayed through the swarm: lock 8.5 s [7.6, 9.6], turn share 0.987 — the swarm locks to the grid. The grid is the gap: tap onsets (kick 30–120 Hz, snare 1.5–5 kHz) sit at grid phases ~0.19 / ~0.69 beat (≈ 100–160 ms off), `drift_ms` walked 0 → −107 ms over 66 s, tick intervals clean (±5 %, no doubled or missed ticks). BUG-065 / the cold-start phase contract |
-| routes | `swarm_beat_nudge` ← `beatPhase01`, `world_breath` ← `bassAttRel`, green on `RouteCoverageTests`; the swarm density (`energyLevel`) is gated by `quietMusicThinsTheMeadow` |
-| flash | `MultiPassFlashHarnessTests.firefliesIsFlashSafe` (270 BPM, 4 patches): **0.00 flashes/s**, Δ0.022 (FF.4 unison Δ0.071). 1080p D-157: DYC 0.0071, Pyramid 0.0117, Warszawa 0.0047, Teardrop 0.0043 (FF.4 0.0296 / 0.0374 / 0.0038 / 0.0036); DYC drop film 0.0086 |
-| goldens | no plan moves (A–D, `OrchestratorCertifiedFilterTests` green). Fireflies enters Session B third (0.637) and tops Session C track 4 on a fresh context (0.631), where the family-repeat multiplier after Filigree keeps Gossamer — traces updated |
-| rubric | automated 2/15, `full` kept (a non-PBR screenprint; Membrane / Filigree precedent); reference contract scored in `docs/VISUAL_REFERENCES/fireflies/README.md` |
-
-**Delivered.**
-- **Patches take turns** (`FirefliesSwarm`). While K > 0 the meadow is P upright strips (2–4, the most whose P-beat cycle ≤ 2 s; edges wave with height), tick n nudges strip n mod P only, and relay stays inside a strip — the boundary rule that makes the strips P disjoint copies of the FF.1 model (level-1 grounding; FIREFLIES_DESIGN §5). K = 0 is FF.1 exactly: Warszawa 0.196 / +0.007, Teardrop 0.137 / −0.008, unknown == irregular. Measured once without the rule: lock 12.1–16.0 s vs 9.4–13.3 s.
-- **Smooth glow** (`fireflies_sprite_fragment`): the halo and starburst continuous instead of thresholded against the paper grain; the world's print grain unchanged. 6× crops before/after: `/Volumes/Extreme SSD/uzume_spikes/fireflies/ff5/glow_crops/`.
-- **Thinning with the music** (Matt's "A"): new `StemFeatures` float 57 `energyLevel` — the track's NRG section level (1–10) over the 10 s centred on the playhead, installed per track by `RenderPipeline.setTrackEnergyLevels` (the BC.1 pattern; cleared at session boundaries; `ENERGY_LEVELS` session-log line) and sampled per frame. 10 % of the swarm shown at ≤ 2, all at ≥ 8; visibility only. On streaming only the preview is measured, so a song holds its typical level.
-- Gates on the real fixtures: `patchesTakeTurns` (whole R < 0.3, turn share > 0.8, lock < 15 s; measured 0.061–0.137, 0.963–0.990, 9.4–12.8 s), `quietMusicThinsTheMeadow`, `EnergyPlanningTests.energyLevelsPerSecond`; the parity probe reports per-strip R / on-beat on the clear captures (DYC 0.906 / +0.907, Pyramid 0.902 / +0.824); decoy +0.626 / −0.617, chance −0.005 ± 0.018; env-gated `m7LockReplay` and `dropFilm`.
-
-**Deviations accepted at certification:** streaming beat alignment is the engine's streaming grid (BUG-065 + the cold-start phase contract), not Fireflies' (Matt: "a"); on streaming the density holds the song's typical energy (no quiet → full arc within a song); Pyramid Song's lock at clarity 1 (injected) takes ~23 s, the capture's own grid (FF.4 read 25.9 s on the same definition); below 60 BPM two strips run longer than 2 s; the "hero emissive in ≥ 60 % of frames" trait is unmeasured.
-**⚠ The M7 capture `2026-09-28T19-18-24Z` was removed from disk by session retention before the closeout;** every number above was read from it before it went. Tests exercised `drawDirect` → `encodePresetVisualization` via `MultiPassRenderHarness.renderFireflies` / `renderOffMain`.
-
 ### Increment BUG154.1 — the network-recovery tests await the debounce ✅ (2026-09-28)
-
-**Delivered.** BUG-154 (P3) was filed from one `closeout_evidence.sh` failure on `scan` and fixed in one increment as P3 allows. Every wait in `NetworkRecoveryCoordinatorTests` now awaits the coordinator's `debounceTask` (made `private(set)`) instead of sleeping `recoveryDebounceSecs + 1 s`. Test-only change; no product behaviour changed.
-**Done-when:** ✅ mechanism reproduced by a 1.5 s latency probe (4/7 fail before, 7/7 pass after); ✅ three consecutive full app-suite runs + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
-
 ### Increment FLASHOFF.1 — the multi-pass flash suite off the main actor ✅ (2026-09-28, stacked on `ff-4`)
-
-**Why.** `MultiPassFlashHarnessTests` was `@MainActor` and held the main actor ~270 s of a full engine run (268.9 s measured), within ~15 s of the point where SessionManager / ProgressiveReadiness / lifecycle tests miss their readiness hang caps (FF.4: one more 27 s render failed 9 of them, 2 of 2 runs). Any new flash test was a step toward that cliff.
-
-**Delivered.** `MultiPassRenderHarness` is no longer `@MainActor`. `render` stays `@MainActor` for its existing callers; `renderOffMain` runs every path on the caller's thread except mv_warp (Dragon Bloom, Skein, Gossamer, Fata Morgana, Nacre, Floret, Glaze), whose per-frame `RenderPipeline` calls are `@MainActor` — those enter the main actor once per FRAME through a `MainActorFrames` box. The `nonisolated(unsafe) static` knobs (`firefliesGridBPM`, `firefliesCameraTimeOffset`, `firefliesFreezeCamera`, `realSpectrum`, `gpuTimesMs`) are now per-harness instance values (`gpuTimes` a locked `GPUTimeLog`), so no caller can race another on them. FF.4's `renderFirefliesOffMain` + `MultiPassFlashFirefliesTests` folded into `renderOffMain` and the one suite (type name keeps the `MultiPassFlash` prefix). The suite is `.serialized`: run in parallel, ~20 multi-second synchronous renders fill the Swift cooperative pool instead — a probe's hop round trip hit **45 s** that way — so it stays one blocked pool thread, as it was one main thread before.
-
-**Evidence (Debug).** Every `[flash-safety]` line byte-identical before/after, 20/20. A temporary probe hopping to the main actor every 50 ms during the suite: worst main-actor entry **0.054 s** (4455 hops, 240 s). Full engine run **2040/2040** passed, 314 s, 2 pre-existing known issues; the flash suite itself 283 s, now off the main actor. No hang cap or flash threshold changed.
-
-**Done-when:** ✅ full engine run green · ✅ flash suite no longer holds the main actor · ✅ measurements identical. **Lands after `ff-4`** (built on it).
-
 ### Increment FF.4 — Fireflies: M7 ✅ closed, not passed (2026-09-28, branch `ff-4`)
-
-**Matt's M7** (`2026-09-28T14-43-46Z`, local files, DYC then B.O.B. under Fireflies): **not passed.** Tester feedback, via Matt: *"all fireflies blinking in unison is overwhelming; they would prefer some level of orchestration across the firefly swarm, so it looks like a coordinated rhythm."* On whether brightness or everyone-at-once was the problem: *"It's everyone at once — go with option A"* (2–4 patches taking turns on the beat, self-organising; FIREFLIES_DESIGN §1a). Also *"fireflies look pixelated"*: FF.3 printed the halo and starburst as one-pixel stipple on an interleaved-gradient grain, which reads as digital dither; his pick *"A"*, a smooth glow, the world keeping its print texture. **What I now believe is wrong:** a whole-meadow unison is the wrong musical shape — everyone at once overwhelms — and the stippled glow reads as pixels, not ink.
-
-| evidence | |
-|---|---|
-| chain_health | **clean**, peak −5.7 dBFS, no reasons |
-| live | 195 s, 11 675 frames: DYC 0–106 s (the drop was not reached), B.O.B. 0–89 s |
-| frame rate | **59.9 fps** median (Debug build of this worktree, 900×600 render target) |
-| GPU | p50 3.26 ms / p95 3.92 ms vs 16.6 ms |
-| drawable | 0 failures, 0 unpresented |
-| beat clarity | `stems.beatClarity01` = 1.0 on both tracks → both lock. **Cannot verify the lock from the capture:** no per-frame swarm coherence column is recorded |
-| near-silence | `near_silent01` never > 0.5 on DYC's quiet opening — quiet music is not near-silence, so the design's "few stragglers through DYC's near-hush" did not happen (design §2 corrected) |
-
-**The pre-M7 packet (all on the real pipeline, FF.3 reproduced exactly).** R1: DYC, 20 seeds, 25–30 s, on-beat vs the true grid — true grid **+0.843 ± 0.014**, half-beat decoy **−0.841 ± 0.012**, free swarm (chance) −0.005 ± 0.018 (`FirefliesSpikeParityProbe.decoyIsDistinguishable`, `FIREFLIES_DECOY=1`, a test-only phase shift). R2: DYC | Warszawa sheet — DYC all-or-nothing, Warszawa a steady scattered handful: different scenes. R3: coherence random → ~0.9 by 5 s → on-beat by ~19 s on clear beats, flat when free (minute 1 vs 4 was left to the M7). R4: emergent simulation. R5: 1080p max Δ frame-mean luma 0.0296 / 0.0374 / 0.0038 / 0.0036 (= FF.3); motion gate DYC 120 / Pyramid 123 spikes (all at unison onsets, = FF.3), Warszawa, Teardrop and the Warszawa-tail silence film 0 spikes, 0 frozen; silence luma min 0.0932. Parity 20 seeds = FF.3 (DYC 0.972 / +0.843, Pyramid 0.975 / +0.812, Warszawa 0.196 / +0.007, Teardrop 0.137 / −0.008). **WCAG:** `MultiPassFlashFirefliesTests.firefliesIsFlashSafe` through `renderFireflies` on one continuous 50 s worst-case train with its own 270 BPM grid and clarity 1 (a locked unison; first 20 s discarded) — **0.00 flashes/s**, 0 transitions, relative luminance 0.014–0.084 (Δ0.071, 24× the responsiveness floor). ⚠ The shared 3 s train cannot be tiled for Fireflies: each tile restarts `trackElapsedS` (a track change to the swarm) and holds 13.5 beats, so every seam jumps the grid half a beat. The test is not keyed on `certified`, so it stays. ⚠ **It runs in its own nonisolated suite, off the main actor.** The `@MainActor` multi-pass flash suite already holds the main actor for ~270 s of a full engine run, within ~15 s of the SessionManager readiness caps. Inside that suite, this 27 s render starved 9 SessionManager / ProgressiveReadiness / lifecycle tests in 2 of 2 full runs (each passes alone in 0.07–0.21 s; 2036/2036 with the test skipped). `MultiPassRenderHarness.renderFirefliesOffMain` is the same render path; the full run is 2037/2037 green. **Every future flash test added to the `@MainActor` suite eats the remaining ~15 s**; moving that suite off the main actor is the follow-up. → **Done at FLASHOFF.1**: the whole suite is off the main actor; `renderFirefliesOffMain` and `MultiPassFlashFirefliesTests` were folded into `renderOffMain` and the one suite.
-
-**A stale expectation, corrected before the M7:** the prompt listed Superstition and Penny Lane as free; BUG140.2 (2026-09-25) re-measured them as regular, so they lock. Pyramid Song is still flagged (free).
-
-**Not done (M7 not passed):** streaming pass, `certified`, `certifiedPresets`, `multiPassMeasured`, the Session C golden (⚠ NRG.3/NRG.4 changed the planner since that golden was measured, so re-measure it at certification). Tests exercised `drawDirect` → `encodePresetVisualization` via `MultiPassRenderHarness.renderFireflies`.
-
-**Next:** FF.5 — patches take turns + a smooth glow, then the M7 again (`prompts/FF.5-prompt.md`).
-
 ### Increment LFSEEK.1 — jump within a local-file track ✅ (2026-09-28; Matt's live check pending)
-
-**Why (Matt, 2026-09-27).** Local-file playback had no way to move within a song: the transport was Stop / Prev / Play-Pause / Next only. Streaming doesn't need one, since the streaming app owns its player. Checking NRG.4 meant listening to Dance Yrself Clean from the top to reach the 3:08 drop. Matt picked a clickable track bar over keyboard skips.
-
-**Delivered.**
-- **Track bar** (`TrackSeekBar` in `LocalFileTransportBar`): the current track's position between elapsed and total time, above the transport buttons, in local-file sessions only. Click or drag to jump; the jump lands on release, so a drag restarts the audio once. VoiceOver reads "Track position, 1:23 of 8:58", and adjusting steps ±10 s. It polls the position four times a second while shown.
-- **Player:** `LocalFilePlaybackProvider.seek(to:)` restarts the engine at the chosen frame through the same `start()` every track change uses. That teardown is the one proven against the BUG-021/059/078 races, and it swaps the (player, file) pair first, so the stopped node's completion bails instead of advancing the queue. The first pass is a `scheduleSegment` from the frame; loops after it are whole. `PlayheadAnalysisClock` adds the start frame to `sampleTime`, which counts from 0 at `play()`. A paused player stays paused.
-- **Track clock:** `MIRPipeline.seek(to:)` moves `elapsedSeconds`, the clock the plan, beat grid, stem series and recording all read, and clears the state keyed to the old position (the drift/onset lock and the first-note pulse anchor). The grid, tempo and smoothers stay. `VisualizerEngine.seekLocalFile(to:)` does both and clears the last-applied planned scene, so the new position's scene applies at once. A failed restart ends the session with the existing local-file playback toast.
-- The LF transport methods moved into `AudioInputRouter+LocalFileTransport.swift`, which keeps the router under its file-length cap.
-
-**Evidence.** `LocalFileSeekTests` on the real engine and fixture: a seek to 12 s reads the playhead at 12–13 s; a seek does not fire the queue advance; the end arrives on time after a seek near it; a paused seek stays paused; the MIR clock moves and keeps the grid.
-
-**Done-when:** ✅ tests; ⏳ Matt's live check. Open Dance Yrself Clean, drag the bar to about 3:00, and the drop at 3:08 should bring the dense scene.
-
-**Found and fixed (BUG-151, Matt: "don't flag, fix").** The end-of-track signal fired when the player had *read* the last audio (`.dataConsumed`, AVAudioPlayerNode's default), 1.0 s before it had *played* it, so each multi-file queue advance cut the song's last second. The queue advance now waits for `.dataPlayedBack`; a single-file loop keeps `.dataConsumed` so it stays seamless. The seek test requires the end ≥ 2.8 s into a 3 s remainder (the old code measured 2.0 s).
-
 ### Increment NRG.4 — scene changes land on the song's energy changes ✅ (2026-09-27; Matt's live check pending)
-
-**Delivered (D-259).**
-- `EnergyCurve.energyChanges()` finds where a song's energy steps: seconds at which the true-median section level of the 20 s after differs from the 20 s before by ≥ 3 levels (the centre of the jump plateau). A stretch of 20 s or less between two changes, a brief dip or burst, is too short for its own scene, so both of its changes are dropped. `TrackProfile.energyChanges(trackDuration:)` returns them only for a whole-track curve.
-- `makeSections` cuts the track at those changes when the curve covers the whole track. Each energy section keeps the song's usual pacing: as many equal slices as `estimatedSectionCount` gives, so scene length is unchanged from NRG.3. A streaming preview keeps the equal slices.
-- Inside a section, the preset's `maxDuration` cap now splits the remainder evenly instead of leaving a stub before the change. A scene reads energy only up to its section's end, so it no longer hears the next section coming. A 1 ms epsilon on the section walk ends the zero-length tail segment NRG.3 found.
-
-**Evidence.**
-- `EnergyPlanningTests`: a step is found at the second it happens; a 15 s dip is not a change; a 40 s breakdown is two. A quiet-then-loud song changes scene exactly at the step, and no scene straddles it.
-- On the real beta playlist, Dance Yrself Clean changes at 3:08, 5:57, 6:35 and 8:18. The raw curve puts the drop at 3:08, the breakdown at 5:56 and the re-entry at 6:34, so each change lands at or within a second of them. NRG.3's "drop at ~3:15" was a misreading. Song endings now read as their fades (Teen Spirit, Pyramid Song, Teardrop, Warszawa). Steady songs (B.O.B., Superstition, Penny Lane, Take Five, Moonlight I) have no changes.
-- Golden Session A: identical steady 180 s songs now split evenly, so every track opens on the seed-0 argmax, Filigree (trace in the test). The BUG-147 cross-process pin was re-pinned and confirmed identical across two processes.
-
-**Done-when:** ✅ tests + real-playlist plan; ⏳ Matt's live check.
-
 ### Increment NRG.3 — scene choice reads the energy curve ✅ (2026-09-27; Matt's live check pending)
-
-**Delivered (D-259).**
-- `PresetScorer`'s mood term became an energy term: the stretch's 1–10 level sets the target visual density (`energy01`: 0.1 + 0.8·(level−1)/9, the span the mood mapping had). The weight is still 0.30, and valence and colour temperature are out.
-- The planner reads the 30 s from each segment's start (`TrackProfile.energyLevel(at:window:trackDuration:)`). A preview curve uses the song's typical level; near the end, the last 30 s is read. The transition into the segment uses the same level, so only level 10 cuts and calmer stretches crossfade longer.
-- Removed: the `LiveAdapter` mood-driven preset override, with its event kinds, cooldown, `LiveAdapter+MoodOverride.swift`, the app's override-suppression gates, `lastClassifiedMood` and `DiagnosticHoldTests`. Reactive mode no longer scores mood. The live classifier still feeds the certified scenes (Matt: leave them alone).
-
-**Evidence.**
-- New `EnergyPlanningTests`: a quiet-then-loud song gets sparse then dense scenes. The scorer test now covers energy and pins that colour temperature is not scored.
-- Goldens re-expressed as energy levels matching the old arousal density, and regenerated with traces; Session B's and D's winners are unchanged.
-- The real beta playlist, planned from its NRG.1 curves: Dance Yrself Clean gets sparse scenes (Witchlight, Skein, Aurora Veil) through its hush, dense ones (Cymatic Resonance, Nebula, Filigree) from 3:21, Witchlight again at the 6:09 breakdown and the 8:24 fade. B.O.B. takes its one cut at level 10.
-
-**Done-when:** ✅ tests + goldens + real-playlist plan; ⏳ Matt's live check.
-
-**Found, not changed:**
-- Scene changes land on fixed segment boundaries, so the drop switches at 3:21. Done in NRG.4 (the drop is at 3:08, not ~3:15 as read here).
-- The **M key ("Toggle mood lock")** flipped a flag nothing read; removed at Matt's call (2026-09-27).
-- The segment walk can emit a zero-length tail segment at a track's end (floating-point loop edge, pre-existing, never played). Fixed in NRG.4.
-
 ### Increment NRG.2 — the library 1–10 energy scale and the preparation readout ✅ (2026-09-26; Matt's look at the readout pending)
-
-**Delivered (D-259).** `EnergyScale.library`: each second's loudness and activity are ranked against the library and the ranks averaged, and the library deciles of that score are levels 1–10. Calibrated by `tools/energy_calibration.py` on `CorpusCensusRunner --energy` over the 1,000-track stratified pilot (999 decoded, 287,777 seconds; production `analyzeMIR` via `SessionPreparer.energyCurve(of:)`). `EnergyCurve.readout()` gives the 10th/90th-percentile section levels after a ±5 s running median, shown as one number when they're within one level. The preparation row shows *energy 5* or *energy 2 → 9* in place of the mood word (retired with its four strings). **Library sanity:** the median typical level by genre is classical 2, jazz 4, soul/R&B 5, folk 6, pop and rock 7, electronic 8, hip-hop 9; 22 % of songs read steady. **Beta playlist:** Dance Yrself Clean 2 → 9, B.O.B. 8 → 10, Superstition 4 → 6, Teen Spirit 5 → 8, Penny Lane 5, Take Five 2, Pyramid Song 4 → 10, Teardrop 5 → 9, Moonlight I 1, Warszawa 3 → 6. Swift and Python agree exactly on all ten.
-**Done-when:** ✅ `EnergyScaleTests`; ✅ library + beta readouts; ⏳ Matt sees the readout in the preparation view. **Not changed (follow-ups):** `PreparationAperture` still sets its churn from mood spread; `DebugOverlayView` still shows live mood; the planner still scores mood (NRG.3). **Next:** NRG.3, the planner reads the energy curve per segment, and valence leaves scene choice.
-
 ### Increment BUG150.1 — the Spotify connection tests await the connect ✅ (2026-09-26)
-
-**Delivered.** BUG-150 (P3) was filed from one `closeout_evidence.sh` failure (`connectLoginRequiredUnauthenticated`, state still `.preview` after a 400 ms sleep) and fixed in one increment as P3 allows. Every wait in `SpotifyConnectionViewModelTests` and `SpotifyConnectionViewModelOAuthTests` now awaits `debounceTask` / `connectTask` (`debounceTask` made internal). Test-only change; no product behaviour changed.
-**Done-when:** ✅ mechanism reproduced by a 500 ms latency probe (3/4 OAuth tests fail before, 16/16 pass after); ✅ app suite 476/476 + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No budget widened.
-
 ### Increment NRG.1 — preparation measures each song's energy curve ✅ (2026-09-26; Matt: *"the curves look right"*)
-
-**Delivered (D-259).** `TrackProfile.energyCurve`: one point per second of loudness (mean power, dB) and activity (median smoothed raw flux), built by `EnergyCurveBuilder` inside `analyzeMIR` from the frames it already analyses. The whole file is covered locally, the 30 s preview on streaming. Cache schema 16 → 17. It measures only: no 1–10 level and no scene choice yet. **Why a curve:** Matt rejected ranking whole songs (*"it depends on the part of the song — dance yourself clean is … both calm and driving"*), and confirmed the Dance Yrself Clean curve (quiet to 2:40, drop ~3:15, breakdown ~6:00, return 6:40, fade 8:20) matches the song.
-**Done-when:** ✅ `EnergyCurveTests` (a quiet→loud clip reads a 29.5 dB step, rising activity, one point a second); ✅ Matt checked all ten beta-song loudness curves (*"the curves look right"*, 2026-09-26). **Next:** NRG.2, the library-wide 1–10 scale + range readout; then NRG.3, the planner reads the curve per segment (valence out, D-259 §3).
-
 ### Increment BUG148.1 — the mood model does not generalise: diagnosed ✅ (2026-09-26; fix awaits Matt)
-
-**Delivered (diagnosis only).** BUG-148 (valence negative on 10/10 beta songs) and BUG-149 (key reads F# minor on 7/10; 35 % of the census pilot) filed from Matt's BUG-144 check; the BUG-145 manual check is recorded as passed. A Python replica of `MoodClassifier` matches the app's per-frame output to 3×10⁻⁵. Leave-one-song-out with the shipping recipe scores valence sign agreement **42 %** (chance 50 %, r −0.30) and arousal 50 % (r −0.04): the 12-song model does not generalise, and its frame-shuffled validation split hid that. Today's flux runs +2.5 σ outside the training range. Library proxy (27,638 tracks): 61.5 % negative valence.
-**Done-when:** ✅ KNOWN_ISSUES BUG-148 diagnosis + fix verification criteria; ⏳ Matt's call on the fix. BUG-149 not yet diagnosed.
-
 ### Increment FF.3 — Fireflies: the light ✅ (2026-09-26, branch `ff-3`)
-
-**Done-when:** one still beside FF.R2 `09` / `07` accepted by Matt first; then all of FIREFLIES_DESIGN §4.4 — light on grass, mist and branches, occlusion by trunks, branches and foreground grass, out-of-focus near fireflies, the light rising and decaying with the flash — with films + motion gate, 1080p flash on all four captures, FF.1 parity, breath, Release frame time and rubric reported.
-
-**Matt's verdict on the look still (Task 3):** *"This light clears the bar."*
-
-**Delivered.**
-- `Renderer/Shaders/Fireflies.metal`: `fireflies_sprite_*` rewritten — a flat near-white printed dot; a yellow-green halo + four-point starburst printed as coverage against the paper grain (IGN, as the world's `ff_grain`); near fireflies as a soft thin-lens CoC disc, energy divided by area. New `fireflies_pool_*`: a light volume with a modulate-add blend (src·dst + dst) — the print under it × (1 + L·tint).
-- `FirefliesGeometry`: occlusion without a depth buffer — the 100 k-segment skeleton counting-sorted once into 0.5 m world-z bands (`bandOrder`), the lit fireflies counting-sorted into the same bands every frame; per band, far → near: branches, pools, fireflies (`baseInstance` ranges, vertex buffers bound once). Pool reach 0.45 m, capped at 0.05 frame heights on screen.
-- `FirefliesRenderTests.depthBandsAreContiguous` (new, always-on): the skeleton runs far → near and every band's draw range holds only that band. `lookStills` also writes a Warszawa free-swarm window (f1204–1213).
-- `PresetFrameBudgetTests`: Fireflies' row re-recorded 17.96 → 19.61 ms (isolated, commented).
-- Sidecar `description` rewritten to what the light does, including its limit (BUG-138). `FirefliesSwarm`, the world's composition and the breath route untouched.
-
-**Grounding (Task 1).** All four mechanisms at level 1 (a working reference): the light — the world's own threshold screen (`ff_print` / `ff_grain`) plus angular spokes (musk's lens-flare Shadertoy `XdfXRX`); light on the surroundings — deferred point-light volumes (Apple's *Rendering a scene with deferred lighting* sample; Godot Light2D multiply/add light sprites); occlusion — painter's algorithm (Newell, Newell & Sancha 1972) over sorted instanced draws; bokeh — MJP's *How To Fake Bokeh* sample and the Samaritan demo (GDC 2011), CoC after Potmesil & Chakravarty 1981. `PostProcessChain` was verified NOT to run on this path (`particles`-only → `drawDirect`), so the light lives in the geometry. No new engine surface.
-
-**The lesson the first still taught.** Pools MULTIPLY where they overlap. Uncapped 0.45 m pools on the nearest fireflies tiled the foreground and a DYC unison lifted the frame-mean luma 0.09 → 0.35 (sprites alone: +0.03). Capping the pools' SCREEN radius, not only their world reach, is what keeps a unison "hundreds of small lights". Known limit: multiplying near-black ink stays near-black, so the nearest trunks do not catch the light (they stay silhouettes, as in `07`).
-
-**Evidence.** Parity (20 seeds), FF.3 = FF.2 exactly: DYC R 0.972 / on-beat +0.843; Pyramid 0.975 / +0.812; Warszawa 0.196 / +0.007; Teardrop 0.137 / −0.008. Flash, 1920×1080, real draw path: max Δ frame-mean luma DYC 0.0296, Pyramid 0.0374, Warszawa 0.0038, Teardrop 0.0036 (FF.2: 0.0099 / 0.0124 / 0.0016 / 0.0014; gate 0.05) — per-second range 0.0885 / 0.0919 / 0.0255 / 0.0188; love_rehab fixture (always-on, 320×180) 0.0379 (FF.2 0.0120). Silence (Warszawa tail, 208 near-silent frames): luma min 0.093, the world keeps moving. Motion gate (1290-frame films at 720p): DYC 120 / Pyramid 123 spikes, all at the periodic unison-flash onsets (the 40 ms rise; FF.2: 13 / 21 — brighter flashes, same place), 183 / 139 frozen (the dark gaps between locked flashes); Warszawa, Teardrop, silence 0 spikes, 0 frozen. Read as sequences: a unison sweeps in, peaks in ~4 frames and decays with the envelope, many lights throughout; no occlusion pop (fireflies change band only by drifting past a branch in depth). Breath with the camera held still: 3.33× (DYC), 1.68× (Pyramid) — unchanged, the light does not swamp it. Cost, **Release** (`swift test -c release --enable-testable-imports`, no readback, command-buffer timestamps, 1920×1080, DYC): GPU median 2.32 ms (p95 2.49, max 2.92), CPU model 0.29 ms; **Debug**: GPU 2.32 ms, CPU model 5.47 ms (`-Onone`); `PresetFrameBudgetTests` (Debug, readback, isolated) 19.61 ms = 3.3× median, inside the 8× / 60 ms nets (a first cut read 29 ms — a comparison sort inside the harness's timed passes; now a counting sort). Rubric (`full`, not changed): 2/15, the same as FF.2. Tests exercised `drawDirect` → `encodePresetVisualization` via `MultiPassRenderHarness.renderFireflies` (world fragment + slot 6, then the geometry's banded branches, pools and sprites in one encoder).
-
-**Next:** FF.4 — M7 on the beta playlist, certification, removing `exclude_from_cycling`. Watch in M7: whether the unison's brighter frame-to-frame change (3× FF.2, inside D-157) reads as a pulse of the whole meadow.
-
 ### Increment BUG147.1 — a planner seed reproduces its plan in any process ✅ (2026-09-25)
-
-**Delivered.** BUG-147 (P3, found while measuring BUG-144), filed and fixed in one increment as P3 allows. `seededNoise` hashes the preset id with FNV-1a over UTF-8 instead of the per-process-seeded `String.hashValue`. `stemAffinitySubScore` sums stems in sorted order, not `Set` order. BUG-133's `nearTiePick` had no per-process source of its own. Not user-visible: the app draws a random seed per plan and per Regenerate.
-**Done-when:** ✅ `NearTieSamplingTests.pinnedAcrossProcesses` (pinned fingerprint; two different values in two processes before the fix, the same value in three after); ✅ full engine suite + SwiftLint strict; ✅ KNOWN_ISSUES + release notes.
-
 ### Increment BUG146.2 — preparation MIR at 44.1 kHz whatever the file's rate ✅ (2026-09-26)
-
-**Diagnosed (BUG146.1).** `CorpusCensusRunner --dual-rate` on Superstition: at 96 kHz the fixed 1024-point FFT pushed the key correlations +1.6/+1.9 σ, halved the Nyquist-normalised centroid (−0.87 σ) and moved flux −0.40 σ; the band energies stayed within 0.23 σ.
-**Delivered.** `analyzePreview` resamples to `StemSeparator.modelSampleRate` (`BeatThisPreprocessor.resample`) before `analyzeMIR`; 44.1 kHz input is untouched. Folded into the branch's schema v16.
-**Done-when:** ✅ `MIRSampleRateTests` (fails on the old code: centroid off 50 %); ✅ Superstition 96 / 48 / 44.1 kHz stores arousal 0.494 / 0.499 / 0.517 (was 0.21 / 0.45 / 0.52); ✅ beta playlist: 44.1 kHz songs unchanged, BUG-144 ρ 0.855 → 0.927. Residual: valence 0.09 apart at 96 kHz.
-
 ### Increment BUG145.2 — the stored BPM is the beat tracker's ✅ (2026-09-26; manual check pending)
-
-**Diagnosed (BUG145.1).** `TrackProfile.bpm` was the MIR `BeatDetector`'s IOI tempo. Its sub-bass onsets fire at their 400 ms cooldown on every song (median IOI 0.441 s on all ten beta songs, and on the 30 s windows), so it read 130–143 BPM whatever the music.
-**Delivered (Matt: no BPM for beatless songs).** The stored BPM is now `octaveFoldedTempoBPM` of the Beat This! grid, a new trimmed mean of the octave-folded intervals that avoids the median's 20 ms quantisation. It is `nil` when the D-154 gate calls the beat irregular. Folded into the branch's schema v16. No behavioural change to beat sync: the grid, the live `BeatDetector` and the gate are unchanged.
-**Done-when:** ✅ `ProfileTempoTests` (fails on the old code, which stored 139.7); ✅ the beta-playlist gate: spread 12.7 → 94.6 BPM, irregular → nil; ✅ KNOWN_ISSUES + release notes; ⏳ Matt looks at the preparation view. **Lead, not measured:** the live `stableBPM` may saturate the same way.
-
 ### Increment BUG144.2 — the stored mood is the song's median ✅ (2026-09-25; manual feel check pending)
-
-**Delivered (Matt's option A).** `analyzeMIR` stores `SessionPreparer.songMood`: the per-frame median of valence and arousal after the first sixth, instead of the classifier's last-frame EMA state. Cache schema 15 → 16. The rule matches KAG.3's `songArousal`; its owner will read `mood.arousal` and drop that field, and whichever branch merges second takes v17.
-**Done-when:** ✅ `SongMoodTests` (failed on the old line, passes); ✅ `SongMoodBetaPlaylistTests` over fresh Release caches: ρ 0.588 before (fails) → 0.855 after (passes); ✅ KNOWN_ISSUES + release notes; ⏳ Matt's listen on the beta playlist (do the opening scenes for Teardrop, Take Five, Pyramid Song and Moonlight I suit the songs?). BUG-145 and BUG-146 stay open.
-
 ### Increment BUG144.1 — the stored mood is the last seconds of the audio: diagnosed ✅ (2026-09-25; fix awaits Matt)
-
-**Delivered (diagnosis only, no code change).** The KAG.3 finding was filed as BUG-144 and measured through the shipping `LocalFilePreparationPipeline` (Release `PrepTimingRunner` with a temporary recording classifier) over the beta playlist. `TrackProfile.mood` equals the last frame on 10/10 songs. Spearman vs the production chain is 0.59, against 0.85 for a song-level median. With no history, the top-scored scene changes on 8/10 songs (local) and 5/10 (30 s window), and a ±0.02 control changes 0/10. Whole-session diffs are **not** evidence: the +0.02 control already changes 64/100 openers (55/100 on the BUG-147 fixed-seed re-run). Golden session plans are unaffected because they hand-author mood. Two defects were found in passing and filed: **BUG-145** (`TrackProfile.bpm` is 130–143 on every song) and **BUG-146** (prep mood moves with the file's sample rate: Superstition reads 0.21 at 96 kHz and 0.52 at 44.1 kHz). The Regenerate-seed `hashValue` non-reproducibility was flagged as a separate task.
-**Done-when:** ✅ KNOWN_ISSUES BUG-144/145/146 with evidence and verification criteria, and an OBS-DS4-1 pointer. **Next:** BUG144.2, the fix, once Matt picks the statistic.
-
 ### Increment FF.2 — Fireflies: the world, in 3D, as a screenprint ✅ (2026-09-25, branch `ff-2`, not pushed)
-
-**Done-when:** one 3D still beside FF.R2 `07` accepted by Matt first; then the whole world of FIREFLIES_DESIGN §4 with the breath (Matt's "B"), the swarm placed in depth through the shared camera with FF.1's parity intact, films + motion gate + 1080p flash + Release frame time + rubric reported.
-
-**Matt's verdict on the look still (Task 4):** *"accept — continue to Task 5. looks good overall, might want to consider having the trees move based on musical input."* The trees sway on the breath route (no beat coupling — the beat stays the swarm's, FA #67).
-
-**Delivered.**
-- `FirefliesWorld` (new): one pinhole camera with a slow drift (±1.1 m, ±1°), the breath, and the static branch skeletons — stochastic recursive trees (Honda 1971; Weber & Penn lateral shoots; da Vinci radii; per-tree seeds) and ~1100 foreground stalks + seed heads.
-- `Presets/Shaders/Fireflies.metal` rewritten: one ray per pixel through the shared camera (slot 6, bound by `bindFirefliesRuntime`, Nebula precedent) — sky, ground plane, crowned tree-line cards at 115/160/230 m, exponential height mist. Six inks sampled from `07`; tone = line-screen coverage (Freudenberg 2001 / Webb et al. 2002); stroke octaves blended as printed colour (Praun et al. 2001); grass as a cut layer in bearing × inverse-range coordinates.
-- `FirefliesGeometry`: writes the camera, draws the branches (capsule segments, phone-wire AA), then the fireflies — each firefly's 3D point derived from FF.1's screen layout through a fixed rest camera at FF.1's depth (3 m/unit). `FirefliesSwarm` untouched.
-- Breath: `bassAttRel` → 4 s EMA → 0.5 + 0.5·tanh(4x); wind speed/sway (∝ breath²) and mist speed, integrated. Route `world_breath` declared, green.
-- `Scripts/compare_render.sh`: `COMPARE_REF_DIR` override for the local-only prints (default path byte-identical).
-
-**Grounding (Task 1).** 3D world: analytic ray–plane casting + exponential height fog — working code. Trees: Honda / Weber & Penn / da Vinci — paper with implementable math; thin lines: Persson phone-wire AA — working code. Screenprint: Freudenberg 2001, Webb et al. 2002 §3.2, Praun et al. 2001 — paper. Shared camera: standard pinhole — working code. No level-3 mechanism, no new engine surface.
-
-**Evidence.** Parity (20 seeds, 25–30 s), FF.2 = FF.1 exactly: DYC R 0.972 / on-beat +0.843 (spike 0.968 / +0.843); Pyramid 0.975 / +0.812 (0.972 / +0.839); Warszawa 0.196 / +0.007 (0.179 / −0.007); Teardrop 0.137 / −0.008 (0.140 / −0.006). Flash, 1920×1080, real draw path: max Δ frame-mean luma 0.0099 / 0.0124 / 0.0016 / 0.0014 (gate 0.05), per-second range ≤ 0.0315. Silence (Warszawa tail, 208 near-silent frames): luma min 0.091, the world keeps moving. Motion gate: DYC / Pyramid spikes only at unison-flash onsets (13 / 21, the ~52-frame flash cycle); Warszawa, Teardrop, silence 0 spikes. Breath visibility with the camera held still: tree-crown motion full/quiet 3.33× (DYC), 1.68× (Pyramid); the first linear mapping measured 1.79× / 1.27× and was invisible under the drift. Cost, **Release** (`swift test -c release --enable-testable-imports`, no readback, command-buffer timestamps, 1920×1080, DYC): GPU median 2.78 ms (p95 5.70), CPU model 0.30 ms; **Debug**: GPU 2.57 ms, CPU model 5.46 ms (`-Onone`); `PresetFrameBudgetTests` (Debug, readback, isolated) 17.96 ms = 3.1× median, inside the 8× / 60 ms nets — recorded as Fireflies' first baseline row. Rubric (`full`, not changed): 2/15, the same as FF.1's source — the proxy looks for cookbook calls by name (`fbm8`, `mat_*`, fog helpers, in-shader deviation reads) that a screenprint world does not use. Tests exercised `drawDirect` → `encodePresetVisualization` via `MultiPassRenderHarness.renderFireflies` (world fragment + slot 6, then the geometry's branches and sprites in one encoder).
-
-**Next:** FF.3 — the light (near-white core + coloured bloom, light on grass and mist, occlusion by grass/trees, out-of-focus near fireflies); flash re-measured.
-
 ### Increment TESTREL.1 — the engine suite runs optimized ✅ (2026-09-25)
-
-**Delivered.** `swift test -c release --enable-testable-imports --package-path UzumeEngine` now builds and runs the whole suite, so test-derived numbers can be quoted in Release (CLAUDE.md §Build & Test). Two blockers: (1) `SystemAudioCapture.seedTapResourcesForTesting` was `#if DEBUG`, so `SystemAudioCaptureTeardownTests` did not compile optimized — the gate is dropped (`internal` already confines it to `@testable`). (2) Under -O, `PresetSessionReplay`'s async `@main` emitted a weak specialized thunk (`$sIetH_yts5Error_pIegHrzo_TR10async_MainTf3npf_n`) with the same name as the test runner's; the linker coalesced them and the runner's `main` ran the replay CLI ("Executed 0 tests" + its usage). Its `run()` never awaited, so it is now a sync `ParsableCommand`. Recipe in RUNBOOK §Build and Test.
-**Done-when:** ✅ full engine suite green in Debug (2006 Swift Testing / 214 XCTest, 274 s) and optimized (same counts, 63 s). **Caveat:** `--enable-testable-imports` compiles with `-enable-testing`, which inhibits some optimization — near-Release, not the shipped app's exact codegen. Any future test-linked executable must keep a sync `@main`.
-
 ### Increment FF.1 — Fireflies engine port at spike fidelity ✅ (2026-09-25, merged #273)
-
-**Done-when:** the FF.0 swarm runs in the engine and its coherence R(t) and on-beat-vs-true-grid
-curves match the spike's on the spike's four captures within ±0.1 over 25–30 s; flash safety is
-measured in the real draw path. Behaviour only — the world is the spike's placeholder (FF.2) and the
-light is the spike's two Gaussian stamps (FF.3).
-
-**Delivered.**
-- `FirefliesSwarm` (CPU model, a port of `fireflies_spike.py`), `FirefliesGeometry` (instanced
-  core+halo sprites sized in frame heights), `Presets/Shaders/Fireflies.{metal,json}` (placeholder
-  dusk; `passes: ["particles"]`, so `drawDirect` draws world then sprites), registry + app wiring.
-- K = clamp(2 · `stems.beatClarity01` − 1, 0, 1): steady 1, unknown and irregular free (D-257).
-- **The tempo is the installed grid's**, read from `SpectralHistoryBuffer` slot 2418. Three measured
-  estimators failed first; the record is in `FirefliesSwarm.installTempo`. Unbundled: given the
-  spike's `grid_bpm` from t = 0 the engine reproduces the spike, so the port itself is faithful and
-  every earlier gap was the tempo source.
-
-**Evidence.** Parity is gated on the seed DISTRIBUTION (20 seeds each side), because a free swarm's R
-spans 0.07–0.34 across the spike's own seeds; the literal seed-7-vs-`*_metrics.csv` comparison is
-printed too. Engine / spike means at 25–30 s: DYC R 0.972 / 0.968, on-beat +0.843 / +0.843; Pyramid
-0.975 / 0.972, +0.812 / +0.839; Warszawa 0.196 / 0.179, +0.007 / −0.007; Teardrop 0.137 / 0.140,
-−0.008 / −0.006. On the clear-beat tracks the engine traces the spike's curves across the whole 30 s,
-not only the window (overlay plot: `docs/presets/fireflies_spike/plot_parity.py`). Stepping a 60 fps
-render off the 43 Hz captures gives the same numbers. Flash, 1920×1080, real draw path: max Δ
-frame-mean luma ≤ 0.011 on all four (gate 0.05), per-second range ≤ 0.024. Motion gate: unison-flash
-spikes on the clear-beat films (DYC 449, Pyramid 249; spike 295 / 180), none on the free ones, max
-inter-frame change ≤ 2.3/255, no jitter.
-CPU per frame for 600 fireflies (advance + upload, M2 Pro): 0.28 ms at `-O`, 5.1 ms at `-Onone`. The first cut used an O(N²) neighbour scan — 0.60 ms at `-O` but 79 ms at `-Onone`, which the Debug-built `PresetFrameBudgetTests` measured at 15× the roster median; a uniform grid (identical neighbour sets, bit-identical parity) fixed both.
-
-**Rotation (a sketch must not reach a listener).** Uncertified presets are hard-excluded from the
-planner and reactive scoring by default (`PresetScorer`), but two paths still reach one: manual
-next/previous cycling (`PresetLoader.cyclableIndex` checks only `exclude_from_cycling`), and the
-user-visible Settings toggle "Show uncertified scenes". Fireflies sets `exclude_from_cycling: true`,
-which closes the first. The toggle stays an explicit opt-in whose own copy says it reveals scenes that
-"haven't passed quality review". Closing that too would take `is_diagnostic`, which marks an
-operational tool rather than a scene (D-074) and so misdescribes it; not used. Remove
-`exclude_from_cycling` at FF.4.
-
 ### Increment BUG140.2 — the beat-irregularity gate measures the tempo it means ✅ (2026-09-25; live check passed)
-
-**Matt's option A** (fix the measurement, keep the 10 % rule). **Delivered:** the D-154 gate compares `octaveFoldedMedianBPM` of each grid's beats instead of `BeatGrid.bpm` (`assessBeatIrregularity(grid:drums:)`, used by `StemCache.beatIrregular` and CorpusCensusRunner). The drums grid is analysed at the separator's output rate (44.1 kHz). `PersistentStemCache` schema is v15 (BUG-141 took v14). The census harness separates the whole window. `computeBPM`/`BeatGrid.bpm` are untouched, so there is **no behavioural change to beat sync**. **Measured** (601-track stratified re-run + 150 duplicate pairs): corpus-est flag rate 25.2 % → 12.0 %; copies disagree 34/150 → 6/150; 12 new flags, 3 of them look false. Superstition/Penny Lane are regular; Pyramid Song is still flagged in production. Plain median (BUG140.1's proposal) measured insufficient; the octave fold is what clears the motivating tracks. D-154 amended.
-**Done-when:** ✅ tests + corpus re-run + production-path check (KNOWN_ISSUES BUG-140). ✅ Manual: Matt, session `2026-09-25T14-29-08Z` — *"Membrane is locked on Superstition … looks great!"* (`beatClarity01` = 1.00 throughout, on this branch's pre-renumber v14). **Follow-up:** the stem warm-up sample-rate bug found here became BUG-141, merged #271.
-
 ### Increment BUG143.1 — the app test host no longer over-releases a closed window ✅ (2026-09-25)
-
-**Delivered.** BUG-143 was filed from the intermittent exit 65 of `closeout_evidence.sh` step 2 (the app tests straight after the engine suite; host crash in `objc_autoreleasePoolPop`). It was fixed in one P2 increment. Three DS.6 tests built an `NSWindow` in code (so `isReleasedWhenClosed == true`) and `close()`d it: `PerformanceToastLayoutTests`, `PlaybackChromeReducedMotionTests` and `ReviewCaptureHarness`. That over-released the window under ARC. All three now use `NSWindow.offscreen(_:)` (`UzumeAppTests/OffscreenWindow.swift`), which clears the flag. Test-only change; no product code.
-**Done-when:** ✅ deterministic reproducer (`OffscreenWindowTests`). Against the unfixed helper it crashed the host 3/3 with the identical signature; fixed, it passes 3/3. ✅ A source scan fails any test file that builds a raw `NSWindow` and closes it. ✅ Engine suite then app suite back to back: app 476/476, exit 0. ✅ SwiftLint strict. No timeout widened.
-
 ### Increment BUG142.1 — a stale Now Playing poll no longer fires after stop ✅ (2026-09-25)
-
-**Delivered.** BUG-142 was filed from the intermittent CI failure of `trackChange_secondTrack_hasPrevious` (run 36162100751) and fixed in one P2 increment. `StreamingMetadata` gains a `generation` counter bumped under `lock` in `stopObserving()`. A poll writes state or fires only if its generation is still current, checked inside the locked compare. `pollingTask` is `private(set)` so the test can await it.
-**Done-when:** ✅ deterministic reproducer (`stopObserving_whilePollInFlight_firesNoEvent`), fail-before confirmed; ✅ StreamingMetadata suite + full engine suite + SwiftLint strict; ✅ KNOWN_ISSUES + release notes. No sleep budgets widened.
-
 ### Increment BUG141.1 — stem analysis at the separator's rate, not the file's ✅ (2026-09-25)
-
-**Delivered.** BUG-141 was found during BUG140.2 and filed and fixed in one P2 increment. `LocalFilePreparationPipeline`'s stem-series `StemAnalyzer` and `analyzePreview`'s warmup fps both used the file's rate, though the stems are 44.1 kHz. Both now use `separator.outputSampleRate`. Cache schema 13 → 14. Real-file A/B (Release `PrepTimingRunner`): the 44.1 kHz control is bit-identical. On 48 kHz, vocal pitch drops 7–10 % to true and the scorer input moves ≤ 0.01. On 96 kHz, pitch halves to true and low bands move ×2–3.
-**Done-when:** ✅ two wiring tests, fail-before confirmed; ✅ real-file before/after; ✅ KNOWN_ISSUES + release notes. Merged #271 (`9fee33ae`); BUG140.2 took v15. **Open:** optional manual check on a 96 kHz file.
-
 ### Increment BUG140.1 — why the beat-irregularity gate flags Superstition, diagnosed ✅ (2026-09-24)
-
-**Delivered (diagnosis only — no behaviour change, no threshold change).** BUG-140 filed with two root causes: (1) the drums-grid BPM the D-154 gate compares comes from `BeatGridResolver.computeBPM`, which averages IOIs across two octaves (BUG-134 fault 1, still unfixed in `computeBPM`), so Superstition's 138.25 is an eighth/quarter average, not a 4:3 or 3:2 relation; (2) on the local-file path the drums grid is analysed at `preview.sampleRate` though stems are 44.1 kHz — every 48 kHz file's drums BPM is scaled ×1.088. Corpus: 34 % flagged (July census), 42 % of flagged duplicate recordings disagree with their other copy; ratio folding rejected (no metrical peak in the data; un-flags Mingus). Median-IOI estimator measured on a 602-track re-run: corpus-est flag rate 27.7 % → 17.1 %. Instrumentation: `CENSUS_DUMP_BEATS=<dir>` on `CorpusCensusRunner`. Also fixed the stale `TrackProfile.beatIrregular` comment (Membrane declares `requires_regular_beat` since PR.26).
-**Done-when:** ✅ KNOWN_ISSUES BUG-140 with artifacts + verification criteria. **Next:** BUG140.2 fix (median estimator + drums-grid sample rate) — awaits Matt's call; needs a BeatBench before/after (all five suites).
-
 ### Increment BC.1 — beat clarity reaches the GPU ✅ (2026-09-24, D-257)
-
-**Done-when:** the D-154 beat-regularity flag reaches every shader as one track-scoped float
-(`StemFeatures.beat_clarity01`: 1 steady / 0 irregular / 0.5 unknown). It is written at every track
-change, reset to unknown at session boundaries on both entry paths, and preserved across live stem
-pushes. It is gated and ships alone: no scene reads it yet, and Fireflies FF.1 will be the first.
-
-**Delivered.**
-- **The slot:** float 56, reclaimed from `_pad14` in Swift and in both MSL sites.
-- **Writes:** `RenderPipeline.setBeatClarity(beatIrregular:)` is called from `resetStemPipeline` on
-  every call, identity or not, and from `clearSessionScopedSurfaces()`, which now also clears
-  `currentTrackBeatIrregular`.
-- **Recording and replay:**
-  - `stems.csv` gains a `beatClarity01` tail column.
-  - `SessionReplayHarness` replays a capture older than the column as **unknown, not 0**.
-  - The route-coverage gate lists the field as carried.
-  - `FixtureSessionCaptureGenerator` records unknown, since it has no `TrackProfile`.
-- **New gate:** `CommonLayoutTest` had MSL order parity for `FeatureVector` only. It now checks
-  `StemFeatures` across both MSL sites and pins `beat_clarity01` to float index 55 (Swift byte offset
-  220). Its parser splits statements rather than lines, because `StemFeatures` declares two floats per
-  line. Breaking the preamble on purpose made it fail.
-- **The split:** `StemFeatures.swift` sat at 399 of its 400-line cap, so its `Codable` extension moved
-  unchanged into `StemFeatures+Codable.swift`.
-- **Safety:** old stem-series cache entries (raw memory dumps, stride unchanged at 256) still load with 0
-  in the slot. That's harmless, because every series frame reaches the GPU through `setStemFeatures`,
-  which keeps the installed value. Every existing shader is byte-identical, since the slot was padding
-  and nothing reads it yet.
-
 ### Increment GOLDEN.1 — golden sessions plan against the shipped roster ✅ (2026-09-24)
-
-**Done-when:** `GoldenSessionTests.makeRealCatalog()` loads the real sidecars instead of a hand
-mirror; Sessions A–D regenerated with scoring traces; whether the BUG-133 monopoly survives on the
-real roster is measured, not assumed.
-
-**Delivered.** The fixture now decodes `Sources/Presets/Shaders/*.json` via
-`PresetLoader.bundledShadersURL` in loader order, with a guard test pinning its count to
-`PresetLoaderCompileFailureTest.expectedProductionPresetCount` so a partial load can't pass. BETA.0's
-`[VL, Membrane ×4]` is gone: **Membrane does not appear at all** on the real roster. New goldens:
-A `[Cymatic Resonance ×5]` (each track cycles CR → Mitosis → Dragon Bloom), B `[Gossamer ×5]`
-(→ Skein), C `[CR, Gossamer, Glaze, Mitosis, Gossamer, Mitosis]`, D Lumen Mosaic (unchanged).
-**Monopoly verdict: does not persist on the production path.** The identical track-firsts are the
-seed-0 argmax restarting a 3-scene (A) / 2-scene (B) cycle once the leader's cooldown expires,
-which is the track-granularity repeat BUG133.1 already recorded. Both production call sites plan with a
-random non-zero seed; over seeds 1…24, Session A draws 7–11 distinct scenes per 15–16 segments,
-B 5–8 per 10–12, C 10–15 per ~20. No new defect filed. Test-only; no `Sources/` change.
-
 ### Increment BETA.0 — beta decisions recorded, Plasma removed, beta test playlist ✅ (2026-09-24)
-
-**Done-when:** D-251…D-256 filed with Matt's verbatim words; Phase BETA above Phase PR, PR marked
-superseded; Aurora Veil carries its CC BY-NC-SA notice (golden unchanged); Plasma gone from
-`Sources/` and `Tests/`; the ten-song playlist exists as `.m3u` + doc and resolves.
-
-**Delivered.** All five. Production count 31 → 30. The playlist resolves **10/10** through
-`M3UParser`, with census tempo and D-154 flags in `docs/presets/BETA_TEST_PLAYLIST.md`. ⚠
-`GoldenSessionTests`' mirrored catalog is a stale 10-preset subset (still carries Arachne); without
-Plasma its Session A reverts to a Membrane run — recorded as a fixture property, re-mirror queued. → Done at GOLDEN.1.
-
 ### Increment BUG139.1 — the tap teardown deadlock, root-caused from source ✅ (2026-09-23)
 ### Increment U.11a — UX_SPEC §4.4 describes the connector U.11 shipped ✅ (2026-09-23)
 ### Increment BUG103.1 — a raising `play()` becomes a Swift error, not process death ✅ (2026-09-23)
