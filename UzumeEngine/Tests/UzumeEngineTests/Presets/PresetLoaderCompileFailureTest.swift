@@ -144,7 +144,9 @@ struct PresetLoaderCompileFailureTest {
     /// presets in the roster the gate counts 32.
     /// 32 → 33 at UND.1 (Understory, the `staged` feedback-IFS fern field; certified: false).
     /// 33 → 34 at FH.16 (Fiddlehead, the `particles` descent-fern dive via `FiddleheadFern`; certified: false).
-    static let expectedProductionPresetCount = 34
+    /// 34 → 35 at EFB.1 (Energetic Flyby, Kali's `direct` ray-march flythrough + `EnergeticFlybyState`;
+    /// certified: false).
+    static let expectedProductionPresetCount = 35
 
     @Test("PresetLoader.presets.count matches expectedProductionPresetCount — catches Failed Approach #44 silent drops")
     func test_presetLoaderProductionCount() {

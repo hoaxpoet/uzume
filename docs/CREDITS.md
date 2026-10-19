@@ -277,6 +277,32 @@ each with a clean-room replacement named (D-252).
 
 ---
 
+## Kali "Energetic Flyby" — Energetic Flyby scene shader (CC BY-NC-SA 3.0, NOT MIT)
+
+**Used in:** `UzumeEngine/Sources/Presets/Shaders/EnergeticFlyby.metal` — the whole
+fragment shader of the Energetic Flyby scene (EFB.1; working name).
+
+**Source:** Kali, *[Inércia 2022] Energetic Flyby*, Shadertoy csjGDD (2022), live-coded
+at Inércia Shader Royale 2022 — https://www.shadertoy.com/view/csjGDD
+
+**What was taken:** the algorithm and all of its constants, ported to Metal Shading
+Language; the adaptations (time, travel, spin and burst bindings, resolution, y-flip, the
+sRGB store, plus the music drivers and the photosensitivity fix) are recorded in the file
+header and marked `EFB:` in the code.
+
+**License:** the source carries no licence header, so Shadertoy's default terms apply:
+Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported (CC BY-NC-SA 3.0) —
+https://creativecommons.org/licenses/by-nc-sa/3.0/. Under ShareAlike the adapted file is
+itself CC BY-NC-SA 3.0: **it is not covered by Uzume's MIT licence and may not be used
+commercially.** The second such port of D-252's cap of about three.
+
+**Clean-room replacement (D-252):** a flythrough authored from the published fold-tunnel
+technique — abs-fold domain repetition along a sine path, spheres with radial spikes, glow
+accumulated in the march — written without reference to Kali's code. Built only if Kali
+objects to the port (design doc §8).
+
+---
+
 ## WebGL-Fluid-Simulation — GPU pressure-projection shaders
 
 **Used in:** `UzumeEngine/Sources/Presets/Shaders/PoissonSandbox.metal` — the
@@ -380,6 +406,9 @@ If you ship a derivative of Uzume, you must:
    commercially — it is not MIT.
 1c. Keep the CMU Graphics Lab Motion Capture Database acknowledgement
    above with Kagura's bundled clip data.
+1d. Preserve the CC BY-NC-SA 3.0 notice for Kali's "Energetic Flyby" in
+   `EnergeticFlyby.metal` and in this file, and do not distribute that file
+   commercially — it is not MIT.
 2. Make this `CREDITS.md` (or an equivalent compilation of the
    notices) reachable from a user-visible surface — e.g. an "About"
    panel — alongside license text or hyperlinks.

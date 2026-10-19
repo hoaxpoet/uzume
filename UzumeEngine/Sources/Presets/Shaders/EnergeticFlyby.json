@@ -1,0 +1,39 @@
+{
+  "name": "Energetic Flyby",
+  "family": "fractal",
+  "duration": 60,
+  "description": "A continuous flight down a twisting tunnel of glassy, perforated shells lit from inside, following a cluster of spiked, spinning spheres that throw light rods through the tunnel. Kali's Energetic Flyby (Shadertoy csjGDD, CC BY-NC-SA 3.0) ported verbatim. Each downbeat on the cached grid (barPhase01) bursts the sphere light and turns its colour, with a smaller echo on beat 3; every second downbeat banks the camera a quarter turn. The song's energy (spectralFlux, self-normalised) sets the flight speed and glow floor; the bass (bassDev, self-normalised) spins the spheres.",
+  "author": "Kali (port: Uzume engine)",
+  "passes": [],
+  "fragment_function": "energetic_flyby_fragment",
+  "vertex_function": "fullscreen_vertex",
+  "visual_density": 0.85,
+  "motion_intensity": 0.6,
+  "color_temperature_range": [0.3, 0.8],
+  "fatigue_risk": "medium",
+  "transition_affordances": ["crossfade"],
+  "section_suitability": ["buildup", "peak", "bridge"],
+  "complexity_cost": { "tier1": 12.0, "tier2": 8.0 },
+  "audio_routes": [
+    {
+      "route": "downbeat_burst",
+      "primitive": "barPhase01",
+      "kind": "accent",
+      "note": "EFB.1 — each wrap of the cached grid's barPhase01 is a downbeat: the sphere-rod light bursts (decay 0.35 s, rods only, D-157) and the glow colour turns +0.7 rad; a 0.35 echo when barPhase01 x beatsPerBar crosses 2 (beat 3, meters of 4+); every second downbeat banks the camera a quarter turn over 1 s. EnergeticFlybyState."
+    },
+    {
+      "route": "energy_speed_glow",
+      "primitive": "spectralFlux",
+      "kind": "continuous",
+      "note": "EFB.1 — spectralFlux self-normalised against its own running mean (8 s warm-up rule, FH.17), smoothed 0.6 s: flight speed 0.65 + 0.8 x energy and glow floor 0.45 + 0.5 x energy."
+    },
+    {
+      "route": "bass_spin",
+      "primitive": "bassDev",
+      "kind": "continuous",
+      "note": "EFB.1 — positive bassDev self-normalised the same way, attack 30 ms / release 300 ms: sphere spin rate 1 + 3 x bass."
+    }
+  ],
+  "certified": false,
+  "rubric_profile": "full"
+}
