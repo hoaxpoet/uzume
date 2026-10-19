@@ -889,14 +889,17 @@ extension VisualizerEngine {
 
     private func bindEnergeticFlybyRuntime(_ desc: PresetDescriptor) {
         // EFB.1: the Nimbus pattern — the music lives in `EnergeticFlybyState` (slot 6), ticked once per
-        // frame before the draw. Full resolution: Kali's look has fine edges, and the render scale is
-        // Matt's call on the EFB.1 timing stills (DECISION-NEEDED), not a default set here.
+        // frame before the draw.
         if let state = EnergeticFlybyState(device: context.device) {
             energeticFlybyState = state
             pipeline.setDirectPresetFragmentBuffer(state.stateBuffer)
             pipeline.setMeshPresetTick { [weak state] features, stems in
                 state?.tick(deltaTime: features.deltaTime, features: features, stems: stems)
             }
+            // EFB.1, Matt's pick (2026-10-19) on the timing stills: half resolution + bilinear upscale.
+            // Kali's 200-step march is p95 34.6 ms at full 1080p, 20.9 ms at 0.75x and 10.2 ms at 0.5x
+            // (Release, M2 Pro); only 0.5x fits the frame. Reset to 1.0 at the top of applyPreset.
+            pipeline.setDirectRenderScale(0.5)
         } else {
             logger.error("EnergeticFlybyState: failed to allocate state for preset '\(desc.name)'")
         }

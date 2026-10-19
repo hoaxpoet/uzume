@@ -174,7 +174,8 @@ struct PresetFrameBudgetTests {
         // full resolution). Kali's 200-step march is the cost (the downbeat-core accumulation adds
         // <= 0.7 ms). Release, no readback, Mac mini M2 Pro, There There drive: 1080p p50 25.4 / p95
         // 34.6 ms; 0.75x 15.3 / 20.9; 0.5x 7.5 / 10.2; 4K 95.4 / 129.4
-        // (`EnergeticFlybyRenderTests.releaseTiming`). The render scale is Matt's call (EFB.1).
+        // (`EnergeticFlybyRenderTests.releaseTiming`). Matt picked 0.5x (2026-10-19); production applies it
+        // with `setDirectRenderScale(0.5)`, which this harness does not, so this row times full resolution.
         "Energetic Flyby": 29.97
     ]
 
