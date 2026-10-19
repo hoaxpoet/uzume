@@ -10,6 +10,12 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-19-181401] W0.2 — honest 4K pass costs and sidecar-owned render scale
+
+- **Ray-march timing now measures GPU work, not CPU encoder setup.** Apple timestamp counters report G-buffer, lighting, and complete post-process cost independently, below the display-wait floor that made whole-frame timing ambiguous.
+- **`render_scale` is now the common per-preset quality lever for scalable direct and ray-march scenes.** Nimbus's existing 0.5 scale moved from a preset-name branch into `Nimbus.json`; its rendered look is unchanged.
+- **Session records say what was actually rendered.** `RENDER_TARGET` now includes effective scale plus internal width, height, and megapixels, including the 4K ray-march pixel cap. Stateful feedback and staged paths remain native-resolution until their history-resize contract is designed.
+
 ### [dev-2026-10-09-140939] UND.R2 — full-track preparation stays bounded (BUG-176)
 
 - **Long local tracks no longer retain every stem-analysis graph result until preparation ends.** Each two-second separation window now releases its temporary MPSGraph wrappers and result objects before the next window begins, while the expensive graph, queue and Metal buffers remain reusable.

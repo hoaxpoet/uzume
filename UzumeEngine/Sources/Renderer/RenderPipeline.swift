@@ -425,13 +425,35 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         let pixelWidth = max(Int(size.width), 1)
         let pixelHeight = max(Int(size.height), 1)
         let megapixels = Double(pixelWidth * pixelHeight) / 1_000_000
-        // PERF.12 — the EFFECTIVE scale, whichever path set it. `directRenderScale` alone records
-        // 1.00 for a ray-march preset rendering at 0.5 (VL does), and this line exists precisely so
-        // `frame_gpu_ms` is interpretable after the fact — a scale the log does not carry is a 4×
-        // cost difference nobody can attribute later, which is the gap that let BUG-098 hide.
-        let scaleText = String(format: "%.2f", min(directRenderScale, rayMarchRenderScale))
+        let passes = passesLock.withLock { activePasses }
+        let isRayMarch = passes.contains(.rayMarch)
+        let isScalableDirect = passes.isEmpty || passes == [.direct]
+        // W0.2: report the scale ACTUALLY applied. A ray-march sidecar may declare 0.5
+        // while the marched-pixel budget lowers a 4K frame to 0.4; logging the declaration
+        // made frame cost ambiguous by 56% in pixel area.
+        let effectiveScale: Float
+        if isRayMarch {
+            effectiveScale = Self.marchScale(
+                declared: rayMarchRenderScale,
+                width: pixelWidth,
+                height: pixelHeight
+            )
+        } else if isScalableDirect {
+            effectiveScale = directRenderScale
+        } else {
+            // Feedback, mv-warp, post-process, particle, and staged paths own persistent
+            // targets whose resize semantics are deliberately outside W0.2.
+            effectiveScale = 1.0
+        }
+        let internalWidth = max(Int((Float(pixelWidth) * effectiveScale).rounded()), 1)
+        let internalHeight = max(Int((Float(pixelHeight) * effectiveScale).rounded()), 1)
+        let internalMegapixels = Double(internalWidth * internalHeight) / 1_000_000
+        let scaleText = String(format: "%.2f", effectiveScale)
         let mpText = String(format: "%.2f", megapixels)
-        return "width=\(pixelWidth) height=\(pixelHeight) megapixels=\(mpText) render_scale=\(scaleText)"
+        let internalMPText = String(format: "%.2f", internalMegapixels)
+        return "width=\(pixelWidth) height=\(pixelHeight) megapixels=\(mpText) "
+            + "render_scale=\(scaleText) internal_width=\(internalWidth) "
+            + "internal_height=\(internalHeight) internal_megapixels=\(internalMPText)"
     }
 
     var directRenderScale: Float {
@@ -609,12 +631,11 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     ///                         the dispatched pass or in the pre/post setup.
     public var onRenderTimingObserved: ((_ encodeCpuMs: Float, _ renderframeCpuMs: Float) -> Void)?
 
-    /// Ray-march per-pass CPU breakdown observer (PERF.2-pass — BUG-019 instrumentation).
-    /// Fires from `drawWithRayMarch` after `RayMarchPipeline.render(...)` returns. Only
-    /// invoked on ray-march frames; other preset paths leave the recorder's values empty.
-    ///   - `gbufferMs`: wall-clock of the G-buffer pass (SDF or mesh dispatch).
-    ///   - `lightingMs`: wall-clock of the lighting pass.
-    ///   - `postProcessMs`: wall-clock of bloom / composite.
+    /// Ray-march per-pass GPU breakdown observer (W0.2).
+    /// Fires asynchronously after the command buffer completes. Values come from GPU
+    /// timestamp counters at render-encoder boundaries—not CPU encoding wall time and
+    /// not command-buffer time, which may include queue/display waits. Only invoked on
+    /// ray-march frames and on devices supporting draw-boundary counter sampling.
     public var onRayMarchPassTimingObserved: (
         (_ gbufferMs: Float, _ lightingMs: Float, _ postProcessMs: Float) -> Void
     )?

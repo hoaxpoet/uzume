@@ -39,7 +39,8 @@ extension RayMarchPipeline {
         stemFeatures: StemFeatures,
         noiseTextures: TextureManager?,
         presetFragmentBuffer3: MTLBuffer? = nil,
-        presetHeightTexture: MTLTexture? = nil
+        presetHeightTexture: MTLTexture? = nil,
+        gpuTiming: GPUPassSampleWindow? = nil
     ) {
         guard let g0 = gbuffer0, let g1 = gbuffer1, let g2 = gbuffer2 else {
             passLogger.error("runGBufferPass: G-buffer textures nil — skipping")
@@ -68,6 +69,7 @@ extension RayMarchPipeline {
             )
             return
         }
+        gpuTiming?.begin(on: encoder)
         encoder.setRenderPipelineState(gbufferPipelineState)
         encoder.setFragmentBytes(&features, length: MemoryLayout<FeatureVector>.stride, index: 0)
         encoder.setFragmentBuffer(fftBuffer, offset: 0, index: 1)
@@ -88,6 +90,7 @@ extension RayMarchPipeline {
         let slot10Texture = presetHeightTexture ?? ferrofluidHeightPlaceholderTexture
         encoder.setFragmentTexture(slot10Texture, index: 10)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        gpuTiming?.end(on: encoder)
         encoder.endEncoding()
     }
 
@@ -115,7 +118,8 @@ extension RayMarchPipeline {
         stemFeatures: StemFeatures,
         noiseTextures: TextureManager?,
         iblManager: IBLManager? = nil,
-        presetFragmentBuffer3: MTLBuffer? = nil
+        presetFragmentBuffer3: MTLBuffer? = nil,
+        gpuTiming: GPUPassSampleWindow? = nil
     ) {
         guard let g0 = gbuffer0, let g1 = gbuffer1, let g2 = gbuffer2,
               let lit = litTexture else { return }
@@ -127,6 +131,7 @@ extension RayMarchPipeline {
         desc.colorAttachments[0].storeAction = .store
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: desc) else { return }
+        gpuTiming?.begin(on: encoder)
         encoder.setRenderPipelineState(lightingPipeline)
         encoder.setFragmentBytes(&features, length: MemoryLayout<FeatureVector>.stride, index: 0)
         var stems = stemFeatures
@@ -147,6 +152,7 @@ extension RayMarchPipeline {
         noiseTextures?.bindTextures(to: encoder)
         iblManager?.bindTextures(to: encoder)       // texture(9–11)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        gpuTiming?.end(on: encoder)
         encoder.endEncoding()
     }
 }
@@ -226,7 +232,8 @@ extension RayMarchPipeline {
     /// Pass 5 (fallback, no PostProcessChain): ACES composite litTexture → outputTexture.
     func runCompositePass(commandBuffer: MTLCommandBuffer,
                           outputTexture: MTLTexture,
-                          overrideSource: MTLTexture? = nil) {
+                          overrideSource: MTLTexture? = nil,
+                          gpuTiming: GPUPassSampleWindow? = nil) {
         guard let lit = overrideSource ?? litTexture else { return }
 
         let desc = MTLRenderPassDescriptor()
@@ -236,10 +243,12 @@ extension RayMarchPipeline {
         desc.colorAttachments[0].storeAction = .store
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: desc) else { return }
+        gpuTiming?.begin(on: encoder)
         encoder.setRenderPipelineState(compositePipeline)
         encoder.setFragmentTexture(lit, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        gpuTiming?.end(on: encoder)
         encoder.endEncoding()
     }
 }

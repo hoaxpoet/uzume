@@ -157,6 +157,15 @@ The renderer manages the Metal pipeline: device, command queue, triple-buffered 
 
 **Render path priority:** mesh → postProcess → rayMarch → feedback → direct.
 
+**4K measurement and scaling (W0.2).** `render_scale` is a sidecar-owned internal-resolution
+fraction shared by the scalable direct and ray-march paths. Direct presets render into an offscreen
+target and upscale; ray-march presets scale G-buffer and lighting while keeping the final composite
+at drawable size. Feedback, mv-warp, staged, particle, and standalone post-process paths remain
+native until their persistent/intermediate resize contracts are explicit. `RENDER_TARGET` records
+both drawable and effective internal dimensions. Ray-march pass attribution uses draw-boundary
+`MTLCounterSampleBuffer` timestamps for G-buffer, lighting, and the full post-process group; when a
+device lacks counters, no CPU proxy is emitted as GPU time.
+
 **Per-frame ray-march modulation.** The shared `drawWithRayMarch` path applies preset-agnostic, audio-reactive modulation to `SceneUniforms` each frame — driven by `FeatureVector` values that the lighting / composite passes consume. Modulations:
 
 - **Light intensity** = `baseIntensity × (0.4 + max(beatBass, beatMid, beatComposite) × 2.6)` — pulses on any-band beat onset; cross-genre by reading the strongest of the three onset signals.
@@ -624,7 +633,7 @@ UzumeEngine/
     RenderPipeline          → Render graph dispatch, feedback ping-pong, activePasses guarded by passesLock
     DrawableLifecycleProbe  → HANG.1 lock-protected renderer diagnostic. Correlates per-frame render-pass/drawable requests, unique drawable objects, scheduled presentation, command-buffer commit/completion/failure, and unpresented acquisitions. `VisualizerEngine+InitHelpers` polls its public snapshot off the render thread and persists 10 s balance heartbeats plus >500 ms blocked-request alarms to session.log. Instrumentation only; no render decision or Metal resource ownership.
     RenderPipeline+Draw     → Per-frame render-graph executor (renderFrame). **LFSTEM.1e:** `perFrameStemPublish` fires FIRST, before the frame snapshots `latestStemFeatures` — that snapshot serves the particles update, the preset tick and the draw, so publishing after it would land a frame late. It is a separate hook from `meshPresetTick` because that slot is owned by whichever preset needs per-frame state (Skein's painter clock), and one closure cannot serve both. Walks activePasses, dispatches the first available pass. MV-2 multi-pass flow: when .mvWarp is present, a preceding .rayMarch pass renders to warpState.sceneTexture and continues the loop instead of returning. Fallback path is drawDirect.
-    RenderPipeline+DirectDraw → NB.8 half-resolution direct-render path (Nimbus). `setDirectRenderScale(_:)` opts a `direct` preset into rendering its fragment to a 0.5× offscreen `halfResTarget` then bilinearly upscaling to the drawable (`feedback_blit` + linear-clamp sampler) — ~4× cheaper for a body that swells to fill the frame. `drawDirect` branches on the scale; the shared slot-binding contract lives in `encodePresetVisualization`. Default 1.0 (every other preset full-res, unaffected); the half-res target is pre-allocated at preset apply. MetalFX is NOT wired (Temporal needs motion vectors a procedural volume lacks → ghosting); the bilinear upscale substitutes, appropriate for soft gas. Worst-case Nimbus body ~2.6 ms half-res march + ~0.3 ms upscale ≈ 3 ms (vs ~7.6 ms full-res), well under the 7 ms Tier-2 ceiling.
+    RenderPipeline+DirectDraw → W0.2 scalable direct-render path. `PresetDescriptor.render_scale` reaches `setDirectRenderScale(_:)`; a scale below 1 renders into `halfResTarget` then bilinearly upscales (`feedback_blit` + linear-clamp sampler). Nimbus declares 0.5 in its sidecar; no preset-name hard-code remains. Default 1.0. MetalFX Temporal is not wired because procedural scenes lack motion vectors.
     RenderPipeline+MeshDraw → Mesh shader draw: drawWithMeshShader. Delegates to MeshGenerator (native M3+ mesh or M1/M2 vertex fallback).
     RenderPipeline+PostProcess → HDR post-process: drawWithPostProcess (stand-alone path; ray-march presets get bloom via PostProcessChain.runBloomAndComposite instead).
     RenderPipeline+FeedbackDraw → Milkdrop-style global feedback path (Membrane). FeedbackDrawContext value type + 2-mode (particle vs surface) dispatch + ping-pong texture swap.
@@ -651,7 +660,8 @@ UzumeEngine/
     MVWarpTypes → `MVWarpPipelineBundle` (the per-preset compiled pipeline states the mv_warp pass needs) + the mv_warp value types. Consumed by RenderPipeline+MVWarp.
     FrameBudgetManager      → Pure-state frame timing governor: QualityLevel ladder (full→noBloom→reducedRayMarch→reducedParticles→reducedMesh), asymmetric hysteresis (3 overruns down / 180 frames up), per-tier Configuration factories, reset() on preset change. Exposes recentMaxFrameMs/recentFramesObserved (30-slot rolling window) via FrameTimingProviding for ML scheduling. D-057, D-059.
     MLDispatchScheduler     → Pure-state ML dispatch controller: gates stem separation dispatch onto frame-timing-clean moments. Decision enum (dispatchNow/defer/forceDispatch), DispatchContext value type, decide(context:) algorithm. Tier defaults: 2000ms/30-frame (Tier 1), 1500ms/20-frame (Tier 2). FrameTimingProviding protocol for testability. D-059.
-    RayMarchPipeline        → Deferred 3-pass: G-buffer textures, lighting pipeline, composite pipeline. (The reducedMotion OR-gate went with SSGI at RECON.18.)
+    RayMarchPipeline        → Deferred 3-pass: G-buffer textures, lighting pipeline, composite pipeline. W0.2 brackets the three logical groups with `RayMarchPassProfiler` GPU timestamp counters. (The reducedMotion OR-gate went with SSGI at RECON.18.)
+    RayMarchPassProfiler    → Triple-buffered `MTLCounterSampleBuffer`: six draw-boundary timestamp samples per ray-march frame resolve asynchronously into G-buffer / lighting / post-process GPU milliseconds. Absent on devices without counter support; never substitutes CPU encode time.
     RayMarchPipeline+Passes → Per-pass encoders: runGBufferPass, runMeshGBufferPass (FA#66 mesh branch), runLightingPass, runDepthDebugPass (dead — CA.7a-FU-2), runGBufferDebugPass (G key), runCompositePass. Slot-8 (LumenPatternState) + slot-10 (FerrofluidParticles height) placeholder fallbacks live here.
     RayMarchPipeline+PipelineStates → Static factory buildPipelineBundle returning compiled lighting/composite/gbufferDebug/depthDebug pipeline states + sampler. Single call site: RayMarchPipeline.init.
     PostProcessChain        → HDR scene texture, bloom ping-pong, 4 pipeline states, ACES composite. bloomEnabled gates bright-pass + blur; composite always runs for ACES tone-mapping. runBloomAndComposite is the ray-march integration path (consumes externally-rendered HDR scene texture from RayMarchPipeline).

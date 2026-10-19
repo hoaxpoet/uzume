@@ -478,8 +478,10 @@ here, ports first:
 
 **Wave 0: process only, no scenes (about 1 week).**
 - W0.1 Mechanise R1 decoy lift and R2 two-song sheet on the QG.3 coupling harness and `compare_render.sh`.
-- W0.2 Per-pass GPU timing. The registry lists it as missing, and `frame_gpu_ms` floors at about 15.3 ms,
-  so the flagships cannot be priced without it.
+- W0.2 ✅ Per-pass GPU timing (2026-10-19). Ray-march G-buffer, lighting, and post-process groups now
+  use Apple-GPU timestamp counters; `frame_gpu_ms`'s ≈15.3 ms display-wait floor is no longer used
+  for pass attribution. The same increment made `render_scale` sidecar-owned for direct and ray-march
+  presets and records effective internal dimensions at 4K.
 - W0.3 A **beta test playlist**: about 10 local FLACs spanning 4/4 electronic with drops, hip-hop, rock,
   swung jazz, rubato classical, a 3/4 or 5/4 track, ambient, sung ballad, metal, and *Low*. The same list
   also gets a streaming pass, for the ≈ 2.5 s stem lag.

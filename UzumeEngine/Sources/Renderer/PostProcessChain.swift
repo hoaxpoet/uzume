@@ -255,6 +255,22 @@ public final class PostProcessChain: @unchecked Sendable {
         to outputTexture: MTLTexture,
         commandBuffer: MTLCommandBuffer
     ) {
+        runBloomAndComposite(
+            from: externalSceneTexture,
+            to: outputTexture,
+            commandBuffer: commandBuffer,
+            gpuTiming: nil
+        )
+    }
+
+    /// Renderer-internal overload that brackets the whole bloom/composite group with
+    /// GPU timestamp samples. The public API remains free of the profiler's internal type.
+    func runBloomAndComposite(
+        from externalSceneTexture: MTLTexture,
+        to outputTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer,
+        gpuTiming: GPUPassSampleWindow?
+    ) {
         // CLEAN.4.3: feed the external texture into the bloom/composite passes via
         // `sceneTexture`, but restore it on exit (the defer covers the guard below too)
         // — otherwise a later standalone `.postProcess` render() draws into, and leaks,
@@ -272,11 +288,16 @@ public final class PostProcessChain: @unchecked Sendable {
         }
 
         if bloomEnabled {
-            runBrightPass(commandBuffer: commandBuffer)
+            runBrightPass(commandBuffer: commandBuffer, gpuTimingStart: gpuTiming)
             runBlurH(commandBuffer: commandBuffer)
             runBlurV(commandBuffer: commandBuffer)
         }
-        runComposite(commandBuffer: commandBuffer, outputTexture: outputTexture)
+        runComposite(
+            commandBuffer: commandBuffer,
+            outputTexture: outputTexture,
+            gpuTimingStart: bloomEnabled ? nil : gpuTiming,
+            gpuTimingEnd: gpuTiming
+        )
     }
 
     // MARK: - Internal Pass Methods
@@ -321,7 +342,10 @@ public final class PostProcessChain: @unchecked Sendable {
 
     /// Pass 2: Bright pass — `sceneTexture` → `bloomTexA`.
     /// Only pixels with Rec. 709 luminance > 0.9 survive; others are zeroed.
-    func runBrightPass(commandBuffer: MTLCommandBuffer) {
+    func runBrightPass(
+        commandBuffer: MTLCommandBuffer,
+        gpuTimingStart: GPUPassSampleWindow? = nil
+    ) {
         guard let scene = sceneTexture, let bloomA = bloomTexA else { return }
 
         let desc = MTLRenderPassDescriptor()
@@ -331,6 +355,7 @@ public final class PostProcessChain: @unchecked Sendable {
         desc.colorAttachments[0].storeAction = .store
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: desc) else { return }
+        gpuTimingStart?.begin(on: encoder)
         encoder.setRenderPipelineState(brightPassPipeline)
         encoder.setFragmentTexture(scene, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
@@ -383,7 +408,12 @@ public final class PostProcessChain: @unchecked Sendable {
     /// Adds bloom at 0.5 strength when `bloomEnabled` is `true`; skips bloom contribution
     /// when `false` (frame-budget governor, QualityLevel >= .noBloom). ACES tone mapping
     /// always runs regardless of bloom state. D-057.
-    func runComposite(commandBuffer: MTLCommandBuffer, outputTexture: MTLTexture) {
+    func runComposite(
+        commandBuffer: MTLCommandBuffer,
+        outputTexture: MTLTexture,
+        gpuTimingStart: GPUPassSampleWindow? = nil,
+        gpuTimingEnd: GPUPassSampleWindow? = nil
+    ) {
         guard let scene = sceneTexture, let bloomA = bloomTexA else { return }
 
         let desc = MTLRenderPassDescriptor()
@@ -393,6 +423,7 @@ public final class PostProcessChain: @unchecked Sendable {
         desc.colorAttachments[0].storeAction = .store
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: desc) else { return }
+        gpuTimingStart?.begin(on: encoder)
         encoder.setRenderPipelineState(compositePipeline)
         // bloomStrength: 1.0 when bloom is enabled, 0.0 when suppressed by governor.
         var strength: Float = bloomEnabled ? 1.0 : 0.0
@@ -401,6 +432,7 @@ public final class PostProcessChain: @unchecked Sendable {
         encoder.setFragmentTexture(bloomA, index: 1)
         encoder.setFragmentSamplerState(sampler, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        gpuTimingEnd?.end(on: encoder)
         encoder.endEncoding()
     }
 }

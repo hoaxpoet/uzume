@@ -251,8 +251,9 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// fill/accent); a 5th+ is ignored. Empty uses `SceneUniforms` defaults.
     public let sceneLights: [SceneLight]
 
-    /// Fraction of display resolution the ray-march chain renders at (`render_scale`).
-    /// Consumed via `rayMarchRenderScale` below. Clamped to [0.4, 1].
+    /// Fraction of display resolution used by scalable render paths (`render_scale`).
+    /// Direct and ray-march paths currently consume it. Stateful feedback/mv-warp/staged
+    /// paths stay full-resolution until they have explicit history-resize semantics.
     public let renderScale: Float?
 
     /// Ray-march render scale (BUG-101 / PERF.11).
@@ -270,6 +271,16 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// Clamped to [0.4, 1.0]: below 0.4 the upscale stops being softness and starts
     /// being a different image.
     public var rayMarchRenderScale: Float {
+        scalableRenderScale
+    }
+
+    /// Direct-fragment render scale. Uses the same bounded metadata value as ray marching;
+    /// the render path performs a single bilinear upscale into the native-size drawable.
+    public var directRenderScale: Float {
+        scalableRenderScale
+    }
+
+    private var scalableRenderScale: Float {
         guard let scale = renderScale else { return 1.0 }
         return min(max(scale, 0.4), 1.0)
     }
