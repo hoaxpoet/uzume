@@ -51,7 +51,7 @@ struct EnergeticFlybyRenderTests {
         func frames(faithful: Float) -> [EnergeticFlybyStateGPU] {
             (-2...2).map { k in
                 EnergeticFlybyStateGPU(time: time, travel: time, camT: time, spin: best.spin + Float(k) * spinStep,
-                                       burst: 0, glowBase: 0.5, faithful: faithful)
+                                       flicker: 0, glowBase: 1.25, faithful: faithful)   // typical glow = Kali's average
             }
         }
         func luma(_ states: [EnergeticFlybyStateGPU]) throws -> [Double] {
@@ -133,19 +133,18 @@ struct EnergeticFlybyRenderTests {
         }
         report("shipped", shipped)
         let fixedGlow = EnergeticFlybyState.glowFloor + EnergeticFlybyState.glowGain * 0.5
-        report("no burst", try arm { _, s in s.burst = 0 })
-        report("no burst, hue, roll", try arm { _, s in s.burst = 0; s.hue = 0; s.roll = 0 })
-        report("+ constant glow floor", try arm { _, s in s.burst = 0; s.hue = 0; s.roll = 0; s.glowBase = fixedGlow })
+        report("no hue, roll", try arm { _, s in s.hue = 0; s.roll = 0 })
+        report("+ constant glow", try arm { _, s in s.hue = 0; s.roll = 0; s.glowBase = fixedGlow })
         report("+ constant speed + spin", try arm { i, s in
             let t = Float(i) / 60
-            s.burst = 0; s.hue = 0; s.roll = 0; s.glowBase = fixedGlow
+            s.hue = 0; s.roll = 0; s.glowBase = fixedGlow
             s.travel = t * 1.05; s.camT = s.travel; s.spin = t * 2
         })
         report("Kali (faithful)", try arm { i, s in
             let t = Float(i) / 60, sine = sin(t) * 123.456
             s = EnergeticFlybyStateGPU(time: t, travel: t,
                                        camT: t.truncatingRemainder(dividingBy: 10) > 5 ? (t / 4 + 0.5).rounded(.down) * 4 : t,
-                                       spin: t, burst: sine - sine.rounded(.down), glowBase: 0.5, faithful: 1)
+                                       spin: t, flicker: sine - sine.rounded(.down), glowBase: 0.5, faithful: 1)
         })
     }
 
@@ -224,16 +223,19 @@ struct EnergeticFlybyRenderTests {
         // D-157: per-frame Δ of frame-mean luma.
         let deltas = zip(frames, frames.dropFirst()).map { abs($1.luma - $0.luma) }
 
-        // Downbeat timing: the frame the burst is set (its peak) against every Beat This! downbeat.
+        // Downbeat timing: the frame each colour step starts (the downbeat's visual event) against every
+        // Beat This! downbeat.
         let states = trace.states
-        let peaks = states.indices.filter { $0 > 0 && states[$0].burst == 1 && states[$0 - 1].burst < 1 }.map { times[$0] }
+        let peaks = states.indices.filter {
+            $0 > 1 && states[$0].hue != states[$0 - 1].hue && states[$0 - 1].hue == states[$0 - 2].hue
+        }.map { times[$0] }
         let reference = try Self.referenceDownbeats(capture).filter { $0 >= start && $0 < start + seconds }
         let lags = reference.map { ref in peaks.map { $0 - ref }.min { abs($0) < abs($1) } ?? .infinity }
         let hits = lags.filter { abs($0) <= 1 / Self.fps + 1e-4 }.count
         let finiteLags = lags.filter(\.isFinite).sorted()
         print(String(format: "[efb-replay] %@ | continuity: median %.4f max %.4f, %d frames > 3× median | "
                      + "luma mean %.3f, max Δ %.4f, %d > 0.05, %d > 0.1 | downbeats %d/%d within ±1 frame "
-                     + "(lags ms: %@) | bursts %d",
+                     + "(lags ms: %@) | colour steps %d",
                      capture, median, diffs.max() ?? 0, spikes,
                      frames.map(\.luma).reduce(0, +) / Double(frames.count), deltas.max() ?? 0,
                      deltas.filter { $0 > 0.05 }.count, deltas.filter { $0 > 0.1 }.count,

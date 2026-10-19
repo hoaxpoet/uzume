@@ -1,9 +1,9 @@
 // EnergeticFlybyStateTests — EFB.1 task 2: the music drivers for Energetic Flyby, on synthetic grids.
 //
-// Pure CPU checks of `EnergeticFlybyState`: downbeat → one burst + one colour turn, beat 3 → the
-// 0.35 echo (2 and 4 → nothing), the bank eases with no per-frame step, travel never jumps and keeps
-// moving at silence, the normalisers' warm-up does not overshoot (FH.17), and the per-track reset
-// keeps travel and hue. Plus the GPU layout against the MSL struct, read through Metal reflection.
+// Pure CPU checks of `EnergeticFlybyState`: a downbeat turns the colour exactly once, the turn stays in
+// Kali's range, the bank eases with no per-frame step, travel never jumps and keeps moving at silence, the
+// normalisers' warm-up does not overshoot (FH.17), and the per-track reset keeps travel and hue. Plus the GPU
+// layout against the MSL struct, read through Metal reflection.
 
 import Testing
 import Metal
@@ -43,35 +43,18 @@ struct EnergeticFlybyStateTests {
 
     // MARK: - Downbeat
 
-    @Test("A downbeat produces exactly one burst and one hue step")
-    func downbeatIsOneBurstOneHueStep() throws {
+    @Test("A downbeat produces exactly one colour step")
+    func downbeatIsOneHueStep() throws {
         // 120 BPM 4/4: a bar is 2 s; 2.5 s crosses exactly one downbeat (t = 2.0).
-        let (_, trace) = try Self.run(Self.grid(seconds: 2.5))
-        let bursts = zip(trace, trace.dropFirst()).filter { $1.burst > $0.burst + 0.5 }.count
-        #expect(bursts == 1, "bursts: \(bursts)")
-        #expect(trace.contains { $0.burst == 1 })
+        let (state, trace) = try Self.run(Self.grid(seconds: 2.5))
+        let starts = trace.indices.dropFirst(2).filter {
+            trace[$0].hue != trace[$0 - 1].hue && trace[$0 - 1].hue == trace[$0 - 2].hue
+        }
+        #expect(starts.count == 1, "colour steps start at frames \(starts)")
         let hueStep = trace.last!.hue - trace.first!.hue
         #expect(abs(hueStep - EnergeticFlybyState.hueStep) < 1e-4, "hue moved \(hueStep)")
-    }
-
-    @Test("Beat 3 is the 0.35 echo; beats 2 and 4 add nothing")
-    func beatThreeEchoesBeatsTwoAndFourDoNot() throws {
-        // 120 BPM 4/4: beats every 0.5 s, downbeats at 2.0 and 4.0 (the first bar's start is not a
-        // wrap). The only rises may be beat 3 (1.0, 3.0) and the downbeats (2.0, 4.0).
-        let (_, trace) = try Self.run(Self.grid(seconds: 4.2))
-        let rises = trace.indices.dropFirst().filter { trace[$0].burst > trace[$0 - 1].burst + 0.01 }
-        let riseTimes = rises.map { Float($0) / Self.fps }
-        #expect(rises.count == 4, "rises at \(riseTimes)")
-        for (time, expected) in zip(riseTimes, [Float(1), 2, 3, 4]) {
-            #expect(abs(time - expected) <= 2 / Self.fps, "rise at \(time), expected \(expected)")
-        }
-        for index in rises where abs(Float(index) / Self.fps - 3) < 0.1 {
-            #expect(abs(trace[index].burst - EnergeticFlybyState.echoLevel) < 0.02, "beat-3 burst \(trace[index].burst)")
-        }
-        // No echo in 3/4 (beat 3 is the last beat there; the echo needs ≥ 4 beats per bar).
-        let (_, waltz) = try Self.run(Self.grid(seconds: 3.9, beatsPerBar: 3))
-        let waltzRises = zip(waltz, waltz.dropFirst()).filter { $1.burst > $0.burst + 0.01 }.count
-        #expect(waltzRises == 2, "3/4 rises: \(waltzRises) (two downbeats, no echo)")
+        #expect(trace.allSatisfy { $0.flicker == 0 }, "no brightness flare on the shipped path")
+        _ = state
     }
 
     @Test("The colour turn swings pink → orange → pink → blue and never leaves Kali's ±0.7 rad")
@@ -120,13 +103,13 @@ struct EnergeticFlybyStateTests {
         #expect(trace.allSatisfy { $0.camT == $0.travel }, "the shipped camera never parks")
     }
 
-    @Test("Silence keeps the flight moving at the floor speed, with no bursts")
+    @Test("Silence keeps the flight moving at the floor speed, at the glow floor")
     func silenceFliesAtTheFloor() throws {
         let drive = (0..<600).map { _ in FeatureVector(deltaTime: Self.dt) }
         let (_, trace) = try Self.run(drive)
         let expected = EnergeticFlybyState.speedFloor * Self.dt * Float(drive.count)
         #expect(abs(trace.last!.travel - expected) < 1e-3, "travel \(trace.last!.travel) vs \(expected)")
-        #expect(trace.allSatisfy { $0.burst == 0 && $0.glowBase == EnergeticFlybyState.glowFloor })
+        #expect(trace.allSatisfy { $0.flicker == 0 && $0.glowBase == EnergeticFlybyState.glowFloor })
     }
 
     // MARK: - Normalisers
@@ -168,7 +151,7 @@ struct EnergeticFlybyStateTests {
         #expect(after.travel == before.travel)
         #expect(after.hue == before.hue)
         #expect(after.roll == before.roll, "the bank settles where it is — no snap")
-        #expect(state.energy == 0 && state.bass == 0 && state.burst == 0)
+        #expect(state.energy == 0 && state.bass == 0)
     }
 
     // MARK: - Faithful mode
@@ -181,7 +164,7 @@ struct EnergeticFlybyStateTests {
         #expect(abs(last.time - 7) < 1e-4 && last.travel == last.time && last.spin == last.time)
         #expect(last.camT == 8, "Kali parks at floor(t/4 + .5)·4 while mod(t, 10) > 5")
         let sine = sin(last.time) * 123.456
-        #expect(abs(last.burst - (sine - sine.rounded(.down))) < 1e-3)
+        #expect(abs(last.flicker - (sine - sine.rounded(.down))) < 1e-3)
         #expect(last.faithful == 1 && last.hue == 0 && last.roll == 0 && last.glowBase == 0.5)
     }
 
@@ -214,7 +197,7 @@ struct EnergeticFlybyStateTests {
             "travel": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.travel)!,
             "camT": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.camT)!,
             "spin": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.spin)!,
-            "burst": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.burst)!,
+            "flicker": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.flicker)!,
             "glowBase": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.glowBase)!,
             "hue": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.hue)!,
             "roll": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.roll)!,

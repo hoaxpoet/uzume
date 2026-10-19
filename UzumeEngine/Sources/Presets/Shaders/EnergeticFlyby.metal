@@ -8,7 +8,8 @@
 //   • `time`             → st.time, the state's wall clock (EnergeticFlybyState: ∫ dt)
 //   • `t` in mainImage   → st.travel (the flight position, ∫ speed dt); `from` uses st.camT
 //   • `time` in coso     → st.spin (Kali spun the spheres at `time`)
-//   • `so`               → the burst (Kali: fract(sin(time)*123.456), a per-frame flicker)
+//   • `so`               → st.flicker, faithful mode only (Kali: fract(sin(time)*123.456), a per-frame
+//                          strobe — 15.5 flashes/s on the flash train, so the shipped path drops it)
 //   • iResolution / gl_FragCoord → in.uv + features.aspect_ratio; y flipped (Uzume uv.y = 0 is top)
 //   • GLSL globals (br, tub, hit, pos, sphpos) → a thread struct passed by reference (MSL has no
 //     mutable globals); functions prefixed `efb_` (the preamble shares one namespace)
@@ -24,7 +25,7 @@
 // level the result matches his mean colour within 0.01 and his saturation within 0.01 (EFB.1 side-by-side).
 //
 // MUSIC + PHOTOSENSITIVITY (design doc §3–§5; every change is marked `EFB:`):
-//   • downbeat burst lights only the sphere rods (`g`), not the tunnel glow (`li`) — D-157
+//   • Kali's flicker is replaced by a steady glow level (st.glowBase, his 1.25 average at a typical passage)
 //   • glow colour turn (`hue`) on the downbeat; quarter-turn bank (`roll`) every second downbeat
 //   • energy → flight speed (st.travel) and glow floor (st.glowBase); bass → st.spin
 //   • the one-frame white-out fix: the rods are probed at the camera, glow × mix(.3, 1, …)
@@ -48,7 +49,7 @@ struct EnergeticFlybyStateGPU {
     float travel;     // flight position on path(): the sphere cluster and the look-at
     float camT;       // camera position on path(): == travel (faithful mode: Kali's 5 s park)
     float spin;       // sphere spin phase (bass)
-    float burst;      // downbeat burst 0…1 (faithful mode: Kali's `so`)
+    float flicker;    // faithful mode only: Kali's `so`
     float glowBase;   // glow floor (energy)
     float hue;        // glow colour turn, radians (downbeat)
     float roll;       // camera bank, radians (every second downbeat)
@@ -65,14 +66,11 @@ struct EFBMarch {
 };
 
 constant float kEFBDet = .001;
-/// EFB: radius around the sphere centre whose rod light the downbeat burst brightens (Kali's spiked
-/// shell is ~.16 across). Larger = a bigger flare and more of the frame moving on the beat.
-constant float kEFBCoreRadius = .25;
 /// EFB (cost, Matt 2026-10-19): Kali steps 0.3 of the distance bound; 0.6 halves the steps. The glow
 /// is a per-step sum, so each step's glow is weighted by the same ratio to keep Kali's brightness.
 constant float kEFBStep = .6;
-/// EFB: the downbeat flare's strength on the cluster core (Kali's flicker reached 1.5).
-constant float kEFBBurstGain = 1.5;
+/// EFB (white-out fix): ray length over which rod glow fades in while a rod is at the camera.
+constant float kEFBCamFade = .3;
 constant float kEFBGlowPerStep = kEFBStep / .3;
 
 // MARK: - Kali's functions (verbatim)
@@ -148,7 +146,6 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
     float2 uv = float2(atan2(dir.x, dir.y) + time * .5, length(dir.xy) + sin(time * .2));
     float3 col = efb_fractal(uv, time);
     float d = 0., td = 0., g = 0., ref = 0., ltd = 0., li = 0.;
-    float gCore = 0.;   // EFB: the rod glow gathered near the cluster centres (the burst's footprint)
     float3 p = from;
     // EFB (design §5, the white-out fix): when a spinning rod sweeps through the camera every ray
     // starts inside it and `g` saturates the whole frame for one frame (05_anti_whole_frame_whiteout).
@@ -173,24 +170,22 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         }
         if (d < kEFBDet || td > 3.3) break;   // EFB (cost): Kali 5; geometry fades to black at 3 (f = 1 - td/3)
         td += d;
-        g += .1 / (.1 + k.br * 13.) * kEFBGlowPerStep;
+        // EFB (white-out fix): with a rod at the camera every ray starts inside it, and the rod glow
+        // gathered in the first steps whites out the frame (05_anti_whole_frame_whiteout). Fade in only
+        // that near-camera glow, only while a rod is there (camGlow < 1) — no whole-frame dimming, which
+        // measured as its own flash.
+        g += .1 / (.1 + k.br * 13.) * kEFBGlowPerStep * mix(smoothstep(0., kEFBCamFade, td), 1., max(camGlow, st.faithful));   // faithful: no fix
         li += .1 / (.1 + k.tub * 5.) * kEFBGlowPerStep;
-        // EFB: the burst lights the cluster, not the frame. Kali's rod glow builds up along every ray
-        // (measured: a rods-only burst still moved the frame-mean 0.157/frame, 1.5 flashes/s), so the
-        // burst reads only the part of it gathered near the three sphere centres.
-        float3 c = p - k.sphpos;
-        gCore += .1 / (.1 + k.br * 13.) * kEFBGlowPerStep * exp(-dot(c, c) / (kEFBCoreRadius * kEFBCoreRadius));
     }
-    // EFB: Kali scaled the WHOLE glow by (.5 + so*1.5). The scene's burst adds only the cluster's own
-    // light (`gCore`); the rods and the tunnel light (`li`) sit at the energy floor, so the frame's
-    // luminance holds steady on the downbeat (D-157, design §5).
+    // EFB: Kali scaled the whole glow by (.5 + so*1.5), a per-frame strobe. The shipped glow is steady at
+    // st.glowBase (energy-driven, 1.25 at a typical passage — his average); the downbeat turns its colour.
     float glowScale;
     if (st.faithful > .5) {
         g = max(g, li * .15);
-        glowScale = st.glowBase + st.burst * 1.5;
+        glowScale = st.glowBase + st.flicker * 1.5;
     } else {
-        g = max(g * st.glowBase + gCore * st.burst * kEFBBurstGain, li * .15 * st.glowBase);
-        glowScale = mix(.3, 1., camGlow);
+        g = max(g, li * .15) * st.glowBase;
+        glowScale = 1.;
     }
     float f = 1. - td / 3.;
     if (ref == 1.) f = 1. - ltd / 3.;

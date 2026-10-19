@@ -2,7 +2,7 @@
   "name": "Energetic Flyby",
   "family": "fractal",
   "duration": 60,
-  "description": "A continuous flight down a twisting tunnel of glassy, perforated shells lit from inside, following a cluster of spiked, spinning spheres that throw light rods through the tunnel. Kali's Energetic Flyby (Shadertoy csjGDD, CC BY-NC-SA 3.0) ported verbatim. Each downbeat on the cached grid (barPhase01) bursts the sphere light and turns its colour, with a smaller echo on beat 3; every second downbeat banks the camera a quarter turn. The song's energy (spectralFlux, self-normalised) sets the flight speed and glow floor; the bass (bassDev, self-normalised) spins the spheres.",
+  "description": "A continuous flight down a twisting tunnel of glassy, perforated shells lit from inside, following a spiked, spinning sphere cluster that throws light rods through the tunnel. Kali's Energetic Flyby (Shadertoy csjGDD, CC BY-NC-SA 3.0), its march cut for cost and run at native resolution. Each downbeat on the cached grid (barPhase01) turns the glow's colour, pink to orange to pink to blue; every second downbeat banks the camera a quarter turn. The song's energy (spectralFlux, self-normalised) sets the flight speed and the glow level; the bass (bassDev, self-normalised) spins the spheres.",
   "author": "Kali (port: Uzume engine)",
   "passes": [],
   "fragment_function": "energetic_flyby_fragment",
@@ -16,16 +16,16 @@
   "complexity_cost": { "tier1": 7.7, "tier2": 7.7 },
   "audio_routes": [
     {
-      "route": "downbeat_burst",
+      "route": "downbeat_colour_turn",
       "primitive": "barPhase01",
       "kind": "accent",
-      "note": "EFB.1 — each wrap of the cached grid's barPhase01 is a downbeat: the sphere-core light bursts (decay 0.35 s, bounded to the cluster, D-157) and the glow colour steps 0.7 rad along pink -> orange -> pink -> blue (inside Kali's range); a 0.35 echo when barPhase01 x beatsPerBar crosses 2 (beat 3, meters of 4+); every second downbeat banks the camera a quarter turn over 1 s. EnergeticFlybyState."
+      "note": "EFB.1 - each wrap of the cached grid's barPhase01 is a downbeat: the glow colour steps 0.7 rad along pink -> orange -> pink -> blue (inside Kali's range), eased 0.25 s; every second downbeat banks the camera a quarter turn over 1 s. No brightness flare: at Kali's glow any flare took the worst-case flash train over the regional limit (Matt's call). EnergeticFlybyState."
     },
     {
       "route": "energy_speed_glow",
       "primitive": "spectralFlux",
       "kind": "continuous",
-      "note": "EFB.1 — spectralFlux self-normalised against its own running mean (8 s warm-up rule, FH.17), smoothed 0.6 s: flight speed 0.65 + 0.8 x energy and glow floor 0.45 + 0.5 x energy."
+      "note": "EFB.1 — spectralFlux self-normalised against its own running mean (8 s warm-up rule, FH.17), smoothed 0.6 s: flight speed 0.65 + 0.8 x energy and glow 0.9 + 0.7 x energy (a typical passage = Kali's average glow, 1.25)."
     },
     {
       "route": "bass_spin",

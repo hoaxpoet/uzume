@@ -134,6 +134,17 @@ for cost: one sphere system instead of three, steps of 0.6 of the distance bound
 weighted ×2), a 100-step cap and a 3.3 depth cut-off. Native 2560×1440: p50 13.2 / p95 17.1 ms; the app holds
 the scene at 30 fps. At Kali's glow level the cut march matches his mean colour within 0.01.
 
+**EFB.1, the downbeat and the colour (2026-10-19).** Matt: *"you still have the color wrong"*. The steady glow
+the spike carried over (0.45 + 0.5·energy) sat at about half of Kali's average (his flicker `.5 + so·1.5`
+averaged 1.25), darker and less saturated than his frames. At his glow level the flight alone holds the
+worst-case flash train **at** the regional limit (3.00/s); every downbeat brightness flare tried took it over
+(3.50/s, even at a quarter strength). Matt took §10's fallback **B**: Kali's full colour, the downbeat shown by
+the colour turn only. The musical-role sentence becomes: *on each "one" the glow's colour turns, and every
+second "one" the camera banks; between them the flight's speed follows the energy and the bass spins the
+spheres.* The white-out fix changed with it: a whole-frame dim as a rod nears the camera measured as its own
+flash at this brightness, so only the rod glow gathered in the first 0.3 of each ray is faded, and only while
+a rod is at the camera (forced moment ×1.03; ×1.78 without).
+
 ## 8. Licence (D-252)
 
 Kali's source carries no licence header, so Shadertoy's default terms apply: **CC BY-NC-SA 3.0**. The port is

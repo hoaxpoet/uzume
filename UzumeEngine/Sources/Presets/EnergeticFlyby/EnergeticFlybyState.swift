@@ -7,13 +7,15 @@
 // self-normalisation (FA #31: no fixed p5–p95 is available live).
 //
 // One primitive per layer (FA #67):
-//   • downbeat (cached grid, `barPhase01` wrap) → sphere-core burst + glow colour turn; a 0.35 echo
-//     on beat 3; every second downbeat a quarter-turn bank, eased over 1 s, alternating direction
+//   • downbeat (cached grid, `barPhase01` wrap) → the glow's colour turns (pink → orange → pink → blue);
+//     every second downbeat a quarter-turn bank, eased over 1 s, alternating direction. No brightness
+//     flare: at Kali's full glow any flare took the worst-case flash train over the regional limit
+//     (Matt, 2026-10-19: Kali's colour, the downbeat by the colour turn only)
 //   • energy (`spectralFlux`, self-normalised, 0.6 s) → flight speed + glow floor
 //   • bass (positive `bassDev`, self-normalised, 30 ms / 300 ms) → sphere spin
 //
 // EFB_FAITHFUL=1 replaces the music with Kali's own behaviour (travel = spin = time, the
-// pseudo-random `so` burst, Kali's 5 s camera park, hue/roll 0, no white-out fix) so a still can be
+// pseudo-random `so` flicker, Kali's 5 s camera park, hue/roll 0, no white-out fix) so a still can be
 // compared against the reference frames 01–04. Never the shipped path.
 
 import Foundation
@@ -31,7 +33,7 @@ struct EnergeticFlybyStateGPU: Equatable {
     var travel: Float = 0
     var camT: Float = 0
     var spin: Float = 0
-    var burst: Float = 0
+    var flicker: Float = 0   // faithful mode only: Kali's `so`
     var glowBase: Float = 0
     var hue: Float = 0
     var roll: Float = 0
@@ -41,7 +43,7 @@ struct EnergeticFlybyStateGPU: Equatable {
 
 // MARK: - EnergeticFlybyState
 
-/// Owns the flight, spin, burst, colour-turn and bank state for Energetic Flyby and its GPU buffer.
+/// Owns the flight, spin, colour-turn and bank state for Energetic Flyby and its GPU buffer.
 ///
 /// Thread-safe: `tick()`, `reset()` and `stateBuffer` can be used from any queue.
 public final class EnergeticFlybyState: @unchecked Sendable {
@@ -50,15 +52,17 @@ public final class EnergeticFlybyState: @unchecked Sendable {
 
     static let speedFloor: Float = 0.65
     static let speedGain: Float = 0.8
-    static let glowFloor: Float = 0.45
-    static let glowGain: Float = 0.5
+    /// Glow level = glowFloor + glowGain·energy. Kali's glow flickered between 0.5× and 2.0× every frame
+    /// (`.5 + so·1.5`, `so` uniform), averaging 1.25×; the flicker is a strobe and is gone, so the steady level
+    /// is set to that average: a typical passage (energy ≈ 0.5 on the route-coverage captures) is 1.25×,
+    /// silence 0.9×, the loudest 1.6×. Matt, 2026-10-19: "you still have the color wrong" — the spike's
+    /// 0.45 + 0.5·energy sat at about half of Kali's glow, darker and less saturated than his frames.
+    static let glowFloor: Float = 0.9
+    static let glowGain: Float = 0.7
     static let energyTau: Float = 0.6
     static let bassAttack: Float = 0.03
     static let bassRelease: Float = 0.30
     static let spinGain: Float = 3
-    static let burstTau: Float = 0.35
-    static let echoLevel: Float = 0.35
-    static let echoTau: Float = 0.20
     static let hueStep: Float = 0.7
     /// The colour turn swings pink → orange → pink → blue (0, +0.7, 0, −0.7 rad on Kali's glow rotation), one
     /// step per downbeat. Matt, 2026-10-19: stay in Kali's range — accumulating the turn took the glow
@@ -77,7 +81,6 @@ public final class EnergeticFlybyState: @unchecked Sendable {
     public let stateBuffer: MTLBuffer
     public private(set) var energy: Float = 0
     public private(set) var bass: Float = 0
-    public private(set) var burst: Float = 0
     /// True on the frame the cached grid's bar wrapped.
     public private(set) var downbeatThisFrame = false
 
@@ -94,9 +97,7 @@ public final class EnergeticFlybyState: @unchecked Sendable {
     private var heard: Float = 0
     private var fluxMean: Float = 0
     private var bassMean: Float = 0
-    private var echo: Float = 0
     private var lastBarPhase: Float = 0
-    private var lastBeatInBar: Float = 0
     private var hueBase: Float = 0
     private var hueTarget: Float = 0
     /// Position in `hueCycle`; never reset, so a track change continues the swing rather than repeating a colour.
@@ -142,8 +143,8 @@ public final class EnergeticFlybyState: @unchecked Sendable {
     public func reset() {
         lock.withLock {
             heard = 0; fluxMean = 0; bassMean = 0
-            energy = 0; bass = 0; burst = 0; echo = 0
-            lastBarPhase = 0; lastBeatInBar = 0
+            energy = 0; bass = 0
+            lastBarPhase = 0
             rollBase = currentRoll(); rollTarget = rollBase; rollSince = .infinity
             hueBase = currentHue(); hueTarget = hueBase; hueSince = .infinity
             downbeatCount = 0
@@ -171,24 +172,14 @@ public final class EnergeticFlybyState: @unchecked Sendable {
         bass += (bassIn - bass) * (1 - exp(-dt / (bassIn > bass ? Self.bassAttack : Self.bassRelease)))
         spin += Double((1 + Self.spinGain * bass) * dt)
 
-        // Downbeat = the cached grid's bar wrapping (never raw onsets). Beat 3 = the bar position
-        // crossing 2 beats, in meters of four or more.
-        let barPhase = features.barPhase01
-        let downbeat = barPhase + 0.5 < lastBarPhase
-        let beatInBar = barPhase * features.beatsPerBar
-        let beatThree = !downbeat && features.beatsPerBar >= 4 && lastBeatInBar < 2 && beatInBar >= 2
-        lastBarPhase = barPhase
-        lastBeatInBar = beatInBar
+        // Downbeat = the cached grid's bar wrapping (never raw onsets).
+        let downbeat = features.barPhase01 + 0.5 < lastBarPhase
+        lastBarPhase = features.barPhase01
         downbeatThisFrame = downbeat
 
-        burst *= exp(-dt / Self.burstTau)
-        echo *= exp(-dt / Self.echoTau)
-        if beatThree { echo = Self.echoLevel }
         hueSince += dt
         rollSince += dt
         if downbeat {
-            burst = 1
-            echo = 0
             hueBase = currentHue()
             hueTarget = Self.hueCycle[hueIndex % Self.hueCycle.count]
             hueIndex += 1
@@ -205,7 +196,7 @@ public final class EnergeticFlybyState: @unchecked Sendable {
         gpu.travel = Float(travel)
         gpu.camT = gpu.travel
         gpu.spin = Float(spin)
-        gpu.burst = max(burst, echo)
+        gpu.flicker = 0
         gpu.glowBase = Self.glowFloor + Self.glowGain * energy
         gpu.hue = currentHue()
         gpu.roll = currentRoll()
@@ -232,7 +223,7 @@ public final class EnergeticFlybyState: @unchecked Sendable {
         gpu.travel = time
         gpu.camT = time.truncatingRemainder(dividingBy: 10) > 5 ? (time / 4 + 0.5).rounded(.down) * 4 : time
         gpu.spin = time
-        gpu.burst = sine - sine.rounded(.down)
+        gpu.flicker = sine - sine.rounded(.down)
         gpu.glowBase = 0.5
         gpu.hue = 0
         gpu.roll = 0
