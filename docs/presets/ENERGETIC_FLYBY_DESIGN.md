@@ -89,6 +89,14 @@ luminance: round 3 max Δ frame-mean luma 0.168 per frame, 7 frames > 0.1 in 20 
 - **Bound the burst's footprint:** the burst brightens the light that comes *from the sphere cluster* (the `br`
   rod/sphere glow term, `g += .1/(.1+br*13.)`), not the tunnel light (`li`) or the whole glow sum. The tunnel
   stays at its energy-driven floor.
+  **EFB.1 finding (measured, 2026-10-19):** the rods-only burst as written still failed: Kali's rod glow `g`
+  builds up along *every* ray in the frame, so brightening it moved frame-mean luminance 0.157 in one frame
+  (1.50 flashes/s full frame, 4.00/s regional on the worst-case train). An ablation (burst, colour turn, bank,
+  glow floor, speed each switched off in turn) showed the burst is the only flash source. The shipped burst
+  therefore reads only the rod light gathered within `kEFBCoreRadius` (0.25) of the three sphere centres, so
+  the cluster core flares white-hot and the rest of the frame holds: 0.00 flashes/s, regional 2.50/s, red
+  0.50/s. Red is the bare flight's own (0.50–2.00/s with every driver off), so "red 0.00" is not reachable
+  without changing Kali's look.
 - **Keep global luminance steady on the beat:** gate the measured result, not the intent: 0.00 flashes/s on
   the flash harness's worst-case train, regional ≤ 3/s, red 0.00 (BR.20 v2), and report max Δ frame-mean luma.
 - **Fix the one-frame white-out** found in spike round 2 (frame 487, `05_anti_whole_frame_whiteout.jpg`). When a
