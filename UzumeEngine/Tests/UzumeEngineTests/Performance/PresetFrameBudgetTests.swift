@@ -170,13 +170,12 @@ struct PresetFrameBudgetTests {
         // builds the geometry per pass) at ~250 ms `-Onone`; `FirefliesGeometry.bandOrder` is a
         // counting sort. Release, no readback, DYC 1920x1080: see `FirefliesRenderTests.frameCostAt1080p`.
         "Fireflies": 19.61,
-        // EFB.1 — first recorded cost 29.97 ms (4.8x median, 2026-10-19, Debug harness with readback,
-        // full resolution). Kali's 200-step march is the cost (the downbeat-core accumulation adds
-        // <= 0.7 ms). Release, no readback, Mac mini M2 Pro, There There drive: 1080p p50 25.4 / p95
-        // 34.6 ms; 0.75x 15.3 / 20.9; 0.5x 7.5 / 10.2; 4K 95.4 / 129.4
-        // (`EnergeticFlybyRenderTests.releaseTiming`). Matt picked 0.5x (2026-10-19); production applies it
-        // with `setDirectRenderScale(0.5)`, which this harness does not, so this row times full resolution.
-        "Energetic Flyby": 29.97
+        // EFB.1 — 13.45 ms (2.2x median, 2026-10-19, Debug harness with readback, native 1080p) for the
+        // cost-reduced march (one sphere system, 2x steps, 100-step cap, 3.3 depth cut-off); Kali's verbatim
+        // march was 29.97. Release, no readback, Mac mini M2 Pro, There There drive, p50 / p95: native 1080p
+        // 7.7 / 10.0 ms, native 2560x1440 13.2 / 17.1, native 4K 28.8 / 36.8 (`EnergeticFlybyRenderTests.
+        // releaseTiming`). The app holds the scene at 30 fps (Matt: native resolution, 30 fps accepted).
+        "Energetic Flyby": 13.45
     ]
 
     /// Presets `MultiPassRenderHarness` cannot drive. Named, printed, and NOT counted as passing.

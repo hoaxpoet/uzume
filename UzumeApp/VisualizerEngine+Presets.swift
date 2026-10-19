@@ -199,6 +199,7 @@ extension VisualizerEngine {
         pipeline.setDirectPresetFragmentBuffer2(nil)
         pipeline.setDirectPresetFragmentBuffer3(nil)
         pipeline.setDirectRenderScale(1.0)   // NB.8: full-res unless a preset opts into half-res below
+        pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         pipeline.setRayMarchPresetHeightTexture(nil)
         pipeline.setPostProcessChain(nil)
         pipeline.setRayMarchPipeline(nil)
@@ -896,10 +897,11 @@ extension VisualizerEngine {
             pipeline.setMeshPresetTick { [weak state] features, stems in
                 state?.tick(deltaTime: features.deltaTime, features: features, stems: stems)
             }
-            // EFB.1, Matt's pick (2026-10-19) on the timing stills: half resolution + bilinear upscale.
-            // Kali's 200-step march is p95 34.6 ms at full 1080p, 20.9 ms at 0.75x and 10.2 ms at 0.5x
-            // (Release, M2 Pro); only 0.5x fits the frame. Reset to 1.0 at the top of applyPreset.
-            pipeline.setDirectRenderScale(0.5)
+            // EFB.1, Matt (2026-10-19): native resolution, no upscaling ("it needs to be crisp and clean"),
+            // and 30 fps accepted on the Mac mini. The cost-reduced march is p95 ~21 ms at native 2560×1440
+            // (the Tier-1 drawable a 4K TV gets) on an M2 Pro: past a 60 Hz frame, well inside 33 ms. A
+            // steady 30 reads smoother than a 60 Hz loop that drops frames unevenly. Reset in applyPreset.
+            pipeline.setFrameRateCap(30)
         } else {
             logger.error("EnergeticFlybyState: failed to allocate state for preset '\(desc.name)'")
         }

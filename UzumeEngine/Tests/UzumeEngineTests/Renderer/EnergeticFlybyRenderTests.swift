@@ -75,7 +75,7 @@ struct EnergeticFlybyRenderTests {
         }
     }
 
-    /// Kali's rod distance (`br` in `coso`) at the camera, min over the three sphere systems.
+    /// Kali's rod distance (`br` in `coso`) at the camera, for the one sphere system the scene keeps.
     static func rodDistanceAtCamera(travel: Float, spin: Float) -> Float {
         func path(_ t: Float) -> SIMD3<Float> { SIMD3(sin(t + cos(t) * 0.5) * 0.5, cos(t * 0.5), t) }
         func rot(_ v: SIMD2<Float>, _ a: Float) -> SIMD2<Float> {   // GLSL/MSL `v * mat2(c, s, -s, c)`
@@ -93,8 +93,7 @@ struct EnergeticFlybyRenderTests {
             return max(br, simd_length(p) - 1)
         }
         let from = path(travel) + SIMD3(0.2, 0, 0)
-        let pc = from - path(travel + 0.5)
-        return min(rods(pc), rods(pc + 0.7), rods(pc - 0.7))
+        return rods(from - path(travel + 0.5))
     }
 
     // MARK: - Flash ablation (EFB_FLASH_DIAG=1)
@@ -261,8 +260,8 @@ struct EnergeticFlybyRenderTests {
             fv.deltaTime = 1 / Self.fps
             return fv
         }
-        for (label, width, height) in [("1080p", 1920, 1080), ("1080p@0.75", 1440, 810),
-                                       ("1080p@0.5", 960, 540), ("4K", 3840, 2160)] {
+        for (label, width, height) in [("1080p", 1920, 1080), ("1440p (Tier-1 cap, 4K TV)", 2560, 1440),
+                                       ("4K", 3840, 2160)] {
             var harness = MultiPassRenderHarness(width: width, height: height, readback: false)
             let log = GPUTimeLog()
             harness.gpuTimes = log

@@ -127,6 +127,13 @@ Chrome on his Mac, but Uzume's budget is 60 fps at 1080p with headroom. D-254 al
 renders at 0.5×) only if needed; Kali's look has fine edges, so the render scale is a fidelity trade-off that
 goes to Matt with frames. `complexity_cost` is set from the measurement.
 
+**EFB.1 outcome (2026-10-19).** Kali's verbatim march is p50 25.7 / p95 35.2 ms at native 1080p and p50 56 /
+p95 73 ms at native 2560×1440 on the M2 Pro Mac mini (Release). Matt rejected rendering below native resolution
+(*"it needs to be crisp and clean"*) and accepted 30 fps on the Mac mini after a side-by-side. The march was cut
+for cost: one sphere system instead of three, steps of 0.6 of the distance bound instead of 0.3 (per-step glow
+weighted ×2), a 100-step cap and a 3.3 depth cut-off. Native 2560×1440: p50 13.2 / p95 17.1 ms; the app holds
+the scene at 30 fps. At Kali's glow level the cut march matches his mean colour within 0.01.
+
 ## 8. Licence (D-252)
 
 Kali's source carries no licence header, so Shadertoy's default terms apply: **CC BY-NC-SA 3.0**. The port is

@@ -13,7 +13,7 @@
   "fatigue_risk": "medium",
   "transition_affordances": ["crossfade"],
   "section_suitability": ["buildup", "peak", "bridge"],
-  "complexity_cost": { "tier1": 7.5, "tier2": 7.5 },
+  "complexity_cost": { "tier1": 7.7, "tier2": 7.7 },
   "audio_routes": [
     {
       "route": "downbeat_burst",

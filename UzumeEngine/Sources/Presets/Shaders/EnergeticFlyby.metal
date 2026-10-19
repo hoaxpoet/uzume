@@ -2,7 +2,7 @@
 //
 // Source: Kali, "[Inércia 2022] Energetic Flyby", Shadertoy csjGDD
 // (https://www.shadertoy.com/view/csjGDD), live-coded at Inércia Shader Royale 2022 (4th place).
-// Kali's algorithm and constants are kept verbatim. Design of record: docs/presets/ENERGETIC_FLYBY_DESIGN.md.
+// Kali's algorithm and constants are kept verbatim except the cost changes listed below. Design of record: docs/presets/ENERGETIC_FLYBY_DESIGN.md.
 //
 // BINDINGS (the only adaptations; EFB.1 task 1):
 //   • `time`             → st.time, the state's wall clock (EnergeticFlybyState: ∫ dt)
@@ -15,6 +15,13 @@
 //   • output → sRGB-decoded before the store: Shadertoy writes display values straight to 8 bits,
 //     the drawable is `_srgb` (the Kagura precedent), so the displayed bytes equal Kali's
 //   • the 200-step loop as written
+//
+// COST (Matt, 2026-10-19: native resolution, no upscaling; 30 fps accepted on a Tier-1 Mac). Kali's march
+// at native 2560×1440 is p50 56 / p95 73 ms on an M2 Pro. Four changes, each marked `EFB (cost)`, bring it
+// to p50 ~16 / p95 ~21 ms: ONE sphere system instead of three (his flanking pp ± .7 systems are dropped),
+// steps of 0.6 of the distance bound instead of 0.3 with the per-step glow weighted ×2 to keep his
+// brightness, a 100-step cap, and a 3.3 depth cut-off (his geometry is black past 3). At Kali's own glow
+// level the result matches his mean colour within 0.01 and his saturation within 0.01 (EFB.1 side-by-side).
 //
 // MUSIC + PHOTOSENSITIVITY (design doc §3–§5; every change is marked `EFB:`):
 //   • downbeat burst lights only the sphere rods (`g`), not the tunnel glow (`li`) — D-157
@@ -58,9 +65,15 @@ struct EFBMarch {
 };
 
 constant float kEFBDet = .001;
-/// EFB: radius around each sphere centre whose rod light the downbeat burst brightens (Kali's spiked
+/// EFB: radius around the sphere centre whose rod light the downbeat burst brightens (Kali's spiked
 /// shell is ~.16 across). Larger = a bigger flare and more of the frame moving on the beat.
 constant float kEFBCoreRadius = .25;
+/// EFB (cost, Matt 2026-10-19): Kali steps 0.3 of the distance bound; 0.6 halves the steps. The glow
+/// is a per-step sum, so each step's glow is weighted by the same ratio to keep Kali's brightness.
+constant float kEFBStep = .6;
+/// EFB: the downbeat flare's strength on the cluster core (Kali's flicker reached 1.5).
+constant float kEFBBurstGain = 1.5;
+constant float kEFBGlowPerStep = kEFBStep / .3;
 
 // MARK: - Kali's functions (verbatim)
 
@@ -123,12 +136,10 @@ static float efb_de(float3 p, thread EFBMarch& k) {
     }
     k.pos = p;
     k.tub = -length(p.xy) + .45 + sin(p.z * 10.) * .1 * smoothstep(.4, .5, abs(.5 - fract(p.z * .05)) * 2.);
-    float co = efb_coso(pp, k);
-    co = min(co, efb_coso(pp + .7, k));
-    co = min(co, efb_coso(pp - .7, k));
+    float co = efb_coso(pp, k);   // EFB (cost): Kali's two flanking sphere systems (pp ± .7) are dropped
     float d = min(k.tub, co);
     if (d == k.tub) k.hit = step(fract(.1 * length(sin(p * 10.))), .05);
-    return d * .3;
+    return d * kEFBStep;   // EFB (cost): Kali .3
 }
 
 static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
@@ -144,11 +155,10 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
     // Probe the rods at the camera and pull the glow down while one is there.
     k.br = 1000.;
     {
-        float3 pc = from - k.sphpos;
-        efb_coso(pc, k); efb_coso(pc + .7, k); efb_coso(pc - .7, k);
+        efb_coso(from - k.sphpos, k);
     }
     float camGlow = smoothstep(.0, .2, k.br);
-    for (int i = 0; i < 200; i++) {
+    for (int i = 0; i < 100; i++) {   // EFB (cost): Kali 200; with 2× steps 100 covers the same depth
         p += dir * d;
         d = efb_de(p, k);
         if (d < kEFBDet && ref == 0. && k.hit == 1.) {
@@ -161,16 +171,15 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
             ltd = td;
             continue;
         }
-        if (d < kEFBDet || td > 5.) break;
+        if (d < kEFBDet || td > 3.3) break;   // EFB (cost): Kali 5; geometry fades to black at 3 (f = 1 - td/3)
         td += d;
-        g += .1 / (.1 + k.br * 13.);
-        li += .1 / (.1 + k.tub * 5.);
+        g += .1 / (.1 + k.br * 13.) * kEFBGlowPerStep;
+        li += .1 / (.1 + k.tub * 5.) * kEFBGlowPerStep;
         // EFB: the burst lights the cluster, not the frame. Kali's rod glow builds up along every ray
         // (measured: a rods-only burst still moved the frame-mean 0.157/frame, 1.5 flashes/s), so the
         // burst reads only the part of it gathered near the three sphere centres.
         float3 c = p - k.sphpos;
-        float near = min(dot(c, c), min(dot(c + .7, c + .7), dot(c - .7, c - .7)));
-        gCore += .1 / (.1 + k.br * 13.) * exp(-near / (kEFBCoreRadius * kEFBCoreRadius));
+        gCore += .1 / (.1 + k.br * 13.) * kEFBGlowPerStep * exp(-dot(c, c) / (kEFBCoreRadius * kEFBCoreRadius));
     }
     // EFB: Kali scaled the WHOLE glow by (.5 + so*1.5). The scene's burst adds only the cluster's own
     // light (`gCore`); the rods and the tunnel light (`li`) sit at the energy floor, so the frame's
@@ -180,7 +189,7 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         g = max(g, li * .15);
         glowScale = st.glowBase + st.burst * 1.5;
     } else {
-        g = max(g * st.glowBase + gCore * st.burst * 1.5, li * .15 * st.glowBase);
+        g = max(g * st.glowBase + gCore * st.burst * kEFBBurstGain, li * .15 * st.glowBase);
         glowScale = mix(.3, 1., camGlow);
     }
     float f = 1. - td / 3.;
