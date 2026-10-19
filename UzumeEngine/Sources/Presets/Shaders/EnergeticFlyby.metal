@@ -18,11 +18,12 @@
 //   • the 200-step loop as written
 //
 // COST (Matt, 2026-10-19: native resolution, no upscaling; 30 fps accepted on a Tier-1 Mac). Kali's march
-// at native 2560×1440 is p50 56 / p95 73 ms on an M2 Pro. Four changes, each marked `EFB (cost)`, bring it
-// to p50 ~16 / p95 ~21 ms: ONE sphere system instead of three (his flanking pp ± .7 systems are dropped),
-// steps of 0.6 of the distance bound instead of 0.3 with the per-step glow weighted ×2 to keep his
-// brightness, a 100-step cap, and a 3.3 depth cut-off (his geometry is black past 3). At Kali's own glow
-// level the result matches his mean colour within 0.01 and his saturation within 0.01 (EFB.1 side-by-side).
+// at native 2560×1440 is p50 56 / p95 73 ms on an M2 Pro. Two changes, each marked `EFB (cost)`: ONE sphere
+// system instead of three (his flanking pp ± .7 systems are dropped), and an adaptive step — up to 2× his
+// in open space, exactly his near any surface — with the per-step glow weighted by the same factor. His
+// 200-step budget and 5.0 depth are kept: cutting them (and a uniform 2× step) lost thin shells, holes and
+// mirrored cells (Matt, live: "blurry and pixelated areas"). At his glow level it matches his frames to
+// mean |Δ| 0.018–0.075 at 1440p (the remainder is the two dropped sphere systems).
 //
 // MUSIC + PHOTOSENSITIVITY (design doc §3–§5; every change is marked `EFB:`):
 //   • Kali's flicker is replaced by a steady glow level (st.glowBase, his 1.25 average at a typical passage)
@@ -66,12 +67,15 @@ struct EFBMarch {
 };
 
 constant float kEFBDet = .001;
-/// EFB (cost, Matt 2026-10-19): Kali steps 0.3 of the distance bound; 0.6 halves the steps. The glow
-/// is a per-step sum, so each step's glow is weighted by the same ratio to keep Kali's brightness.
-constant float kEFBStep = .6;
+/// EFB (cost): in open space a march step goes up to this many times Kali's (he steps 0.3 of the
+/// distance bound); near a surface (d below kEFBNear) it is exactly his, so thin shell layers, holes and
+/// mirrored cells are found where he finds them. A uniform 2× step (and a 3.3 depth cut-off) skipped them:
+/// Matt, live, "some blurry and pixelated areas". The glow is a per-step sum, so each step's glow is
+/// weighted by the same factor to keep Kali's brightness.
+constant float kEFBFarStep = 2.;
+constant float2 kEFBNear = float2(.01, .05);
 /// EFB (white-out fix): ray length over which rod glow fades in while a rod is at the camera.
 constant float kEFBCamFade = .3;
-constant float kEFBGlowPerStep = kEFBStep / .3;
 
 // MARK: - Kali's functions (verbatim)
 
@@ -137,7 +141,7 @@ static float efb_de(float3 p, thread EFBMarch& k) {
     float co = efb_coso(pp, k);   // EFB (cost): Kali's two flanking sphere systems (pp ± .7) are dropped
     float d = min(k.tub, co);
     if (d == k.tub) k.hit = step(fract(.1 * length(sin(p * 10.))), .05);
-    return d * kEFBStep;   // EFB (cost): Kali .3
+    return d * .3;
 }
 
 static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
@@ -155,8 +159,9 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         efb_coso(from - k.sphpos, k);
     }
     float camGlow = smoothstep(.0, .2, k.br);
-    for (int i = 0; i < 100; i++) {   // EFB (cost): Kali 200; with 2× steps 100 covers the same depth
-        p += dir * d;
+    float adv = 0.;   // EFB (cost): the advance, Kali's d scaled by the open-space factor
+    for (int i = 0; i < 200; i++) {
+        p += dir * adv;
         d = efb_de(p, k);
         if (d < kEFBDet && ref == 0. && k.hit == 1.) {
             float2 e = float2(0., .1);
@@ -166,16 +171,19 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
             ref = 1.;
             td = 0.;
             ltd = td;
+            adv = d;
             continue;
         }
-        if (d < kEFBDet || td > 3.3) break;   // EFB (cost): Kali 5; geometry fades to black at 3 (f = 1 - td/3)
-        td += d;
+        if (d < kEFBDet || td > 5.) break;
+        float sc = mix(1., kEFBFarStep, smoothstep(kEFBNear.x, kEFBNear.y, d));   // EFB (cost)
+        adv = d * sc;
+        td += adv;
         // EFB (white-out fix): with a rod at the camera every ray starts inside it, and the rod glow
         // gathered in the first steps whites out the frame (05_anti_whole_frame_whiteout). Fade in only
         // that near-camera glow, only while a rod is there (camGlow < 1) — no whole-frame dimming, which
         // measured as its own flash.
-        g += .1 / (.1 + k.br * 13.) * kEFBGlowPerStep * mix(smoothstep(0., kEFBCamFade, td), 1., max(camGlow, st.faithful));   // faithful: no fix
-        li += .1 / (.1 + k.tub * 5.) * kEFBGlowPerStep;
+        g += .1 / (.1 + k.br * 13.) * sc * mix(smoothstep(0., kEFBCamFade, td), 1., max(camGlow, st.faithful));   // faithful: no fix
+        li += .1 / (.1 + k.tub * 5.) * sc;
     }
     // EFB: Kali scaled the whole glow by (.5 + so*1.5), a per-frame strobe. The shipped glow is steady at
     // st.glowBase (energy-driven, 1.25 at a typical passage — his average); the downbeat turns its colour.

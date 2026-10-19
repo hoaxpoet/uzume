@@ -130,9 +130,10 @@ goes to Matt with frames. `complexity_cost` is set from the measurement.
 **EFB.1 outcome (2026-10-19).** Kali's verbatim march is p50 25.7 / p95 35.2 ms at native 1080p and p50 56 /
 p95 73 ms at native 2560×1440 on the M2 Pro Mac mini (Release). Matt rejected rendering below native resolution
 (*"it needs to be crisp and clean"*) and accepted 30 fps on the Mac mini after a side-by-side. The march was cut
-for cost: one sphere system instead of three, steps of 0.6 of the distance bound instead of 0.3 (per-step glow
-weighted ×2), a 100-step cap and a 3.3 depth cut-off. Native 2560×1440: p50 13.2 / p95 17.1 ms; the app holds
-the scene at 30 fps. At Kali's glow level the cut march matches his mean colour within 0.01.
+for cost: one sphere system instead of three, and an adaptive step (up to 2× Kali's in open space, exactly his
+near any surface, per-step glow weighted to match). A first cut (uniform 2× step, 100-step cap, 3.3 depth
+cut-off) lost thin shells, holes and mirrored cells — Matt, live: *"some blurry and pixelated areas"*; the
+depth cut-off was the main cause. Native 2560×1440: p50 20.4 / p95 27.2 ms; the app holds the scene at 30 fps.
 
 **EFB.1, the downbeat and the colour (2026-10-19).** Matt: *"you still have the color wrong"*. The steady glow
 the spike carried over (0.45 + 0.5·energy) sat at about half of Kali's average (his flicker `.5 + so·1.5`
