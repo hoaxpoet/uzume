@@ -74,6 +74,20 @@ struct EnergeticFlybyStateTests {
         #expect(waltzRises == 2, "3/4 rises: \(waltzRises) (two downbeats, no echo)")
     }
 
+    @Test("The colour turn swings pink → orange → pink → blue and never leaves Kali's ±0.7 rad")
+    func colourTurnStaysInKalisRange() throws {
+        let (state, trace) = try Self.run(Self.grid(seconds: 33))   // 16 downbeats
+        let limit = EnergeticFlybyState.hueStep + 1e-4
+        #expect(trace.allSatisfy { abs($0.hue) <= limit }, "hue range \(trace.map(\.hue).min()!)…\(trace.map(\.hue).max()!)")
+        // Settled hue half a bar after each of the first four downbeats (t = 2, 4, 6, 8).
+        let settled = [3, 5, 7, 9].map { trace[$0 * 60].hue }
+        let expected: [Float] = [0.7, 0, -0.7, 0]
+        for (got, want) in zip(settled, expected) { #expect(abs(got - want) < 1e-3, "settled \(settled)") }
+        // A track change continues the swing from where it is: no snap, and no repeated colour.
+        state.reset()
+        #expect(state.gpuState.hue == trace.last!.hue)
+    }
+
     // MARK: - Bank
 
     @Test("The bank turns a quarter every second downbeat, alternating, with no per-frame step")

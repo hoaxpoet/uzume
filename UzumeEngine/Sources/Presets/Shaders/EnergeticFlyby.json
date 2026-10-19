@@ -19,7 +19,7 @@
       "route": "downbeat_burst",
       "primitive": "barPhase01",
       "kind": "accent",
-      "note": "EFB.1 — each wrap of the cached grid's barPhase01 is a downbeat: the sphere-rod light bursts (decay 0.35 s, rods only, D-157) and the glow colour turns +0.7 rad; a 0.35 echo when barPhase01 x beatsPerBar crosses 2 (beat 3, meters of 4+); every second downbeat banks the camera a quarter turn over 1 s. EnergeticFlybyState."
+      "note": "EFB.1 — each wrap of the cached grid's barPhase01 is a downbeat: the sphere-core light bursts (decay 0.35 s, bounded to the cluster, D-157) and the glow colour steps 0.7 rad along pink -> orange -> pink -> blue (inside Kali's range); a 0.35 echo when barPhase01 x beatsPerBar crosses 2 (beat 3, meters of 4+); every second downbeat banks the camera a quarter turn over 1 s. EnergeticFlybyState."
     },
     {
       "route": "energy_speed_glow",

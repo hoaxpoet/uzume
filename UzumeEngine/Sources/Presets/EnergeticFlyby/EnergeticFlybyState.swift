@@ -7,7 +7,7 @@
 // self-normalisation (FA #31: no fixed p5–p95 is available live).
 //
 // One primitive per layer (FA #67):
-//   • downbeat (cached grid, `barPhase01` wrap) → sphere-rod burst + glow colour turn; a 0.35 echo
+//   • downbeat (cached grid, `barPhase01` wrap) → sphere-core burst + glow colour turn; a 0.35 echo
 //     on beat 3; every second downbeat a quarter-turn bank, eased over 1 s, alternating direction
 //   • energy (`spectralFlux`, self-normalised, 0.6 s) → flight speed + glow floor
 //   • bass (positive `bassDev`, self-normalised, 30 ms / 300 ms) → sphere spin
@@ -60,6 +60,10 @@ public final class EnergeticFlybyState: @unchecked Sendable {
     static let echoLevel: Float = 0.35
     static let echoTau: Float = 0.20
     static let hueStep: Float = 0.7
+    /// The colour turn swings pink → orange → pink → blue (0, +0.7, 0, −0.7 rad on Kali's glow rotation), one
+    /// step per downbeat. Matt, 2026-10-19: stay in Kali's range — accumulating the turn took the glow
+    /// through teal and green (±1.4 rad and beyond), which no reference frame has.
+    static let hueCycle: [Float] = [hueStep, 0, -hueStep, 0]
     static let hueEase: Float = 0.25
     static let rollStep = Float.pi / 2
     static let rollEase: Float = 1.0
@@ -94,6 +98,9 @@ public final class EnergeticFlybyState: @unchecked Sendable {
     private var lastBarPhase: Float = 0
     private var lastBeatInBar: Float = 0
     private var hueBase: Float = 0
+    private var hueTarget: Float = 0
+    /// Position in `hueCycle`; never reset, so a track change continues the swing rather than repeating a colour.
+    private var hueIndex = 0
     private var hueSince: Float = .infinity
     private var rollBase: Float = 0
     private var rollTarget: Float = 0
@@ -138,7 +145,7 @@ public final class EnergeticFlybyState: @unchecked Sendable {
             energy = 0; bass = 0; burst = 0; echo = 0
             lastBarPhase = 0; lastBeatInBar = 0
             rollBase = currentRoll(); rollTarget = rollBase; rollSince = .infinity
-            hueBase = currentHue(); hueSince = .infinity
+            hueBase = currentHue(); hueTarget = hueBase; hueSince = .infinity
             downbeatCount = 0
             downbeatThisFrame = false
             publish()
@@ -182,7 +189,10 @@ public final class EnergeticFlybyState: @unchecked Sendable {
         if downbeat {
             burst = 1
             echo = 0
-            hueBase = currentHue(); hueSince = 0
+            hueBase = currentHue()
+            hueTarget = Self.hueCycle[hueIndex % Self.hueCycle.count]
+            hueIndex += 1
+            hueSince = 0
             if downbeatCount % 2 == 0 {
                 rollBase = currentRoll()
                 rollTarget = rollBase + ((downbeatCount / 2) % 2 == 0 ? Self.rollStep : -Self.rollStep)
@@ -202,9 +212,9 @@ public final class EnergeticFlybyState: @unchecked Sendable {
         gpu.faithful = 0
     }
 
-    /// The eased colour turn: the last step's start plus its eased progress.
+    /// The eased colour turn from the last step's start toward its target.
     private func currentHue() -> Float {
-        hueSince.isFinite ? hueBase + Self.hueStep * Self.ease(hueSince / Self.hueEase) : hueBase
+        hueSince.isFinite ? hueBase + (hueTarget - hueBase) * Self.ease(hueSince / Self.hueEase) : hueTarget
     }
 
     private func currentRoll() -> Float {

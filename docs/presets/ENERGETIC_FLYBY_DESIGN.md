@@ -59,7 +59,7 @@ song's energy and the bass spins the spheres.*
 
 | Visual layer | Primitive (CPU, `EnergeticFlybyState`) | Timescale | Notes |
 |---|---|---|---|
-| Sphere-cluster light: burst intensity **and** colour turn (one layer, one event) | downbeat = `barPhase01` wrap on the cached grid; a 0.35× echo when `barPhase01·beatsPerBar` crosses 2 (beat 3 in 4/4) | bar | Replaces Kali's `so = fract(sin(time)*123.456)`, a pseudo-random per-frame flicker. Burst decay 0.35 s, echo decay 0.20 s; colour turn +0.7 rad eased over 0.25 s |
+| Sphere-cluster light: burst intensity **and** colour turn (one layer, one event) | downbeat = `barPhase01` wrap on the cached grid; a 0.35× echo when `barPhase01·beatsPerBar` crosses 2 (beat 3 in 4/4) | bar | Replaces Kali's `so = fract(sin(time)*123.456)`, a pseudo-random per-frame flicker. Burst decay 0.35 s, echo decay 0.20 s; colour turn 0.7 rad eased over 0.25 s, swinging pink → orange → pink → blue so it stays inside Kali's palette (EFB.1, Matt: *"stay in Kali's range"*; accumulating it took the glow into green) |
 | Camera bank (quarter turn, alternating direction) | every second downbeat | 2 bars | Shares the downbeat primitive with the burst at a **different timescale**; this is the only shared primitive and it is deliberate |
 | Flight speed + glow floor | energy = `spectralFlux`, self-normalised against its own running mean (Fiddlehead's `squash` pattern), 0.6 s smoothing | phrase / section | FA #31: never an absolute threshold on an AGC-normalised value |
 | Sphere spin rate | `bassDev` (positive part), fast attack 30 ms / release 300 ms, self-normalised | beat-to-bar | |
