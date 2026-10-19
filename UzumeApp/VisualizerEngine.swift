@@ -256,6 +256,10 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// `applyPreset` (NB.4 — same direct-preset slot-6 pattern as Aurora Veil).
     var nimbusState: NimbusState?
 
+    /// EFB.1 — Energetic Flyby's flight / spin / downbeat-burst state, allocated while the scene is
+    /// active (slot 6 + `setMeshPresetTick`, the Nimbus pattern), nil otherwise.
+    var energeticFlybyState: EnergeticFlybyState?
+
     /// Skein painter integrators + onset-burst ring + per-track seed — allocated
     /// when the Skein preset is active, nil otherwise. Tick closure and
     /// skeinBuffer are wired via `setMeshPresetTick` / `setDirectPresetFragmentBuffer`

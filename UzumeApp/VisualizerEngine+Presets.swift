@@ -100,6 +100,9 @@ extension VisualizerEngine {
         // so the body blooms back UP into the new track rather than popping (DESIGN §1.5).
         // No-op when Nimbus is not the active preset (state is nil).
         nimbusState?.reset()
+        // EFB.1 (design §6): normalisers, envelopes and the bank start over; travel and hue carry on, so a
+        // track change never snaps the camera or the palette. No-op unless Energetic Flyby is active.
+        energeticFlybyState?.reset()
         // CR.2: settle the sand into the new track (no-op unless the geometry exists).
         (cymaticSandGeometry as? CymaticSandGeometry)?.reset()
         // WL.2 (§7.3): a stale smoothed harmonic phase or `previousBarPhase` across a track
@@ -185,6 +188,7 @@ extension VisualizerEngine {
         nebulaState = nil
         waveformState = nil
         nimbusState = nil
+        energeticFlybyState = nil
         skeinState = nil
         lumenPatternEngine = nil
         ferrofluidParticles = nil
@@ -587,6 +591,7 @@ extension VisualizerEngine {
         case "Waveform":    bindWaveformRuntime(desc)
         case "Skein":       bindSkeinRuntime(desc)
         case "Nimbus":      bindNimbusRuntime(desc)
+        case "Energetic Flyby": bindEnergeticFlybyRuntime(desc)
         case "Lumen Mosaic": bindLumenMosaicRuntime(desc)
         case "Witchlight":  bindWitchlightRuntime(desc)
         case "Kagura":      bindKaguraRuntime(desc)
@@ -879,6 +884,21 @@ extension VisualizerEngine {
             pipeline.setDirectRenderScale(0.5)
         } else {
             logger.error("NimbusState: failed to allocate state for preset '\(desc.name)'")
+        }
+    }
+
+    private func bindEnergeticFlybyRuntime(_ desc: PresetDescriptor) {
+        // EFB.1: the Nimbus pattern — the music lives in `EnergeticFlybyState` (slot 6), ticked once per
+        // frame before the draw. Full resolution: Kali's look has fine edges, and the render scale is
+        // Matt's call on the EFB.1 timing stills (DECISION-NEEDED), not a default set here.
+        if let state = EnergeticFlybyState(device: context.device) {
+            energeticFlybyState = state
+            pipeline.setDirectPresetFragmentBuffer(state.stateBuffer)
+            pipeline.setMeshPresetTick { [weak state] features, stems in
+                state?.tick(deltaTime: features.deltaTime, features: features, stems: stems)
+            }
+        } else {
+            logger.error("EnergeticFlybyState: failed to allocate state for preset '\(desc.name)'")
         }
     }
 
