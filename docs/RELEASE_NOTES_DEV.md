@@ -10,6 +10,15 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-20-153840] EFB.3 — Energetic Flyby certified (the 29th)
+
+Energetic Flyby — Kali's Shadertoy flythrough down a twisting tunnel of glassy, perforated shells, led by a spiked
+sphere cluster — is certified on Matt's call and now enters planned sessions. Each downbeat turns the glow's colour
+(pink, orange, pink, blue) and every second downbeat banks the camera; the song's energy sets the flight speed and
+glow, the bass spins the spheres. It renders at native resolution held at 30 fps; on an M1/M2 Mac with a 4K display
+it is drawn at 2560×1440 and stretched (a recorded limit). Flash-safe on a real render (0.00 flashes/s full frame,
+regional 3.00/s — at the limit). While it is on screen during streaming, live stem separation pauses (BUG-181).
+
 ### [dev-2026-10-20-141441] BUG-181 + EFB.1/EFB.2 — Energetic Flyby lands; streaming pauses stem separation for scenes that read no stems
 
 Energetic Flyby (Kali's Shadertoy flythrough, uncertified, pin with `UZUME_PIN_SCENE="Energetic Flyby"`) is on

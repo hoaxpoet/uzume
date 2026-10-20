@@ -1,6 +1,6 @@
 # Energetic Flyby — Design (working name)
 
-**Status:** EFB.0 design record, 2026-10-19 (design seat). `certified: false` until EFB.3.
+**Status:** EFB.0 design record, 2026-10-19 (design seat). **Certified at EFB.3, 2026-10-20** (Matt: keep the current version and certify).
 **Working name.** "Energetic Flyby" is Kali's title for the source. Matt names the scene before certification;
 until then the slug is `energetic_flyby` and the increment prefix is `EFB`.
 **Source:** Kali, *[Inércia 2022] Energetic Flyby*, Shadertoy `csjGDD`, live-coded at Inércia Shader Royale

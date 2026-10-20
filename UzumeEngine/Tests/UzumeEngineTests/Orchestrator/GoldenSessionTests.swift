@@ -66,9 +66,14 @@ struct GoldenSessionTests {
             tracks: makeSessionA(), catalog: makeRealCatalog(), deviceTier: .tier2)
         let ids = session.tracks.map { $0.preset.id }
         // NRG.3 (2026-09-27): regenerated for energy; NRG.4 for even splits (trace above).
+        // EFB.3 (2026-10-20): Energetic Flyby certified. Track-0 ranking (seed 0, tier 2):
+        //   Energetic Flyby 0.642 (energy 0.961, tempo 0.967) · Filigree 0.633 (0.961, 0.933) ·
+        //   Mitosis 0.631 · Fiddlehead 0.613 — its motion_intensity 0.6 fits the 130 BPM / level-9
+        //   fixture's target motion slightly better than Filigree's. A near-tie; seeded production
+        //   plans sample among such ties (BUG133.2).
         // Production plans with a random seed; this seed-0 argmax pins the scorer only.
         #expect(ids == [
-            "Filigree", "Filigree", "Filigree", "Filigree", "Filigree",
+            "Energetic Flyby", "Energetic Flyby", "Energetic Flyby", "Energetic Flyby", "Energetic Flyby",
         ])
     }
 
@@ -171,8 +176,14 @@ struct GoldenSessionTests {
         let session = try planner.plan(
             tracks: makeSessionC(), catalog: makeRealCatalog(), deviceTier: .tier2)
         // NRG.3: regenerated for energy (trace above).
+        // EFB.3 (2026-10-20): Energetic Flyby certified. History-free argmax per track (tier 2, seed 0):
+        //   C0 Energetic Flyby 0.642 > Filigree 0.633 · C1 Gossamer 0.647 · C2 Ferrofluid Ocean 0.656 ·
+        //   C3 Energetic Flyby 0.651 > Filigree 0.624 · C4 Fireflies 0.631 > Gossamer 0.591 ·
+        //   C5 Filigree 0.642 > Mitosis 0.640 > Energetic Flyby 0.633.
+        // Tracks 4–5 move because the session's fatigue history changed: Filigree no longer opened
+        // tracks 0 and 3, so it is fresh for track 5, and Fireflies tops track 4.
         #expect(session.tracks.map { $0.preset.id } == [
-            "Filigree", "Gossamer", "Ferrofluid Ocean", "Filigree", "Gossamer", "Cymatic Resonance",
+            "Energetic Flyby", "Gossamer", "Ferrofluid Ocean", "Energetic Flyby", "Fireflies", "Filigree",
         ])
     }
 
@@ -351,3 +362,4 @@ private func makeSessionD() -> [(TrackIdentity, TrackProfile)] {
     [(makeIdentity(title: "AmbientLM-0", duration: 180),
       makeProfile(bpm: 75, energyLevel: 7))]
 }
+

@@ -226,7 +226,7 @@ private let expectedAutomatedGate: [String: Bool] = [
                                      // no fbm cascade and no mat_* calls, so M1–M3 read 0 by construction (the
                                      // Aurora Veil port precedent). M4: the music is CPU-side
                                      // (EnergeticFlybyState at slot 6), which the MSL heuristic cannot see.
-                                     // certified: false; L4/M7 is Matt's live look.
+                                     // Certified at EFB.3 on Matt's call (2026-10-20).
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
     "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
                                      // surface, not a certification candidate. Reads no audio at all
@@ -403,7 +403,7 @@ struct FidelityRubricGateTests {
     // ⚠ Verified the reviewed BINARY, not just the session: `ArrivalStep.o` compiled 12:24:46,
     // app built 12:24:50, last run 12:25:06, session log opens 12:25:04 CDT — so the M7 was on
     // the FTR.33 build and not a stale one (the BUG-051 discipline).
-    private static let certifiedPresets: Set<String> = ["Membrane", "Lumen Mosaic", "Ferrofluid Ocean", "Dragon Bloom", "Fata Morgana", "Murmuration", "Nimbus", "Skein", "Nacre", "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Aurora Veil", "Cymatic Resonance", "Volumetric Lithograph", "Meniscus", "Witchlight", "Stave", "Fractal Tree", "Ricercar",
+    private static let certifiedPresets: Set<String> = ["Membrane", "Energetic Flyby", "Lumen Mosaic", "Ferrofluid Ocean", "Dragon Bloom", "Fata Morgana", "Murmuration", "Nimbus", "Skein", "Nacre", "Floret", "Glaze", "Filigree", "Mitosis", "Cytokinesis", "Aurora Veil", "Cymatic Resonance", "Volumetric Lithograph", "Meniscus", "Witchlight", "Stave", "Fractal Tree", "Ricercar",
         // PR.18 (2026-09-09) — the 22nd. Matt's M7 on session `2026-09-09T22-36-18Z`:
         // *"looks great. looks ready to certify"*. 81 s live on the V.8 uplift build, 5414
         // frames, zero drawable failures and zero unpresented.

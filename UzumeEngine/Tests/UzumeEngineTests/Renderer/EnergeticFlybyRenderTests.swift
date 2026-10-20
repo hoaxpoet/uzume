@@ -21,6 +21,7 @@ import simd
 @testable import Renderer
 @testable import Presets
 @testable import Shared
+@testable import Diagnostics
 
 @Suite("EnergeticFlybyRender (EFB.1)")
 @MainActor
@@ -287,6 +288,56 @@ struct EnergeticFlybyRenderTests {
         for (i, state) in trace.states.enumerated() {
             print(String(format: "[efb-session] row %d dt %.1f ms travel %.3f spin %.3f hue %.3f roll %.3f glow %.3f",
                          from + i, drive[i].deltaTime * 1000, state.travel, state.spin, state.hue, state.roll, state.glowBase))
+        }
+    }
+
+    // MARK: - Soak (EFB_SOAK=1, EFB.3 certification)
+
+    /// Ten minutes of scene time at native 2560×1440, 30 fps, on one live state (the shared harness's direct path),
+    /// driven by a real-music capture looped. Per minute: the frame is lit and moving, not white; resident memory
+    /// grows < 25 MB; GPU p50 stays within 1.5× of minute 1.
+    @Test("EFB_SOAK=1: ten minutes — memory flat, lit and moving, cost steady",
+          .enabled(if: ProcessInfo.processInfo.environment["EFB_SOAK"] == "1"))
+    func soak() throws {
+        let rows = try SessionReplayHarness.loadRowsForReplay(
+            Self.fixturesDir().appendingPathComponent("route_coverage/there_there/features.csv"))
+        let perMinute = 1800, minutes = Int(ProcessInfo.processInfo.environment["EFB_SOAK_MINUTES"] ?? "") ?? 10
+        let drive = (0..<(perMinute * minutes)).map { i -> FeatureVector in
+            var fv = SessionReplayHarness.featureForReplay(from: rows[i % rows.count], aspect: 16 / 9)
+            fv.deltaTime = 1 / 30
+            return fv
+        }
+        var harness = MultiPassRenderHarness(width: 2560, height: 1440)
+        let log = GPUTimeLog()
+        harness.gpuTimes = log
+        var lumas: [Double] = [], whites: [Double] = [], memory: [Double] = []
+        _ = try harness.render(preset: Self.preset, features: drive, stems: drive.map { _ in .zero }) { bgra in
+            // Every 64th pixel: mean luma and the fraction near white.
+            var sum = 0.0, white = 0, n = 0
+            for i in stride(from: 0, to: bgra.count, by: 256) {
+                let blue = 0.114 * Double(bgra[i]), green = 0.587 * Double(bgra[i + 1])
+                let y: Double = blue + green + 0.299 * Double(bgra[i + 2])
+                sum += y; n += 1; if y > 245 { white += 1 }
+            }
+            lumas.append(sum / Double(n)); whites.append(Double(white) / Double(n))
+            if lumas.count % perMinute == 1 { memory.append(Double(MemoryReporter.snapshot()?.residentBytes ?? 0)) }
+            return 0
+        }
+        let gpu = log.ms
+        for minute in 0..<minutes {
+            let range = (minute * perMinute)..<((minute + 1) * perMinute)
+            let times = gpu[range].sorted(), p50 = times[times.count / 2]
+            let firstP50 = gpu[0..<perMinute].sorted()[perMinute / 2]
+            let luma = lumas[range].reduce(0, +) / Double(perMinute)
+            let moving = zip(lumas[range], lumas[range].dropFirst()).map { abs($0 - $1) }.max() ?? 0
+            let white = whites[range].max() ?? 0
+            let growth = (memory[minute] - memory[0]) / (1024 * 1024)
+            print(String(format: "[efb-soak] min %d: luma %.1f, max frame Δ %.2f, white %.3f | GPU p50 %.1f ms | +%.1f MB",
+                         minute + 1, luma, moving, white, p50, growth))
+            #expect(luma > 20 && luma < 200 && white < 0.05, "minute \(minute + 1): luma \(luma) white \(white)")
+            #expect(moving > 0.05, "minute \(minute + 1): frames not moving")
+            #expect(growth < 25, "minute \(minute + 1): resident +\(growth) MB since minute 1")
+            #expect(p50 < firstP50 * 1.5, "minute \(minute + 1): GPU p50 \(p50) ms vs \(firstP50) ms in minute 1")
         }
     }
 
