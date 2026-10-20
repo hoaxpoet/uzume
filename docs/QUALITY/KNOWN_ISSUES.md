@@ -25,6 +25,7 @@ belongs in the second table, not the first.
 
 | ID | Sev | Domain | What happens | Next step |
 |---|---|---|---|---|
+| BUG-181 | P2 | renderer.perf / dsp.stem | On Spotify, Energetic Flyby dropped 15.9 % of frames past 33 ms vs 7.4 % on local files: live stem separation shares the GPU. The scene reads no stems. Fixed: separation pauses for `reads_stems: false` scenes. | Matt's live Spotify pass: frames past 33 ms near the offline 4.7 %. |
 | BUG-180 | P3 | preset.understory / scene-fidelity | A clear vertical seam down the middle of Understory's forest backdrop, live. Uncertified preset. | Diagnose in UND.8 (design §12, 2026-10-05). |
 | BUG-085 | P1 | renderer / app.hang | The app freezes and needs a force-quit, minutes into a session. The cause is unknown. The 08-05 capture came from a Debug build under Xcode, and it shows the whole process stopping, not only the renderer (audit D2). | A long Release session launched from Finder. On a freeze, note whether the music kept playing. From testers: BR.5's Report a Problem. |
 | BUG-081 | P2 | app.hang | A beachball about 78 s into one session (2026-08-03), with no stack. One instance: the "08-04 ×2" formerly listed here were BUG-085's. Probably the same defect as BUG-085. | With BUG-085. |
@@ -77,6 +78,41 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
+
+### BUG-181 — on Spotify, live stem separation makes Energetic Flyby drop twice the frames (2026-10-20)
+
+**Severity:** P2 (judder on the streaming path, the beta's common case) · **Domain:** `renderer.perf` / `dsp.stem`
+(`VisualizerEngine+Stems`, `StemSeparator` MPSGraph, `MLDispatchScheduler`) · **Failure class:** `resource-management`
+· **Status:** Fixed 2026-10-20 (EFB.2, option A) — pending Matt's live Spotify check · **Found by:** Matt, EFB.2 live round 1, 2026-10-20 (Spotify pass; *"some artifacts
+during spotify playback"*)
+
+**Expected.** Energetic Flyby, held at 30 fps at native 2636×1398 on the Mac mini, drops about as many frames on
+Spotify as it does on local files for comparable music.
+
+**Actual.** Session `2026-10-20T13-20-00Z` (build 9010, chain health **degraded**: low band, 2 tap reinstalls):
+frames whose GPU time passed 33.3 ms — local files 7.9 % (p50 24.1 / p95 37.0 ms), Spotify **15.9 %**
+(p50 24.7 / p95 50.6 ms). Re-rendering the same recorded frames offline (`EnergeticFlybyRenderTests.sessionReplay`,
+`EFB_TIMING_ONLY=1`, Release, no other GPU work): local 7.4 % (p50 24.2 / p95 34.7 — matches live), Spotify **4.7 %**
+(p50 23.5 / p95 33.2). The Spotify songs are lighter, not heavier: the extra drops are contention. Only the
+streaming path runs live Open-Unmix separation on the GPU (MPSGraph, every 2 s; local tracks use the pre-analysed
+series and skip it — LFSTEM.2). Its inference ran p50 405 / p90 1,466 / max 3,149 ms in that session. The
+scheduler gate mostly worked (`ml_forced=1` in ~5 min), so the cost is the separation itself, not a mis-timed
+dispatch. Energetic Flyby reads no stems (its `audio_routes` are `barPhase01`, `spectralFlux`, `bassDev`), so for
+this scene the work is pure cost. Not the 5 s signal-health check (stall clusters within 2 s of one: 68 % vs 61 %
+chance). The seam lines Matt also saw are Kali's geometry, not this defect (EFB.2 round 1; he keeps them).
+
+**Fix (Matt chose A, 2026-10-20).** A sidecar key `"reads_stems"` (default `true`); `false` pauses live
+separation in `runStemSeparation` while that scene is on screen (`VisualizerEngine.onScreenScene`, set in
+`applyPreset`), still running the BUG-007.9 grid recalibration; session.log records `STEM_SEPARATION: paused` /
+`resumed`. Only Energetic Flyby declares it — a route-manifest rule would have paused 13 scenes, five of whose
+shaders touch stems. `PresetReadsStemsTests` gates each adopter (no stem route, no stem read in the
+comment-stripped shader, a registered behavioural check of its CPU state); negative control: Nimbus declared
+`false` fails it. **Options weighed.** (A) Pause live separation while the on-screen scene reads no stems — the LFSTEM.2
+precedent ("pure waste on the same GPU the renderer draws with"); a stem-reading scene that follows starts from the
+cached preview stems and reaches live stems after the usual warm-up. (B) Keep separation running and make it cheaper
+or lower priority — engine work with an uncertain gain. **Verification (before the fix):** the replayed Spotify
+segment's offline 4.7 % is the floor; a live Spotify pass on the fix must land within ~2 points of it, and a
+stem-reading scene after Energetic Flyby must reach live stems within its normal warm-up.
 
 ### BUG-180 — a vertical seam down the middle of Understory's forest backdrop (2026-10-05)
 
@@ -1409,6 +1445,19 @@ Instrumented re-test (session `2026-06-17T14-54-49Z`): **12 rapid back-and-forth
 
 
 ---
+
+### LIMIT — Energetic Flyby is drawn at 2560×1440 on a Tier-1 Mac and stretched on 4K displays (2026-10-20)
+
+**Domain:** `preset.fidelity` / `renderer.perf` · **Decided by:** Matt, EFB.2, 2026-10-20 (*"Keep it as now: smooth at
+30 fps, drawn at 2560x1440 and stretched on 4K displays. Record the limit and move on."*)
+
+On a Tier-1 Mac (M1/M2) the app caps every scene's drawable at 2560×1440 (BR.6b); on a 3840×2160 display macOS
+stretches it 1.5×. Most scenes hide that; Energetic Flyby's hard, one-sample edges (Kali's) show it as pixelation
+on a 4K monitor viewed up close. Native 4K would cost p95 ~60 ms on an M2 Pro; even 6× open-space steps only
+reach ~50 ms, and the remaining cost is near-surface steps (cutting them read as blur) and the sphere cluster (the
+scene's subject). Edge smoothing (one extra ray on high-contrast quads) was tried and read worse live. Matt chose
+smooth 30 fps over crisp ~20 fps. Recorded so nobody reopens it as a defect; a faster Mac (uncapped drawable) or a
+cheaper design would change it.
 
 ### BUG-036 — Heap allocations on the real-time Core Audio thread at three sites (FFTProcessor, AudioBuffer.latestSamples, SessionRecorder raw tap) (2026-06-09)
 

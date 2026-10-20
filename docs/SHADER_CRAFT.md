@@ -2517,6 +2517,7 @@ Every preset ships a `<PresetName>.json` sidecar alongside its `.metal` file. Th
 | `natural_cycle_seconds` | none | Caps the scorer's `maxDuration` for presets whose visual cycle (e.g. Arachne's 60 s build) outranks the formula (V.7.6.2 §5). |
 | `wait_for_completion_event` | `false` | Preset signals its own completion → `nextPreset()` (definite-end-state presets; Arachne canonical). |
 | `requires_regular_beat` | `false` | Hard-excluded from planning on beat-irregular tracks (D-154). |
+| `reads_stems` | `true` | `false` = nothing the scene draws reads `StemFeatures`, so live stem separation (streaming path) pauses while it is on screen (BUG-181). Declare only after checking the shader AND any CPU state/geometry; `PresetReadsStemsTests` gates each adopter. A wrong `false` silently starves a stem-driven scene. |
 | `is_diagnostic` | `false` | Excluded from planner selection entirely (D-074); dev/diagnostic presets only. |
 | `text_overlay` | `false` | Binds `texture(12)` text overlay (SpectralCartograph-class diagnostics). |
 | `stages` | none | Staged-composition pass list (V.ENGINE.1) — per-stage fragment + `samples` wiring; see the staged paradigm section and §17.2 for the per-stage keys. |

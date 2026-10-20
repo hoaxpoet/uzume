@@ -202,6 +202,8 @@ extension VisualizerEngine {
         // consumes the same sidecar value when its pipeline is built below.
         pipeline.setDirectRenderScale(desc.directRenderScale)
         pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
+        // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
+        stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
         pipeline.setRayMarchPresetHeightTexture(nil)
         pipeline.setPostProcessChain(nil)
         pipeline.setRayMarchPipeline(nil)

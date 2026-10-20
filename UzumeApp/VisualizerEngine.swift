@@ -634,8 +634,16 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     var latestSeparationTimestamp: CFAbsoluteTime = 0
 
     /// Protects `latestSeparatedStems` + `latestSeparationTimestamp` across
-    /// the stemQueue → analysisQueue handoff.
+    /// the stemQueue → analysisQueue handoff. Also guards `onScreenScene`.
     let stemsStateLock = NSLock()
+
+    /// BUG-181 — the scene on screen and whether it reads stems (its sidecar's `reads_stems`), set by
+    /// `applyPreset` on the main thread and read by the separation timer on `stemQueue`.
+    var onScreenScene: (name: String, readsStems: Bool) = ("", true)
+
+    /// BUG-181 — whether the last separation tick was paused, so the session log records each pause
+    /// and resume once rather than every 2 s. `stemQueue` only.
+    var separationPausedForScene = false
 
     /// Whether MIR recording is active.
     var mirPipelineIsRecording: Bool { mirPipeline.isRecording }

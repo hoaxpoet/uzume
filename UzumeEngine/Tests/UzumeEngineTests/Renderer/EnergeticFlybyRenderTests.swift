@@ -247,6 +247,49 @@ struct EnergeticFlybyRenderTests {
         }
     }
 
+    // MARK: - Session replay (EFB_SESSION=<features.csv>)
+
+    /// Replays a recorded session's frames — its own deltaTime per frame, its own features — through the
+    /// scene at the session's drawable size, writing every frame as a PNG. For live defects that only one
+    /// session showed (EFB.2: seams and blockiness on the Spotify pass). EFB_FROM / EFB_COUNT pick rows,
+    /// EFB_W / EFB_H the drawable (default 2636×1398, the Mac mini's Tier-1 fullscreen cap on a 4K TV).
+    @Test("Replay a recorded session's frames through the scene (EFB_SESSION=features.csv)")
+    func sessionReplay() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let csv = env["EFB_SESSION"] else { return }
+        let rows = try SessionReplayHarness.loadRowsForReplay(URL(fileURLWithPath: csv))
+        let from = Int(env["EFB_FROM"] ?? "") ?? 0, count = Int(env["EFB_COUNT"] ?? "") ?? 300
+        let width = Int(env["EFB_W"] ?? "") ?? 2636, height = Int(env["EFB_H"] ?? "") ?? 1398
+        let slice = Array(rows[min(from, rows.count - 1)..<min(from + count, rows.count)])
+        let drive = slice.map { SessionReplayHarness.featureForReplay(from: $0, aspect: Float(width) / Float(height)) }
+        let out = URL(fileURLWithPath: env["EFB_OUT"] ?? "/tmp/efb_session")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        // EFB_TIMING_ONLY=1: no readback or PNGs, just GPU time per frame — the same frames without the live
+        // app's other GPU work (stem separation), to split content cost from contention.
+        let timingOnly = env["EFB_TIMING_ONLY"] == "1"
+        var harness = MultiPassRenderHarness(width: width, height: height, readback: !timingOnly)
+        let trace = EnergeticFlybyTraceLog(), log = GPUTimeLog()
+        harness.energeticFlybyTrace = trace
+        harness.gpuTimes = log
+        var index = 0
+        _ = try harness.render(preset: Self.preset, features: drive, stems: drive.map { _ in .zero }) { bgra in
+            defer { index += 1 }
+            if !timingOnly {
+                try? Self.writePNG(bgra, width, height, out.appendingPathComponent(String(format: "f_%05d.png", from + index)))
+            }
+            return 0
+        }
+        let ms = log.ms.sorted()
+        print(String(format: "[efb-session-timing] rows %d…%d at %d×%d: GPU p50 %.1f p95 %.1f max %.1f ms, %.1f%% > 33.3 ms",
+                     from, from + slice.count - 1, width, height, ms[ms.count / 2], ms[Int(Double(ms.count) * 0.95)],
+                     ms.last ?? 0, Double(ms.filter { $0 > 33.3 }.count) / Double(ms.count) * 100))
+        if timingOnly { return }
+        for (i, state) in trace.states.enumerated() {
+            print(String(format: "[efb-session] row %d dt %.1f ms travel %.3f spin %.3f hue %.3f roll %.3f glow %.3f",
+                         from + i, drive[i].deltaTime * 1000, state.travel, state.spin, state.hue, state.roll, state.glowBase))
+        }
+    }
+
     // MARK: - Release timing (task 7)
 
     @Test("Release GPU time at 1080p and 4K, and the 0.75× / 0.5× scales (EFB_TIMING=1)")

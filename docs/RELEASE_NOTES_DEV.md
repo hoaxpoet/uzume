@@ -10,6 +10,17 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-20-141441] BUG-181 + EFB.1/EFB.2 — Energetic Flyby lands; streaming pauses stem separation for scenes that read no stems
+
+Energetic Flyby (Kali's Shadertoy flythrough, uncertified, pin with `UZUME_PIN_SCENE="Energetic Flyby"`) is on
+`main` (#357): native resolution held at 30 fps, Kali's colour, the downbeat turning the glow's colour. On Matt's
+first Spotify pass it dropped twice the frames of local playback; re-rendering the same frames offline showed the
+cause was live stem separation sharing the GPU (15.9 % of frames past 33 ms live vs 4.7 % without it), and the
+scene reads no stems. Scenes can now declare `"reads_stems": false` in their sidecar; while one is on screen the
+streaming path pauses separation (the beat-grid recalibration still runs) and resumes when a stem-reading scene
+comes on. Energetic Flyby is the only adopter; each adopter is gated by `PresetReadsStemsTests`. Pending Matt's
+live Spotify check.
+
 ### [dev-2026-10-08-200116] FH.17 — Fiddlehead certified (the 28th): an endless dive into a fern, lit by the music
 ### [dev-2026-10-19-181401] W0.2 — honest 4K pass costs and sidecar-owned render scale
 
