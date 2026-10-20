@@ -74,6 +74,10 @@ constant float kEFBDet = .001;
 /// weighted by the same factor to keep Kali's brightness.
 constant float kEFBFarStep = 2.;
 constant float2 kEFBNear = float2(.01, .05);
+/// EFB (edge smoothing): luma contrast across a 2×2 pixel quad above which a second ray is taken.
+/// .25 keeps native 2560×1440 inside a 30 fps frame on an M2 Pro (p95 32.4 ms; .15 was 33.5) and about
+/// three-quarters of .15's smoothing (stair-step energy −7–8 % vs −9–11 %).
+constant float kEFBEdgeAA = .25;
 /// EFB (white-out fix): ray length over which rod glow fades in while a rod is at the camera.
 constant float kEFBCamFade = .3;
 
@@ -219,18 +223,17 @@ static inline float3 efb_srgb_to_linear(float3 c) {
     return select(pow((c + 0.055) / 1.055, 2.4), c / 12.92, c <= 0.04045);
 }
 
-// MARK: - Fragment
+// MARK: - Shading
 
-fragment float4 energetic_flyby_fragment(VertexOut in [[stage_in]],
-                                         constant FeatureVector& features [[buffer(0)]],
-                                         constant EnergeticFlybyStateGPU& st [[buffer(6)]]) {
+/// One ray through the screen point `uv01` (0…1, y down): Kali's mainImage body, display-space colour.
+static float3 efb_shade(float2 uv01, constant FeatureVector& features, constant EnergeticFlybyStateGPU& st) {
     EFBMarch k;
     k.br = 0.; k.tub = 0.; k.hit = 0.;
     k.pos = float3(0.); k.sphpos = float3(0.);
     k.time = st.time;
     k.spin = st.spin;
 
-    float2 uv = float2(in.uv.x - .5, .5 - in.uv.y);   // Kali: gl_FragCoord/resolution - .5, y up
+    float2 uv = float2(uv01.x - .5, .5 - uv01.y);    // Kali: gl_FragCoord/resolution - .5, y up
     uv.x *= max(features.aspect_ratio, 1e-4);          // Kali: uv /= vec2(res.y/res.x, 1)
     float t = st.travel;                               // EFB: Kali's t = time → the flight position
     float3 from = efb_path(st.camT);                   // EFB: no park on the shipped path (camT == t)
@@ -241,6 +244,24 @@ fragment float4 energetic_flyby_fragment(VertexOut in [[stage_in]],
     dir = efb_lookat(fw, float3(fw.x * 2., 1., 0.)) * dir;
     dir.xz += sin(k.time) * .3;
     float3 col = efb_march(from, dir, k, st);
-    col = mix(float3(.5) * length(col), col, .8);
-    return float4(efb_srgb_to_linear(saturate(col)), 1.);
+    return mix(float3(.5) * length(col), col, .8);
+}
+
+// MARK: - Fragment
+
+fragment float4 energetic_flyby_fragment(VertexOut in [[stage_in]],
+                                         constant FeatureVector& features [[buffer(0)]],
+                                         constant EnergeticFlybyStateGPU& st [[buffer(6)]]) {
+    float3 col = saturate(efb_shade(in.uv, features, st));
+    // EFB (edge smoothing, Matt 2026-10-20): Kali takes one sample per pixel, so his edges stair-step,
+    // and a Tier-1 Mac's 2560×1440 cap stretched 1.5× onto a 4K TV magnifies them ("pixelation").
+    // Where a pixel differs sharply from its 2×2 neighbours, one more ray at the half-pixel diagonal is
+    // averaged in: ~+16 % cost. Three more rays looked smoother but doubled the cost (EFB.2). Faithful
+    // mode stays one sample, like Kali.
+    float edge = fwidth(dot(col, float3(.299, .587, .114)));
+    if (st.faithful < .5 && edge > kEFBEdgeAA) {
+        float2 px = float2(dfdx(in.uv.x), dfdy(in.uv.y));
+        col = (col + saturate(efb_shade(in.uv + px * .5, features, st))) * .5;
+    }
+    return float4(efb_srgb_to_linear(col), 1.);
 }
