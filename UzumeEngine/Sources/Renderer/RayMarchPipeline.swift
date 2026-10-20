@@ -56,20 +56,11 @@ public final class RayMarchPipeline: @unchecked Sendable {
     /// Composite pass: reads litTexture, applies ACES, writes to drawable format.
     let compositePipeline: MTLRenderPipelineState
 
-    // MARK: - Per-pass Timing Breakdown (PERF.2-pass — BUG-019 instrumentation)
-    //
-    // Set inside `render(...)`. Read by `RenderPipeline.drawWithRayMarch` after
-    // the render call returns, on the same MainActor thread — no synchronization.
-    // Captures wall-clock per sub-pass via `CACurrentMediaTime()`.
+    // MARK: - Per-pass GPU Timing
 
-    /// Wall-clock cost in ms of the G-buffer pass during the most recent `render(...)` call.
-    public private(set) var lastGBufferPassMs: Float = 0
-    /// Wall-clock cost in ms of the lighting pass during the most recent `render(...)` call.
-    public private(set) var lastLightingPassMs: Float = 0
-    /// Wall-clock cost in ms of the post-process bloom / composite pass during the most
-    /// recent `render(...)` call. Includes either the `PostProcessChain.runBloomAndComposite`
-    /// call (when a chain is attached) or the fallback `runCompositePass`.
-    public private(set) var lastPostProcessPassMs: Float = 0
+    /// Hardware timestamp-counter profiler. Nil only when the device does not support
+    /// draw-boundary counters; in that case pass timing remains honestly unavailable.
+    private let passProfiler: RayMarchPassProfiler?
 
     // MARK: - Step Count Governor (D-057)
 
@@ -248,6 +239,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
     public init(context: MetalContext, shaderLibrary: ShaderLibrary) throws {
         self.context = context
         self.sceneUniforms = SceneUniforms()
+        self.passProfiler = RayMarchPassProfiler(device: context.device)
         let bundle = try Self.buildPipelineBundle(context: context, shaderLibrary: shaderLibrary)
         self.lightingPipeline = bundle.lighting
         self.compositePipeline = bundle.composite
@@ -383,17 +375,18 @@ public final class RayMarchPipeline: @unchecked Sendable {
         iblManager: IBLManager? = nil,
         postProcessChain: PostProcessChain? = nil,
         presetFragmentBuffer3: MTLBuffer? = nil,
-        presetHeightTexture: MTLTexture? = nil
+        presetHeightTexture: MTLTexture? = nil,
+        passTimingHandler: (@Sendable (RayMarchPassTimings) -> Void)? = nil
     ) {
         guard gbuffer0 != nil, gbuffer1 != nil, gbuffer2 != nil, litTexture != nil else {
             logger.error("RayMarchPipeline.render called before textures allocated — skipping")
             return
         }
 
-        // PERF.2-pass — per-sub-pass CPU encode timing. Wall-clock via
-        // CACurrentMediaTime() so the BUG-019 attribution can drill below
-        // `renderframe_cpu_ms`. Sub-microsecond per snapshot; same MainActor
-        // thread as the caller (no synchronization needed).
+        // W0.2 — bracket the three logical sections with GPU timestamp counters.
+        // The previous PERF.2-pass values timed CPU encoder construction and were
+        // therefore not usable for 4K GPU budgeting.
+        let timingFrame = passProfiler?.beginFrame()
         // FLY.5 — publish the ACTUAL vertical radians-per-rendered-pixel into the
         // free `cameraRight.w` padding lane, so a preset's LOD / anti-alias cutoff
         // knows how big a pixel really is at THIS window size. Fractal Fly-By
@@ -406,7 +399,6 @@ public final class RayMarchPipeline: @unchecked Sendable {
         sceneUniforms.cameraRight.w =
             2.0 * tan(sceneUniforms.cameraOriginAndFov.w * 0.5) / Float(renderH)
 
-        let gbufT0 = CACurrentMediaTime()
         runGBufferPass(
             commandBuffer: commandBuffer,
             gbufferPipelineState: gbufferPipelineState,
@@ -416,47 +408,52 @@ public final class RayMarchPipeline: @unchecked Sendable {
             stemFeatures: stemFeatures,
             noiseTextures: noiseTextures,
             presetFragmentBuffer3: presetFragmentBuffer3,
-            presetHeightTexture: presetHeightTexture
+            presetHeightTexture: presetHeightTexture,
+            gpuTiming: timingFrame?.gbuffer
         )
-        lastGBufferPassMs = Float((CACurrentMediaTime() - gbufT0) * 1000)
 
         // G-buffer debug bypass: skip lighting/ACES entirely.
         // gbuf2 is written directly to the drawable so the 4-quadrant
         // diagnostic colors are unmodified when they reach the screen.
         if debugGBufferMode {
             runGBufferDebugPass(commandBuffer: commandBuffer, outputTexture: outputTexture)
-            lastLightingPassMs = 0
-            lastPostProcessPassMs = 0
             return
         }
 
-        let lightT0 = CACurrentMediaTime()
         runLightingPass(
             commandBuffer: commandBuffer,
             features: &features,
             stemFeatures: stemFeatures,
             noiseTextures: noiseTextures,
             iblManager: iblManager,
-            presetFragmentBuffer3: presetFragmentBuffer3
+            presetFragmentBuffer3: presetFragmentBuffer3,
+            gpuTiming: timingFrame?.lighting
         )
-        lastLightingPassMs = Float((CACurrentMediaTime() - lightT0) * 1000)
 
         let colorForPost = litTexture
 
-        let postT0 = CACurrentMediaTime()
         if let chain = postProcessChain {
             // Route the (optionally temporally-resolved) colour through bloom + ACES.
             guard let src = colorForPost else { return }
             chain.ensureAllocated(width: src.width, height: src.height)
-            chain.runBloomAndComposite(from: src, to: outputTexture, commandBuffer: commandBuffer)
+            chain.runBloomAndComposite(
+                from: src,
+                to: outputTexture,
+                commandBuffer: commandBuffer,
+                gpuTiming: timingFrame?.postProcess
+            )
         } else {
             runCompositePass(
                 commandBuffer: commandBuffer,
                 outputTexture: outputTexture,
-                overrideSource: colorForPost
+                overrideSource: colorForPost,
+                gpuTiming: timingFrame?.postProcess
             )
         }
-        lastPostProcessPassMs = Float((CACurrentMediaTime() - postT0) * 1000)
+
+        if let timingFrame, let passTimingHandler {
+            passProfiler?.resolve(timingFrame, after: commandBuffer, handler: passTimingHandler)
+        }
     }
 
     // swiftlint:enable function_parameter_count

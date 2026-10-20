@@ -22,6 +22,13 @@ comes on. Energetic Flyby is the only adopter; each adopter is gated by `PresetR
 live Spotify check.
 
 ### [dev-2026-10-08-200116] FH.17 — Fiddlehead certified (the 28th): an endless dive into a fern, lit by the music
+### [dev-2026-10-19-181401] W0.2 — honest 4K pass costs and sidecar-owned render scale
+
+- **Ray-march timing now measures GPU work, not CPU encoder setup.** Apple timestamp counters report G-buffer, lighting, and complete post-process cost independently, below the display-wait floor that made whole-frame timing ambiguous.
+- **`render_scale` is now the common per-preset quality lever for scalable direct and ray-march scenes.** Nimbus's existing 0.5 scale moved from a preset-name branch into `Nimbus.json`; its rendered look is unchanged.
+- **Session records say what was actually rendered.** `RENDER_TARGET` now includes effective scale plus internal width, height, and megapixels, including the 4K ray-march pixel cap. Stateful feedback and staged paths remain native-resolution until their history-resize contract is designed.
+
+### [dev-2026-10-09-140939] UND.R2 — full-track preparation stays bounded (BUG-176)
 
 Fiddlehead is certified on Matt's live check (build 9003, Dance Yrself Clean: *"perfect. love it. ship it."*). The camera falls forever into a fern whose every leaflet is the same fern again, each frond uncurling as the camera reaches it. Every bass hit swells the fern's light, treble twinkles the leaflet edges, and every bar sends one nerve impulse racing down the stem to the leaflet tips. Fifteen palettes, each after a named work (Memphis to Rothko), take turns every 32 bars with a 3 s crossfade, starting at a different one per track. It now enters planned sessions like the other certified scenes. Flash-safe on a real render (0.00 flashes/s); a ten-minute soak holds memory flat and cost steady (13.6 ms per frame at 1080p, Release, M2 Pro).
 

@@ -61,9 +61,8 @@ extension VisualizerEngine {
         pipe.onRenderTimingObserved = { [weak recorder] encodeMs, renderframeMs in
             recorder?.recordRenderTimings(encodeCpuMs: encodeMs, renderFrameCpuMs: renderframeMs)
         }
-        // PERF.2-pass — feed the ray-march per-sub-pass breakdown
-        // (gbuffer/lighting/post-process) so the BUG-019 fix increment
-        // has a concrete target.
+        // W0.2 — feed true GPU timestamp-counter timings for the ray-march
+        // G-buffer / lighting / post-process groups into the session record.
         pipe.onRayMarchPassTimingObserved = { [weak recorder] gbufMs, lightMs, postMs in
             recorder?.recordRayMarchPassTimings(
                 gbufferMs: gbufMs,
