@@ -1,4 +1,5 @@
 import Metal
+import MetalKit
 import Shared
 import os.log
 
@@ -58,6 +59,22 @@ extension RenderPipeline {
     /// Thread-safe — can be called from any queue.
     public func setMeshPresetTick(_ tick: (@Sendable (FeatureVector, StemFeatures) -> Void)?) {
         meshPresetTickLock.withLock { meshPresetTick = tick }
+    }
+
+    /// Hold the view at `fps` frames per second while the current preset is active, or nil for the
+    /// view's own rate (EFB.1: Energetic Flyby renders at native resolution and runs a steady 30 fps on
+    /// a Mac that cannot draw it in 16.7 ms — steadier than a 60 Hz loop that drops frames unevenly).
+    /// Reset to nil on every preset change. Main thread (`applyPreset`).
+    public func setFrameRateCap(_ fps: Int?) {
+        frameRateCap = fps
+    }
+
+    /// Apply the cap to the view the render loop is drawing (called from `draw(in:)`).
+    func applyFrameRateCap(to view: MTKView) {
+        let native = nativeFramesPerSecond ?? view.preferredFramesPerSecond
+        nativeFramesPerSecond = native
+        let target = frameRateCap.map { min($0, native) } ?? native
+        if view.preferredFramesPerSecond != target { view.preferredFramesPerSecond = target }
     }
 
     /// Attach a per-frame stem publish closure (LFSTEM.1e). Called once per frame before

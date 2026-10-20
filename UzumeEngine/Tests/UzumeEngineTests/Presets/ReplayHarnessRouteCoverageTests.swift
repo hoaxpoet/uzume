@@ -72,6 +72,7 @@ struct ReplayHarnessRouteCoverageTests {
         "spectralCentroid", "spectralFlux", "valence", "arousal",
         // beat + grid
         "beatBass", "beatMid", "beatComposite", "beatPhase01", "barPhase01",
+        "beatsPerBar",   // EFB.1 — the meter (Energetic Flyby's beat-3 echo)
         "pulseAmp01", "pulsePhase01", "pulseBeatIndex", "pulseRegionalBlend01",
         // deviation primitives (D-026)
         "bassAttRel", "bassDev",

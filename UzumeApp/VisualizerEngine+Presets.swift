@@ -100,6 +100,9 @@ extension VisualizerEngine {
         // so the body blooms back UP into the new track rather than popping (DESIGN §1.5).
         // No-op when Nimbus is not the active preset (state is nil).
         nimbusState?.reset()
+        // EFB.1 (design §6): normalisers, envelopes and the bank start over; travel and hue carry on, so a
+        // track change never snaps the camera or the palette. No-op unless Energetic Flyby is active.
+        energeticFlybyState?.reset()
         // CR.2: settle the sand into the new track (no-op unless the geometry exists).
         (cymaticSandGeometry as? CymaticSandGeometry)?.reset()
         // WL.2 (§7.3): a stale smoothed harmonic phase or `previousBarPhase` across a track
@@ -185,6 +188,7 @@ extension VisualizerEngine {
         nebulaState = nil
         waveformState = nil
         nimbusState = nil
+        energeticFlybyState = nil
         skeinState = nil
         lumenPatternEngine = nil
         ferrofluidParticles = nil
@@ -195,6 +199,7 @@ extension VisualizerEngine {
         pipeline.setDirectPresetFragmentBuffer2(nil)
         pipeline.setDirectPresetFragmentBuffer3(nil)
         pipeline.setDirectRenderScale(1.0)   // NB.8: full-res unless a preset opts into half-res below
+        pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         pipeline.setRayMarchPresetHeightTexture(nil)
         pipeline.setPostProcessChain(nil)
         pipeline.setRayMarchPipeline(nil)
@@ -587,6 +592,7 @@ extension VisualizerEngine {
         case "Waveform":    bindWaveformRuntime(desc)
         case "Skein":       bindSkeinRuntime(desc)
         case "Nimbus":      bindNimbusRuntime(desc)
+        case "Energetic Flyby": bindEnergeticFlybyRuntime(desc)
         case "Lumen Mosaic": bindLumenMosaicRuntime(desc)
         case "Witchlight":  bindWitchlightRuntime(desc)
         case "Kagura":      bindKaguraRuntime(desc)
@@ -879,6 +885,25 @@ extension VisualizerEngine {
             pipeline.setDirectRenderScale(0.5)
         } else {
             logger.error("NimbusState: failed to allocate state for preset '\(desc.name)'")
+        }
+    }
+
+    private func bindEnergeticFlybyRuntime(_ desc: PresetDescriptor) {
+        // EFB.1: the Nimbus pattern — the music lives in `EnergeticFlybyState` (slot 6), ticked once per
+        // frame before the draw.
+        if let state = EnergeticFlybyState(device: context.device) {
+            energeticFlybyState = state
+            pipeline.setDirectPresetFragmentBuffer(state.stateBuffer)
+            pipeline.setMeshPresetTick { [weak state] features, stems in
+                state?.tick(deltaTime: features.deltaTime, features: features, stems: stems)
+            }
+            // EFB.1, Matt (2026-10-19): native resolution, no upscaling ("it needs to be crisp and clean"),
+            // and 30 fps accepted on the Mac mini. The cost-reduced march is p95 ~21 ms at native 2560×1440
+            // (the Tier-1 drawable a 4K TV gets) on an M2 Pro: past a 60 Hz frame, well inside 33 ms. A
+            // steady 30 reads smoother than a 60 Hz loop that drops frames unevenly. Reset in applyPreset.
+            pipeline.setFrameRateCap(30)
+        } else {
+            logger.error("EnergeticFlybyState: failed to allocate state for preset '\(desc.name)'")
         }
     }
 

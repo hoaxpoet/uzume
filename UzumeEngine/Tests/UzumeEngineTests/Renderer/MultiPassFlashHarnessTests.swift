@@ -256,6 +256,19 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Fiddlehead", samples: try await flashLuma("Fiddlehead", settle: 60, frames: 900))
     }
 
+    @Test("Energetic Flyby is flash-safe (Kali's glow, colour turn + bank on the worst-case train, real headless render)")
+    func energeticFlybyIsFlashSafe() async throws {
+        // EFB.1 — Energetic Flyby is a `direct` ray march whose music lives in `EnergeticFlybyState` at
+        // slot 6. The single-pass gate draws it against a ZEROED slot 6 (no clock, no glow), so it is
+        // measured here, where `renderDirectPreset` ticks the real state per frame as production does.
+        //
+        // Load-bearing: Kali's glow is bright, and the flight alone at his brightness sits AT the regional
+        // limit (3.00/s, measured EFB.1). Every downbeat brightness flare tried took it over (3.50/s), so
+        // the downbeat is a colour turn only (Matt's call). The train's bar wraps every 4 accents
+        // (1.125 Hz); flux and bassDev spike at 4.5 Hz, driving speed, glow and spin harder than music.
+        assertFlashSafe(name: "Energetic Flyby", samples: try await flashLuma("Energetic Flyby", settle: 60, frames: 900))
+    }
+
     @Test("Alfvén is flash-safe (worst-case beat train, real headless solver render)")
     func alfvenIsFlashSafe() async throws {
         // ALFVEN.CERT — Alfvén reaches this harness because the single-pass gate correctly

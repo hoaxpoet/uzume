@@ -221,6 +221,12 @@ private let expectedAutomatedGate: [String: Bool] = [
     "Fiddlehead":           false,   // FH.16 — lightweight; all audio is read CPU-side in FiddleheadFern
                                      // (pulses on beat-phase wraps, deviation envelopes) and the ground
                                      // MSL reads no audio — the Kagura precedent.
+    "Energetic Flyby":      false,   // EFB.1 — full; 2/15 measured (M5 silence, M6 performance pass). A verbatim
+                                     // port of Kali's csjGDD (FA #65): his own fold-tunnel `fractal()` and glow,
+                                     // no fbm cascade and no mat_* calls, so M1–M3 read 0 by construction (the
+                                     // Aurora Veil port precedent). M4: the music is CPU-side
+                                     // (EnergeticFlybyState at slot 6), which the MSL heuristic cannot see.
+                                     // certified: false; L4/M7 is Matt's live look.
     "Staged Sandbox":       false,   // diagnostic sandbox; not a certification candidate
     "Poisson Sandbox":      false,   // ALFVEN.1 diagnostic; proves the persistent/iterated staged
                                      // surface, not a certification candidate. Reads no audio at all

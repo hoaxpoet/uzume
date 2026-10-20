@@ -88,7 +88,10 @@ struct MultiPassRenderHarness {
         // FH.17 — Fiddlehead: `FiddleheadFern` draws the whole scene through the particles seam (the
         // Alfvén shape) after baking its curl-state fields on its own queue; the sidecar fragment is
         // only the ground shown while they bake.
-        "Fiddlehead"
+        "Fiddlehead",
+        // EFB.1 — Energetic Flyby: one fullscreen ray-march fragment fed by `EnergeticFlybyState`
+        // at slot 6 (the Nebula shape), ticked per frame from the drive.
+        "Energetic Flyby"
     ]
 
     /// Render `presetName` over `features`/`stems` (row-aligned), returning `reduce(bgra)`
@@ -175,7 +178,7 @@ struct MultiPassRenderHarness {
         case "Volumetric Lithograph": return try renderVolumetricLithograph(features, stems, reduce)
         case "Fractal Tree": return try renderMeshPreset(presetName, features, stems,
                                                          settle: settle, reduce)
-        case "Nebula", "Spectral Cartograph", "Waveform":
+        case "Nebula", "Spectral Cartograph", "Waveform", "Energetic Flyby":
             return try renderDirectPreset(presetName, features, stems, reduce)
         default:
             throw HarnessError.presetNotFound("\(presetName) is not a multi-pass harness preset")
@@ -1022,6 +1025,14 @@ struct MultiPassRenderHarness {
     /// Set by a diagnostic on its own harness before calling `render`.
     var realSpectrum: [[Float]]?
 
+    /// EFB.1 — Energetic Flyby probes. `energeticFlybyFaithful` runs the state in Kali's own
+    /// behaviour (EFB_FAITHFUL; nil = the environment switch). `energeticFlybyForced`, when set,
+    /// replaces the ticked state with these per-frame values (a forced moment, e.g. a rod through
+    /// the camera). `energeticFlybyTrace` records what the shader read on every frame.
+    var energeticFlybyFaithful: Bool?
+    var energeticFlybyForced: [EnergeticFlybyStateGPU]?
+    var energeticFlybyTrace: EnergeticFlybyTraceLog?
+
     /// BR.1 / K4 — the Fractal Tree flash drive. `openTheGates` also pins `bassDev`,
     /// `spectralFlux` and `spectralSurge` to constants (right for the frame budget, which wants a
     /// steady full canopy), which would flatten exactly the pulses a flash measurement exists to
@@ -1398,6 +1409,16 @@ struct MultiPassRenderHarness {
             throw HarnessError.setupFailed("WaveformState allocation")
         }
 
+        // EFB.1 — Energetic Flyby's slot-6 state, ticked from the drive exactly as production's
+        // `setMeshPresetTick` closure does (features.deltaTime, before the draw).
+        var flyby: EnergeticFlybyState?
+        if presetName == "Energetic Flyby" {
+            flyby = energeticFlybyFaithful.map { EnergeticFlybyState(device: ctx.device, faithful: $0) }
+                ?? EnergeticFlybyState(device: ctx.device)
+            if flyby == nil { throw HarnessError.setupFailed("EnergeticFlybyState allocation") }
+        }
+        let forced = energeticFlybyForced, trace = energeticFlybyTrace
+
         let history = SpectralHistoryBuffer(device: ctx.device)
         // The real generated textures, not placeholders — see the note above.
         let textures = try TextureManager(context: ctx, shaderLibrary: lib)
@@ -1419,6 +1440,17 @@ struct MultiPassRenderHarness {
             waveform?.tick(deltaTime: 1.0 / 60.0, magnitudes: fftPtr, binCount: 512)
             var features = drive[frame]
             var stem = stems[frame]
+            if let flyby {
+                flyby.tick(deltaTime: features.deltaTime, features: features, stems: stem)
+                if let forced {
+                    var state = forced[frame % forced.count]
+                    flyby.stateBuffer.contents().copyMemory(
+                        from: &state, byteCount: MemoryLayout<EnergeticFlybyStateGPU>.stride)
+                    trace?.append(state)
+                } else {
+                    trace?.append(flyby.gpuState)
+                }
+            }
             enc.setRenderPipelineState(preset.pipelineState)
             enc.setFragmentBytes(&features, length: MemoryLayout<FeatureVector>.size, index: 0)
             enc.setFragmentBuffer(fft, offset: 0, index: 1)
@@ -1427,6 +1459,7 @@ struct MultiPassRenderHarness {
             enc.setFragmentBuffer(history.gpuBuffer, offset: 0, index: 5)
             if let nebula { enc.setFragmentBuffer(nebula.bandBuffer, offset: 0, index: 6) }
             if let waveform { enc.setFragmentBuffer(waveform.barBuffer, offset: 0, index: 6) }
+            if let flyby { enc.setFragmentBuffer(flyby.stateBuffer, offset: 0, index: 6) }
             textures.bindTextures(to: enc)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             enc.endEncoding()
@@ -1507,6 +1540,19 @@ private final class MainActorFrames {
         try body(frame, &pixels)
         return pixels
     }
+}
+
+// MARK: - EnergeticFlybyTraceLog
+
+/// Per-frame `EnergeticFlybyStateGPU` the shader read, collected through
+/// `MultiPassRenderHarness.energeticFlybyTrace`. Locked, so the harness stays `Sendable`.
+final class EnergeticFlybyTraceLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [EnergeticFlybyStateGPU] = []
+
+    var states: [EnergeticFlybyStateGPU] { lock.withLock { values } }
+
+    func append(_ value: EnergeticFlybyStateGPU) { lock.withLock { values.append(value) } }
 }
 
 // MARK: - GPUTimeLog

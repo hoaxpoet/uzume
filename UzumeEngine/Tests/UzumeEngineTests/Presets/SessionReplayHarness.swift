@@ -63,6 +63,11 @@ struct SessionReplayHarness {
         // its purest form (Faraday's subharmonic beat-lock and its transient accent
         // both read as "not working" until these were mapped).
         var barPhase01: Float = 0
+        // EFB.1 — the meter: Energetic Flyby's beat-3 echo reads `barPhase01 · beatsPerBar`, which
+        // replayed as 0 (no echo) until mapped. `playbackTime` is the audio position the row was
+        // analysed at — the axis Beat This! references use; not a FeatureVector field.
+        var beatsPerBar: Float = 4
+        var playbackTime: Float = 0
         var bassDev: Float = 0
         var trebRel: Float = 0
         var bassRel: Float = 0
@@ -135,6 +140,8 @@ struct SessionReplayHarness {
             r.bassAttRel = get(f, "bassAttRel");   r.beatPhase01 = get(f, "beatPhase01")
             // the session logs bar phase in PERMILLE
             r.barPhase01 = get(f, "barPhase01_permille") / 1000.0
+            r.beatsPerBar = get(f, "beatsPerBar")
+            r.playbackTime = get(f, "playback_time_s")
             r.bassDev = get(f, "bassDev")
             // UND.1 — the CSV spells it `treb_rel`; reading "trebRel" fed every replay ZERO
             // while ReplayHarnessRouteCoverageTests listed it as carried.
@@ -179,6 +186,7 @@ struct SessionReplayHarness {
         f.valence = r.valence; f.arousal = r.arousal
         f.bassAttRel = r.bassAttRel; f.beatPhase01 = r.beatPhase01
         f.barPhase01 = r.barPhase01; f.bassDev = r.bassDev; f.pulseAmp01 = r.pulseAmp01
+        f.beatsPerBar = r.beatsPerBar
         f.trebRel = r.trebRel; f.bassRel = r.bassRel
         f.pulsePhase01 = r.pulsePhase01
         f.pulseBeatIndex = r.pulseBeatIndex

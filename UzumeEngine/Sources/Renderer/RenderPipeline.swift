@@ -383,6 +383,10 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// cheaper and the soft gas tolerates the upscale. Set per-preset in
     /// `applyPreset`; reset to 1.0 on every preset change.
     private var _directRenderScale: Float = 1.0
+    /// EFB.1 — a per-preset frame-rate cap, or nil for the view's own rate; and that own rate,
+    /// captured from the view on the first frame. Main-thread state (`draw(in:)` and `applyPreset`).
+    var frameRateCap: Int?
+    var nativeFramesPerSecond: Int?
     private let directRenderScaleLock = NSLock()
 
     /// Set the direct-preset render scale (1.0 = full res; e.g. 0.5 = half-res
@@ -794,6 +798,8 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         let elapsed = Float(now - startTime)
         let deltaTime = Float(now - lastFrameTime)
         lastFrameTime = now
+
+        applyFrameRateCap(to: view)
 
         var features = featuresLock.withLock { latestFeatures }
         features.time = elapsed

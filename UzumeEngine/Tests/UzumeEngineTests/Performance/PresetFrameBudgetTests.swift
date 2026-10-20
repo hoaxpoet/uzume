@@ -169,7 +169,14 @@ struct PresetFrameBudgetTests {
         // a COMPARISON sort of the 100 k-segment skeleton ran inside every timed pass (this harness
         // builds the geometry per pass) at ~250 ms `-Onone`; `FirefliesGeometry.bandOrder` is a
         // counting sort. Release, no readback, DYC 1920x1080: see `FirefliesRenderTests.frameCostAt1080p`.
-        "Fireflies": 19.61
+        "Fireflies": 19.61,
+        // EFB.1 — 17.59 ms (2.8x median, 2026-10-19, Debug harness with readback, native 1080p) for the
+        // cost-reduced march: one sphere system and an adaptive step (2x Kali's in open space, his near any
+        // surface), his 200 steps and 5.0 depth kept. Kali's verbatim march was 29.97. Release, no readback,
+        // Mac mini M2 Pro, There There drive, p50 / p95: native 1080p 11.7 / 15.8 ms, native 2560x1440
+        // 20.4 / 27.2, native 4K 44.1 / 59.5 (`EnergeticFlybyRenderTests.releaseTiming`). The app holds the
+        // scene at 30 fps (Matt: native resolution, 30 fps accepted).
+        "Energetic Flyby": 17.59
     ]
 
     /// Presets `MultiPassRenderHarness` cannot drive. Named, printed, and NOT counted as passing.

@@ -597,6 +597,7 @@
 "settings.about.ack.open_unmix"  = "Open-Unmix — separating songs into vocals, drums, bass and other. Fabian-Robert Stöter, Stefan Uhlich, Antoine Liutkus, Yuki Mitsufuji. MIT License.";
 "settings.about.ack.panns"       = "PANNs MobileNetV1 — instrument detection. Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley. Weights CC BY 4.0; AudioSet labels © Google, CC BY 4.0.";
 "settings.about.ack.auroras"     = "Aurora Veil — its shader is “Auroras” by nimitz (@stormoid), ported to Metal. CC BY-NC-SA 3.0: not covered by Uzume’s MIT License, and not for commercial use.";
+"settings.about.ack.energetic_flyby" = "Energetic Flyby — its shader is “Energetic Flyby” by Kali, ported to Metal. CC BY-NC-SA 3.0: not covered by Uzume’s MIT License, and not for commercial use.";
 "settings.about.ack.fluid"       = "Alfvén — pressure solve from WebGL Fluid Simulation by Pavel Dobryakov, © 2017. MIT License.";
 "settings.about.ack.cmu"         = "Kagura — the data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.";
 "settings.about.ack.milkdrop"    = "Dragon Bloom, Fata Morgana, Floret, Glaze, Meniscus, Nacre, Stave and Witchlight are new works inspired by Milkdrop presets by Martin, Flexi, stahlregen, suksma, Rovastar, QBikal and the $$$ Royal mashups (projectM’s Cream of the Crop pack and butterchurn).";

@@ -151,6 +151,11 @@ struct PresetAcceptanceTests {
         // Coverage: KaguraPulseLockReplayTests, KaguraMotionSequenceTests and the
         // MultiPassRenderHarness "Kagura" case (frame budget, flash safety).
         guard preset.descriptor.name != "Kagura" else { return }
+        // Energetic Flyby (EFB.1): Kali's look has a white-hot core by design — reference 03 itself
+        // clips (34 % of its pixels ≥ 250) and the verbatim port reproduces it (FA #65). What must not
+        // happen is a WHOLE-frame white-out: EnergeticFlybyRenderTests.whiteOutIsBounded (forced rod
+        // through the camera, negative control) and MultiPassFlashHarnessTests.energeticFlybyIsFlashSafe.
+        guard preset.descriptor.name != "Energetic Flyby" else { return }
         let ctx = try MetalContext()
         var fixture = steadyFixture
         let pixels = try renderFrame(preset: preset, features: &fixture, context: ctx)

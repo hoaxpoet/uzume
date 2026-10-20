@@ -1,0 +1,39 @@
+{
+  "name": "Energetic Flyby",
+  "family": "fractal",
+  "duration": 60,
+  "description": "A continuous flight down a twisting tunnel of glassy, perforated shells lit from inside, following a spiked, spinning sphere cluster that throws light rods through the tunnel. Kali's Energetic Flyby (Shadertoy csjGDD, CC BY-NC-SA 3.0), its march cut for cost and run at native resolution. Each downbeat on the cached grid (barPhase01) turns the glow's colour, pink to orange to pink to blue; every second downbeat banks the camera a quarter turn. The song's energy (spectralFlux, self-normalised) sets the flight speed and the glow level; the bass (bassDev, self-normalised) spins the spheres.",
+  "author": "Kali (port: Uzume engine)",
+  "passes": [],
+  "fragment_function": "energetic_flyby_fragment",
+  "vertex_function": "fullscreen_vertex",
+  "visual_density": 0.85,
+  "motion_intensity": 0.6,
+  "color_temperature_range": [0.3, 0.8],
+  "fatigue_risk": "medium",
+  "transition_affordances": ["crossfade"],
+  "section_suitability": ["buildup", "peak", "bridge"],
+  "complexity_cost": { "tier1": 11.7, "tier2": 11.7 },
+  "audio_routes": [
+    {
+      "route": "downbeat_colour_turn",
+      "primitive": "barPhase01",
+      "kind": "accent",
+      "note": "EFB.1 - each wrap of the cached grid's barPhase01 is a downbeat: the glow colour steps 0.7 rad along pink -> orange -> pink -> blue (inside Kali's range), eased 0.25 s; every second downbeat banks the camera a quarter turn over 1 s. No brightness flare: at Kali's glow any flare took the worst-case flash train over the regional limit (Matt's call). EnergeticFlybyState."
+    },
+    {
+      "route": "energy_speed_glow",
+      "primitive": "spectralFlux",
+      "kind": "continuous",
+      "note": "EFB.1 — spectralFlux self-normalised against its own running mean (8 s warm-up rule, FH.17), smoothed 0.6 s: flight speed 0.65 + 0.8 x energy and glow 0.9 + 0.7 x energy (a typical passage = Kali's average glow, 1.25)."
+    },
+    {
+      "route": "bass_spin",
+      "primitive": "bassDev",
+      "kind": "continuous",
+      "note": "EFB.1 — positive bassDev self-normalised the same way, attack 30 ms / release 300 ms: sphere spin rate 1 + 3 x bass."
+    }
+  ],
+  "certified": false,
+  "rubric_profile": "full"
+}

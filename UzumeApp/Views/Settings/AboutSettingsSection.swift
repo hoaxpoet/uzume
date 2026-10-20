@@ -68,6 +68,7 @@ extension AboutSettingsSection {
         ("settings.about.ack.open_unmix", url("https://github.com/sigsep/open-unmix-pytorch")),
         ("settings.about.ack.panns", url("https://zenodo.org/records/3987831")),
         ("settings.about.ack.auroras", url("https://www.shadertoy.com/view/XtGGRt")),
+        ("settings.about.ack.energetic_flyby", url("https://www.shadertoy.com/view/csjGDD")),
         ("settings.about.ack.fluid", url("https://github.com/PavelDoGreat/WebGL-Fluid-Simulation")),
         ("settings.about.ack.cmu", url("http://mocap.cs.cmu.edu/")),
         ("settings.about.ack.milkdrop", url("https://github.com/projectM-visualizer/presets-cream-of-the-crop"))

@@ -87,6 +87,8 @@ public enum StatefulRuntimeRegistry {
         "Fireflies",
         // UND.1 — Understory's feedback-IFS fronds read their spring-driven bend from
         // `UnderstoryField.buffer` at slot 6 in the `fronds` stage; the tick runs the springs.
-        "Understory"
+        "Understory",
+        // EFB.1 — Energetic Flyby's flight, spin and downbeat burst live in `EnergeticFlybyState` at slot 6.
+        "Energetic Flyby"
     ]
 }
