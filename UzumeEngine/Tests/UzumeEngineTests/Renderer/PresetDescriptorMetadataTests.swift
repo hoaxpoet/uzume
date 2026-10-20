@@ -112,6 +112,17 @@ private enum MetadataTestError: Error {
     #expect(descriptor.complexityCost.tier2 == 0.9)
 }
 
+@Test func presetDescriptorMetadata_renderScaleFeedsScalablePaths() throws {
+    let json = """
+    { "name": "Scaled", "render_scale": 0.625 }
+    """
+    let descriptor = try JSONDecoder().decode(PresetDescriptor.self, from: Data(json.utf8))
+
+    #expect(descriptor.renderScale == 0.625)
+    #expect(descriptor.directRenderScale == 0.625)
+    #expect(descriptor.rayMarchRenderScale == 0.625)
+}
+
 // MARK: - 5. On-disk back-fill regression
 
 /// Loads all built-in presets via PresetLoader and asserts that each has a non-default
@@ -139,4 +150,8 @@ private enum MetadataTestError: Error {
 
     #expect(failedPresets.isEmpty,
             "Presets missing back-filled complexity_cost: \(failedPresets). Restore their metadata in the corresponding .json sidecar.")
+
+    let nimbus = loader.presets.first { $0.descriptor.name == "Nimbus" }
+    #expect(nimbus?.descriptor.directRenderScale == 0.5,
+            "Nimbus's 0.5 internal scale must live in its sidecar, not app binding code")
 }

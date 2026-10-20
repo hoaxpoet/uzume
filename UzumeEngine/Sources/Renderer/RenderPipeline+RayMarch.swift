@@ -287,17 +287,14 @@ extension RenderPipeline {
             iblManager: ibl,
             postProcessChain: chainForBloom,
             presetFragmentBuffer3: presetBuf3,
-            presetHeightTexture: presetHeightTex
-        )
-
-        // PERF.2-pass — surface per-sub-pass timings to the recorder so BUG-019
-        // diagnosis can drill below renderframe_cpu_ms. Reads from
-        // `rayMarchState`'s `lastFooPassMs` properties (set inside `render(...)`
-        // on this same MainActor thread — no synchronization needed).
-        onRayMarchPassTimingObserved?(
-            rayMarchState.lastGBufferPassMs,
-            rayMarchState.lastLightingPassMs,
-            rayMarchState.lastPostProcessPassMs
+            presetHeightTexture: presetHeightTex,
+            passTimingHandler: { [weak self] timings in
+                self?.onRayMarchPassTimingObserved?(
+                    timings.gbufferMs,
+                    timings.lightingMs,
+                    timings.postProcessMs
+                )
+            }
         )
 
         // Present only when rendering directly to the drawable (normal path).

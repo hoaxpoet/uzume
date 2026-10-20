@@ -336,6 +336,12 @@ honest beta read is about 33–35. The plan, lanes, order and per-entry sources 
 [`docs/presets/BETA_SCENE_SLATE_2026-09-24.md`](presets/BETA_SCENE_SLATE_2026-09-24.md) §00; increments are
 recorded in their own rows as they land.
 
+### Wave 0 · Visual-quality infrastructure
+
+| ID | Status | Done-when |
+|---|---|---|
+| **W0.2** 4K measurement + per-preset scaling foundation | ✅ 2026-10-19 | Ray-march G-buffer / lighting / post-process costs come from Apple-GPU timestamp counters rather than CPU encoder wall time; `render_scale` is sidecar-owned for scalable direct and ray-march paths; Nimbus's existing 0.5 scale has no app-name branch; `RENDER_TARGET` records effective internal dimensions; hardware-counter, descriptor, marched-pixel, and full-app build gates are green. Per-stage timing and an adaptive quality policy remain later increments. |
+
 ### Lane 1 · Fireflies (slate D1)
 
 | ID | Status | Done-when |
