@@ -35,6 +35,6 @@
     }
   ],
   "reads_stems": false,
-  "certified": false,
+  "certified": true,
   "rubric_profile": "full"
 }

@@ -123,6 +123,12 @@ struct PhotosensitivityCertificationTests {
                            // 0 transitions, relative luminance 0.015…0.037 (Δ0.022). 1080p D-157 on the
                            // four captures: max Δ frame-mean luma 0.0071 / 0.0117 / 0.0047 / 0.0043.
         ,
+        "Energetic Flyby"  // direct + EnergeticFlybyState at slot 6: this single-pass harness binds a ZEROED
+                           // slot 6 (no clock, no glow), so it reads static here. Measured for real by
+                           // MultiPassFlashHarnessTests.energeticFlybyIsFlashSafe, which ticks the real state per
+                           // frame: 0.00 flashes/s, regional 3.00/s (AT the limit — Kali's flight at his
+                           // brightness), red 1.00/s — EFB.3.
+        ,
         "Fiddlehead"       // particles; the fern is `FiddleheadFern`'s compute render through the particles seam
                            // and `fiddlehead_ground_fragment` is only the bake-time ground, so this single-pass
                            // harness renders it static. Measured for real by
