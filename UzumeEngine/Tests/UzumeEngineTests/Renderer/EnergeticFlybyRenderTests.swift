@@ -247,6 +247,38 @@ struct EnergeticFlybyRenderTests {
         }
     }
 
+    // MARK: - Session replay (EFB_SESSION=<features.csv>)
+
+    /// Replays a recorded session's frames — its own deltaTime per frame, its own features — through the
+    /// scene at the session's drawable size, writing every frame as a PNG. For live defects that only one
+    /// session showed (EFB.2: seams and blockiness on the Spotify pass). EFB_FROM / EFB_COUNT pick rows,
+    /// EFB_W / EFB_H the drawable (default 2636×1398, the Mac mini's Tier-1 fullscreen cap on a 4K TV).
+    @Test("Replay a recorded session's frames through the scene (EFB_SESSION=features.csv)")
+    func sessionReplay() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let csv = env["EFB_SESSION"] else { return }
+        let rows = try SessionReplayHarness.loadRowsForReplay(URL(fileURLWithPath: csv))
+        let from = Int(env["EFB_FROM"] ?? "") ?? 0, count = Int(env["EFB_COUNT"] ?? "") ?? 300
+        let width = Int(env["EFB_W"] ?? "") ?? 2636, height = Int(env["EFB_H"] ?? "") ?? 1398
+        let slice = Array(rows[min(from, rows.count - 1)..<min(from + count, rows.count)])
+        let drive = slice.map { SessionReplayHarness.featureForReplay(from: $0, aspect: Float(width) / Float(height)) }
+        let out = URL(fileURLWithPath: env["EFB_OUT"] ?? "/tmp/efb_session")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        var harness = MultiPassRenderHarness(width: width, height: height)
+        let trace = EnergeticFlybyTraceLog()
+        harness.energeticFlybyTrace = trace
+        var index = 0
+        _ = try harness.render(preset: Self.preset, features: drive, stems: drive.map { _ in .zero }) { bgra in
+            defer { index += 1 }
+            try? Self.writePNG(bgra, width, height, out.appendingPathComponent(String(format: "f_%05d.png", from + index)))
+            return 0
+        }
+        for (i, state) in trace.states.enumerated() {
+            print(String(format: "[efb-session] row %d dt %.1f ms travel %.3f spin %.3f hue %.3f roll %.3f glow %.3f",
+                         from + i, drive[i].deltaTime * 1000, state.travel, state.spin, state.hue, state.roll, state.glowBase))
+        }
+    }
+
     // MARK: - Release timing (task 7)
 
     @Test("Release GPU time at 1080p and 4K, and the 0.75× / 0.5× scales (EFB_TIMING=1)")
