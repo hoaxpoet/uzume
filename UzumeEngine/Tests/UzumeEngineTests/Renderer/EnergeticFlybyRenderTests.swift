@@ -264,15 +264,26 @@ struct EnergeticFlybyRenderTests {
         let drive = slice.map { SessionReplayHarness.featureForReplay(from: $0, aspect: Float(width) / Float(height)) }
         let out = URL(fileURLWithPath: env["EFB_OUT"] ?? "/tmp/efb_session")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        var harness = MultiPassRenderHarness(width: width, height: height)
-        let trace = EnergeticFlybyTraceLog()
+        // EFB_TIMING_ONLY=1: no readback or PNGs, just GPU time per frame — the same frames without the live
+        // app's other GPU work (stem separation), to split content cost from contention.
+        let timingOnly = env["EFB_TIMING_ONLY"] == "1"
+        var harness = MultiPassRenderHarness(width: width, height: height, readback: !timingOnly)
+        let trace = EnergeticFlybyTraceLog(), log = GPUTimeLog()
         harness.energeticFlybyTrace = trace
+        harness.gpuTimes = log
         var index = 0
         _ = try harness.render(preset: Self.preset, features: drive, stems: drive.map { _ in .zero }) { bgra in
             defer { index += 1 }
-            try? Self.writePNG(bgra, width, height, out.appendingPathComponent(String(format: "f_%05d.png", from + index)))
+            if !timingOnly {
+                try? Self.writePNG(bgra, width, height, out.appendingPathComponent(String(format: "f_%05d.png", from + index)))
+            }
             return 0
         }
+        let ms = log.ms.sorted()
+        print(String(format: "[efb-session-timing] rows %d…%d at %d×%d: GPU p50 %.1f p95 %.1f max %.1f ms, %.1f%% > 33.3 ms",
+                     from, from + slice.count - 1, width, height, ms[ms.count / 2], ms[Int(Double(ms.count) * 0.95)],
+                     ms.last ?? 0, Double(ms.filter { $0 > 33.3 }.count) / Double(ms.count) * 100))
+        if timingOnly { return }
         for (i, state) in trace.states.enumerated() {
             print(String(format: "[efb-session] row %d dt %.1f ms travel %.3f spin %.3f hue %.3f roll %.3f glow %.3f",
                          from + i, drive[i].deltaTime * 1000, state.travel, state.spin, state.hue, state.roll, state.glowBase))
