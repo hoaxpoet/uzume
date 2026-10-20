@@ -106,7 +106,9 @@ struct StemSeriesWiringTests {
                 """)
         // BUG-181 — the scene-driven pause skips separation but keeps the one-shot beat-grid
         // recalibration that rides on separation ticks (BUG-007.9).
-        #expect(stems.contains("guard separationPausedForOnScreenScene() else { return false }\n        runtimeRecalibrationIfDue()"), """
+        let pauseKeepsRecalibration = "guard separationPausedForOnScreenScene() else { return false }\n"
+            + "        runtimeRecalibrationIfDue()"
+        #expect(stems.contains(pauseKeepsRecalibration), """
                 the BUG-181 pause must still run runtimeRecalibrationIfDue — a paused scene plays the grid.
                 """)
         let seriesGate = "guard stemSeriesLock.withLock({ !currentStemSeries.isEmpty }) "
