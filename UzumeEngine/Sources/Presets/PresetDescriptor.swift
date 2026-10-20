@@ -532,6 +532,15 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// exclude. Manual preset selection is unaffected. Defaults to `false`.
     public let requiresRegularBeat: Bool
 
+    // MARK: - Stem Use (BUG-181)
+
+    /// `false` declares that nothing this scene draws reads `StemFeatures` — not its shader, not its
+    /// CPU state — so live stem separation (the streaming path's MPSGraph job, ~0.4 s of GPU every 2 s)
+    /// pauses while it is on screen. Defaults to `true`: a scene that does not declare it keeps live
+    /// stems, because a wrong `false` silently starves a stem-driven scene (the BUG-138 class — route
+    /// manifests under-declare). Gated per adopter by `PresetReadsStemsTests`.
+    public let readsStems: Bool
+
     // MARK: - Text Overlay
 
     /// When `true`, the engine creates a `DynamicTextOverlay` for this preset and binds
@@ -602,6 +611,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         case excludeFromCycling = "exclude_from_cycling"
         case waitForCompletionEvent = "wait_for_completion_event"
         case requiresRegularBeat = "requires_regular_beat"
+        case readsStems = "reads_stems"
         case textOverlay = "text_overlay"
         case stages
         case marks
@@ -724,6 +734,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         // MARK: FBS / D-154 — beat-regularity requirement
         requiresRegularBeat = try container.decodeIfPresent(
             Bool.self, forKey: .requiresRegularBeat) ?? false
+        readsStems = try container.decodeIfPresent(Bool.self, forKey: .readsStems) ?? true
 
         // MARK: Text Overlay
         textOverlay = try container.decodeIfPresent(Bool.self, forKey: .textOverlay) ?? false

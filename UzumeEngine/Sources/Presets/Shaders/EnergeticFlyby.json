@@ -34,6 +34,7 @@
       "note": "EFB.1 — positive bassDev self-normalised the same way, attack 30 ms / release 300 ms: sphere spin rate 1 + 3 x bass."
     }
   ],
+  "reads_stems": false,
   "certified": false,
   "rubric_profile": "full"
 }

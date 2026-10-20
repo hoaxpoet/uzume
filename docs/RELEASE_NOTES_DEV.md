@@ -10,6 +10,17 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-10-20-141441] BUG-181 + EFB.1/EFB.2 — Energetic Flyby lands; streaming pauses stem separation for scenes that read no stems
+
+Energetic Flyby (Kali's Shadertoy flythrough, uncertified, pin with `UZUME_PIN_SCENE="Energetic Flyby"`) is on
+`main` (#357): native resolution held at 30 fps, Kali's colour, the downbeat turning the glow's colour. On Matt's
+first Spotify pass it dropped twice the frames of local playback; re-rendering the same frames offline showed the
+cause was live stem separation sharing the GPU (15.9 % of frames past 33 ms live vs 4.7 % without it), and the
+scene reads no stems. Scenes can now declare `"reads_stems": false` in their sidecar; while one is on screen the
+streaming path pauses separation (the beat-grid recalibration still runs) and resumes when a stem-reading scene
+comes on. Energetic Flyby is the only adopter; each adopter is gated by `PresetReadsStemsTests`. Pending Matt's
+live Spotify check.
+
 ### [dev-2026-10-08-200116] FH.17 — Fiddlehead certified (the 28th): an endless dive into a fern, lit by the music
 
 Fiddlehead is certified on Matt's live check (build 9003, Dance Yrself Clean: *"perfect. love it. ship it."*). The camera falls forever into a fern whose every leaflet is the same fern again, each frond uncurling as the camera reaches it. Every bass hit swells the fern's light, treble twinkles the leaflet edges, and every bar sends one nerve impulse racing down the stem to the leaflet tips. Fifteen palettes, each after a named work (Memphis to Rothko), take turns every 32 bars with a 3 s crossfade, starting at a different one per track. It now enters planned sessions like the other certified scenes. Flash-safe on a real render (0.00 flashes/s); a ten-minute soak holds memory flat and cost steady (13.6 ms per frame at 1080p, Release, M2 Pro).

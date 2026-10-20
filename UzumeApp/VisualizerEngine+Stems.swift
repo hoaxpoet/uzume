@@ -239,8 +239,35 @@ extension VisualizerEngine {
         return true
     }
 
+    /// BUG-181 — is the scene on screen one that reads no stems? Live separation is ~0.4 s of MPSGraph
+    /// work on the renderer's GPU every 2 s; on Matt's Spotify pass it doubled Energetic Flyby's
+    /// dropped frames (15.9 % vs 4.7 % for the same frames without it), and that scene reads none.
+    /// The stem sample buffer keeps filling, so a stem-reading scene that follows separates on the
+    /// next tick with a full window. Logs each pause and resume once.
+    func separationPausedForOnScreenScene() -> Bool {
+        let scene = stemsStateLock.withLock { onScreenScene }
+        let paused = !scene.readsStems
+        if paused != separationPausedForScene {
+            separationPausedForScene = paused
+            sessionRecorder?.log(paused
+                ? "STEM_SEPARATION: paused — scene '\(scene.name)' reads no stems (BUG-181)"
+                : "STEM_SEPARATION: resumed — scene '\(scene.name)' reads stems")
+        }
+        return paused
+    }
+
+    /// The two reasons a tick does no separation: a pre-analysed series supersedes it (LFSTEM.2), or
+    /// the scene on screen reads no stems (BUG-181). The second still runs the one-shot beat-grid
+    /// recalibration that rides on separation ticks (BUG-007.9) — the paused scene plays the grid.
+    func separationNotNeeded() -> Bool {
+        if separationSupersededBySeries() { return true }
+        guard separationPausedForOnScreenScene() else { return false }
+        runtimeRecalibrationIfDue()
+        return true
+    }
+
     func runStemSeparation() {
-        if separationSupersededBySeries() { return }
+        if separationNotNeeded() { return }
 
         let now = CACurrentMediaTime()
 

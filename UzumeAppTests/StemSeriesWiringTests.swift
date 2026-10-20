@@ -99,9 +99,15 @@ struct StemSeriesWiringTests {
               let initHelpers = source("UzumeApp/VisualizerEngine+InitHelpers.swift")
         else { return }
 
-        #expect(stems.contains("if separationSupersededBySeries() { return }"), """
+        #expect(stems.contains("if separationSupersededBySeries() { return true }")
+                && stems.contains("if separationNotNeeded() { return }"), """
                 runStemSeparation must skip the MPSGraph dispatch when a series supersedes it — \
                 that 142 ms job every 2 s is LFSTEM.2's whole saving.
+                """)
+        // BUG-181 — the scene-driven pause skips separation but keeps the one-shot beat-grid
+        // recalibration that rides on separation ticks (BUG-007.9).
+        #expect(stems.contains("guard separationPausedForOnScreenScene() else { return false }\n        runtimeRecalibrationIfDue()"), """
+                the BUG-181 pause must still run runtimeRecalibrationIfDue — a paused scene plays the grid.
                 """)
         let seriesGate = "guard stemSeriesLock.withLock({ !currentStemSeries.isEmpty }) "
             + "else { return false }"

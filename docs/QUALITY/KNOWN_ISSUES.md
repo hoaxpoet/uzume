@@ -25,7 +25,7 @@ belongs in the second table, not the first.
 
 | ID | Sev | Domain | What happens | Next step |
 |---|---|---|---|---|
-| BUG-181 | P2 | renderer.perf / dsp.stem | On Spotify, Energetic Flyby drops 15.9 % of frames past 33 ms vs 7.4 % on local files: live stem separation shares the GPU. The scene reads no stems. | Matt's call on the fix (pause separation while a no-stems scene is on screen). |
+| BUG-181 | P2 | renderer.perf / dsp.stem | On Spotify, Energetic Flyby dropped 15.9 % of frames past 33 ms vs 7.4 % on local files: live stem separation shares the GPU. The scene reads no stems. Fixed: separation pauses for `reads_stems: false` scenes. | Matt's live Spotify pass: frames past 33 ms near the offline 4.7 %. |
 | BUG-180 | P3 | preset.understory / scene-fidelity | A clear vertical seam down the middle of Understory's forest backdrop, live. Uncertified preset. | Diagnose in UND.8 (design §12, 2026-10-05). |
 | BUG-085 | P1 | renderer / app.hang | The app freezes and needs a force-quit, minutes into a session. The cause is unknown. The 08-05 capture came from a Debug build under Xcode, and it shows the whole process stopping, not only the renderer (audit D2). | A long Release session launched from Finder. On a freeze, note whether the music kept playing. From testers: BR.5's Report a Problem. |
 | BUG-081 | P2 | app.hang | A beachball about 78 s into one session (2026-08-03), with no stack. One instance: the "08-04 ×2" formerly listed here were BUG-085's. Probably the same defect as BUG-085. | With BUG-085. |
@@ -83,7 +83,7 @@ passes, the entry moves to §Resolved (recent).
 
 **Severity:** P2 (judder on the streaming path, the beta's common case) · **Domain:** `renderer.perf` / `dsp.stem`
 (`VisualizerEngine+Stems`, `StemSeparator` MPSGraph, `MLDispatchScheduler`) · **Failure class:** `resource-management`
-· **Status:** Open, diagnosed · **Found by:** Matt, EFB.2 live round 1, 2026-10-20 (Spotify pass; *"some artifacts
+· **Status:** Fixed 2026-10-20 (EFB.2, option A) — pending Matt's live Spotify check · **Found by:** Matt, EFB.2 live round 1, 2026-10-20 (Spotify pass; *"some artifacts
 during spotify playback"*)
 
 **Expected.** Energetic Flyby, held at 30 fps at native 2636×1398 on the Mac mini, drops about as many frames on
@@ -101,7 +101,13 @@ dispatch. Energetic Flyby reads no stems (its `audio_routes` are `barPhase01`, `
 this scene the work is pure cost. Not the 5 s signal-health check (stall clusters within 2 s of one: 68 % vs 61 %
 chance). The seam lines Matt also saw are Kali's geometry, not this defect (EFB.2 round 1; he keeps them).
 
-**Fix options (Matt's call).** (A) Pause live separation while the on-screen scene reads no stems — the LFSTEM.2
+**Fix (Matt chose A, 2026-10-20).** A sidecar key `"reads_stems"` (default `true`); `false` pauses live
+separation in `runStemSeparation` while that scene is on screen (`VisualizerEngine.onScreenScene`, set in
+`applyPreset`), still running the BUG-007.9 grid recalibration; session.log records `STEM_SEPARATION: paused` /
+`resumed`. Only Energetic Flyby declares it — a route-manifest rule would have paused 13 scenes, five of whose
+shaders touch stems. `PresetReadsStemsTests` gates each adopter (no stem route, no stem read in the
+comment-stripped shader, a registered behavioural check of its CPU state); negative control: Nimbus declared
+`false` fails it. **Options weighed.** (A) Pause live separation while the on-screen scene reads no stems — the LFSTEM.2
 precedent ("pure waste on the same GPU the renderer draws with"); a stem-reading scene that follows starts from the
 cached preview stems and reaches live stems after the usual warm-up. (B) Keep separation running and make it cheaper
 or lower priority — engine work with an uncertain gain. **Verification (before the fix):** the replayed Spotify
