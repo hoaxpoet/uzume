@@ -1446,6 +1446,19 @@ Instrumented re-test (session `2026-06-17T14-54-49Z`): **12 rapid back-and-forth
 
 ---
 
+### LIMIT — Energetic Flyby is drawn at 2560×1440 on a Tier-1 Mac and stretched on 4K displays (2026-10-20)
+
+**Domain:** `preset.fidelity` / `renderer.perf` · **Decided by:** Matt, EFB.2, 2026-10-20 (*"Keep it as now: smooth at
+30 fps, drawn at 2560x1440 and stretched on 4K displays. Record the limit and move on."*)
+
+On a Tier-1 Mac (M1/M2) the app caps every scene's drawable at 2560×1440 (BR.6b); on a 3840×2160 display macOS
+stretches it 1.5×. Most scenes hide that; Energetic Flyby's hard, one-sample edges (Kali's) show it as pixelation
+on a 4K monitor viewed up close. Native 4K would cost p95 ~60 ms on an M2 Pro; even 6× open-space steps only
+reach ~50 ms, and the remaining cost is near-surface steps (cutting them read as blur) and the sphere cluster (the
+scene's subject). Edge smoothing (one extra ray on high-contrast quads) was tried and read worse live. Matt chose
+smooth 30 fps over crisp ~20 fps. Recorded so nobody reopens it as a defect; a faster Mac (uncapped drawable) or a
+cheaper design would change it.
+
 ### BUG-036 — Heap allocations on the real-time Core Audio thread at three sites (FFTProcessor, AudioBuffer.latestSamples, SessionRecorder raw tap) (2026-06-09)
 
 **Severity:** P2 (violates the standing "do not allocate in the Core Audio IO proc callback" rule on every callback of every session; priority-inversion / glitch risk under memory pressure rather than observed breakage).

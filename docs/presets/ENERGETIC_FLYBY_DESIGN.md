@@ -146,6 +146,11 @@ spheres.* The white-out fix changed with it: a whole-frame dim as a rod nears th
 flash at this brightness, so only the rod glow gathered in the first 0.3 of each ray is faded, and only while
 a rod is at the camera (forced moment ×1.03; ×1.78 without).
 
+**EFB.2 limit (2026-10-20, Matt's call).** On a Tier-1 Mac the scene is drawn at 2560×1440 (the app's cap for
+every scene) and stretched on 4K displays, where Kali's hard edges read as slightly pixelated. Native 4K at 30 fps
+is out of reach on an M2 Pro (p95 ~50–60 ms); Matt kept smooth 30 fps over crisp ~20 fps. Recorded in
+KNOWN_ISSUES §Known Limitations.
+
 ## 8. Licence (D-252)
 
 Kali's source carries no licence header, so Shadertoy's default terms apply: **CC BY-NC-SA 3.0**. The port is
