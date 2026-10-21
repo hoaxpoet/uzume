@@ -127,7 +127,7 @@ extension RenderPipeline {
         // feedback presets (Murmuration) draw straight to the drawable, so they
         // allocate nothing here (CLEAN.4.4). `ensureFeedbackTexturesAllocated` itself
         // still no-ops when `currentFeedbackParams == nil` (every non-feedback preset).
-        let drawableSize = view.drawableSize
+        let drawableSize = renderSize(of: view)
         if particles == nil {
             feedbackLock.withLock {
                 ensureFeedbackTexturesAllocated(size: drawableSize)
@@ -285,9 +285,10 @@ extension RenderPipeline {
     // drawDirect/drawParticleMode/drawSurfaceMode each take 6 parameters —
     // the full render-pass context they coordinate. Refactor tracked separately.
 
-    /// Original single-pass render directly to drawable.
+    /// Original single-pass render directly to drawable. (MFX.2's reconstruct branch — one
+    /// guarded call — tipped it past the body-length limit.)
     @MainActor
-    func drawDirect(
+    func drawDirect( // swiftlint:disable:this function_body_length
         commandBuffer: MTLCommandBuffer,
         view: MTKView,
         features: inout FeatureVector,
@@ -306,6 +307,19 @@ extension RenderPipeline {
         let textCB = textOverlayCallbackLock.withLock { textOverlayCallback }
         if let overlay = textOverlay {
             textCB?(overlay, features)
+        }
+
+        // MFX.2: a scene that declared `temporal_reconstruction` renders at its internal size and
+        // MetalFX rebuilds the drawable-sized frame into the drawable itself (not the A4 canvas).
+        // Every other scene skips this and takes exactly the paths below.
+        if temporalReconstructor != nil,
+           drawDirectReconstructed(
+               commandBuffer: commandBuffer,
+               drawable: drawable.drawable,
+               features: &features,
+               stems: stemFeatures,
+               textOverlay: textOverlay) {
+            return
         }
 
         // NB.8 half-res path: a heavy volumetric preset (Nimbus) whose march cost

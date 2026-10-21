@@ -158,7 +158,7 @@ extension RenderPipeline {
                 from: view, commandBuffer: commandBuffer, site: "rayMarch.present.drawable")
             : nil
 
-        let size = view.drawableSize
+        let size = renderSize(of: view)
         let width = Int(size.width)
         let height = Int(size.height)
         // BUG-101 — the marcher may shade fewer pixels than the drawable. The composite pass

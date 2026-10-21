@@ -365,6 +365,8 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Last drawable size reported by `mtkView(_:drawableSizeWillChange:)`.
     /// Used by `setupMVWarp` so mid-session preset switches allocate at the real size.
     var currentDrawableSize: CGSize = CGSize(width: 1920, height: 1080)
+    /// The drawable's own size; `currentDrawableSize` is the size scenes render at (A4 canvas).
+    var presentationSize: CGSize = CGSize(width: 1920, height: 1080)
 
     /// Public accessor for the last known drawable size (guarded by mvWarpLock).
     public var mvWarpDrawableSize: CGSize {
@@ -416,8 +418,14 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// session and ~12 ms on another (same preset, same track, same machine), the 5× could not
     /// be attributed. A synthetic 1080p harness would have reported the cheap number and passed.
     /// Log this on every change so `frame_gpu_ms` is interpretable after the fact.
+    ///
+    /// A4: `width`/`height` are the size scenes render at (the canvas on tier 1); `drawable_*` is
+    /// the fixed drawable. A reconstructing scene renders `render_scale × drawable` and MetalFX
+    /// writes the drawable, so its base is the drawable.
     public var renderTargetDescription: String {
-        let size = mvWarpDrawableSize
+        let temporal = temporalSummaryLock.withLock { temporalSummary }
+        let drawable = presentationDrawableSize
+        let size = temporal == nil ? mvWarpDrawableSize : drawable
         let pixelWidth = max(Int(size.width), 1)
         let pixelHeight = max(Int(size.height), 1)
         let megapixels = Double(pixelWidth * pixelHeight) / 1_000_000
@@ -434,6 +442,8 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
                 width: pixelWidth,
                 height: pixelHeight
             )
+        } else if let temporal {
+            effectiveScale = temporal
         } else if isScalableDirect {
             effectiveScale = directRenderScale
         } else {
@@ -450,6 +460,8 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         return "width=\(pixelWidth) height=\(pixelHeight) megapixels=\(mpText) "
             + "render_scale=\(scaleText) internal_width=\(internalWidth) "
             + "internal_height=\(internalHeight) internal_megapixels=\(internalMPText)"
+            + " drawable_width=\(Int(drawable.width)) drawable_height=\(Int(drawable.height))"
+            + (temporal != nil ? " reconstruct=temporal" : "")
     }
 
     var directRenderScale: Float {
@@ -470,6 +482,28 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// does not exist (PUB.5, ultra-review C7).
     var halfResTexture: MTLTexture?
     var halfResTextureSize: (width: Int, height: Int) = (0, 0)
+
+    // MARK: - Direct temporal reconstruction (MFX.2)
+
+    /// The active scene's MRT pipeline and reconstructor; nil for every scene without a
+    /// `temporal_reconstruction` block. Main-thread state (`applyPreset`, `draw(in:)`), like
+    /// `halfResTexture`.
+    var temporalPipelineState: MTLRenderPipelineState?
+    var temporalReconstructor: DirectTemporalReconstructor?
+    /// Internal scale for `renderTargetDescription`, which is read off the main thread.
+    let temporalSummaryLock = NSLock()
+    var temporalSummary: Float?
+
+    // MARK: - Render canvas (MFX.2, VQ amendment A4)
+
+    /// BR.6b pixel cap for scene rendering (tier 1), or nil. Main thread.
+    var renderPixelCap: Double?
+    /// Scenes render here when the cap is below the drawable; resolved into the drawable at
+    /// present. Nil otherwise. Main thread.
+    var canvasTexture: MTLTexture?
+    /// The texture this frame's paths drew (canvas or drawable), set at present, cleared per
+    /// frame — what the capture hook records. Main thread.
+    var presentedFrameTexture: MTLTexture?
 
     // MARK: - Noise Textures (Increment 3.13)
 
@@ -738,7 +772,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
 
     // MARK: - MTKViewDelegate
 
-    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+    public func mtkView(_ view: MTKView, drawableSizeWillChange drawableSize: CGSize) {
+        // A4: every subsystem below allocates at the size scenes render at (the canvas on tier 1).
+        let size = updateCanvas(drawableSize: drawableSize)
         let width = max(Int(size.width), 1)
         let height = max(Int(size.height), 1)
 
@@ -801,8 +837,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         logger.info("Drawable resized to \(width)×\(height)")
     }
 
+    // MFX.2's two canvas lines (A4) tipped this past the body-length limit.
     @MainActor
-    public func draw(in view: MTKView) {
+    public func draw(in view: MTKView) { // swiftlint:disable:this function_body_length
         // Wait for an available frame slot (triple buffering).
         context.inflightSemaphore.wait()
 
@@ -821,6 +858,8 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         lastFrameTime = now
 
         applyFrameRateCap(to: view)
+        updateCanvas(drawableSize: view.drawableSize)
+        presentedFrameTexture = nil
 
         var features = featuresLock.withLock { latestFeatures }
         features.time = elapsed
