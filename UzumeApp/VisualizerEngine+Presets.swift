@@ -201,6 +201,8 @@ extension VisualizerEngine {
         // W0.2: metadata-owned internal scale for scalable direct presets. Ray-march
         // consumes the same sidecar value when its pipeline is built below.
         pipeline.setDirectRenderScale(desc.directRenderScale)
+        // MFX.2: nil for every scene without `temporal_reconstruction`.
+        pipeline.setTemporalReconstruction(desc.temporalReconstruction, pipeline: preset.temporalPipelineState)
         pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
         stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
