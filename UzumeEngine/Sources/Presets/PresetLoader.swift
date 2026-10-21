@@ -6,6 +6,7 @@
 
 import Foundation
 import Metal
+import Shared
 import os.log
 
 private let logger = Logger(subsystem: "io.uzume.presets", category: "PresetLoader")
@@ -144,6 +145,9 @@ public final class PresetLoader: @unchecked Sendable {
         public let mvWarpPipelines: MVWarpCompiledPipelines?
         /// Ordered staged-composition pipelines (V.ENGINE.1). Empty for non-staged presets.
         public let stages: [LoadedStage]
+        /// MFX.2: colour + depth + motion (+ reactive) MRT pipeline for a scene that declares
+        /// `temporal_reconstruction`. Nil for every other preset.
+        public let temporalPipelineState: MTLRenderPipelineState?
 
         public init(
             descriptor: PresetDescriptor,
@@ -151,7 +155,8 @@ public final class PresetLoader: @unchecked Sendable {
             feedbackPipelineState: MTLRenderPipelineState? = nil,
             rayMarchPipelineState: MTLRenderPipelineState? = nil,
             mvWarpPipelines: MVWarpCompiledPipelines? = nil,
-            stages: [LoadedStage] = []
+            stages: [LoadedStage] = [],
+            temporalPipelineState: MTLRenderPipelineState? = nil
         ) {
             self.descriptor = descriptor
             self.pipelineState = pipelineState
@@ -159,6 +164,7 @@ public final class PresetLoader: @unchecked Sendable {
             self.rayMarchPipelineState = rayMarchPipelineState
             self.mvWarpPipelines = mvWarpPipelines
             self.stages = stages
+            self.temporalPipelineState = temporalPipelineState
         }
     }
 
@@ -341,7 +347,8 @@ public final class PresetLoader: @unchecked Sendable {
                 feedbackPipelineState: pipelines.feedback,
                 rayMarchPipelineState: pipelines.rayMarch,
                 mvWarpPipelines: pipelines.mvWarp,
-                stages: pipelines.stages
+                stages: pipelines.stages,
+                temporalPipelineState: pipelines.temporal
             )
 
             lock.withLock {
@@ -455,17 +462,20 @@ public final class PresetLoader: @unchecked Sendable {
         let rayMarch: MTLRenderPipelineState?
         let mvWarp: MVWarpCompiledPipelines?
         let stages: [LoadedStage]
+        let temporal: MTLRenderPipelineState?
 
         init(standard: MTLRenderPipelineState,
              feedback: MTLRenderPipelineState? = nil,
              rayMarch: MTLRenderPipelineState? = nil,
              mvWarp: MVWarpCompiledPipelines? = nil,
-             stages: [LoadedStage] = []) {
+             stages: [LoadedStage] = [],
+             temporal: MTLRenderPipelineState? = nil) {
             self.standard  = standard
             self.feedback  = feedback
             self.rayMarch  = rayMarch
             self.mvWarp    = mvWarp
             self.stages    = stages
+            self.temporal  = temporal
         }
     }
 
@@ -486,8 +496,7 @@ public final class PresetLoader: @unchecked Sendable {
         if descriptor.passes.contains(.staged) {
             return compileStagedShader(at: url, descriptor: descriptor)
         }
-        guard let result = compileStandardShader(at: url, descriptor: descriptor) else { return nil }
-        return CompiledShader(standard: result.standard, feedback: result.feedback)
+        return compileStandardShader(at: url, descriptor: descriptor)
     }
 
     /// Compile a staged-composition preset (V.ENGINE.1). The preset declares an
@@ -627,7 +636,36 @@ public final class PresetLoader: @unchecked Sendable {
             }
         }
 
-        return CompiledShader(standard: standardState, feedback: feedbackState)
+        // MFX.2 — a scene that declares `temporal_reconstruction` also gets an MRT pipeline in
+        // the formats MetalFX reads. `standardState` above is kept (Metal drops the fragment's
+        // extra outputs), so a path that has not opted in can still draw the scene.
+        var temporalState: MTLRenderPipelineState?
+        if let spec = descriptor.temporalReconstruction {
+            guard let state = makeTemporalPipeline(spec, vertexFn, fragmentFn, url) else { return nil }
+            temporalState = state
+        }
+
+        return CompiledShader(standard: standardState, feedback: feedbackState, temporal: temporalState)
+    }
+
+    /// The MFX.2 MRT pipeline: colour, depth, motion (+ reactive) in the formats MetalFX reads.
+    private func makeTemporalPipeline(_ spec: TemporalReconstructionSpec, _ vertexFn: MTLFunction,
+                                      _ fragmentFn: MTLFunction, _ url: URL) -> MTLRenderPipelineState? {
+        let mrt = MTLRenderPipelineDescriptor()
+        mrt.vertexFunction = vertexFn
+        mrt.fragmentFunction = fragmentFn
+        mrt.colorAttachments[0].pixelFormat = TemporalReconstructionSpec.colorFormat
+        mrt.colorAttachments[1].pixelFormat = TemporalReconstructionSpec.depthFormat
+        mrt.colorAttachments[2].pixelFormat = TemporalReconstructionSpec.motionFormat
+        if spec.reactiveMask {
+            mrt.colorAttachments[3].pixelFormat = TemporalReconstructionSpec.reactiveFormat
+        }
+        do {
+            return try device.makeRenderPipelineState(descriptor: mrt)
+        } catch {
+            logger.error("Temporal MRT pipeline failed for \(url.lastPathComponent): \(error)")
+            return nil
+        }
     }
 
     /// Compile a ray march preset: produces a G-buffer pipeline state (3 color attachments)
