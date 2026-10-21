@@ -349,6 +349,7 @@ count-in, sparse percussion) will open on the sway. How many songs that is has *
 **Measured (Release, Mac mini M2 Pro, macOS 26.5.1, `PresetFrameBudgetTests.presetFrameCost`, harness ms).** At 3840×2160, 13 of 23 measured scenes are over 16.6 ms. At the 2560×1440 cap, only Volumetric Lithograph is (already excluded, decision 2). The full table is in the audit, §BR.6.
 
 **Fix.** `CappedMTKView` (`MetalView.swift`): on tier-1 GPUs (`detectDeviceTier` — the m3/m4 name match, so the M2 Pro Mac mini is tier 1) `drawableSize` ≤ 2560×1440 pixels, aspect kept, never upscaled; the compositor scales it to the window. `capableCatalog` drops Alfvén on tier 1.
+**Superseded mechanism (MFX.2 / VQ amendment A4, 2026-10-21):** the view is now `PixelModeMTKView` (drawable = the display's pixel mode, never resized by a scene switch); the tier-1 cap is applied by the engine's render canvas (`RenderPipeline+Canvas`), stretched in-app instead of by the compositor. Same render cost per scene, plus one full-screen copy per frame.
 
 **Gates.** `Tier1RenderBudgetTests`: the sizing math (Air 13", 5K, 4K, ≤ budget untouched); the cap only when set; in a real 3840×2160 offscreen window the drawable is capped **and** the render pipeline's `drawableSizeWillChange` receives the capped size; Alfvén excluded on tier 1 and kept on tier 2.
 
@@ -1457,7 +1458,10 @@ on a 4K monitor viewed up close. Native 4K would cost p95 ~60 ms on an M2 Pro; e
 reach ~50 ms, and the remaining cost is near-surface steps (cutting them read as blur) and the sphere cluster (the
 scene's subject). Edge smoothing (one extra ray on high-contrast quads) was tried and read worse live. Matt chose
 smooth 30 fps over crisp ~20 fps. Recorded so nobody reopens it as a defect; a faster Mac (uncapped drawable) or a
-cheaper design would change it.
+cheaper design would change it. **MFX.2 (2026-10-21, D-263):** the cap now lives in the engine (the scene renders at
+2560×1440 into a canvas the app stretches bilinearly into a drawable at the display's pixel size) — meant to look the same (bilinear; not yet compared live),
+the stretch moved in-app. MetalFX temporal reconstruction now exists for this scene to opt into (EFB.4), but on its
+proof scene it measured softer than the stretch in forward flight; EFB.4's TV side-by-side decides.
 
 ### BUG-036 — Heap allocations on the real-time Core Audio thread at three sites (FFTProcessor, AudioBuffer.latestSamples, SessionRecorder raw tap) (2026-06-09)
 
