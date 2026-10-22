@@ -66,9 +66,20 @@ final class PixelModeMTKView: MTKView {
     /// About 2560×1440 — the tier-1 scene render budget (BR.6b), applied by the engine's canvas.
     static let tier1MaxPixels: Double = 2560 * 1440
 
+    /// VQ.0 render soak / inventory only: force the drawable to this size whatever the window and
+    /// display (the compositor scales it into the window). Main thread; nil in normal use.
+    static var drawableOverride: CGSize? {
+        didSet { NotificationCenter.default.post(name: drawableOverrideChanged, object: nil) }
+    }
+    static let drawableOverrideChanged = Notification.Name("io.uzume.drawableOverrideChanged")
+
     override init(frame frameRect: CGRect, device: MTLDevice?) {
         super.init(frame: frameRect, device: device)
         autoResizeDrawable = false
+        let center = NotificationCenter.default
+        center.addObserver(forName: Self.drawableOverrideChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyPixelMode() }
+        }
     }
 
     required init(coder: NSCoder) {
@@ -114,6 +125,7 @@ final class PixelModeMTKView: MTKView {
                 displayPixels: CGSize(width: mode.pixelWidth, height: mode.pixelHeight),
                 displayBacking: CGSize(width: screen.frame.width * scale, height: screen.frame.height * scale))
         }
+        if let override = Self.drawableOverride { target = override }
         if target.width >= 1, target.height >= 1, target != drawableSize {
             drawableSize = target   // MTKView forwards this to drawableSizeWillChange
         }

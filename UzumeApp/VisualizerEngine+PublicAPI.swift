@@ -233,10 +233,11 @@ extension VisualizerEngine {
     /// `capableCatalog` over every loaded scene, for this engine's GPU. Same `.apple8`
     /// test as `PresetLoader+Mesh` / `MeshGenerator`.
     var plannableCatalog: [PresetDescriptor] {
-        Self.capableCatalog(
+        let capable = Self.capableCatalog(
             presetLoader.presets.map(\.descriptor),
             supportsNativeMeshShaders: context.device.supportsFamily(.apple8),
             tier: Self.detectDeviceTier(device: context.device)
         )
+        return capable.filter { !renderBudgetRefusedPresetIDs.contains($0.id) }   // VQ.0 (D-264)
     }
 }

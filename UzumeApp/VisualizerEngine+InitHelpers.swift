@@ -359,12 +359,9 @@ extension VisualizerEngine {
     /// Power Mode and hand it to the active `FrameBudgetManager` (CLEAN.4.6 / D-167).
     func applyCurrentThermalFloor() {
         let info = ProcessInfo.processInfo
-        pipeline.frameBudgetManager?.setThermalFloor(
-            FrameBudgetManager.qualityFloor(
-                thermalState: info.thermalState,
-                lowPowerMode: info.isLowPowerModeEnabled
-            )
-        )
+        // VQ.0: floor + 30 fps cap + (critical) the light fallback scene.
+        pipeline.frameBudgetManager?.setThermalState(info.thermalState, lowPowerMode: info.isLowPowerModeEnabled)
+        MainActor.assumeIsolated { pipeline.applyGovernorRequests() }
     }
 
     // MARK: - Device Tier Detection

@@ -44,6 +44,9 @@
 		A10022 /* ITunesSearchFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20022; };
 		A10040 /* VisualizerEngine+Orchestrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20040; };
 		N10006 /* VisualizerEngine+WiringLogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = N20006; };
+		VQ0A0005 /* RenderInventoryReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = VQ0A0006; };
+		VQ0A0003 /* VisualizerEngine+RenderSoak.swift in Sources */ = {isa = PBXBuildFile; fileRef = VQ0A0004; };
+		VQ0A0001 /* VisualizerEngine+RenderStability.swift in Sources */ = {isa = PBXBuildFile; fileRef = VQ0A0002; };
 		N10007 /* VisualizerEngine+TrackIdentityResolution.swift in Sources */ = {isa = PBXBuildFile; fileRef = N20007; };
 		C10001 /* SessionStateViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20001; };
 		C10002 /* IdleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20002; };
@@ -184,6 +187,7 @@
 		H10036 /* FullscreenObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20036; };
 		BR410001 /* LocalizationKeyCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR420001; };
 		BR110001 /* MeshCapabilityCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR120001; };
+		VQ0B0001 /* RenderBudgetRefusalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = VQ0B0002; };
 		MF210001 /* DrawablePixelModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MF220001; };
 		H10037 /* DisplayManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20037; };
 		H10038 /* MultiDisplayToastBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20038; };
@@ -339,6 +343,9 @@
 		A20030 /* Uzume.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Uzume.xcconfig; sourceTree = "<group>"; };
 		A20040 /* VisualizerEngine+Orchestrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualizerEngine+Orchestrator.swift"; sourceTree = "<group>"; };
 		N20006 /* VisualizerEngine+WiringLogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualizerEngine+WiringLogs.swift"; sourceTree = "<group>"; };
+		VQ0A0006 /* RenderInventoryReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderInventoryReport.swift; sourceTree = "<group>"; };
+		VQ0A0004 /* VisualizerEngine+RenderSoak.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualizerEngine+RenderSoak.swift"; sourceTree = "<group>"; };
+		VQ0A0002 /* VisualizerEngine+RenderStability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualizerEngine+RenderStability.swift"; sourceTree = "<group>"; };
 		N20007 /* VisualizerEngine+TrackIdentityResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualizerEngine+TrackIdentityResolution.swift"; sourceTree = "<group>"; };
 		C20001 /* SessionStateViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStateViewModel.swift; sourceTree = "<group>"; };
 		C20002 /* IdleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleView.swift; sourceTree = "<group>"; };
@@ -426,6 +433,7 @@
 		H20036 /* FullscreenObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenObserverTests.swift; sourceTree = "<group>"; };
 		BR420001 /* LocalizationKeyCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKeyCoverageTests.swift; sourceTree = "<group>"; };
 		BR120001 /* MeshCapabilityCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshCapabilityCatalogTests.swift; sourceTree = "<group>"; };
+		VQ0B0002 /* RenderBudgetRefusalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenderBudgetRefusalTests.swift; sourceTree = "<group>"; };
 		MF220001 /* DrawablePixelModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawablePixelModeTests.swift; sourceTree = "<group>"; };
 		H20037 /* DisplayManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManagerTests.swift; sourceTree = "<group>"; };
 		H20038 /* MultiDisplayToastBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiDisplayToastBridgeTests.swift; sourceTree = "<group>"; };
@@ -573,6 +581,9 @@
 				Q20012 /* VisualizerEngine+StreamingArtwork.swift */,
 				A20040 /* VisualizerEngine+Orchestrator.swift */,
 				N20006 /* VisualizerEngine+WiringLogs.swift */,
+				VQ0A0006 /* RenderInventoryReport.swift */,
+				VQ0A0004 /* VisualizerEngine+RenderSoak.swift */,
+				VQ0A0002 /* VisualizerEngine+RenderStability.swift */,
 				N20007 /* VisualizerEngine+TrackIdentityResolution.swift */,
 				A20022 /* ITunesSearchFetcher.swift */,
 				DS40001 /* DesignSystem */,
@@ -851,6 +862,7 @@
 				BR520002 /* MainThreadWatchdogTests.swift */,
 				BR220002 /* DisplaySleepGuardTests.swift */,
 				BR120001 /* MeshCapabilityCatalogTests.swift */,
+				VQ0B0002 /* RenderBudgetRefusalTests.swift */,
 				MF220001 /* DrawablePixelModeTests.swift */,
 				H20037 /* DisplayManagerTests.swift */,
 				H20038 /* MultiDisplayToastBridgeTests.swift */,
@@ -1054,6 +1066,9 @@
 				A10022 /* ITunesSearchFetcher.swift in Sources */,
 				A10040 /* VisualizerEngine+Orchestrator.swift in Sources */,
 				N10006 /* VisualizerEngine+WiringLogs.swift in Sources */,
+				VQ0A0005 /* RenderInventoryReport.swift in Sources */,
+				VQ0A0003 /* VisualizerEngine+RenderSoak.swift in Sources */,
+				VQ0A0001 /* VisualizerEngine+RenderStability.swift in Sources */,
 				N10007 /* VisualizerEngine+TrackIdentityResolution.swift in Sources */,
 				C10001 /* SessionStateViewModel.swift in Sources */,
 				C10002 /* IdleView.swift in Sources */,
@@ -1190,6 +1205,7 @@
 				BR510002 /* MainThreadWatchdogTests.swift in Sources */,
 				BR210002 /* DisplaySleepGuardTests.swift in Sources */,
 				BR110001 /* MeshCapabilityCatalogTests.swift in Sources */,
+				VQ0B0001 /* RenderBudgetRefusalTests.swift in Sources */,
 				MF210001 /* DrawablePixelModeTests.swift in Sources */,
 				H10037 /* DisplayManagerTests.swift in Sources */,
 				H10038 /* MultiDisplayToastBridgeTests.swift in Sources */,
