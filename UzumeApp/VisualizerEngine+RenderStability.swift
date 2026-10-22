@@ -143,4 +143,18 @@ extension VisualizerEngine {
         applyPreset(loaded)
         showPresetName(loaded.descriptor.name)
     }
+
+    // MARK: - Floor simulation
+
+    /// "warning:24,critical:42,normal:51" → [(.warning, 24), …]; unknown entries are skipped.
+    static func pressureSchedule(env name: String) -> [(FrameBudgetManager.MemoryPressure, Double)] {
+        let levels: [String: FrameBudgetManager.MemoryPressure] = ["warning": .warning, "critical": .critical,
+                                                                   "normal": .normal]
+        return (ProcessInfo.processInfo.environment[name] ?? "").split(separator: ",").compactMap { entry in
+            let parts = entry.split(separator: ":")
+            guard parts.count == 2, let level = levels[String(parts[0])], let minute = Double(parts[1])
+            else { return nil }
+            return (level, minute)
+        }
+    }
 }

@@ -56,19 +56,22 @@ extension RenderPipeline {
         onFallbackSceneRequested?(mgr.fallbackCause ?? "governor")
     }
 
-    /// Memory pressure (from the app's `DispatchSource.makeMemoryPressureSource`): warning → the
-    /// lowest rung and no new scene allocation larger than the current one (the budget's ceiling is
-    /// capped at today's total); critical → the light fallback scene; normal restores both.
+    /// Memory pressure (from the app's `DispatchSource.makeMemoryPressureSource`): warning → the lowest
+    /// rung, scenes keep playing; critical → the light fallback scene, and no new scene allocation larger
+    /// than the current one (the budget's ceiling is capped at today's total); normal restores both.
     @MainActor
     public func handleMemoryPressure(_ pressure: FrameBudgetManager.MemoryPressure) {
         let budget = context.renderTargetBudget
         switch pressure {
-        case .normal:
+        case .normal, .warning:
+            // Matt (2026-10-22, option A): a warning lowers quality but keeps the planned scenes — warnings
+            // are routine on 8–16 GB Macs (3 in 90 min of ordinary work on the 16 GB dev Mac), and capping
+            // the budget there collapsed playback to the light scene each time.
             if let restore = ceilingBeforeMemoryPressure { budget.ceiling = restore }
             ceilingBeforeMemoryPressure = nil
-        case .warning, .critical:
-            // "No larger than the current scene" needs a current scene: with nothing but the drawable pool
-            // live (launch, a switch in flight) there is nothing to compare against, so no cap.
+        case .critical:
+            // No new scene larger than the current one. That needs a current scene: with nothing but the
+            // drawable pool live (launch, a switch in flight) there is nothing to compare against, so no cap.
             let pool = budget.reservedBytes.values.reduce(0, +)
             guard budget.totalBytes > pool else { break }
             if ceilingBeforeMemoryPressure == nil { ceilingBeforeMemoryPressure = budget.ceiling }

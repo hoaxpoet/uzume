@@ -11,6 +11,9 @@
 //   UZUME_RENDER_SOAK_MINUTES=60      stop (write the summary, quit) after this long
 //   UZUME_FOOTPRINT_KILL_MB=4096      exit(3) when phys_footprint crosses this (default 4096 with a report)
 //   UZUME_RENDER_INVENTORY=<file.md>  run the render-memory inventory, write it, quit
+//   UZUME_SIMULATE_PRESSURE=warning:24,critical:42,normal:51   memory-pressure events at those minutes, through
+//                                     the handler macOS's DispatchSource events reach (`memory_pressure -S`
+//                                     needs root; real critical pressure would starve the whole Mac)
 //
 // Recipes: `docs/RUNBOOK.md` §VQ.0 render soak; `Scripts/render_soak.sh`, `Scripts/tv_soak.sh`.
 
@@ -137,6 +140,12 @@ final class RenderSoakDriver {
         }
         if let minutes = config.minutes {
             schedule(every: minutes * 60, repeats: false) { $0.finish(reason: "\(Int(minutes)) minutes") }
+        }
+        for (level, minute) in VisualizerEngine.pressureSchedule(env: "UZUME_SIMULATE_PRESSURE") {
+            schedule(every: minute * 60, repeats: false) { driver in
+                driver.engine?.sessionRecorder?.log("MEMORY_PRESSURE \(level) (simulated)")
+                driver.engine?.pipeline.handleMemoryPressure(level)
+            }
         }
         logger.info("VQ.0 render soak started")
     }

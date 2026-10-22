@@ -270,25 +270,33 @@ struct DrainReleaseAllocateTests {
 @MainActor
 struct RenderBudgetMemoryPressureTests {
 
-    @Test("warning caps the ceiling at the live scene's set; with no scene live it caps nothing; normal restores")
-    func warningCapsAtCurrentSet() throws {
+    @Test("warning lowers quality but caps nothing; critical caps at the live set (not before a scene); normal restores")
+    func pressureCaps() throws {
         let rig = try RenderBudgetRig()
         let original = rig.budget.ceiling
-        rig.resize(vq0HD)                                   // only the drawable pool is live
-        rig.pipeline.handleMemoryPressure(.warning)
-        #expect(rig.budget.ceiling == original, "no scene yet: nothing to compare against")
-        #expect(!rig.pipeline.isMemoryPressureCapped)
-        rig.pipeline.handleMemoryPressure(.normal)
-
+        rig.pipeline.frameBudgetManager = FrameBudgetManager(configuration: .tier2Default)
         rig.pipeline.setFeedbackParams(FeedbackParams())
         rig.resize(vq0UHD)
-        rig.pipeline.handleMemoryPressure(.warning)
+        rig.pipeline.handleMemoryPressure(.warning)       // Matt 2026-10-22, option A
+        #expect(rig.budget.ceiling == original && !rig.pipeline.isMemoryPressureCapped)
+        #expect(rig.pipeline.frameBudgetManager?.appliedLevel == .reducedMesh, "lowest rung")
+        try rig.attachMVWarp(size: vq0UHD)
+        #expect(rig.pipeline.mvWarpState != nil, "a bigger scene still allocates under a warning")
+        rig.pipeline.clearMVWarpState()
+        rig.idle()
+
+        rig.pipeline.handleMemoryPressure(.critical)
         #expect(rig.pipeline.isMemoryPressureCapped)
         #expect(rig.budget.ceiling == rig.budget.totalBytes)
         try rig.attachMVWarp(size: vq0UHD)                  // a bigger set than the current one
         #expect(rig.pipeline.mvWarpState == nil, "refused while capped")
         rig.pipeline.handleMemoryPressure(.normal)
         #expect(rig.budget.ceiling == original && !rig.pipeline.isMemoryPressureCapped)
+
+        let empty = try RenderBudgetRig()
+        empty.resize(vq0HD)                                 // only the drawable pool is live
+        empty.pipeline.handleMemoryPressure(.critical)
+        #expect(!empty.pipeline.isMemoryPressureCapped, "no scene yet: nothing to compare against")
     }
 }
 
