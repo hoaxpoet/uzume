@@ -262,7 +262,7 @@ static inline SkeinLineLookup skeinLineLookupAt(float t, constant SkeinUniforms&
         return r;
     }
     SkeinBreakGPU sel = st.breaks[0];                          // oldest retained (the fallback for t < all)
-    for (int i = 1; i < n; ++i) {
+    for (int i = 1; i < n; ++i) {   // loop-bound: kSkeinMaxBreaks — n = min(breakCount, kSkeinMaxBreaks)
         SkeinBreakGPU bk = st.breaks[i];
         if (bk.tauStart <= t) { sel = bk; } else { break; }    // ascending → first miss ends the search
     }
@@ -510,7 +510,7 @@ fragment float4 skein_geometry_fragment(
     // burst.size now carries attack × THROW MAGNITUDE (how hard the onset hit) — a heavy hit
     // flings a bigger blot, longer streaks, wider satellites. Bake-and-hold unchanged.
     int nB = min(int(st.burstCount), kSkeinMaxBursts);
-    for (int b = 0; b < nB; ++b) {
+    for (int b = 0; b < nB; ++b) {   // loop-bound: kSkeinMaxBursts — nB = min(burstCount, kSkeinMaxBursts)
         SkeinBurstGPU burst = st.bursts[b];
         float age = tau - burst.spawnTau;
         if (age < 0.0 || age > kSkeinBakeWindow) { continue; }
@@ -591,7 +591,7 @@ fragment float4 skein_geometry_fragment(
         // each ending in a terminal droplet (refs: the white threads crossing both micro images).
         // Angular spread tight on sharp hits, looser on soft ones; never a radial starburst
         // (1–3 threads in the throw's half-plane, not spokes).
-        for (int sIdx = 0; sIdx < nStreak; ++sIdx) {
+        for (int sIdx = 0; sIdx < nStreak; ++sIdx) {   // loop-bound: 3 — nStreak = 1 + two bools
             float4 hsk = hash_f01_4x(float4(burst.hashSeed, 200.0 + float(sIdx), 1.0, 0.0));
             float sAng = base + (hsk.x * 2.0 - 1.0) * mix(0.65, 0.20, sharp);
             float sLen = streakLen * mix(0.55, 1.0, hsk.y);
@@ -626,7 +626,7 @@ fragment float4 skein_geometry_fragment(
         // blots, many mid drops, a dust tail — the confetti becomes the tail of a real
         // distribution) and RADIAL ELONGATION (far drops stretch into teardrops pointing away
         // from the impact). Isotropic px AA + round floor (Matt M7 2026-06-05) retained.
-        for (int n = 0; n < nDrop; ++n) {
+        for (int n = 0; n < nDrop; ++n) {   // loop-bound: 46 — nDrop = int(mix(46, 13, visc)), visc clamped to [0, 1]
             float4 hs      = hash_f01_4x(float4(burst.hashSeed, float(n), 1.0, 0.0));
             float distFrac = pow(hs.x, 1.5);
             float dist     = spread * distFrac;

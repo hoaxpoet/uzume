@@ -69,7 +69,7 @@ static inline float ls_shadow_march(
 ) {
     float dt   = tMax / float(steps);
     float tau  = 0.0;
-    for (int i = 0; i < steps; i++) {
+    for (int i = 0; i < min(steps, 64); i++) {   // VQ.0: no caller today; 8–16 recommended
         float3 pos  = p + lightDir * (float(i) + 0.5) * dt;
         float  den  = vol_density_fbm(pos, 1.0, 2);
         tau += den * sigma * dt;

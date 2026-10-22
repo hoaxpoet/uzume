@@ -181,7 +181,7 @@ kernel void ferrofluid_height_bake(
             if (cx < 0 || cx >= side) { continue; }
             uint flat = uint(cy) * u.cellGridSide + uint(cx);
             uint count = min(cellCounts[flat], u.cellSlotCapacity);
-            for (uint i = 0; i < count; i++) {
+            for (uint i = 0; i < min(count, 64u); i++) {   // VQ.0: cellSlotCapacity = 16
                 uint particleIdx = cellSlots[flat * u.cellSlotCapacity + i];
                 float d = length(pXZ - particles[particleIdx].position);
                 res = poly_smin(res, d, u.smoothMinW);

@@ -43,7 +43,7 @@ static inline void alf_fft_threadgroup(threadgroup float2* buf, uint tid, uint t
     // invariant under a permutation of the outputs, so only the ROUND-TRIP gate catches
     // it. It did: 2.07 relative error against a 1e-4 bar.
     uint bits = uint(log2(float(n)));
-    for (uint i = tid; i < n; i += tcount) {
+    for (uint i = tid; i < min(n, kAlfvenMaxFFT); i += tcount) {
         uint rev = reverse_bits(i) >> (32u - bits);
         if (rev > i) {
             float2 tmp = buf[i];
@@ -54,7 +54,7 @@ static inline void alf_fft_threadgroup(threadgroup float2* buf, uint tid, uint t
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
     float sign = forward ? -1.0 : 1.0;
-    for (uint len = 2; len <= n; len <<= 1) {
+    for (uint len = 2; len <= min(n, kAlfvenMaxFFT); len <<= 1) {
         // Named `span`: the obvious name here is an MSL keyword (the 16-bit float
         // type), and shadowing it is Failed Approach #44 — which this file hit on
         // its very first compile.
@@ -87,7 +87,7 @@ kernel void alfven_fft_rows(
     threadgroup float2 buf[kAlfvenMaxFFT];
     uint tid = tid2.x, tcount = tcount2.x;
     uint n = src.get_width();
-    for (uint i = tid; i < n; i += tcount) {
+    for (uint i = tid; i < min(n, kAlfvenMaxFFT); i += tcount) {
         buf[i] = src.read(uint2(i, gid.y)).xy;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -95,7 +95,7 @@ kernel void alfven_fft_rows(
     alf_fft_threadgroup(buf, tid, tcount, n, forward != 0u);
 
     float scale = (forward != 0u) ? 1.0 : (1.0 / float(n));
-    for (uint i = tid; i < n; i += tcount) {
+    for (uint i = tid; i < min(n, kAlfvenMaxFFT); i += tcount) {
         dst.write(float4(buf[i] * scale, 0.0, 1.0), uint2(i, gid.y));
     }
 }
@@ -112,7 +112,7 @@ kernel void alfven_fft_cols(
     threadgroup float2 buf[kAlfvenMaxFFT];
     uint tid = tid2.x, tcount = tcount2.x;
     uint n = src.get_height();
-    for (uint i = tid; i < n; i += tcount) {
+    for (uint i = tid; i < min(n, kAlfvenMaxFFT); i += tcount) {
         buf[i] = src.read(uint2(gid.x, i)).xy;
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -120,7 +120,7 @@ kernel void alfven_fft_cols(
     alf_fft_threadgroup(buf, tid, tcount, n, forward != 0u);
 
     float scale = (forward != 0u) ? 1.0 : (1.0 / float(n));
-    for (uint i = tid; i < n; i += tcount) {
+    for (uint i = tid; i < min(n, kAlfvenMaxFFT); i += tcount) {
         dst.write(float4(buf[i] * scale, 0.0, 1.0), uint2(gid.x, i));
     }
 }
@@ -177,9 +177,9 @@ static inline float alf_hash(float2 p) {
 static inline float alf_seed(float2 uv, float phase, float amp, uint kmax) {
     constexpr float kTau = 6.28318530718;
     float s = 0.0, norm = 0.0;
-    int km = int(kmax);
-    for (int m = -km; m <= km; ++m) {
-        for (int nn = 0; nn <= km; ++nn) {
+    int km = min(int(kmax), 64);   // VQ.0: seedK is 2–3
+    for (int m = -km; m <= km; ++m) {   // loop-bound: 129 — km = min(kmax, 64)
+        for (int nn = 0; nn <= km; ++nn) {   // loop-bound: 65 — km = min(kmax, 64)
             if (nn == 0 && m <= 0) { continue; }
             float k2 = float(m * m + nn * nn);
             if (k2 < 1.0 || k2 > float(km * km)) { continue; }
@@ -541,11 +541,11 @@ kernel void alfven_blur(
     uint2 gid                           [[thread_position_in_grid]]
 ) {
     if (gid.x >= p.gridEdge || gid.y >= p.gridEdge) { return; }
-    int radius = int(ceil(3.0 * sigma));
+    int radius = min(int(ceil(3.0 * sigma)), 32);   // VQ.0: sigma ≤ √45 → radius ≤ 21
     float inv2s2 = 1.0 / (2.0 * sigma * sigma);
     int n = int(p.gridEdge);
     float sum = 0.0, wsum = 0.0;
-    for (int i = -radius; i <= radius; ++i) {
+    for (int i = -radius; i <= radius; ++i) {   // loop-bound: 65 — radius = min(…, 32)
         float w = exp(-float(i * i) * inv2s2);
         int2 o = int2(gid) + int2(dir * float(i));
         uint2 c = uint2(uint((o.x % n + n) % n), uint((o.y % n + n) % n));

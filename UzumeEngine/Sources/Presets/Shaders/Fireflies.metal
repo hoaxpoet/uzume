@@ -85,7 +85,7 @@ static inline float ff_noise(float2 p) {
 /// fbm, 0…~1, `octaves` ≥ 4 on every hero surface (SHADER_CRAFT §12.1).
 static inline float ff_fbm(float2 p, int octaves) {
     float sum = 0.0, amp = 0.5;
-    for (int o = 0; o < octaves; o++) {
+    for (int o = 0; o < min(octaves, 8); o++) {   // VQ.0: callers pass 4–6
         sum += amp * ff_noise(p);
         p = p * 2.03 + float2(17.1, 9.3);
         amp *= 0.5;
