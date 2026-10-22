@@ -35,6 +35,9 @@ extension RenderPipeline {
         renderPixelCap = cap
     }
 
+    /// The cap set by `setRenderPixelCap` (VQ.0 inventory restores it after measuring uncapped).
+    public var currentRenderPixelCap: Double? { renderPixelCap }
+
     /// `drawable` scaled down (never up) to at most `pixelCap` pixels, aspect kept, or `drawable`
     /// itself when there is no cap or it already fits.
     public static func renderSize(drawable: CGSize, pixelCap: Double?) -> CGSize {
@@ -47,7 +50,9 @@ extension RenderPipeline {
 
     /// The size scenes render at for this view's drawable.
     func renderSize(of view: MTKView) -> CGSize {
-        Self.renderSize(drawable: view.drawableSize, pixelCap: renderPixelCap)
+        // VQ.0: the committed size, which lags the drawable through a coalesced resize.
+        let drawable = allocationDrawableSize ?? MainActor.assumeIsolated { view.drawableSize }
+        return Self.renderSize(drawable: drawable, pixelCap: renderPixelCap)
     }
 
     /// The drawable's own size (what the reconstruct path writes), as last reported.
@@ -70,12 +75,10 @@ extension RenderPipeline {
         }
         let width = max(Int(render.width), 1), height = max(Int(render.height), 1)
         if canvasTexture?.width == width, canvasTexture?.height == height { return render }
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: context.pixelFormat, width: width, height: height, mipmapped: false)
-        desc.usage = [.renderTarget, .shaderRead]
-        desc.storageMode = .private
-        canvasTexture = context.device.makeTexture(descriptor: desc)
-        canvasTexture?.label = "Render canvas (BR.6b cap, A4)"
+        canvasTexture = nil   // VQ.0: release before allocate
+        let descriptor = context.sizeScaledDescriptor(width: width, height: height, storage: .private)
+        let label = "render canvas (BR.6b cap, A4) \(width)×\(height)"
+        canvasTexture = context.renderTargetBudget.makeTexture(owner: "canvas", label: label, descriptor: descriptor)
         logger.info("Render canvas \(width)×\(height) → drawable \(Int(drawableSize.width))×\(Int(drawableSize.height))")
         return render
     }

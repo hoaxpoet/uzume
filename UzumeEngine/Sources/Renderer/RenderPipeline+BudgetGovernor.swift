@@ -31,4 +31,56 @@ extension RenderPipeline {
         let meshDensity: Float = level >= .reducedMesh ? 0.5 : 1.0
         meshLock.withLock { meshGenerator }?.densityMultiplier = meshDensity
     }
+
+    // MARK: - Completed frames (VQ.0)
+
+    /// Feed one completed frame to the governor and apply what it decides: the quality level, a
+    /// command-buffer error, the frame-rate cap and a fallback-scene request.
+    @MainActor
+    func observeCompletedFrame(cpuMs: Float, gpuMs: Float?, fault: String?, at time: CFTimeInterval) {
+        if let fault {
+            commandBufferErrorCount += 1
+            frameBudgetManager?.observeCommandBufferError(fault, at: time)
+        }
+        guard let mgr = frameBudgetManager else { return }
+        let level = mgr.observe(.init(cpuFrameMs: cpuMs, gpuFrameMs: gpuMs, timestamp: time))
+        applyQualityLevel(level)
+        applyGovernorRequests()
+    }
+
+    /// Act on the governor's latched fallback request (once).
+    @MainActor
+    public func applyGovernorRequests() {
+        guard let mgr = frameBudgetManager, mgr.fallbackSceneRequested else { return }
+        mgr.acknowledgeFallback()
+        onFallbackSceneRequested?(mgr.fallbackCause ?? "governor")
+    }
+
+    /// Memory pressure (from the app's `DispatchSource.makeMemoryPressureSource`): warning → the
+    /// lowest rung and no new scene allocation larger than the current one (the budget's ceiling is
+    /// capped at today's total); critical → the light fallback scene; normal restores both.
+    @MainActor
+    public func handleMemoryPressure(_ pressure: FrameBudgetManager.MemoryPressure) {
+        let budget = context.renderTargetBudget
+        switch pressure {
+        case .normal:
+            if let restore = ceilingBeforeMemoryPressure { budget.ceiling = restore }
+            ceilingBeforeMemoryPressure = nil
+        case .warning, .critical:
+            if ceilingBeforeMemoryPressure == nil { ceilingBeforeMemoryPressure = budget.ceiling }
+            budget.ceiling = min(budget.ceiling, budget.totalBytes)
+        }
+        frameBudgetManager?.setMemoryPressure(pressure)
+        applyQualityLevel(frameBudgetManager?.appliedLevel ?? .full)
+        applyGovernorRequests()
+    }
+
+    /// The failing frame's error code and encoder, or nil when it completed cleanly.
+    static func faultDescription(_ commandBuffer: MTLCommandBuffer) -> String? {
+        guard commandBuffer.status == .error else { return nil }
+        let error = commandBuffer.error as NSError?
+        let infos = error?.userInfo[MTLCommandBufferEncoderInfoErrorKey] as? [MTLCommandBufferEncoderInfo] ?? []
+        let encoder = infos.first { $0.errorState == .faulted }?.label ?? "unknown encoder"
+        return "code \(error?.code ?? -1) in '\(encoder)'"
+    }
 }

@@ -139,10 +139,14 @@ public final class FrameBudgetManager {
         /// milliseconds. Nil when unavailable (first frame, or GPU timestamps not yet
         /// populated). The governor falls back to `cpuFrameMs` when nil.
         public let gpuFrameMs: Float?
+        /// When the frame completed (seconds, any monotonic clock). VQ.0's hard-ceiling hold is timed
+        /// from it; nil advances an internal clock by one 60 Hz frame.
+        public let timestamp: TimeInterval?
 
-        public init(cpuFrameMs: Float, gpuFrameMs: Float?) {
+        public init(cpuFrameMs: Float, gpuFrameMs: Float?, timestamp: TimeInterval? = nil) {
             self.cpuFrameMs = cpuFrameMs
             self.gpuFrameMs = gpuFrameMs
+            self.timestamp = timestamp
         }
     }
 
@@ -152,7 +156,7 @@ public final class FrameBudgetManager {
     public let configuration: Configuration
 
     /// Current quality level. Read from the main actor, where `applyQualityLevel` runs.
-    public private(set) var currentLevel: QualityLevel = .full
+    public internal(set) var currentLevel: QualityLevel = .full
 
     /// Minimum quality level imposed by thermal pressure / Low Power Mode (CLEAN.4.6 / D-167).
     /// Independent of the timing hysteresis: the applied level is `max(currentLevel,
@@ -162,10 +166,31 @@ public final class FrameBudgetManager {
 
     /// The level actually applied to subsystems: the worse (higher rawValue) of the
     /// timing-decided `currentLevel` and the thermal/LPM `thermalFloor`.
-    public var appliedLevel: QualityLevel { max(currentLevel, thermalFloor) }
+    public var appliedLevel: QualityLevel { max(currentLevel, thermalFloor, pressureFloor) }
 
-    private var consecutiveOverruns: Int = 0
-    private var consecutiveRecovered: Int = 0
+    var consecutiveOverruns: Int = 0
+    var consecutiveRecovered: Int = 0
+
+    // MARK: - Stability state (VQ.0, D-264 — logic in `FrameBudgetManager+Stability`)
+
+    var consecutiveHardOverruns = 0
+    var holdUntil: TimeInterval = -.infinity
+    var clock: TimeInterval = 0
+    var errorTimes: [TimeInterval] = []
+    /// Floor from memory pressure (warning → lowest rung).
+    public internal(set) var pressureFloor: QualityLevel = .full
+    /// 30 when thermal state or Low Power Mode caps the frame rate, else nil.
+    public internal(set) var frameRateCap: Int?
+    /// True while the governor wants the light fallback scene (latched until `acknowledgeFallback()`).
+    public internal(set) var fallbackSceneRequested = false
+    /// Why the fallback was requested.
+    public internal(set) var fallbackCause: String?
+    var thermalCritical = false
+    var pressureCritical = false
+    /// Every forced step this session, oldest first (bounded).
+    public internal(set) var forcedSteps: [ForcedStep] = []
+    /// Called for each forced step (the app writes it to the session log).
+    public var onForcedStep: ((ForcedStep) -> Void)?
 
     // MARK: - Rolling Frame Timing Window (FrameTimingProviding — D-059)
 
@@ -216,6 +241,24 @@ public final class FrameBudgetManager {
 
         guard configuration.enabled else { return .full }
 
+        // VQ.0 hard ceiling: two frames over 50 ms of GPU time → the lowest rung, held ≥ 5 s, then the
+        // ordinary 180-frame recovery climbs one rung at a time.
+        let now = sample.timestamp ?? clock + 1.0 / 60.0
+        clock = now
+        if let gpu = sample.gpuFrameMs, gpu > Self.hardGPUCeilingMs {
+            consecutiveHardOverruns += 1
+            if consecutiveHardOverruns >= Self.hardOverrunFrames {
+                consecutiveHardOverruns = 0
+                let ceiling = Int(Self.hardGPUCeilingMs)
+                let cause = "gpu-time \(Int(gpu)) ms > \(ceiling) ms ×\(Self.hardOverrunFrames)"
+                forceLowest(cause: cause, now: now)
+                return appliedLevel
+            }
+        } else {
+            consecutiveHardOverruns = 0
+        }
+        let holding = now < holdUntil
+
         let overrunThreshold   = configuration.targetFrameMs + configuration.overrunMarginMs
         let recoveryThreshold  = configuration.targetFrameMs - configuration.sustainedRecoveryHeadroomMs
         let previousLevel      = currentLevel
@@ -231,6 +274,9 @@ public final class FrameBudgetManager {
                 let msg = "\(previousLevel.displayName) → \(nextLevel.displayName) (\(ms)ms)"
                 logger.info("quality: \(msg, privacy: .public)")
             }
+        } else if holding {
+            // A forced drop holds: recovery does not start counting until the hold ends.
+            consecutiveRecovered = 0
         } else if effectiveMs <= recoveryThreshold {
             consecutiveRecovered += 1
             consecutiveOverruns = 0
@@ -264,37 +310,6 @@ public final class FrameBudgetManager {
         logger.info("quality floor: \(was.displayName, privacy: .public) → \(floor.displayName, privacy: .public) (thermal/LPM)")
     }
 
-    /// Map a thermal state + Low Power Mode flag to a minimum quality floor. Pure — the
-    /// listener reads `ProcessInfo` and feeds the values here, keeping this controller
-    /// `ProcessInfo`-free. Tunable policy (D-167): serious → no-bloom, critical →
-    /// step-0.75; Low Power Mode imposes at least no-bloom.
-    ///
-    /// **The Low Power Mode floor is new behaviour as of RECON.19 (Matt, 2026-08-26).** It was
-    /// `.noSSGI` from D-167 until RECON.18, but that rung only ever suppressed SSGI, which no
-    /// preset ever declared — so Low Power Mode reduced nothing for its entire life. RECON.18
-    /// deleted the rung and deliberately left the floor absent rather than promote it silently;
-    /// Matt then chose `.noBloom`. Low Power Mode now genuinely drops bloom (ACES tone-mapping
-    /// still runs, so the image is dimmer in the highlights, not flat).
-    public static func qualityFloor(
-        thermalState: ProcessInfo.ThermalState,
-        lowPowerMode: Bool
-    ) -> QualityLevel {
-        var floor: QualityLevel
-        switch thermalState {
-        case .nominal, .fair: floor = .full
-        case .serious:        floor = .noBloom
-        case .critical:       floor = .reducedRayMarch
-        @unknown default:     floor = .noBloom
-        }
-        // D-167 amended (Matt, 2026-08-26): Low Power Mode floors at `.noBloom`.
-        // Its previous `.noSSGI` floor reduced nothing, so this is the first time
-        // Low Power Mode actually costs anything visually — bloom off, ACES kept.
-        if lowPowerMode {
-            floor = max(floor, .noBloom)
-        }
-        return floor
-    }
-
     // MARK: - Reset
 
     /// Reset the governor to `.full` immediately.
@@ -306,6 +321,11 @@ public final class FrameBudgetManager {
         currentLevel = .full
         consecutiveOverruns = 0
         consecutiveRecovered = 0
+        // VQ.0: a new scene starts unheld with a clean error window. Thermal, Low Power and memory
+        // pressure are scene-independent and survive.
+        consecutiveHardOverruns = 0
+        holdUntil = -.infinity
+        errorTimes.removeAll()
         // Rolling window is intentionally NOT cleared on reset — the ML scheduler needs
         // the real recent frame history. Resetting it would cause a false "startup warmup"
         // defer on every preset change while the buffer refills.

@@ -119,6 +119,9 @@ struct DrawableResizeRegressionTests {
         // Simulate Retina→non-Retina transition: first a large size, then a smaller one.
         pipeline.mtkView(view, drawableSizeWillChange: CGSize(width: 3840, height: 2160))
         pipeline.mtkView(view, drawableSizeWillChange: CGSize(width: 1920, height: 1080))
+        // VQ.0: a size after the first is coalesced and commits once stable (~150 ms) from the render
+        // loop; flush stands in for that commit.
+        pipeline.flushPendingResize(view: view)
 
         // After the second resize the textures must reflect the final size, not the first.
         #expect(pipeline.feedbackTextures.count == 2)

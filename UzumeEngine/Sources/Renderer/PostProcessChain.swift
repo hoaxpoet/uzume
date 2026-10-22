@@ -154,17 +154,27 @@ public final class PostProcessChain: @unchecked Sendable {
         let bloomW    = max(texWidth / 2, 1)
         let bloomH    = max(texHeight / 2, 1)
 
-        sceneTexture = context.makeSharedTexture(
-            width: texWidth, height: texHeight, pixelFormat: .rgba16Float
-        )
-        bloomTexA = context.makeSharedTexture(
-            width: bloomW, height: bloomH, pixelFormat: .rgba16Float
-        )
-        bloomTexB = context.makeSharedTexture(
-            width: bloomW, height: bloomH, pixelFormat: .rgba16Float
-        )
+        // VQ.0: release before allocate; the three through the budget, all or nothing.
+        (sceneTexture, bloomTexA, bloomTexB) = (nil, nil, nil)
+        func descriptor(_ width: Int, _ height: Int) -> MTLTextureDescriptor {
+            context.sizeScaledDescriptor(width: width, height: height, pixelFormat: .rgba16Float, storage: .shared)
+        }
+        let scene = descriptor(texWidth, texHeight)
+        let bloom = descriptor(bloomW, bloomH)
+        guard let made = context.renderTargetBudget.makeTextures(owner: "postProcess", [
+            .init(scene, label: "post-process scene \(texWidth)×\(texHeight)"),
+            .init(bloom, label: "post-process bloom A \(bloomW)×\(bloomH)"),
+            .init(bloom, label: "post-process bloom B \(bloomW)×\(bloomH)"),
+        ]) else { return }
+        (sceneTexture, bloomTexA, bloomTexB) = (made[0], made[1], made[2])
 
         logger.info("PostProcessChain textures allocated: scene \(texWidth)×\(texHeight), bloom \(bloomW)×\(bloomH)")
+    }
+
+    /// Drop the size-scaled textures (VQ.0 drain → release → allocate). Call only once the frames in
+    /// flight have drained.
+    public func releaseTextures() {
+        (sceneTexture, bloomTexA, bloomTexB) = (nil, nil, nil)
     }
 
     /// Lazy allocator — no-op if textures are already allocated.

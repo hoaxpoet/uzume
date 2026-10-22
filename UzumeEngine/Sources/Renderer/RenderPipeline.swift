@@ -501,6 +501,27 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Scenes render here when the cap is below the drawable; resolved into the drawable at
     /// present. Nil otherwise. Main thread.
     var canvasTexture: MTLTexture?
+
+    // MARK: - Resize (VQ.0, `RenderPipeline+Resize`)
+
+    /// Guards the resize state below (delegate callback and render loop).
+    let resizeLock = NSLock()
+    /// The drawable size the size-scaled set was last allocated for; nil before the first commit.
+    var committedDrawableSize: CGSize?
+    /// A size waiting out the coalescing window.
+    var pendingResize: PendingResize?
+    /// The last frame committed, which a resize waits on (the queue is serial).
+    var lastCommittedCommandBuffer: MTLCommandBuffer?
+    /// Size callbacks received.
+    public internal(set) var resizeCallbackCount = 0
+    /// Committed reallocations (one per coalesced burst).
+    public internal(set) var resizeReallocationCount = 0
+    /// How long a new size must hold before the set is reallocated.
+    public var resizeCoalescingWindow: CFTimeInterval = 0.15
+    /// Called after every committed resize with the drawable size, the callbacks received so far and
+    /// how long drain → release → allocate took (ms). The app logs it (and, the first time, the
+    /// GPU capability line).
+    public var onDrawableSizeCommitted: ((_ drawable: CGSize, _ callbacks: Int, _ ms: Double) -> Void)?
     /// The texture this frame's paths drew (canvas or drawable), set at present, cleared per
     /// frame — what the capture hook records. Main thread.
     var presentedFrameTexture: MTLTexture?
@@ -650,6 +671,21 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Secondary timing observer for soak/diagnostics (D-060c). Same source as `frameBudgetManager`.
     public var onFrameTimingObserved: ((_ cpuMs: Float, _ gpuMs: Float?) -> Void)?
 
+    /// VQ.0: called on the main actor when the render-target budget refuses an allocation. The app
+    /// skips the active scene for the session on this Mac and plays the next one (D-264).
+    public var onRenderBudgetRefusal: (@MainActor (RenderTargetBudget.Refusal) -> Void)?
+
+    /// VQ.0: called on the main actor when the governor wants the light fallback scene (three
+    /// command-buffer errors in 10 s, critical thermal state, critical memory pressure). The argument
+    /// is the cause.
+    public var onFallbackSceneRequested: (@MainActor (String) -> Void)?
+
+    /// VQ.0: frames whose command buffer completed with `.error`.
+    public internal(set) var commandBufferErrorCount = 0
+
+    /// VQ.0: the ceiling to restore when memory pressure returns to normal (nil = not capped).
+    var ceilingBeforeMemoryPressure: Int?
+
     /// Render-loop CPU breakdown observer (PERF.2-render — BUG-019 instrumentation).
     /// Fires from the same command-buffer completion handler as `onFrameTimingObserved`,
     /// so the lag pattern is identical (1–3 frames behind the features the row carries).
@@ -732,6 +768,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         self.feedbackSamplerState = sampler
 
         super.init()
+        context.renderTargetBudget.onRefusal = { [weak self] refusal in
+            Task { @MainActor [weak self] in self?.onRenderBudgetRefusal?(refusal) }
+        }
         logger.info("RenderPipeline initialized with render-graph support")
     }
 
@@ -773,77 +812,23 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     // MARK: - MTKViewDelegate
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange drawableSize: CGSize) {
-        // A4: every subsystem below allocates at the size scenes render at (the canvas on tier 1).
-        let size = updateCanvas(drawableSize: drawableSize)
-        let width = max(Int(size.width), 1)
-        let height = max(Int(size.height), 1)
-
-        // CLEAN.4.4: only (re)allocate the ping-pong for a preset that samples it.
-        // A non-feedback or particle-mode preset gets none — and any pair left over
-        // from a previous feedback preset is released here (the resize is the natural
-        // boundary if the switch-away free was missed). Feedback presets re-allocate
-        // at the new size, preserving the D-061(a) hot-plug no-torn-frames contract.
-        // The other subsystems below (post-process, ray march, mv_warp, staged) keep
-        // their unconditional reallocation — they are gated by their own attachment.
-        if activePresetSamplesFeedback {
-            var textures: [MTLTexture] = []
-            var feedbackAllocOK = true
-            for i in 0..<2 {
-                guard let tex = context.makeSharedTexture(
-                    width: width,
-                    height: height,
-                    usage: [.renderTarget, .shaderRead]
-                ) else {
-                    // CLEAN.4.3: do NOT `return` here — that abandoned the post-process /
-                    // ray-march / mv_warp reallocations below, stranding them at the stale
-                    // size. Drop the feedback pair (feedback rendering guards on empty) and
-                    // fall through so the other subsystems still resize.
-                    logger.error("Failed to allocate feedback texture \(i)")
-                    feedbackAllocOK = false
-                    break
-                }
-                textures.append(tex)
-            }
-            feedbackLock.withLock {
-                if feedbackAllocOK {
-                    feedbackTextures = textures
-                    feedbackIndex = 0
-                } else {
-                    feedbackTextures = []
-                }
-            }
-        } else {
-            feedbackLock.withLock { feedbackTextures = [] }
-        }
-
-        // Reallocate post-process textures if a chain is attached.
-        postProcessLock.withLock {
-            postProcessChain?.allocateTextures(width: width, height: height)
-        }
-
-        // Reallocate ray march G-buffer and lit textures if a pipeline is attached.
-        rayMarchLock.withLock {
-            rayMarchPipeline?.allocateTextures(width: width, height: height)
-        }
-
-        // Track size so mid-session preset switches allocate mv_warp textures correctly.
-        mvWarpLock.withLock { currentDrawableSize = size }
-
-        // Reallocate mv_warp textures if the active preset uses the warp pass.
-        reallocateMVWarpTextures(size: size)
-        // Reallocate per-stage offscreen textures for staged-composition presets.
-        reallocateStagedTextures(size: size)
-
-        logger.info("Drawable resized to \(width)×\(height)")
+        // VQ.0: coalesced drain → release → allocate (`RenderPipeline+Resize`).
+        MainActor.assumeIsolated { recordDrawableSize(drawableSize, view: view) }
     }
 
     // MFX.2's two canvas lines (A4) tipped this past the body-length limit.
     @MainActor
     public func draw(in view: MTKView) { // swiftlint:disable:this function_body_length
+        // VQ.0: commit a coalesced resize (drain → release → allocate) before taking a frame slot.
+        commitPendingResizeIfStable(now: CACurrentMediaTime(), view: view)
+
         // Wait for an available frame slot (triple buffering).
         context.inflightSemaphore.wait()
 
-        guard let commandBuffer = context.commandQueue.makeCommandBuffer() else {
+        // VQ.0: name the failing encoder when a frame errors (the governor logs it and steps down).
+        let frameDescriptor = MTLCommandBufferDescriptor()
+        frameDescriptor.errorOptions = .encoderExecutionStatus
+        guard let commandBuffer = context.commandQueue.makeCommandBuffer(descriptor: frameDescriptor) else {
             context.inflightSemaphore.signal()
             return
         }
@@ -858,7 +843,7 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         lastFrameTime = now
 
         applyFrameRateCap(to: view)
-        updateCanvas(drawableSize: view.drawableSize)
+        updateCanvas(drawableSize: allocationDrawableSize ?? view.drawableSize)
         presentedFrameTexture = nil
 
         var features = featuresLock.withLock { latestFeatures }
@@ -933,17 +918,18 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
             let gpuMs: Float? = cb.gpuEndTime > cb.gpuStartTime
                 ? Float((cb.gpuEndTime - cb.gpuStartTime) * 1000)
                 : nil
+            let fault = Self.faultDescription(cb)
+            let completed = CACurrentMediaTime()
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.onFrameTimingObserved?(cpuMs, gpuMs)
                 self.onRenderTimingObserved?(encodeCpuMs, renderframeCpuMs)
-                guard let mgr = self.frameBudgetManager else { return }
-                let level = mgr.observe(.init(cpuFrameMs: cpuMs, gpuFrameMs: gpuMs))
-                self.applyQualityLevel(level)
+                self.observeCompletedFrame(cpuMs: cpuMs, gpuMs: gpuMs, fault: fault, at: completed)
             }
         }
 
         drawableLifecycleProbe.recordCommit(commandBufferID: commandBufferID)
         commandBuffer.commit()
+        resizeLock.withLock { lastCommittedCommandBuffer = commandBuffer }
     }
 }

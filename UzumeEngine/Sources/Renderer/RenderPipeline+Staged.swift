@@ -186,27 +186,38 @@ extension RenderPipeline {
     private func allocateStagedTextures(size: CGSize) {
         let width = max(Int(size.width), 1)
         let height = max(Int(size.height), 1)
-        var toZero: [MTLTexture] = []
-        stagedLock.withLock {
+        // VQ.0: release the old set before allocating, then every stage's targets through the
+        // budget in one request — all or nothing.
+        let stages: [StagedStageSpec] = stagedLock.withLock {
             stagedTextures.removeAll(keepingCapacity: true)
             stagedBackTextures.removeAll(keepingCapacity: true)
             stagedWatchdogTrips = 0
-            for stage in stagedStages where !stage.writesToDrawable {
-                let desc = MTLTextureDescriptor.texture2DDescriptor(
-                    pixelFormat: stage.pixelFormat,
-                    width: width,
-                    height: height,
-                    mipmapped: false
-                )
-                desc.usage = [.renderTarget, .shaderRead]
-                // Persistent state is CPU-probed by the non-finite watchdog, so it
-                // lives in shared (UMA) memory — on Apple Silicon that is the same
-                // physical memory a `.private` render target uses.
-                desc.storageMode = stage.persistent ? .shared : .private
-                guard let front = context.device.makeTexture(descriptor: desc) else { continue }
+            return stagedStages.filter { !$0.writesToDrawable }
+        }
+        var requests: [RenderTargetBudget.Request] = []
+        for stage in stages {
+            // Persistent state is CPU-probed by the non-finite watchdog, so it lives in shared
+            // (UMA) memory; every other stage is GPU-only.
+            let descriptor = context.sizeScaledDescriptor(
+                width: width,
+                height: height,
+                pixelFormat: stage.pixelFormat,
+                storage: stage.persistent ? .shared : .private
+            )
+            requests.append(.init(descriptor, label: "staged \(stage.name) \(width)×\(height)"))
+            if stage.needsPingPongPair {
+                requests.append(.init(descriptor, label: "staged \(stage.name) back \(width)×\(height)"))
+            }
+        }
+        guard !requests.isEmpty,
+              let made = context.renderTargetBudget.makeTextures(owner: "staged", requests) else { return }
+        var toZero: [MTLTexture] = []
+        var next = made.makeIterator()
+        stagedLock.withLock {
+            for stage in stages {
+                guard let front = next.next() else { break }
                 stagedTextures[stage.name] = front
-                guard stage.needsPingPongPair,
-                      let back = context.device.makeTexture(descriptor: desc) else { continue }
+                guard stage.needsPingPongPair, let back = next.next() else { continue }
                 stagedBackTextures[stage.name] = back
                 toZero.append(front)
                 toZero.append(back)

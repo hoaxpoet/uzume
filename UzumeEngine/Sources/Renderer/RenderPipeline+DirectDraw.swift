@@ -62,11 +62,10 @@ extension RenderPipeline {
         let scaledW = max(Int(Float(drawableWidth) * scale), 1)
         let scaledH = max(Int(Float(drawableHeight) * scale), 1)
         if let tex = halfResTexture, halfResTextureSize == (scaledW, scaledH) { return tex }
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: context.pixelFormat, width: scaledW, height: scaledH, mipmapped: false)
-        desc.usage = [.renderTarget, .shaderRead]
-        desc.storageMode = .private
-        let tex = context.device.makeTexture(descriptor: desc)
+        halfResTexture = nil   // VQ.0: release before allocate
+        let descriptor = context.sizeScaledDescriptor(width: scaledW, height: scaledH, storage: .private)
+        let label = "direct half-res \(scaledW)×\(scaledH)"
+        let tex = context.renderTargetBudget.makeTexture(owner: "directHalfRes", label: label, descriptor: descriptor)
         halfResTexture = tex
         halfResTextureSize = (scaledW, scaledH)
         return tex

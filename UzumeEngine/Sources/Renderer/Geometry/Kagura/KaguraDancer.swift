@@ -115,6 +115,7 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     private let jointCount: Int
     private var trail: [MTLTexture] = []
     private var composite: MTLTexture?
+    private var renderTargetBudget: RenderTargetBudget?   // VQ.0: trail + composite go through it
     private var cur = 0
     private var width = 0, height = 0
     private var lastPixels: [SIMD2<Float>]?
@@ -235,16 +236,21 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
             pixelFormat: .rgba16Float, width: newW, height: newH, mipmapped: false)
         desc.usage = [.shaderRead, .renderTarget]
         desc.storageMode = .private
-        guard let first = device.makeTexture(descriptor: desc), let second = device.makeTexture(descriptor: desc),
-              let comp = device.makeTexture(descriptor: desc) else { return }
-        trail = [first, second]
-        composite = comp
+        // VQ.0: release before allocate; all three through the budget, or none.
+        (trail, composite) = ([], nil)
+        typealias Budget = RenderTargetBudget
+        let requests = ["trail 0", "trail 1", "composite"].map { Budget.Request(desc, label: "Kagura \($0)") }
+        guard let made = Budget.make(requests, owner: "particles.Kagura", budget: renderTargetBudget, device: device)
+        else { return }
+        (trail, composite) = ([made[0], made[1]], made[2])
         cur = 0
         self.width = newW
         self.height = newH
         lastPixels = nil   // a resize drops the trail; never streak from the old frame's positions
         clearTrail()
     }
+
+    public func attach(renderTargetBudget: RenderTargetBudget) { self.renderTargetBudget = renderTargetBudget }
 
     public func update(features: FeatureVector, stemFeatures: StemFeatures, commandBuffer: MTLCommandBuffer) {
         if trail.isEmpty { ensureAllocated(width: 1280, height: 720) }

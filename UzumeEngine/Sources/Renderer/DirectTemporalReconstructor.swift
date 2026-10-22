@@ -74,6 +74,8 @@ public final class DirectTemporalReconstructor {
     private var output: MTLTexture?
     private var scaler: MTLFXTemporalScaler?
 
+    /// The budget declined the last scaler's reservation (a refusal, unlike a Metal failure, fails `prepare`).
+    private var scalerRefused = false
     private var frameIndex: UInt32 = 0
     private var needsReset = true
 
@@ -86,9 +88,20 @@ public final class DirectTemporalReconstructor {
     public private(set) var encodeCount = 0
     public private(set) var resetCount = 0
 
-    public init(device: MTLDevice, spec: TemporalReconstructionSpec) {
+    /// VQ.0: the targets are budgeted and the scaler is charged as an opaque reservation. Nil (offline
+    /// tests that build a reconstructor alone) allocates directly.
+    private let budget: RenderTargetBudget?
+    /// This instance's scaler reservation (unique, so a successor's charge is never dropped by this deinit).
+    private lazy var reservationName = "mfx2 scaler \(ObjectIdentifier(self).hashValue)"
+
+    public init(device: MTLDevice, spec: TemporalReconstructionSpec, budget: RenderTargetBudget? = nil) {
         self.device = device
         self.spec = spec
+        self.budget = budget
+    }
+
+    deinit {
+        budget?.releaseReservation(reservationName)
     }
 
     /// True when this device has the MetalFX temporal scaler.
@@ -146,27 +159,36 @@ public final class DirectTemporalReconstructor {
         let inW = max(Int((Float(outW) * spec.internalScale).rounded()), 1)
         let inH = max(Int((Float(outH) * spec.internalScale).rounded()), 1)
 
+        // VQ.0: release the old set (targets, output, scaler and its reservation) before allocating.
+        targets = nil
+        output = nil
+        scaler = nil
+        budget?.releaseReservation(reservationName)
+        scalerRefused = false
         scaler = makeScaler(inW: inW, inH: inH, outW: outW, outH: outH)
+        if scalerRefused { return fail(outW, outH) }
 
         let renderUsage: MTLTextureUsage = [.renderTarget, .shaderRead]
-        func internalTarget(_ format: MTLPixelFormat, _ usage: MTLTextureUsage?, _ name: String) -> MTLTexture? {
-            makeTexture(format, inW, inH, renderUsage.union(usage ?? []), label: "MFX.2 \(name) \(inW)×\(inH)")
+        typealias Request = RenderTargetBudget.Request
+        func internalTarget(_ format: MTLPixelFormat, _ usage: MTLTextureUsage?, _ name: String) -> Request {
+            let desc = descriptor(format, inW, inH, renderUsage.union(usage ?? []))
+            return .init(desc, label: "MFX.2 \(name) \(inW)×\(inH)")
         }
-        guard let color = internalTarget(Self.colorFormat, scaler?.colorTextureUsage, "colour"),
-              let depth = internalTarget(Self.depthFormat, scaler?.depthTextureUsage, "depth"),
-              let motion = internalTarget(Self.motionFormat, scaler?.motionTextureUsage, "motion")
-        else { return fail(outW, outH) }
-        let reactive = spec.reactiveMask
-            ? internalTarget(Self.reactiveFormat, scaler?.reactiveTextureUsage, "reactive") : nil
-
-        output = nil
+        var requests = [internalTarget(Self.colorFormat, scaler?.colorTextureUsage, "colour"),
+                        internalTarget(Self.depthFormat, scaler?.depthTextureUsage, "depth"),
+                        internalTarget(Self.motionFormat, scaler?.motionTextureUsage, "motion")]
+        if spec.reactiveMask {
+            requests.append(internalTarget(Self.reactiveFormat, scaler?.reactiveTextureUsage, "reactive"))
+        }
         if let scaler {
             let usage = scaler.outputTextureUsage.union(.shaderRead)
-            output = makeTexture(Self.outputFormat, outW, outH, usage, label: "MFX.2 output \(outW)×\(outH)")
-            if output == nil { return fail(outW, outH) }
+            let desc = descriptor(Self.outputFormat, outW, outH, usage)
+            requests.append(.init(desc, label: "MFX.2 output \(outW)×\(outH)"))
         }
-
-        targets = Targets(color: color, depth: depth, motion: motion, reactive: reactive)
+        guard let made = makeTextures(requests) else { return fail(outW, outH) }
+        let reactive = spec.reactiveMask ? made[3] : nil
+        output = scaler == nil ? nil : made.last
+        targets = Targets(color: made[0], depth: made[1], motion: made[2], reactive: reactive)
         self.outputWidth = outW
         self.outputHeight = outH
         renderWidth = inW
@@ -177,23 +199,43 @@ public final class DirectTemporalReconstructor {
         return true
     }
 
+    /// Drop every target, the scaler and its reservation; the next `prepare` reallocates (VQ.0 resize
+    /// release step — call only once the frames in flight have drained).
+    public func releaseTargets() {
+        targets = nil
+        output = nil
+        scaler = nil
+        budget?.releaseReservation(reservationName)
+    }
+
     private func fail(_ outW: Int, _ outH: Int) -> Bool {
         logger.error("MFX.2 target allocation failed at \(outW)×\(outH)")
         targets = nil
         scaler = nil
         output = nil
+        budget?.releaseReservation(reservationName)
         return false
     }
 
-    private func makeTexture(_ format: MTLPixelFormat, _ width: Int, _ height: Int,
-                             _ usage: MTLTextureUsage, label: String) -> MTLTexture? {
+    private func descriptor(_ format: MTLPixelFormat, _ width: Int, _ height: Int,
+                            _ usage: MTLTextureUsage) -> MTLTextureDescriptor {
         let desc = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: format, width: width, height: height, mipmapped: false)
         desc.usage = usage
         desc.storageMode = .private
-        let texture = device.makeTexture(descriptor: desc)
-        texture?.label = label
-        return texture
+        return desc
+    }
+
+    /// Through the budget when there is one (all or nothing), else directly.
+    private func makeTextures(_ requests: [RenderTargetBudget.Request]) -> [MTLTexture]? {
+        if let budget { return budget.makeTextures(owner: "mfx2", requests) }
+        var made: [MTLTexture] = []
+        for request in requests {
+            guard let texture = device.makeTexture(descriptor: request.descriptor) else { return nil }
+            texture.label = request.label
+            made.append(texture)
+        }
+        return made
     }
 
     private func makeScaler(inW: Int, inH: Int, outW: Int, outH: Int) -> MTLFXTemporalScaler? {
@@ -211,14 +253,18 @@ public final class DirectTemporalReconstructor {
             desc.isReactiveMaskTextureEnabled = true
             desc.reactiveMaskTextureFormat = Self.reactiveFormat
         }
-        // VQ.0 will charge the scaler as an opaque reservation: log what creating it allocated.
+        // VQ.0: the scaler is opaque — charge what creating it allocated, as a reservation.
         let before = device.currentAllocatedSize
         guard let made = desc.makeTemporalScaler(device: device) else {
             logger.error("MTLFXTemporalScaler creation failed at \(inW)×\(inH) → \(outW)×\(outH)")
             return nil
         }
-        let delta = device.currentAllocatedSize - before
+        let delta = max(device.currentAllocatedSize - before, 0)
         logger.info("MFX.2 MTLFXTemporalScaler \(inW)×\(inH) → \(outW)×\(outH): currentAllocatedSize +\(delta) B")
+        if let budget, !budget.reserve(reservationName, bytes: delta) {
+            scalerRefused = true
+            return nil
+        }
         made.isDepthReversed = false
         return made
     }

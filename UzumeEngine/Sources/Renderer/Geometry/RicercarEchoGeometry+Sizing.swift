@@ -27,7 +27,10 @@ public extension RicercarEchoGeometry {
     func ensureAllocated(width: Int, height: Int) {
         let newW = max(1, width), newH = max(1, height)
         guard newW != configuration.width || newH != configuration.height else { return }
-        guard let fresh = Self.makeTrail(device: device, width: newW, height: newH) else { return }
+        trail = []   // VQ.0: release before allocate
+        guard let fresh = Self.makeTrail(device: device, width: newW, height: newH, budget: renderTargetBudget) else {
+            return
+        }
         trail = fresh
         cur = 0
         configuration = RicercarEchoConfiguration(
@@ -37,18 +40,19 @@ public extension RicercarEchoGeometry {
 
     /// The ping-pong pair. `nil` rather than a throw so a resize that cannot allocate keeps
     /// drawing at the old size instead of tearing down a running visual.
-    static func makeTrail(device: MTLDevice, width: Int, height: Int) -> [MTLTexture]? {
+    static func makeTrail(device: MTLDevice, width: Int, height: Int,
+                          budget: RenderTargetBudget? = nil) -> [MTLTexture]? {
         let td = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
         td.usage = [.shaderRead, .renderTarget]
         td.storageMode = .private
-        var texs: [MTLTexture] = []
-        for _ in 0..<2 {
-            guard let tex = device.makeTexture(descriptor: td) else { return nil }
-            texs.append(tex)
+        let requests = ["trail 0", "trail 1"].map {
+            RenderTargetBudget.Request(td, label: "Ricercar \($0) \(width)×\(height)")
         }
-        return texs
+        return RenderTargetBudget.make(requests, owner: "particles.Ricercar", budget: budget, device: device)
     }
+
+    func attach(renderTargetBudget: RenderTargetBudget) { self.renderTargetBudget = renderTargetBudget }
 
     static func clear(trail: [MTLTexture], device: MTLDevice) {
         guard let queue = device.makeCommandQueue(), let cmd = queue.makeCommandBuffer() else { return }

@@ -262,16 +262,19 @@ struct FrameBudgetManagerTests {
 
     @Test func qualityFloor_mapsThermalStateAndLowPowerMode() {
         typealias FBM = FrameBudgetManager
+        // VQ.0 (D-264) amends D-167: fair → one rung, serious → one more (+ 30 fps), critical → the
+        // lowest rung (+ the light fallback scene). FrameBudgetManagerStabilityTests covers the cap
+        // and the fallback.
         #expect(FBM.qualityFloor(thermalState: .nominal,  lowPowerMode: false) == .full)
-        #expect(FBM.qualityFloor(thermalState: .fair,     lowPowerMode: false) == .full)
-        #expect(FBM.qualityFloor(thermalState: .serious,  lowPowerMode: false) == .noBloom)
-        #expect(FBM.qualityFloor(thermalState: .critical, lowPowerMode: false) == .reducedRayMarch)
+        #expect(FBM.qualityFloor(thermalState: .fair,     lowPowerMode: false) == .noBloom)
+        #expect(FBM.qualityFloor(thermalState: .serious,  lowPowerMode: false) == .reducedRayMarch)
+        #expect(FBM.qualityFloor(thermalState: .critical, lowPowerMode: false) == .reducedMesh)
         // RECON.19 (Matt's D-167 call, 2026-08-26): Low Power Mode floors at `.noBloom`.
         // It floored at `.noSSGI` until RECON.18 — a rung that reduced nothing, since no preset
         // ever declared SSGI — so this is the first time Low Power Mode costs anything visually.
         #expect(FBM.qualityFloor(thermalState: .nominal,  lowPowerMode: true) == .noBloom)
         #expect(FBM.qualityFloor(thermalState: .fair,     lowPowerMode: true) == .noBloom)
         // Never weakens a stronger thermal floor.
-        #expect(FBM.qualityFloor(thermalState: .critical, lowPowerMode: true) == .reducedRayMarch)
+        #expect(FBM.qualityFloor(thermalState: .critical, lowPowerMode: true) == .reducedMesh)
     }
 }

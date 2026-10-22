@@ -34,6 +34,9 @@ public final class MetalContext: Sendable {
     /// before blocking the CPU, keeping the GPU pipeline saturated.
     public let inflightSemaphore = DispatchSemaphore(value: maxFramesInFlight)
 
+    /// The budget every display-size-scaled render target is allocated through (VQ.0, D-264).
+    public let renderTargetBudget: RenderTargetBudget
+
     // MARK: - Initialization
 
     /// Create a MetalContext using the system default GPU.
@@ -49,6 +52,7 @@ public final class MetalContext: Sendable {
             throw MetalContextError.noCommandQueue
         }
         self.commandQueue = queue
+        self.renderTargetBudget = RenderTargetBudget(device: device)
 
         // BGRa8 is the native CAMetalLayer format on macOS.
         // HDR (EDR) output will use .rgba16Float in a later increment.
@@ -90,6 +94,26 @@ public final class MetalContext: Sendable {
         descriptor.storageMode = .shared
         descriptor.usage = usage
         return device.makeTexture(descriptor: descriptor)
+    }
+
+    /// Descriptor for a display-size-scaled 2D target (VQ.0): `storage` defaults to the budget's
+    /// policy (`.private` unless the CPU reads it back).
+    public func sizeScaledDescriptor(
+        width: Int,
+        height: Int,
+        pixelFormat: MTLPixelFormat? = nil,
+        usage: MTLTextureUsage = [.renderTarget, .shaderRead],
+        storage: MTLStorageMode = RenderTargetBudget.storageMode()
+    ) -> MTLTextureDescriptor {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: pixelFormat ?? self.pixelFormat,
+            width: max(width, 1),
+            height: max(height, 1),
+            mipmapped: false
+        )
+        descriptor.storageMode = storage
+        descriptor.usage = usage
+        return descriptor
     }
 }
 

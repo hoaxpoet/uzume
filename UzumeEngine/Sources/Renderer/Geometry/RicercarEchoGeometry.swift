@@ -62,7 +62,7 @@ public final class RicercarEchoGeometry: ParticleGeometry, @unchecked Sendable {
 
     internal let device: MTLDevice
     private let penBuffer: MTLBuffer
-    internal var trail: [MTLTexture]
+    internal var trail: [MTLTexture], renderTargetBudget: RenderTargetBudget?   // VQ.0: the trail is budgeted
     internal var cur = 0
     private let depositPSO: MTLRenderPipelineState?
     private let decayPSO: MTLRenderPipelineState?

@@ -33,7 +33,9 @@ extension RenderPipeline {
             temporalSummaryLock.withLock { temporalSummary = nil }
             return
         }
-        let recon = DirectTemporalReconstructor(device: context.device, spec: spec)
+        temporalReconstructor = nil   // VQ.0: release the previous set before allocating
+        let budget = context.renderTargetBudget
+        let recon = DirectTemporalReconstructor(device: context.device, spec: spec, budget: budget)
         let size = presentationDrawableSize
         recon.prepare(outputWidth: Int(size.width), outputHeight: Int(size.height))
         temporalPipelineState = pipeline
