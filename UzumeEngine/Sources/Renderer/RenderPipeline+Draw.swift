@@ -56,7 +56,7 @@ extension RenderPipeline {
 
     /// The feedback ping-pong pair at `width`×`height`, through the render-target budget (VQ.0).
     func makeFeedbackPair(width: Int, height: Int) -> [MTLTexture]? {
-        let descriptor = context.sizeScaledDescriptor(width: width, height: height, storage: .shared)
+        let descriptor = context.sizeScaledDescriptor(width: width, height: height)   // GPU-only: private
         return context.renderTargetBudget.makeTextures(owner: "feedback", [
             .init(descriptor, label: "feedback ping \(width)×\(height)"),
             .init(descriptor, label: "feedback pong \(width)×\(height)"),

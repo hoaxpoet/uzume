@@ -67,6 +67,10 @@ extension RenderPipeline {
             if let restore = ceilingBeforeMemoryPressure { budget.ceiling = restore }
             ceilingBeforeMemoryPressure = nil
         case .warning, .critical:
+            // "No larger than the current scene" needs a current scene: with nothing but the drawable pool
+            // live (launch, a switch in flight) there is nothing to compare against, so no cap.
+            let pool = budget.reservedBytes.values.reduce(0, +)
+            guard budget.totalBytes > pool else { break }
             if ceilingBeforeMemoryPressure == nil { ceilingBeforeMemoryPressure = budget.ceiling }
             budget.ceiling = min(budget.ceiling, budget.totalBytes)
         }
@@ -74,6 +78,11 @@ extension RenderPipeline {
         applyQualityLevel(frameBudgetManager?.appliedLevel ?? .full)
         applyGovernorRequests()
     }
+
+    /// True while memory pressure caps the budget at the current scene's set (a refusal now is
+    /// transient: the app falls back to the light scene instead of skipping the refused one for good).
+    @MainActor
+    public var isMemoryPressureCapped: Bool { ceilingBeforeMemoryPressure != nil }
 
     /// The failing frame's error code and encoder, or nil when it completed cleanly.
     static func faultDescription(_ commandBuffer: MTLCommandBuffer) -> String? {

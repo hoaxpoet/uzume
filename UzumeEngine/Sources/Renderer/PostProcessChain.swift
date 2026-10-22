@@ -157,7 +157,7 @@ public final class PostProcessChain: @unchecked Sendable {
         // VQ.0: release before allocate; the three through the budget, all or nothing.
         (sceneTexture, bloomTexA, bloomTexB) = (nil, nil, nil)
         func descriptor(_ width: Int, _ height: Int) -> MTLTextureDescriptor {
-            context.sizeScaledDescriptor(width: width, height: height, pixelFormat: .rgba16Float, storage: .shared)
+            context.sizeScaledDescriptor(width: width, height: height, pixelFormat: .rgba16Float)   // GPU-only
         }
         let scene = descriptor(texWidth, texHeight)
         let bloom = descriptor(bloomW, bloomH)

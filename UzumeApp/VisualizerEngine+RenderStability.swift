@@ -21,7 +21,7 @@ extension VisualizerEngine {
 
     /// The light scene the governor falls back to: the certified scene with the lowest measured 4K GPU
     /// time in the VQ.0 inventory (`docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`).
-    static let lightFallbackSceneID = "stave"
+    static let lightFallbackSceneID = "Stave"   // scene ids are display names
 
     // MARK: - Wiring
 
@@ -91,8 +91,17 @@ extension VisualizerEngine {
     /// The budget refused the active scene: skip it for the session and play the next one.
     @MainActor
     func handleRenderBudgetRefusal(_ refusal: RenderTargetBudget.Refusal) {
-        guard let current = presetLoader.currentPreset?.descriptor.id,
-              !renderBudgetRefusedPresetIDs.contains(current) else { return }
+        // The scene on screen, as `applyPreset` recorded it (`presetLoader.currentPreset` lags planned applies).
+        let current = stemsStateLock.withLock { onScreenScene.name }
+        guard !current.isEmpty, !renderBudgetRefusedPresetIDs.contains(current) else { return }
+        // Under memory pressure the cap is the current scene's set, and it lifts when pressure does:
+        // a refusal then says nothing about this Mac, so play the light scene and ban nothing.
+        if pipeline.isMemoryPressureCapped {
+            sessionRecorder?.log("RENDER_BUDGET_REFUSED scene=\(current) owner=\(refusal.owner) under memory pressure")
+            guard current != Self.lightFallbackSceneID else { return }
+            applyLightFallbackScene(cause: "budget refusal under memory pressure")
+            return
+        }
         renderBudgetRefusedPresetIDs.insert(current)
         let line = "RENDER_BUDGET_REFUSED scene=\(current) owner=\(refusal.owner) "
             + "requested_mb=\(refusal.requestedBytes / 1_048_576) total_mb=\(refusal.totalBytes / 1_048_576) "
@@ -128,7 +137,7 @@ extension VisualizerEngine {
     @MainActor
     func applyLightFallbackScene(cause: String) {
         sessionRecorder?.log("GOVERNOR_FALLBACK_SCENE cause=\"\(cause)\" scene=\(Self.lightFallbackSceneID)")
-        guard presetLoader.currentPreset?.descriptor.id != Self.lightFallbackSceneID,
+        guard stemsStateLock.withLock({ onScreenScene.name }) != Self.lightFallbackSceneID,
               let loaded = presetLoader.presets.first(where: { $0.descriptor.id == Self.lightFallbackSceneID })
         else { return }
         applyPreset(loaded)

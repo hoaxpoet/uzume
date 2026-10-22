@@ -14,7 +14,7 @@ import MetalKit
 // MARK: - Fixture
 
 @MainActor
-private struct Rig {
+struct RenderBudgetRig {
     let ctx: MetalContext
     let pipeline: RenderPipeline
     let loader: PresetLoader
@@ -71,8 +71,8 @@ private struct Rig {
     }
 }
 
-private let hd = CGSize(width: 1920, height: 1080)
-private let uhd = CGSize(width: 3840, height: 2160)
+let vq0HD = CGSize(width: 1920, height: 1080)
+let vq0UHD = CGSize(width: 3840, height: 2160)
 
 // MARK: - Budget
 
@@ -113,6 +113,27 @@ struct RenderTargetBudgetTests {
         #expect(budget.makeTexture(owner: "one", label: "a", descriptor: desc) != nil, "one still fits")
     }
 
+    @Test("a request that fits only once the frames in flight free their targets waits for them, then is admitted")
+    func reclaimBeforeRefusing() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: 1920, height: 1080,
+                                                            mipmapped: false)
+        desc.storageMode = .private
+        let one = RenderTargetBudget(device: device).estimatedBytes(desc)
+        let budget = RenderTargetBudget(device: device, ceiling: one * 3 / 2)
+        /// Stands in for a frame on the GPU still holding the outgoing scene's target.
+        final class InFlight: @unchecked Sendable { var texture: MTLTexture?; var waits = 0 }
+        let inFlight = InFlight()
+        inFlight.texture = budget.makeTexture(owner: "outgoing", label: "old", descriptor: desc)
+        budget.reclaim = { inFlight.texture = nil; inFlight.waits += 1 }
+        let incoming = budget.makeTexture(owner: "incoming", label: "new", descriptor: desc)
+        #expect(incoming != nil)
+        #expect(inFlight.waits == 1 && budget.refusals.isEmpty)
+        let second = budget.makeTexture(owner: "incoming", label: "too much", descriptor: desc)
+        #expect(second == nil && inFlight.waits == 2, "nothing left to reclaim: refused after one wait")
+        withExtendedLifetime(incoming) {}
+    }
+
     @Test("reservations: refused past the ceiling unless forced; replaced by name")
     func reservations() throws {
         let budget = RenderTargetBudget(device: try #require(MTLCreateSystemDefaultDevice()), ceiling: 100)
@@ -146,11 +167,11 @@ struct RenderTargetBudgetTests {
 
     @Test("forced tiny ceiling: the scene's set is refused, nothing partial is left, no crash")
     func tinyCeilingRefusesScene() throws {
-        let rig = try Rig()
+        let rig = try RenderBudgetRig()
         rig.budget.ceiling = 1 << 20   // 1 MB: below any 1080p target
         rig.pipeline.setFeedbackParams(FeedbackParams())
-        rig.resize(hd)
-        try rig.attachMVWarp(size: hd)
+        rig.resize(vq0HD)
+        try rig.attachMVWarp(size: vq0HD)
         rig.idle()
         #expect(rig.pipeline.feedbackTextures.isEmpty)
         #expect(rig.pipeline.mvWarpState == nil)
@@ -161,13 +182,13 @@ struct RenderTargetBudgetTests {
 
     @Test("after a scene switch the budget's total equals the live labelled targets + reservations")
     func totalMatchesLiveAfterSwitch() throws {
-        let rig = try Rig()
+        let rig = try RenderBudgetRig()
         rig.pipeline.setFeedbackParams(FeedbackParams())
-        rig.resize(hd)
+        rig.resize(vq0HD)
         #expect(rig.pipeline.feedbackTextures.count == 2)
         // Switch: feedback scene → staged scene (what applyPreset does).
         rig.pipeline.setFeedbackParams(nil)
-        try rig.attachStaged(size: hd)
+        try rig.attachStaged(size: vq0HD)
         rig.idle()
         #expect(rig.chargedEqualsLive)
         #expect(!rig.budget.liveAllocations.contains { $0.owner == "feedback" }, "the old scene's set is released")
@@ -183,12 +204,12 @@ struct DrainReleaseAllocateTests {
 
     @Test("a burst of 20 size callbacks inside 100 ms commits one reallocation, at the last size")
     func burstCoalesces() throws {
-        let rig = try Rig()
+        let rig = try RenderBudgetRig()
         rig.pipeline.setFeedbackParams(FeedbackParams())
-        rig.resize(hd)   // the first size commits at once
+        rig.resize(vq0HD)   // the first size commits at once
         let before = rig.pipeline.resizeReallocationCount
         for i in 0..<20 {
-            rig.pipeline.mtkView(rig.view, drawableSizeWillChange: i.isMultiple(of: 2) ? uhd : CGSize(width: 2560, height: 1440))
+            rig.pipeline.mtkView(rig.view, drawableSizeWillChange: i.isMultiple(of: 2) ? vq0UHD : CGSize(width: 2560, height: 1440))
         }
         let now = CACurrentMediaTime()
         #expect(!rig.pipeline.commitPendingResizeIfStable(now: now + 0.05, view: nil), "not stable yet")
@@ -200,36 +221,36 @@ struct DrainReleaseAllocateTests {
 
     @Test("50 × 1080p ↔ 4K across feedback, mv_warp, ray-march and staged: back to baseline, peak ≤ 2× the 4K set")
     func toggleFiftyTimes() throws {
-        let rig = try Rig()
+        let rig = try RenderBudgetRig()
         let lib = try ShaderLibrary(context: rig.ctx)
         let rayMarch = try RayMarchPipeline(context: rig.ctx, shaderLibrary: lib)
         rig.pipeline.setRayMarchPipeline(rayMarch)
         rig.pipeline.setFeedbackParams(FeedbackParams())
-        rig.resize(hd)
-        try rig.attachMVWarp(size: hd)
-        try rig.attachStaged(size: hd)
+        rig.resize(vq0HD)
+        try rig.attachMVWarp(size: vq0HD)
+        try rig.attachStaged(size: vq0HD)
         // The ray-march frame path allocates lazily at the size it renders; do what a frame does.
         func frame(_ size: CGSize) {
             rayMarch.ensureAllocated(width: Int(size.width), height: Int(size.height))
             rig.idle()
         }
-        frame(hd)
+        frame(vq0HD)
         let baselineMetal = rig.ctx.device.currentAllocatedSize
         let baselineCharged = rig.budget.totalBytes
-        rig.resize(uhd)
-        frame(uhd)
+        rig.resize(vq0UHD)
+        frame(vq0UHD)
         let steady4K = rig.budget.totalBytes
         rig.budget.resetPeak()
         var metalPeak = rig.ctx.device.currentAllocatedSize
         for _ in 0..<50 {
-            rig.resize(hd)
-            frame(hd)
-            rig.resize(uhd)
-            frame(uhd)
+            rig.resize(vq0HD)
+            frame(vq0HD)
+            rig.resize(vq0UHD)
+            frame(vq0UHD)
             metalPeak = max(metalPeak, rig.ctx.device.currentAllocatedSize)
         }
-        rig.resize(hd)
-        frame(hd)
+        rig.resize(vq0HD)
+        frame(vq0HD)
         let drift = abs(rig.ctx.device.currentAllocatedSize - baselineMetal)
         #expect(drift <= 16 << 20, "Metal allocation back at baseline within 16 MB (drift \(drift >> 20) MB)")
         #expect(rig.budget.totalBytes == baselineCharged)
@@ -240,5 +261,62 @@ struct DrainReleaseAllocateTests {
         #expect(Set(rig.budget.liveAllocations.map(\.owner)) == ["feedback", "mvWarp", "rayMarch", "staged"])
         print("VQ0 toggle: baseline \(baselineMetal >> 20) MB, 4K set \(steady4K >> 20) MB charged, "
               + "charged peak \(rig.budget.peakTotalBytes >> 20) MB, Metal peak \(metalPeak >> 20) MB, drift \(drift >> 20) MB")
+    }
+}
+
+// MARK: - Memory pressure
+
+@Suite("RenderBudgetMemoryPressure")
+@MainActor
+struct RenderBudgetMemoryPressureTests {
+
+    @Test("warning caps the ceiling at the live scene's set; with no scene live it caps nothing; normal restores")
+    func warningCapsAtCurrentSet() throws {
+        let rig = try RenderBudgetRig()
+        let original = rig.budget.ceiling
+        rig.resize(vq0HD)                                   // only the drawable pool is live
+        rig.pipeline.handleMemoryPressure(.warning)
+        #expect(rig.budget.ceiling == original, "no scene yet: nothing to compare against")
+        #expect(!rig.pipeline.isMemoryPressureCapped)
+        rig.pipeline.handleMemoryPressure(.normal)
+
+        rig.pipeline.setFeedbackParams(FeedbackParams())
+        rig.resize(vq0UHD)
+        rig.pipeline.handleMemoryPressure(.warning)
+        #expect(rig.pipeline.isMemoryPressureCapped)
+        #expect(rig.budget.ceiling == rig.budget.totalBytes)
+        try rig.attachMVWarp(size: vq0UHD)                  // a bigger set than the current one
+        #expect(rig.pipeline.mvWarpState == nil, "refused while capped")
+        rig.pipeline.handleMemoryPressure(.normal)
+        #expect(rig.budget.ceiling == original && !rig.pipeline.isMemoryPressureCapped)
+    }
+}
+
+// MARK: - Detach releases
+
+@Suite("ParticleGeometryRelease")
+@MainActor
+struct ParticleGeometryReleaseTests {
+
+    private final class Probe: ParticleGeometry, @unchecked Sendable {
+        var activeParticleFraction: Float = 1
+        var releases = 0
+        func update(features: FeatureVector, stemFeatures: StemFeatures, commandBuffer: MTLCommandBuffer) {}
+        func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {}
+        func releaseRenderTargets() { releases += 1 }
+    }
+
+    @Test("a detached geometry drops its display-size targets; re-attaching the same one does not")
+    func detachReleases() throws {
+        let rig = try RenderBudgetRig()
+        let first = Probe(), second = Probe()
+        rig.pipeline.setParticleGeometry(first)
+        rig.pipeline.setParticleGeometry(first)
+        #expect(first.releases == 0)
+        rig.pipeline.setParticleGeometry(nil)          // applyPreset's reset block
+        #expect(first.releases == 1)
+        rig.pipeline.setParticleGeometry(second)
+        rig.pipeline.setParticleGeometry(first)
+        #expect(second.releases == 1 && first.releases == 1)
     }
 }

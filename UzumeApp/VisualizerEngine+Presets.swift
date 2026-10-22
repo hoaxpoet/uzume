@@ -10,6 +10,7 @@ import Metal
 import os.log
 import Orchestrator
 import Presets
+import QuartzCore
 import Renderer
 import Session
 import Shared
@@ -170,6 +171,13 @@ extension VisualizerEngine {
         // torn-snapshot class.
         dispatchPrecondition(condition: .onQueue(.main))
         let desc = preset.descriptor
+        // VQ.0: how long a scene switch blocks the render loop, per switch, for the soak's switch-frame report.
+        let switchStarted = CACurrentMediaTime()
+        defer {
+            let ms = (CACurrentMediaTime() - switchStarted) * 1000
+            sessionRecorder?.log("SCENE_SWITCH scene=\(desc.name) apply_ms=\(String(format: "%.1f", ms)) "
+                                 + "reclaim_waits=\(pipeline.reclaimWaitCount)")
+        }
 
         // Reset frame-budget governor to .full on each preset change — new presets have
         // unknown cost characteristics; start optimistic and let the controller re-converge.
@@ -178,6 +186,7 @@ extension VisualizerEngine {
         // Reset all active passes and subsystems before applying the new preset.
         // This prevents stale subsystem state from the previous preset bleeding through.
         pipeline.setActivePasses([])
+        MainActor.assumeIsolated { pipeline.beginSceneSwitch() }   // VQ.0: report this scene's first refusal
         pipeline.setMeshGenerator(nil)
         pipeline.setMeshPresetTick(nil)
         pipeline.setMVWarpWetnessDecay(1.0)   // Skein.ENGINE.2: reset to "held" (only Skein decays A)

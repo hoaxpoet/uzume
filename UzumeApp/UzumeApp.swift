@@ -167,10 +167,8 @@ struct UzumeApp: App {
                 let env = ProcessInfo.processInfo.environment
                 if case .unknown = engine.engageScenePin() { return }
                 if let raw = env["UZUME_LOCAL_FILE_PLAYBACK"], !raw.isEmpty {
-                    let url = URL(fileURLWithPath: raw)
-                    guard FileManager.default.isReadableFile(atPath: url.path) else { return }
-                    lfLogger.info("[LF.4] local-file playback mode: \(url.path, privacy: .public)")
-                    await engine.sessionManager.startLocalFile(at: url)
+                    lfLogger.info("[LF.4] local-file playback mode: \(raw, privacy: .public)")
+                    await engine.startEnvLocalPlayback(raw)   // a file, or (VQ.0) a folder of them
                     return
                 }
                 if env["UZUME_AUTOSTART_ADHOC"] == "1" {

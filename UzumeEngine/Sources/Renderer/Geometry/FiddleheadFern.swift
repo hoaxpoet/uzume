@@ -137,6 +137,11 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
 
     public func attach(renderTargetBudget: RenderTargetBudget) { self.renderTargetBudget = renderTargetBudget }
 
+    public func releaseRenderTargets() {
+        (hdr, bloomA, bloomB, history) = (nil, nil, nil, [])
+        historyValid = false
+    }
+
     public func update(features: FeatureVector, stemFeatures: StemFeatures, commandBuffer: MTLCommandBuffer) {
         startBakeIfNeeded()
         let dt = min(max(features.deltaTime, 0), 0.1)

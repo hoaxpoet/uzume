@@ -32,11 +32,14 @@ extension RenderPipeline {
     /// Cap the pixel count scenes render at (BR.6b, tier 1), or nil to render at drawable size.
     /// Set once by the app, before the first frame. Main thread.
     public func setRenderPixelCap(_ cap: Double?) {
+        guard cap != renderPixelCap else { return }
         renderPixelCap = cap
+        // VQ.0: the render size changed, so the size-scaled set must follow — commit it like a resize.
+        resizeLock.withLock {
+            guard let committed = committedDrawableSize else { return }
+            pendingResize = PendingResize(size: committed, since: -.infinity)
+        }
     }
-
-    /// The cap set by `setRenderPixelCap` (VQ.0 inventory restores it after measuring uncapped).
-    public var currentRenderPixelCap: Double? { renderPixelCap }
 
     /// `drawable` scaled down (never up) to at most `pixelCap` pixels, aspect kept, or `drawable`
     /// itself when there is no cap or it already fits.

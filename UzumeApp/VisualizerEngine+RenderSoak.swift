@@ -26,6 +26,22 @@ private let logger = Logger(subsystem: "io.uzume.mac", category: "RenderSoak")
 
 extension VisualizerEngine {
 
+    /// `UZUME_LOCAL_FILE_PLAYBACK`: one readable audio file, or (VQ.0, for the TV soak's playlist) a
+    /// folder of them. Unreadable: nothing.
+    @MainActor
+    func startEnvLocalPlayback(_ path: String) async {
+        let url = URL(fileURLWithPath: path)
+        var isFolder: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder) else { return }
+        if isFolder.boolValue {
+            let queue = LocalFileMenuCommands.enforceQueueCap(LocalFileMenuCommands.expandFolder(at: url))
+            guard !queue.isEmpty else { return }
+            await sessionManager.startLocalFiles(at: queue, origin: .localFolder(url, expanded: queue))
+        } else if FileManager.default.isReadableFile(atPath: url.path) {
+            await sessionManager.startLocalFile(at: url)
+        }
+    }
+
     /// Start the driver if any of its env vars is set. Called once the first session begins playing.
     @MainActor
     func startRenderSoakIfRequested() {
@@ -97,6 +113,9 @@ final class RenderSoakDriver {
         if let size = config.drawableOverride { PixelModeMTKView.drawableOverride = size }
         hookFrames(engine.pipeline)
         if let path = config.inventoryPath {
+            // A measurement: a transient system memory warning must not cap the budget mid-inventory.
+            engine.memoryPressureSource?.cancel()
+            engine.memoryPressureSource = nil
             Task { await runInventory(to: path) }
             return
         }
@@ -112,6 +131,9 @@ final class RenderSoakDriver {
         }
         if let limit = config.killMB {
             schedule(every: 2) { $0.checkFootprint(limitMB: limit) }
+        }
+        if let path = ProcessInfo.processInfo.environment["UZUME_LOCAL_FILE_PLAYBACK"], !path.isEmpty {
+            schedule(every: 2) { $0.restartIfEnded(path) }   // keep the music (and preparation) going
         }
         if let minutes = config.minutes {
             schedule(every: minutes * 60, repeats: false) { $0.finish(reason: "\(Int(minutes)) minutes") }
@@ -136,6 +158,20 @@ final class RenderSoakDriver {
             .sorted { $0.descriptor.name < $1.descriptor.name }
     }
 
+    /// Every certified scene this GPU can run, tier exclusions aside: the inventory measures what an
+    /// M3/M4 allocates too (Alfvén is tier-2 only, BR.6b).
+    private var inventoryScenes: [PresetLoader.LoadedPreset] {
+        guard let engine else { return [] }
+        let capable = VisualizerEngine.capableCatalog(
+            engine.presetLoader.presets.map(\.descriptor),
+            supportsNativeMeshShaders: engine.context.device.supportsFamily(.apple8),
+            tier: .tier2
+        )
+        let runnable = Set(capable.filter(\.certified).map(\.id))
+        return engine.presetLoader.presets.filter { runnable.contains($0.descriptor.id) }
+            .sorted { $0.descriptor.name < $1.descriptor.name }
+    }
+
     private func nextScene() {
         let scenes = certifiedScenes
         guard let engine, !scenes.isEmpty else { return }
@@ -152,6 +188,13 @@ final class RenderSoakDriver {
         markSwitch()
         PixelModeMTKView.drawableOverride = toggledDown ? CGSize(width: 1920, height: 1080) : full
         engine?.sessionRecorder?.log("RENDER_SOAK drawable=\(Int(PixelModeMTKView.drawableOverride?.width ?? 0))")
+    }
+
+    /// The queue ran out: play it again.
+    private func restartIfEnded(_ path: String) {
+        guard let engine, engine.sessionManager.state == .ended else { return }
+        engine.sessionRecorder?.log("RENDER_SOAK playback restarted")
+        Task { await engine.startEnvLocalPlayback(path) }
     }
 
     /// Frames for the next 1.5 s are switch frames, reported apart.
@@ -191,7 +234,7 @@ final class RenderSoakDriver {
 
     static let csvHeader = "minute,footprint_mb,metal_alloc_mb,budget_mb,budget_peak_mb,ceiling_mb,frames,"
         + "gpu_p50_ms,gpu_p95_ms,cpu_max_ms,frames_over_250ms,switch_frames,switch_gpu_p95_ms,switch_cpu_p95_ms,"
-        + "cb_errors,forced_steps,refusals,drawable"
+        + "cb_errors,forced_steps,refusals,reclaim_waits,drawable"
 
     private func closeMinute() {
         guard let engine else { return }
@@ -209,7 +252,7 @@ final class RenderSoakDriver {
             Self.format(Self.percentile(minute.switchCPU, 0.95)),
             "\(engine.pipeline.commandBufferErrorCount)",
             "\(engine.pipeline.frameBudgetManager?.forcedSteps.count ?? 0)",
-            "\(budget.refusals.count)", drawable,
+            "\(budget.refusals.count)", "\(engine.pipeline.reclaimWaitCount)", drawable,
         ].joined(separator: ",")
         rows.append(row)
         minute = MinuteSample()
@@ -259,7 +302,10 @@ final class RenderSoakDriver {
     private func runInventory(to path: URL) async {
         guard let engine else { return }
         let pipe = engine.pipeline
-        let originalCap = pipe.currentRenderPixelCap
+        // This Mac's BR.6b cap, decided the way MetalView decides it (reading the pipeline's could race
+        // the view's first layout and measure "capped" uncapped).
+        let tierCap = VisualizerEngine.detectDeviceTier(device: engine.context.device) == .tier1
+            ? PixelModeMTKView.tier1MaxPixels : nil
         let uhd = CGSize(width: 3840, height: 2160)
         let configs = [
             InventoryConfig(label: "1920×1080", size: CGSize(width: 1920, height: 1080), capped: true),
@@ -268,12 +314,20 @@ final class RenderSoakDriver {
             InventoryConfig(label: "3840×2160 (uncapped, M3/M4)", size: uhd, capped: false),
         ]
         var results: [RenderInventoryReport.Row] = []
-        for config in configs {
-            pipe.setRenderPixelCap(config.capped ? originalCap : nil)
-            PixelModeMTKView.drawableOverride = config.size
-            try? await Task.sleep(for: .milliseconds(700))
-            for scene in certifiedScenes {
-                engine.applyPreset(scene)
+        // Scene-major: a scene's four sizes are measured back to back, so Metal's process-wide total moves
+        // only with that scene's size (minutes apart, unrelated allocations — ML buffers — drift it), and
+        // every size change goes through the real resize path.
+        let scenes = inventoryScenes
+        if let warmUp = scenes.last {   // start-up allocations settle before the first measured scene
+            engine.applyPreset(warmUp)
+            try? await Task.sleep(for: .seconds(3))
+        }
+        for scene in scenes {
+            for (index, config) in configs.enumerated() {
+                pipe.setRenderPixelCap(config.capped ? tierCap : nil)
+                PixelModeMTKView.drawableOverride = config.size
+                try? await Task.sleep(for: .milliseconds(450))   // the 150 ms coalescing window + commit
+                if index == 0 { engine.applyPreset(scene) }
                 minute = MinuteSample()
                 let target = frameCount + 120
                 while frameCount < target { try? await Task.sleep(for: .milliseconds(20)) }
@@ -292,7 +346,7 @@ final class RenderSoakDriver {
                 logger.info("inventory \(scene.descriptor.name, privacy: .public) @ \(config.label, privacy: .public)")
             }
         }
-        pipe.setRenderPixelCap(originalCap)
+        pipe.setRenderPixelCap(tierCap)
         let machine = GPUCapability.current(
             device: engine.context.device,
             budgetCeilingBytes: engine.context.renderTargetBudget.ceiling,

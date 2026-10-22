@@ -316,12 +316,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
         // VQ.0: release before allocate; the four through the budget, all or nothing.
         (gbuffer0, gbuffer1, gbuffer2, litTexture) = (nil, nil, nil, nil)
         func request(_ format: MTLPixelFormat, _ name: String) -> RenderTargetBudget.Request {
-            let descriptor = context.sizeScaledDescriptor(
-                width: texWidth,
-                height: texHeight,
-                pixelFormat: format,
-                storage: .shared
-            )
+            let descriptor = context.sizeScaledDescriptor(width: texWidth, height: texHeight, pixelFormat: format)
             return .init(descriptor, label: "ray-march \(name) \(texWidth)×\(texHeight)")
         }
         guard let made = context.renderTargetBudget.makeTextures(owner: "rayMarch", [

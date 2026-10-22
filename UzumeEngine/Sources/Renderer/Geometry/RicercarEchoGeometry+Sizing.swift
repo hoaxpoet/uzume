@@ -26,7 +26,7 @@ public extension RicercarEchoGeometry {
     /// a resize and must not be "fixed" by keeping a stale-size texture.
     func ensureAllocated(width: Int, height: Int) {
         let newW = max(1, width), newH = max(1, height)
-        guard newW != configuration.width || newH != configuration.height else { return }
+        guard trail.isEmpty || newW != configuration.width || newH != configuration.height else { return }
         trail = []   // VQ.0: release before allocate
         guard let fresh = Self.makeTrail(device: device, width: newW, height: newH, budget: renderTargetBudget) else {
             return
@@ -53,6 +53,8 @@ public extension RicercarEchoGeometry {
     }
 
     func attach(renderTargetBudget: RenderTargetBudget) { self.renderTargetBudget = renderTargetBudget }
+
+    func releaseRenderTargets() { trail = [] }
 
     static func clear(trail: [MTLTexture], device: MTLDevice) {
         guard let queue = device.makeCommandQueue(), let cmd = queue.makeCommandBuffer() else { return }

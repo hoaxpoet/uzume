@@ -90,7 +90,12 @@ extension RenderPipeline {
     /// called from any queue.
     public func setParticleGeometry(_ geometry: (any ParticleGeometry)?) {
         geometry?.attach(renderTargetBudget: context.renderTargetBudget)   // VQ.0
-        particleLock.withLock { particleGeometry = geometry }
+        let outgoing = particleLock.withLock { () -> (any ParticleGeometry)? in
+            defer { particleGeometry = geometry }
+            return particleGeometry
+        }
+        // VQ.0: the app caches these geometries across scenes; their display-size targets must not outlive the scene.
+        if let outgoing, (outgoing as AnyObject) !== (geometry as AnyObject?) { outgoing.releaseRenderTargets() }
     }
 
     /// Attach (or clear) the additive scene-geometry overlay drawn into the mv_warp

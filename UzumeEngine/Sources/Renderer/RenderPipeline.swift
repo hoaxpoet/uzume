@@ -404,6 +404,7 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         // was part of the ~one-frame startup hitch (~25 ms) the instant the
         // preset switched in (NB.8 live session). `drawDirect`'s lazy realloc
         // still covers later drawable resizes.
+        if scale >= 0.999 { halfResTexture = nil }   // VQ.0: the next scene does not need it
         if scale < 0.999 {
             let size = mvWarpDrawableSize
             _ = halfResTarget(drawableWidth: max(Int(size.width), 1),
@@ -516,6 +517,10 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     public internal(set) var resizeCallbackCount = 0
     /// Committed reallocations (one per coalesced burst).
     public internal(set) var resizeReallocationCount = 0
+    /// Counts scene switches (`beginSceneSwitch`); refusals are attributed by it. Guarded by `resizeLock`.
+    var sceneEpoch = 0
+    /// Times the budget had to wait for the frames in flight before admitting a request (VQ.0).
+    public internal(set) var reclaimWaitCount = 0
     /// How long a new size must hold before the set is reallocated.
     public var resizeCoalescingWindow: CFTimeInterval = 0.15
     /// Called after every committed resize with the drawable size, the callbacks received so far and
@@ -680,6 +685,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// is the cause.
     public var onFallbackSceneRequested: (@MainActor (String) -> Void)?
 
+    /// VQ.0: a refusal was reported for the scene on screen (cleared by `beginSceneSwitch`). Main thread.
+    var budgetRefusalReported = false
+
     /// VQ.0: frames whose command buffer completed with `.error`.
     public internal(set) var commandBufferErrorCount = 0
 
@@ -768,8 +776,18 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         self.feedbackSamplerState = sampler
 
         super.init()
+        context.renderTargetBudget.reclaim = { [weak self] in self?.reclaimInFlightTargets() }
         context.renderTargetBudget.onRefusal = { [weak self] refusal in
-            Task { @MainActor [weak self] in self?.onRenderBudgetRefusal?(refusal) }
+            // Stamp the refusal with the scene it happened in NOW (the allocating thread): a lazy
+            // allocator's last retry can land after the switch and must not be blamed on the next scene.
+            guard let epoch = self?.resizeLock.withLock({ self?.sceneEpoch }) else { return }
+            Task { @MainActor [weak self] in
+                // Lazy allocators retry every frame; the app hears about a scene's refusal once.
+                guard let self, epoch == self.resizeLock.withLock({ self.sceneEpoch }),
+                      !self.budgetRefusalReported else { return }
+                self.budgetRefusalReported = true
+                self.onRenderBudgetRefusal?(refusal)
+            }
         }
         logger.info("RenderPipeline initialized with render-graph support")
     }

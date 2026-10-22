@@ -144,6 +144,29 @@ extension RenderPipeline {
             """)
     }
 
+    /// A scene switch starts (top of `applyPreset`, main thread): the new scene's first refusal is reported.
+    /// It does not wait for the frames in flight — the outgoing scene's targets stay charged until those
+    /// frames complete, and only an allocation that would then cross the ceiling waits for them
+    /// (`RenderTargetBudget.reclaim` → `reclaimInFlightTargets`), so an ordinary switch costs nothing.
+    @MainActor
+    public func beginSceneSwitch() {
+        resizeLock.withLock { sceneEpoch += 1 }
+        budgetRefusalReported = false
+    }
+
+    /// The budget is about to refuse: wait for the frames in flight so targets nothing references any more
+    /// actually free, then it checks again. Logged with how long it waited.
+    func reclaimInFlightTargets() {
+        let started = CACurrentMediaTime()
+        drainFramesInFlight()
+        let ms = (CACurrentMediaTime() - started) * 1000
+        let count: Int = resizeLock.withLock {
+            reclaimWaitCount += 1
+            return reclaimWaitCount
+        }
+        logger.info("budget reclaim: waited \(String(format: "%.1f", ms)) ms for the frames in flight (#\(count))")
+    }
+
     /// Wait until every frame committed so far has completed on the GPU.
     func drainFramesInFlight() {
         let last = resizeLock.withLock { lastCommittedCommandBuffer }

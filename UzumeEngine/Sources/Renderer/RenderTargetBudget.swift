@@ -73,6 +73,7 @@ public final class RenderTargetBudget: @unchecked Sendable {
     private var _peakTotal = 0
     private var _refusals: [Refusal] = []
     private var _onRefusal: (@Sendable (Refusal) -> Void)?
+    private var _reclaim: (@Sendable () -> Void)?
 
     // MARK: Init
 
@@ -151,7 +152,17 @@ public final class RenderTargetBudget: @unchecked Sendable {
     /// Every refusal so far.
     public var refusals: [Refusal] { lock.withLock { _refusals } }
 
-    /// Called on a background queue for every refusal.
+    /// Called (outside the lock) when a request would cross the ceiling, before refusing it: the pipeline
+    /// waits for the frames in flight, so targets a scene has already dropped — still alive only because
+    /// a frame on the GPU uses them — free, and the request is checked again. Scene switches therefore
+    /// never wait unless the budget is actually tight.
+    public var reclaim: (@Sendable () -> Void)? {
+        get { lock.withLock { _reclaim } }
+        set { lock.withLock { _reclaim = newValue } }
+    }
+
+    /// Called for every refusal, synchronously on the allocating thread (so the caller can tell which
+    /// scene it belongs to). Keep it cheap and never call back into the budget.
     public var onRefusal: (@Sendable (Refusal) -> Void)? {
         get { lock.withLock { _onRefusal } }
         set { lock.withLock { _onRefusal = newValue } }
@@ -209,15 +220,19 @@ public final class RenderTargetBudget: @unchecked Sendable {
     /// `force` (memory the OS allocates whatever we decide, such as the drawable pool).
     @discardableResult
     public func reserve(_ name: String, bytes: Int, force: Bool = false) -> Bool {
-        let fits: Bool = lock.withLock {
-            let previous = reservations[name] ?? 0
-            guard force || unlockedTotal() - previous + bytes <= _ceiling else { return false }
-            reservations[name] = bytes
-            _peakTotal = max(_peakTotal, unlockedTotal())
-            return true
+        func attempt() -> Bool {
+            lock.withLock {
+                let previous = reservations[name] ?? 0
+                guard force || unlockedTotal() - previous + bytes <= _ceiling else { return false }
+                reservations[name] = bytes
+                _peakTotal = max(_peakTotal, unlockedTotal())
+                return true
+            }
         }
-        if !fits { refuse(owner: name, bytes: bytes) }
-        return fits
+        if attempt() { return true }
+        if let reclaim { reclaim(); if attempt() { return true } }
+        refuse(owner: name, bytes: bytes)
+        return false
     }
 
     /// Drop a reservation.
@@ -233,9 +248,11 @@ public final class RenderTargetBudget: @unchecked Sendable {
     // MARK: Private
 
     private func admit(owner: String, bytes: Int) -> Bool {
-        let fits = lock.withLock { unlockedTotal() + bytes <= _ceiling }
-        if !fits { refuse(owner: owner, bytes: bytes) }
-        return fits
+        func fits() -> Bool { lock.withLock { unlockedTotal() + bytes <= _ceiling } }
+        if fits() { return true }
+        if let reclaim { reclaim(); if fits() { return true } }
+        refuse(owner: owner, bytes: bytes)
+        return false
     }
 
     private func refuse(owner: String, bytes: Int) {
@@ -243,13 +260,18 @@ public final class RenderTargetBudget: @unchecked Sendable {
             let total = unlockedTotal()
             let refusal = Refusal(owner: owner, requestedBytes: bytes, totalBytes: total, ceilingBytes: _ceiling)
             _refusals.append(refusal)
+            if _refusals.count > 1_024 { _refusals.removeFirst(_refusals.count - 1_024) }
             return (refusal, _onRefusal)
         }
-        logger.error("""
-            refused \(owner, privacy: .public): \(bytes / 1_048_576) MB on \(refusal.totalBytes / 1_048_576) MB \
-            of a \(refusal.ceilingBytes / 1_048_576) MB ceiling
-            """)
-        if let callback { DispatchQueue.global(qos: .userInitiated).async { callback(refusal) } }
+        let previous = refusals.dropLast().last
+        let repeated = previous.map { $0.owner == owner && $0.requestedBytes == bytes } ?? false
+        if !repeated {   // a lazy allocator retrying every frame logs once
+            logger.error("""
+                refused \(owner, privacy: .public): \(bytes / 1_048_576) MB on \(refusal.totalBytes / 1_048_576) MB \
+                of a \(refusal.ceilingBytes / 1_048_576) MB ceiling
+                """)
+        }
+        callback?(refusal)
     }
 
     /// Caller holds `lock`.

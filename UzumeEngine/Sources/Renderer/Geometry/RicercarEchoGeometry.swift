@@ -196,7 +196,7 @@ public final class RicercarEchoGeometry: ParticleGeometry, @unchecked Sendable {
         advance(features: features, stems: stemFeatures)
         writePens()
 
-        guard let decayPSO, let depositPSO else { return }
+        guard let decayPSO, let depositPSO, trail.count == 2 else { return }   // VQ.0: released or refused
         var cfg = makeConfig()
         let dst = trail[1 - cur], src = trail[cur]
         let rpd = MTLRenderPassDescriptor()
@@ -223,7 +223,7 @@ public final class RicercarEchoGeometry: ParticleGeometry, @unchecked Sendable {
     }
 
     public func render(encoder: MTLRenderCommandEncoder, features: FeatureVector) {
-        guard let displayPSO else { return }
+        guard let displayPSO, trail.count == 2 else { return }
         var cfg = makeConfig()
         encoder.setRenderPipelineState(displayPSO)
         encoder.setFragmentBytes(&cfg, length: MemoryLayout<RicercarEchoConfig>.stride, index: 0)

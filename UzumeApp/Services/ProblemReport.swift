@@ -3,6 +3,7 @@
 
 import AppKit
 import Foundation
+import Renderer
 import Metal
 import os.log
 
@@ -92,6 +93,7 @@ enum ProblemReportBuilder {
         macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)
         GPU: \(MTLCreateSystemDefaultDevice()?.name ?? "?")
         Displays: \(displays.joined(separator: ", "))
+        \(GPUCapability.lastLogged ?? "GPU_CAPABILITY (not yet logged this launch)")
         """
     }
 

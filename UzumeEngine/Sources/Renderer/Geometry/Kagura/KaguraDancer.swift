@@ -251,6 +251,7 @@ public final class KaguraDancer: ParticleGeometry, @unchecked Sendable {
     }
 
     public func attach(renderTargetBudget: RenderTargetBudget) { self.renderTargetBudget = renderTargetBudget }
+    public func releaseRenderTargets() { (trail, composite, width, height) = ([], nil, 0, 0) }
 
     public func update(features: FeatureVector, stemFeatures: StemFeatures, commandBuffer: MTLCommandBuffer) {
         if trail.isEmpty { ensureAllocated(width: 1280, height: 720) }
