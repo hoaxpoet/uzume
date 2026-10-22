@@ -87,8 +87,9 @@ public final class RenderTargetBudget: @unchecked Sendable {
 
     /// The largest render set any certified scene needs at 3840×2160 with no BR.6b cap (what an
     /// M3/M4 allocates): targets + drawable pool + MetalFX reservation. Measured by the VQ.0
-    /// inventory (`docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`). 0 = not yet measured.
-    public static let largestScene4KSetBytes = 0
+    /// inventory (`docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`, Release, M2 Pro, 2026-10-22): Ferrofluid
+    /// Ocean, 354.9 MB. Re-measure when a scene adds a size-scaled target. 0 = not measured (memory caps only).
+    public static let largestScene4KSetBytes = 372_113_408
 
     /// The ceiling for a Mac: the largest scene's 4K set × 1.5, capped at
     /// `min(15 % of physical memory, 25 % of recommendedMaxWorkingSetSize)` (D-264).

@@ -21,7 +21,7 @@ extension VisualizerEngine {
 
     /// The light scene the governor falls back to: the certified scene with the lowest measured 4K GPU
     /// time in the VQ.0 inventory (`docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`).
-    static let lightFallbackSceneID = "Stave"   // scene ids are display names
+    static let lightFallbackSceneID = "Meniscus"   // 0.53 ms GPU at 4K, no size-scaled targets; ids are names
 
     // MARK: - Wiring
 
