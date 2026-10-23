@@ -900,6 +900,43 @@ Pass these as `SoakTestHarness.Configuration` overrides for different workloads.
 
 ---
 
+## VQ.0 render soak, floor simulation and render-memory inventory (D-264)
+
+The engine's audio/MIR soak above does not render. These three do, through the app's real `applyPreset`, so they
+measure what a viewer's Mac allocates. Always a **Release** build, machine named (CLAUDE.md). Uzume windows open on
+this Mac while they run — leave them open; each run quits itself.
+
+```bash
+xcodebuild -scheme UzumeApp -configuration Release -destination 'platform=macOS' build
+xcodebuild -scheme UzumeApp -configuration Release -destination 'platform=macOS' -showBuildSettings | grep -E ' BUILT_PRODUCTS_DIR'
+```
+
+Use that exact `…/Release/Uzume.app` path (never a DerivedData glob). The default track is
+`/Users/Shared/memrepro/01 Dance Yrself Clean.mp3` (TCC blocks external volumes).
+
+- **60-minute 4K render soak** — every certified scene 20 s each, 1080p ↔ 4K every 5 min, kill at 4 GB:
+  `Scripts/render_soak.sh "<app>" vq0_soak --override 3840x2160 --toggle 300 --minutes 60`.
+  `vq0_soak/render_soak_minutes.csv` holds one row per minute: phys_footprint, Metal allocation, budget total / peak /
+  ceiling, GPU p50/p95, max CPU frame time and frames over 250 ms (non-switch), switch frames and their p95,
+  command-buffer errors, forced governor steps, refusals. Gates (VQ.0): baseline after the first roster cycle
+  (minute ~9), then footprint drift ≤ 50 MB and fitted slope ≤ 5 MB / 10 min; zero errors; zero non-switch frames
+  > 250 ms; budget never crossed.
+- **Floor simulation** — add `--floor`: the 8 GB-Mac ceiling (`UZUME_SIMULATE_MAC_GB=8`, this Mac's
+  working-set ratio) and simulated memory pressure (`memory_pressure -S`) — warn at 40 % of the run, critical at
+  70 %, normal at 85 %. Gate: refused scenes skipped, no crash.
+- **10-minute version** — `--minutes 10` (the soak needs the app's scene path, so it is a script, not an SPM test).
+- **Render-memory inventory** — `open -n "<app>" --env UZUME_LOCAL_FILE_PLAYBACK="<track>" --env
+  UZUME_RENDER_INVENTORY=/path/out.md`: each certified scene × {1080p, 1440p, 2160p with this Mac's BR.6b cap,
+  2160p uncapped}, 120 frames, GPU idle, then the budget's live labelled targets and Metal's own total. Output:
+  `docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`. Re-run it when a scene adds a size-scaled target, then update
+  `RenderTargetBudget.largestScene4KSetBytes` if the largest set grew.
+- **The TV hour (Matt)** — `Scripts/tv_soak.sh "<app>" "/Users/Shared/<playlist folder>"`: the folder's stem caches
+  moved aside (preparation runs during the soak; restored on exit), scenes cycling at the TV's real size, kill at
+  4 GB; plug the TV out and in twice. Its header lists the six steps.
+
+Session-log lines to read afterwards: `GPU_CAPABILITY`, `RENDER_RESIZE`, `RENDER_BUDGET_REFUSED`,
+`GOVERNOR_FORCED`, `GOVERNOR_FALLBACK_SCENE`, `MEMORY_PRESSURE`, `RENDER_SOAK_MINUTE`.
+
 ## Recording the quality reel
 
 The quality reel is a 3-minute screen capture of Uzume playing the canonical

@@ -191,6 +191,44 @@ Baselines for these modulations are captured in `RayMarchPipeline.BaseSceneSnaps
 
 `SpectralHistoryBuffer` (Shared module) maintains 5 ring buffers of 480 samples (≈8s at 60 fps): valence, arousal, `beat_phase01`, `bass_dev`, and log-normalized vocal pitch (80→800 Hz mapped to 0→1). Updated once per frame in `RenderPipeline.draw(in:)` before any render encoder; reset on track change. Enables `instrument`-family presets to render recent MIR history without per-preset plumbing.
 
+**Render memory and stability (VQ.0, D-264).** Every render target whose size follows the display —
+feedback pair, tier-1 canvas, post-process scene/bloom, ray-march G-buffer + lit, mv_warp warp/compose/scene +
+blur pyramid, staged stages, the direct half-res target, MFX.2's internal targets + output, and the
+Fiddlehead / Kagura / Ricercar particle targets — is allocated and labelled through `RenderTargetBudget`, owned by
+`MetalContext`. It charges Metal's own `allocatedSize` (pre-checked with `heapTextureSizeAndAlign`), plus two opaque
+reservations: the drawable pool (`maximumDrawableCount` set explicitly to 3, × one drawable; forced, since the OS
+allocates it regardless) and each MetalFX scaler (its `currentAllocatedSize` delta at creation). A request is
+all-or-nothing and refused if it would cross the ceiling — `min(largest certified scene's 4K set × 1.5, 15 % of
+RAM, 25 % of recommendedMaxWorkingSetSize)`. Live targets are tracked through weak references, so the total is what
+Metal still holds (a command buffer in flight keeps its targets charged). A refusal reaches the app
+(`onRenderBudgetRefusal`), which skips that scene for the session on that Mac and plays the next planned one —
+unless memory pressure caused it, in which case it plays the light fallback scene and bans nothing. Storage:
+GPU-only targets are `.private` (lossless compression on Apple GPUs); `.shared` only where the CPU reads back —
+persistent staged state (the non-finite watchdog) — and, under XCTest, wherever suites read targets back
+(`RenderTargetBudget.cpuReadableTargets`; `UZUME_PRIVATE_TARGETS=1` forces production storage in tests). No
+target qualifies for `.memoryless`: every one is sampled in a later pass.
+
+**Display changes: drain → release → allocate (`RenderPipeline+Resize`).** Metal frees a texture only once every
+command buffer that references it completes, so release means nothing without a drain. `drawableSizeWillChange`
+only records the size; the render loop keeps rendering at the committed size (stretched into the new drawable)
+until the size has held for `resizeCoalescingWindow` (150 ms) — the fullscreen animation and a TV handshake each
+send bursts — then commits once: wait for the last committed frame, drop every subsystem's old set, charge the
+pool, allocate. Ray-march and post-process targets are left to the frame's lazy allocators, which size them at the
+BUG-101 march scale. The first size commits at once. Every committed resize logs `RENDER_RESIZE` (callback count,
+drain+release+allocate ms, budget).
+
+**Governor stability inputs (`FrameBudgetManager+Stability`).** Backstops — GPU timing includes pre-emption by
+other processes and lands 3–5 frames late with three in flight; bounded shader loops
+(`Scripts/check_shader_loop_bounds.sh`) are the prevention, because one multi-second command buffer freezes the
+whole desktop through WindowServer. Two frames over 50 ms GPU → the lowest rung, held ≥ 5 s, then the ordinary
+180-frame recovery one rung at a time. A command buffer completing with `.error` (frames are made with
+`errorOptions = .encoderExecutionStatus`, so the failing encoder is named) → lowest rung; three inside 10 s → the
+light fallback scene. Thermal `fair` → one rung, `serious` → another + 30 fps, `critical` → fallback; Low Power →
+D-167's no-bloom floor + 30 fps. Memory pressure (the app's `DispatchSource.makeMemoryPressureSource`) `warning` →
+lowest rung, scenes keep playing (Matt, 2026-10-22: warnings are routine on 8–16 GB Macs); `critical` → the
+light fallback scene and the budget capped at the live set (no new scene larger than the current one; no cap
+before a scene is live). Every forced step is logged `GOVERNOR_FORCED` with its cause.
+
 **Key subsystems:**
 
 - `FrameBudgetManager` — Pure-state frame timing governor attached to `RenderPipeline`. Receives one `FrameTimingSample` per completed frame (via `commandBuffer.addCompletedHandler` → `@MainActor` hop) and walks a `QualityLevel` ladder: `full → noBloom → reducedRayMarch → reducedParticles → reducedMesh`. Downshifts after 3 consecutive overruns; upshifts after 180 consecutive sub-budget frames (asymmetric hysteresis). Per-tier configuration: tier1 (M1/M2) 14ms target, tier2 (M3+) 16ms target. `reset()` is called on every preset change so the governor starts optimistic. Disabled when `QualityCeiling` is `.ultra`. (D-057)
