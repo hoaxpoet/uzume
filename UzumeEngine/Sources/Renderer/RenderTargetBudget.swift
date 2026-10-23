@@ -85,11 +85,18 @@ public final class RenderTargetBudget: @unchecked Sendable {
 
     // MARK: Ceiling
 
-    /// The largest render set any certified scene needs at 3840×2160 with no BR.6b cap (what an
-    /// M3/M4 allocates): targets + drawable pool + MetalFX reservation. Measured by the VQ.0
-    /// inventory (`docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`, Release, M2 Pro, 2026-10-22): Ferrofluid
-    /// Ocean, 354.9 MB. Re-measure when a scene adds a size-scaled target. 0 = not measured (memory caps only).
-    public static let largestScene4KSetBytes = 372_113_408
+    /// The largest render set any certified scene needs at 3840×2160 with no BR.6b cap (what an M3/M4
+    /// allocates), targets + drawable pool: Ferrofluid Ocean / Lumen Mosaic, 354.9 MB (VQ.0 inventory,
+    /// `docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`, Release, M2 Pro, 2026-10-22).
+    public static let largestCertified4KSetBytes = 372_113_408
+
+    /// A reconstructing scene at 4K out (MFX.2, internal 2560×1440 → 3840×2160): the MetalFX temporal scaler's own
+    /// reservation (322–356 MB measured on the M2 Pro) + its targets + the drawable pool and canvas = 572 MiB. No
+    /// certified scene reconstructs yet; EFB.4's Energetic Flyby is the first consumer.
+    public static let reconstructing4KSetBytes = 599_785_472
+
+    /// The set the ceiling is derived from: the larger of the two. Re-measure when a scene adds a size-scaled target.
+    public static let largestScene4KSetBytes = max(largestCertified4KSetBytes, reconstructing4KSetBytes)
 
     /// The ceiling for a Mac: the largest scene's 4K set × 1.5, capped at
     /// `min(15 % of physical memory, 25 % of recommendedMaxWorkingSetSize)` (D-264).

@@ -252,11 +252,15 @@ struct DrainReleaseAllocateTests {
         rig.resize(vq0HD)
         frame(vq0HD)
         let drift = abs(rig.ctx.device.currentAllocatedSize - baselineMetal)
-        #expect(drift <= 16 << 20, "Metal allocation back at baseline within 16 MB (drift \(drift >> 20) MB)")
-        #expect(rig.budget.totalBytes == baselineCharged)
+        #expect(rig.budget.totalBytes == baselineCharged, "the budget's own total is exact in any run")
         #expect(rig.budget.peakTotalBytes <= 2 * steady4K,
                 "charged peak \(rig.budget.peakTotalBytes >> 20) MB vs 4K set \(steady4K >> 20) MB")
-        #expect(metalPeak - baselineMetal <= 2 * (steady4K - baselineCharged) + (16 << 20))
+        // `currentAllocatedSize` counts the whole process, so in the parallel suite other tests move it (216 MB
+        // seen); the device-wide gate holds only in an isolated run (SOAK_TESTS=1, the soak recipe).
+        if ProcessInfo.processInfo.environment["SOAK_TESTS"] == "1" {
+            #expect(drift <= 16 << 20, "Metal allocation back at baseline within 16 MB (drift \(drift >> 20) MB)")
+            #expect(metalPeak - baselineMetal <= 2 * (steady4K - baselineCharged) + (16 << 20))
+        }
         #expect(rig.chargedEqualsLive)
         #expect(Set(rig.budget.liveAllocations.map(\.owner)) == ["feedback", "mvWarp", "rayMarch", "staged"])
         print("VQ0 toggle: baseline \(baselineMetal >> 20) MB, 4K set \(steady4K >> 20) MB charged, "

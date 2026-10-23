@@ -14,7 +14,10 @@ drawable pool (3 drawables, estimated with `heapTextureSizeAndAlign`): 24.3 MB a
 at 4K — the floor every scene shows.
 
 **Ceiling (D-264).** Largest set at 4K uncapped: **Ferrofluid Ocean and Lumen Mosaic, 354.9 MB** →
-`largestScene4KSetBytes = 372,113,408`; ceiling = min(× 1.5 = 532 MiB, 15 % RAM, 25 % working set) = **532 MiB on
+`largestCertified4KSetBytes = 372,113,408`. **A reconstructing scene is larger:** MFX.2's path at 4K out (internal
+2560×1440) holds 572 MiB — the MetalFX temporal scaler alone 322–356 MB (its `currentAllocatedSize` delta), plus its
+targets and the pool (`reconstructing4KSetBytes`; no certified scene reconstructs yet — EFB.4 is first). Ceiling =
+min(572 × 1.5 = 858 MiB, 15 % RAM, 25 % working set) = **858 MiB on
 every Mac from 8 GB** (15 % RAM / 25 % working set: 8 GB 1,229 / ~1,370–1,520 MiB; 16 GB 2,458 / 3,031 MiB;
 36 GB 5,530 / ~6,820 MiB — working sets other than this Mac's estimated at 0.67–0.74 × RAM; the measured set binds
 everywhere).

@@ -7,6 +7,9 @@ cap in force (tier 1: scenes render at a 2560×1440 canvas) and toggled to 1920�
 track *Dance Yrself Clean* from the stem cache, looping. Footprint sampled by the script every 2 s; the app writes one
 row per minute. Switch frames = the 1.5 s after a scene switch or a committed resize, reported apart.
 
+Both soaks ran with the 532 MiB ceiling the certified scenes alone give. The final ceiling is 858 MiB (it also
+covers a reconstructing scene, D-264), so the soaks tested the stricter budget.
+
 ## 60-minute 4K soak — all gates met
 
 | Gate | Result |
