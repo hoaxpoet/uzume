@@ -55,12 +55,6 @@ final class ToastManager: ObservableObject {
         }
     }
 
-    /// EFB.4 review key: name the version now on screen, replacing the previous press's label.
-    func showReconstructionReviewLabel(_ label: String) {
-        dismissByCondition("debug.reconstruction.review")
-        enqueue(UzumeToast(severity: .info, copy: label, duration: 4, conditionID: "debug.reconstruction.review"))
-    }
-
     /// Manually dismiss a toast by ID.
     func dismiss(id: UUID) {
         dismissTasks[id]?.cancel()

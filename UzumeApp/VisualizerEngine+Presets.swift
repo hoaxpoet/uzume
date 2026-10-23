@@ -210,8 +210,8 @@ extension VisualizerEngine {
         // W0.2: metadata-owned internal scale for scalable direct presets. Ray-march
         // consumes the same sidecar value when its pipeline is built below.
         pipeline.setDirectRenderScale(desc.directRenderScale)
-        // MFX.2: nil for every scene without `temporal_reconstruction` (EFB.4: or the review switch's choice).
-        applyTemporalReconstruction(preset)
+        // MFX.2: nil for every scene without `temporal_reconstruction`.
+        pipeline.setTemporalReconstruction(desc.temporalReconstruction, pipeline: preset.temporalPipelineState)
         pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
         stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
@@ -897,41 +897,6 @@ extension VisualizerEngine {
         }
     }
 
-    /// MFX.2 / EFB.4: the scene's reconstruction, or — developer builds — the review switch's mode. `native`
-    /// lifts the tier-1 cap so the scene renders at the drawable's full size (heavy); every other mode and
-    /// scene puts the cap back if native lifted it. The RENDER_TARGET line in the session log records the
-    /// drawable and internal sizes of each mode.
-    func applyTemporalReconstruction(_ preset: PresetLoader.LoadedPreset) {
-        let spec = preset.descriptor.temporalReconstruction
-        let mode = spec != nil && BuildFlavor.current.showsDeveloperDiagnostics ? reconstructionReviewMode : .recon
-        pipeline.setTemporalReconstruction(mode.spec(from: spec), pipeline: preset.temporalPipelineState)
-        if spec != nil, mode == .native {
-            pipeline.setRenderPixelCap(nil)
-            reconstructionReviewLiftedCap = true
-        } else if reconstructionReviewLiftedCap {
-            let tier1 = VisualizerEngine.detectDeviceTier(device: context.device) == .tier1
-            let cap = MainActor.assumeIsolated { PixelModeMTKView.tier1MaxPixels }   // applyPreset is main-only
-            pipeline.setRenderPixelCap(tier1 ? cap : nil)
-            reconstructionReviewLiftedCap = false
-        }
-        if spec != nil { logger.info("EFB.4 review: '\(preset.descriptor.name)' mode=\(mode.rawValue)") }
-    }
-
-    /// EFB.4 developer key: stretch → reconstructed → reconstructed at half scale → native → … on the scene on screen.
-    /// Returns what to show the viewer: the mode now in force, and whether the scene on screen uses it.
-    @discardableResult
-    func cycleReconstructionReviewMode() -> String {
-        let modes = ReconstructionReviewMode.allCases
-        reconstructionReviewMode = modes[((modes.firstIndex(of: reconstructionReviewMode) ?? 0) + 1) % modes.count]
-        let label = reconstructionReviewMode.label
-        guard let preset = presetLoader.currentPreset, preset.descriptor.temporalReconstruction != nil else {
-            logger.info("EFB.4 review: mode=\(self.reconstructionReviewMode.rawValue) (applies to the next reconstructing scene)")
-            return "\(label) — applies when Energetic Flyby plays"
-        }
-        applyTemporalReconstruction(preset)
-        return label
-    }
-
     private func bindEnergeticFlybyRuntime(_ desc: PresetDescriptor) {
         // EFB.1: the Nimbus pattern — the music lives in `EnergeticFlybyState` (slot 6), ticked once per
         // frame before the draw.
@@ -1083,52 +1048,5 @@ extension VisualizerEngine {
         presetCompletionAdvanceCount += 1
         logger.info("Orchestrator: preset completion honoured — advancing segment")
         nextPreset()
-    }
-}
-
-// MARK: - ReconstructionReviewMode (EFB.4)
-
-/// The developer comparison switch for a reconstructing scene (EFB.4, Matt's side-by-side on the 4K display).
-enum ReconstructionReviewMode: String, CaseIterable, Sendable {
-    /// Today's path: rendered at the tier-1 cap (≈2560×1440) and stretched bilinearly.
-    case off
-    /// MetalFX temporal reconstruction to the drawable (the sidecar's opt-in: 2/3 scale, ≈2560×1440 on 4K).
-    case recon
-    /// The same at half scale (1920×1080 on 4K): the scale that holds 30 fps on an M2 Pro at 4K (EFB.4 timing).
-    case recon50
-    /// True native: the plain render at the drawable's full size (heavy).
-    case native
-
-    /// What the viewer is looking at, numbered in the order the key cycles (EFB.4 review toast).
-    var label: String {
-        switch self {
-        case .off: return "1 of 4 · Today: stretched"
-        case .recon: return "2 of 4 · Reconstructed"
-        case .recon50: return "3 of 4 · Reconstructed, half size"
-        case .native: return "4 of 4 · Native (heavy)"
-        }
-    }
-
-    /// `UZUME_EFB_RECON`; anything else (or unset) is `recon`.
-    init(environment value: String?) {
-        self = value.flatMap(Self.init(rawValue:)) ?? .recon
-    }
-
-    /// The reconstruction this mode applies to a scene that declares `spec`; nil = the plain path.
-    func spec(from spec: TemporalReconstructionSpec?) -> TemporalReconstructionSpec? {
-        guard let spec else { return nil }
-        switch self {
-        case .recon: return spec
-        case .recon50:
-            return TemporalReconstructionSpec(
-                internalScale: 0.5,
-                motionVectors: spec.motionVectors,
-                reactiveMask: spec.reactiveMask,
-                fieldOfViewDegrees: spec.fieldOfViewDegrees,
-                nearPlane: spec.nearPlane,
-                farPlane: spec.farPlane
-            )
-        case .off, .native: return nil
-        }
     }
 }
