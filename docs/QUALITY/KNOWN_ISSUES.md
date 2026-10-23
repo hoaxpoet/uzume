@@ -1462,10 +1462,10 @@ cheaper design would change it. **MFX.2 (2026-10-21, D-263):** the cap now lives
 2560×1440 into a canvas the app stretches bilinearly into a drawable at the display's pixel size) — meant to look the same (bilinear; not yet compared live),
 the stretch moved in-app. MetalFX temporal reconstruction now exists for this scene to opt into (EFB.4), but on its
 proof scene it measured softer than the stretch in forward flight; EFB.4's TV side-by-side decides.
-**EFB.4 (2026-10-23):** built and opted in on branch `claude/efb-4-prompt-2ca8b4` (not merged), pending Matt's
-side-by-side. Reconstruction from 2560×1440 removes the edge stair-steps but leaves the perforation texture about as
-soft as the stretch, and on the M2 Pro it misses 30 fps on 37.9 % of frames at 4K (p95 39.3 ms); from 1920×1080 it
-holds 30 fps (p95 25.7 ms). Design doc §7.
+**EFB.4 (2026-10-23): reconstruction tried and not adopted.** Matt, on the 4K monitor: the stretch *"looks good"*;
+reconstruction *"looks sharper but is also pixelated in places"*, and from 2560×1440 it misses 30 fps on 37.9 % of
+frames on the M2 Pro (p95 39.3 ms; from 1920×1080 it holds 30 fps but is softer). The limit stands; the next lever
+is frame generation (VQ.4a). Design doc §7, D-263 amendment.
 
 ### BUG-036 — Heap allocations on the real-time Core Audio thread at three sites (FFTProcessor, AudioBuffer.latestSamples, SessionRecorder raw tap) (2026-06-09)
 

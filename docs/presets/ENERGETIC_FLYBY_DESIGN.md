@@ -175,7 +175,13 @@ reconstructor only:
 - **Flash:** identical to the certified path on the worst-case train (0.00/s, regional 3.00/s, red 1.00/s).
 - No frame interpolation (MFX.2 skipped it, amendment A5 → VQ.4a): 30 fps presented.
 
-Matt decides on the 4K display with the developer `e` key (stretch → reconstructed → reconstructed ½ → native).
+**Outcome (Matt, 2026-10-23, on the 4K monitor with a developer key cycling the four versions):** *"the original
+stretched looks good, the reconstructed looks sharper but is also pixelated in places and your stats are not
+great"* → **option B: keep today's stretch.** The sidecar does not opt in; the scene looks and costs exactly as at
+EFB.3. The shader keeps writing depth and motion (zero cost on the plain path, byte-identical output) because VQ.4a
+frame interpolation and VQ.4b motion blur name this scene as their consumer; `EnergeticFlybyReconstructionTests`
+opts a temp copy of the sidecar in to keep testing them. The comparison key was removed. Next lever for the 4K
+image here is frame generation (VQ.4a), not upscaling.
 
 ## 8. Licence (D-252)
 
@@ -199,7 +205,7 @@ the second NC-SA scene after Aurora Veil, inside D-252's cap of about three. Obl
 | EFB.1 | Faithful port + `EnergeticFlybyState` music drivers + photosensitivity fix + wiring (uncertified) + harness + Release timing | Stop for Matt's live look (local beta playlist + one streaming pass) |
 | EFB.2 | M7 rounds (two maximum, the PHYS escalation rule) | Matt's M7 |
 | EFB.3 | Certification: `audio_routes` green, flash-safe measured, frame budget, soak, NEW_PRESET_CHECKLIST §4 | Matt's sign-off |
-| EFB.4 | Temporal reconstruction (MFX.2): jitter, depth, analytic motion, reactive mask, sidecar opt-in, developer comparison switch, Release evidence (§7) | Matt's side-by-side on the 4K display |
+| EFB.4 | Temporal reconstruction (MFX.2): jitter, depth, analytic motion, reactive mask, Release evidence (§7) | ✅ Matt's side-by-side, 2026-10-23: **keep the stretch** (option B); motion vectors kept for VQ.4a/4b |
 
 ## 10. Decisions taken in the design seat (defaults; Matt may override)
 
