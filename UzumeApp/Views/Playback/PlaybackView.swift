@@ -391,6 +391,9 @@ struct PlaybackView: View {
             },
             onIncreaseAudioOutputLatency: { [weak engine] in
                 engine?.adjustAudioOutputLatency(ms: +5)
+            },
+            onCycleReconstructionReview: { [weak engine] in
+                engine?.cycleReconstructionReviewMode()
             }
         )
     }

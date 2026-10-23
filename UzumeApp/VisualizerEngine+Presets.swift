@@ -210,8 +210,8 @@ extension VisualizerEngine {
         // W0.2: metadata-owned internal scale for scalable direct presets. Ray-march
         // consumes the same sidecar value when its pipeline is built below.
         pipeline.setDirectRenderScale(desc.directRenderScale)
-        // MFX.2: nil for every scene without `temporal_reconstruction`.
-        pipeline.setTemporalReconstruction(desc.temporalReconstruction, pipeline: preset.temporalPipelineState)
+        // MFX.2: nil for every scene without `temporal_reconstruction` (EFB.4: or the review switch's choice).
+        applyTemporalReconstruction(preset)
         pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
         stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
@@ -897,6 +897,37 @@ extension VisualizerEngine {
         }
     }
 
+    /// MFX.2 / EFB.4: the scene's reconstruction, or — developer builds — the review switch's mode. `native`
+    /// lifts the tier-1 cap so the scene renders at the drawable's full size (heavy); every other mode and
+    /// scene puts the cap back if native lifted it. The RENDER_TARGET line in the session log records the
+    /// drawable and internal sizes of each mode.
+    func applyTemporalReconstruction(_ preset: PresetLoader.LoadedPreset) {
+        let spec = preset.descriptor.temporalReconstruction
+        let mode = spec != nil && BuildFlavor.current.showsDeveloperDiagnostics ? reconstructionReviewMode : .recon
+        pipeline.setTemporalReconstruction(mode == .recon ? spec : nil, pipeline: preset.temporalPipelineState)
+        if spec != nil, mode == .native {
+            pipeline.setRenderPixelCap(nil)
+            reconstructionReviewLiftedCap = true
+        } else if reconstructionReviewLiftedCap {
+            let tier1 = VisualizerEngine.detectDeviceTier(device: context.device) == .tier1
+            let cap = MainActor.assumeIsolated { PixelModeMTKView.tier1MaxPixels }   // applyPreset is main-only
+            pipeline.setRenderPixelCap(tier1 ? cap : nil)
+            reconstructionReviewLiftedCap = false
+        }
+        if spec != nil { logger.info("EFB.4 review: '\(preset.descriptor.name)' mode=\(mode.rawValue)") }
+    }
+
+    /// EFB.4 developer key: today's stretch → reconstructed → true native → … on the scene on screen.
+    func cycleReconstructionReviewMode() {
+        let modes = ReconstructionReviewMode.allCases
+        reconstructionReviewMode = modes[((modes.firstIndex(of: reconstructionReviewMode) ?? 0) + 1) % modes.count]
+        guard let preset = presetLoader.currentPreset, preset.descriptor.temporalReconstruction != nil else {
+            logger.info("EFB.4 review: mode=\(self.reconstructionReviewMode.rawValue) (applies to the next reconstructing scene)")
+            return
+        }
+        applyTemporalReconstruction(preset)
+    }
+
     private func bindEnergeticFlybyRuntime(_ desc: PresetDescriptor) {
         // EFB.1: the Nimbus pattern — the music lives in `EnergeticFlybyState` (slot 6), ticked once per
         // frame before the draw.
@@ -1048,5 +1079,22 @@ extension VisualizerEngine {
         presetCompletionAdvanceCount += 1
         logger.info("Orchestrator: preset completion honoured — advancing segment")
         nextPreset()
+    }
+}
+
+// MARK: - ReconstructionReviewMode (EFB.4)
+
+/// The developer comparison switch for a reconstructing scene (EFB.4, Matt's side-by-side on the 4K display).
+enum ReconstructionReviewMode: String, CaseIterable, Sendable {
+    /// Today's path: rendered at the tier-1 cap (≈2560×1440) and stretched bilinearly.
+    case off
+    /// MetalFX temporal reconstruction to the drawable (the sidecar's opt-in).
+    case recon
+    /// True native: the plain render at the drawable's full size (heavy).
+    case native
+
+    /// `UZUME_EFB_RECON`; anything else (or unset) is `recon`.
+    init(environment value: String?) {
+        self = value.flatMap(Self.init(rawValue:)) ?? .recon
     }
 }

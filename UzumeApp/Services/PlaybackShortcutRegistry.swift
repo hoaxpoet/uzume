@@ -104,6 +104,7 @@ final class PlaybackShortcutRegistry {
         onCycleBarPhaseOffset: (@MainActor () -> Void)? = nil,
         onDecreaseAudioOutputLatency: (@MainActor () -> Void)? = nil,
         onIncreaseAudioOutputLatency: (@MainActor () -> Void)? = nil,
+        onCycleReconstructionReview: (@MainActor () -> Void)? = nil,
         flavor: BuildFlavor = .current
     ) {
         var all = Self.buildShortcuts(
@@ -171,6 +172,16 @@ final class PlaybackShortcutRegistry {
                 key: ".",
                 modifiers: [],
                 label: "Audio output latency +5 ms (BUG-007.6)",
+                category: .developer,
+                action: fn
+            ))
+        }
+        if let fn = onCycleReconstructionReview {
+            all.append(PlaybackShortcut(
+                id: "cycleReconstructionReview",
+                key: "e",
+                modifiers: [],
+                label: "Energetic Flyby: stretched / reconstructed / native (EFB.4 review)",
                 category: .developer,
                 action: fn
             ))

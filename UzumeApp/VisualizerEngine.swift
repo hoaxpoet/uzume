@@ -260,6 +260,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// active (slot 6 + `setMeshPresetTick`, the Nimbus pattern), nil otherwise.
     var energeticFlybyState: EnergeticFlybyState?
 
+    /// EFB.4 review tool (developer builds only): how a reconstructing scene reaches the screen —
+    /// `UZUME_EFB_RECON=off|recon|native`, cycled by the `e` developer key. Public builds always take the
+    /// sidecar's reconstruction.
+    var reconstructionReviewMode = ReconstructionReviewMode(
+        environment: ProcessInfo.processInfo.environment["UZUME_EFB_RECON"])
+    /// True while the review's native mode has lifted the tier-1 render cap; restored when it ends.
+    var reconstructionReviewLiftedCap = false
+
     /// Skein painter integrators + onset-burst ring + per-track seed — allocated
     /// when the Skein preset is active, nil otherwise. Tick closure and
     /// skeinBuffer are wired via `setMeshPresetTick` / `setDirectPresetFragmentBuffer`
