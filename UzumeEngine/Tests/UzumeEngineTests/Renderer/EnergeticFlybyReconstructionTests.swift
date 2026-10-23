@@ -1,5 +1,9 @@
 // EnergeticFlybyReconstructionTests — EFB.4: Energetic Flyby on MFX.2's temporal reconstruction.
 //
+// Matt kept the stretch (EFB.4, 2026-10-23: option B), so the shipped sidecar does not opt in; the shader still
+// writes the MRT contract (jitter, depth, motion, reactive) for VQ.4a frame interpolation and VQ.4b motion blur.
+// The rig opts its own temp copy of the sidecar in (`reconstructionBlock`), so these tests keep guarding it.
+//
 // The scene is loaded through `PresetLoader` (its own shader + sidecar), `EnergeticFlybyState` is ticked
 // per frame and bound at slot 6, and reconstructed frames go through `RenderPipeline.encodeTemporalReconstruction`
 // — the production encode. "Today" is the plain pipeline at the tier-1 cap stretched bilinearly (the A4 canvas),
@@ -44,6 +48,8 @@ final class EFBReconRig {
         src.appendPathComponent("Sources/Presets/Shaders")
         let shader = try String(contentsOf: src.appendingPathComponent("EnergeticFlyby.metal"), encoding: .utf8)
         var sidecar = try String(contentsOf: src.appendingPathComponent("EnergeticFlyby.json"), encoding: .utf8)
+        #expect(!sidecar.contains("temporal_reconstruction"), "EFB.4 option B: the shipped scene does not opt in")
+        sidecar = sidecar.replacingOccurrences(of: "  \"reads_stems\"", with: Self.reconstructionBlock + "  \"reads_stems\"")
         if !reactiveMask { sidecar = sidecar.replacingOccurrences(of: "\"reactive_mask\": true", with: "\"reactive_mask\": false") }
         if let internalScale {
             sidecar = sidecar.replacingOccurrences(of: "\"internal_scale\": 0.6666667", with: "\"internal_scale\": \(internalScale)")
@@ -67,6 +73,15 @@ final class EFBReconRig {
         self.outW = outW
         self.outH = outH
     }
+
+    /// The opt-in EFB.4 built and measured (not shipped): 2/3 scale, analytic motion, reactive mask, the shader's camera.
+    static let reconstructionBlock = """
+      "temporal_reconstruction": {
+        "motion_vectors": "analytic", "internal_scale": 0.6666667, "reactive_mask": true,
+        "fov": 90, "near": 0.05, "far": 20
+      },
+
+    """
 
     /// Overwrite the state the shader reads (after `tick`, or instead of it).
     func force(_ gpu: EnergeticFlybyStateGPU) {
