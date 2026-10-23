@@ -27,7 +27,7 @@ private let logger = Logger(subsystem: "io.uzume.presets", category: "EnergeticF
 
 // MARK: - GPU struct
 
-/// 48 bytes; must match `EnergeticFlybyStateGPU` in EnergeticFlyby.metal byte-for-byte.
+/// 64 bytes; must match `EnergeticFlybyStateGPU` in EnergeticFlyby.metal byte-for-byte.
 struct EnergeticFlybyStateGPU: Equatable {
     var time: Float = 0
     var travel: Float = 0
@@ -38,7 +38,15 @@ struct EnergeticFlybyStateGPU: Equatable {
     var hue: Float = 0
     var roll: Float = 0
     var faithful: Float = 0
-    var pad0: Float = 0, pad1: Float = 0, pad2: Float = 0
+    // EFB.4: the previous frame's values — the motion vectors and the reactive mask (temporal reconstruction)
+    var prevTime: Float = 0
+    var prevTravel: Float = 0
+    var prevCamT: Float = 0
+    var prevSpin: Float = 0
+    var prevRoll: Float = 0
+    var prevHue: Float = 0
+    /// Test only: 1 = the shader holds every surface static (camera-only motion, the comparison arm).
+    var cameraOnlyMotion: Float = 0
 }
 
 // MARK: - EnergeticFlybyState
@@ -132,7 +140,14 @@ public final class EnergeticFlybyState: @unchecked Sendable {
         lock.withLock {
             let dt = min(max(deltaTime, 0.001), 0.1)   // stale first frame / stall (Witchlight precedent)
             clock += Double(dt)
+            let last = gpu
             if faithful { tickFaithful() } else { tickMusic(dt, features) }
+            gpu.prevTime = last.time
+            gpu.prevTravel = last.travel
+            gpu.prevCamT = last.camT
+            gpu.prevSpin = last.spin
+            gpu.prevRoll = last.roll
+            gpu.prevHue = last.hue
             publish()
         }
     }

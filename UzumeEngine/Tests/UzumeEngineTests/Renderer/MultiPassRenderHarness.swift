@@ -1460,6 +1460,8 @@ struct MultiPassRenderHarness {
             if let nebula { enc.setFragmentBuffer(nebula.bandBuffer, offset: 0, index: 6) }
             if let waveform { enc.setFragmentBuffer(waveform.barBuffer, offset: 0, index: 6) }
             if let flyby { enc.setFragmentBuffer(flyby.stateBuffer, offset: 0, index: 6) }
+            var temporalFrame = DirectTemporalFrame()   // EFB.4: zeroed, as production binds it on the plain path
+            enc.setFragmentBytes(&temporalFrame, length: MemoryLayout<DirectTemporalFrame>.size, index: 9)
             textures.bindTextures(to: enc)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             enc.endEncoding()

@@ -300,6 +300,7 @@ struct PhotosensitivityCertificationTests {
                 enc.setFragmentBuffer(slot, offset: 0, index: 6)
             }
             enc.setFragmentBuffer(slot, offset: 0, index: 7)
+            enc.setFragmentBuffer(slot, offset: 0, index: 9)  // MFX.2 TemporalFrame, zeroed (a reconstructing scene's fragment reads it; production always binds it)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             enc.endEncoding()
             cmdBuf.commit()

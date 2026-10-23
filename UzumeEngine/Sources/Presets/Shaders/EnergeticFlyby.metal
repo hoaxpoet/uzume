@@ -42,9 +42,19 @@
 // this adaptation is distributed under the same CC BY-NC-SA 3.0 licence; it is NOT covered by
 // Uzume's MIT licence and may not be used commercially. See docs/CREDITS.md and D-252.
 
+// TEMPORAL RECONSTRUCTION (EFB.4, MFX.2 contract — SHADER_CRAFT §17 `temporal_reconstruction`). Plumbing
+// only; the colour is computed exactly as before (FA #65), and with jitter zero it is byte-identical:
+//   • jitter: the ray goes through `in.uv + jitter / render_size` (buffer 9; zeroed on every other path)
+//   • depth: Metal NDC of the surface the pixel shows, from the declared camera (90° fov, near .05, far 20)
+//   • motion: each surface point carried back to the previous frame in closed form — the tunnel point through
+//     the inverse of Kali's domain warp at the previous `time`, a sphere point through the previous spin and
+//     cluster position — and projected with the previous camera (path, roll, view sway). No hit: the ray's
+//     direction, rotation only
+//   • reactive: the glow whose colour the downbeat turns, while it turns, and the rods' own glow
+
 // MARK: - State (EnergeticFlybyState.swift, fragment buffer 6)
 
-/// 48 bytes; must match `EnergeticFlybyStateGPU` in EnergeticFlybyState.swift byte-for-byte.
+/// 64 bytes; must match `EnergeticFlybyStateGPU` in EnergeticFlybyState.swift byte-for-byte.
 struct EnergeticFlybyStateGPU {
     float time;       // Kali's `time`: tunnel twist + breathing, fractal texture, view sway
     float travel;     // flight position on path(): the sphere cluster and the look-at
@@ -55,7 +65,9 @@ struct EnergeticFlybyStateGPU {
     float hue;        // glow colour turn, radians (downbeat)
     float roll;       // camera bank, radians (every second downbeat)
     float faithful;   // 1 = Kali's glow + no white-out fix (reference comparison only)
-    float pad0, pad1, pad2;
+    // EFB.4: the previous frame's values, for the motion vectors and the reactive mask
+    float prevTime, prevTravel, prevCamT, prevSpin, prevRoll, prevHue;
+    float cameraOnlyMotion;   // test only: 1 = every surface held static (the comparison the motion test runs)
 };
 
 // MARK: - Kali's globals
@@ -76,6 +88,20 @@ constant float kEFBFarStep = 2.;
 constant float2 kEFBNear = float2(.01, .05);
 /// EFB (white-out fix): ray length over which rod glow fades in while a rod is at the camera.
 constant float kEFBCamFade = .3;
+/// EFB.4: the camera the depth is written with (sidecar `fov` / `near` / `far`). Kali's ray is
+/// (uv, .5) with uv.y in ±.5: a 90° vertical field of view.
+constant float kEFBNearZ = .05;
+constant float kEFBFarZ = 20.;
+/// EFB.4 reactive mask: a glow colour turn of this many radians in one frame ignores history fully.
+constant float kEFBHueReactive = .05;
+
+/// EFB.4: where the march ended and what it saw, for depth and motion (never read by the colour).
+struct EFBHit {
+    float3 p;        // the surface the pixel shows: the mirror point after a reflection
+    float surface;   // 1 = a surface (Kali's `d < .01`), 0 = no hit
+    float rod;       // share of the final glow that is the rods' own (above the tunnel floor)
+    float glow;      // share of the pixel's light that is the glow (the part the colour turn rotates)
+};
 
 // MARK: - Kali's functions (verbatim)
 
@@ -145,7 +171,7 @@ static float efb_de(float3 p, thread EFBMarch& k) {
 }
 
 static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
-                        constant EnergeticFlybyStateGPU& st) {
+                        constant EnergeticFlybyStateGPU& st, thread EFBHit& h) {
     float time = k.time;
     float2 uv = float2(atan2(dir.x, dir.y) + time * .5, length(dir.xy) + sin(time * .2));
     float3 col = efb_fractal(uv, time);
@@ -166,6 +192,7 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         if (d < kEFBDet && ref == 0. && k.hit == 1.) {
             float2 e = float2(0., .1);
             float3 n = normalize(float3(efb_de(p + e.yxx, k), efb_de(p + e.xyx, k), efb_de(p + e.xxy, k)) - efb_de(p, k));
+            h.p = p;   // EFB.4: the mirror is the surface this pixel shows
             p -= dir * d * 2.;
             dir = reflect(dir, n);
             ref = 1.;
@@ -187,6 +214,10 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
     }
     // EFB: Kali scaled the whole glow by (.5 + so*1.5), a per-frame strobe. The shipped glow is steady at
     // st.glowBase (energy-driven, 1.25 at a typical passage — his average); the downbeat turns its colour.
+    // EFB.4: what the march saw, for depth and motion (the reactive mask reads the rods' share)
+    h.rod = g > li * .15 ? 1. - li * .15 / g : 0.;
+    if (ref == 0.) h.p = p;
+    h.surface = (ref == 1. || d < .01) ? 1. : 0.;
     float glowScale;
     if (st.faithful > .5) {
         g = max(g, li * .15);
@@ -210,6 +241,7 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
     float3 glo = g * .1 * float3(2., 1., 2.) * glowScale * .5;
     glo.rb = glo.rb * efb_rot(dir.y * 1.5 + st.hue);   // EFB: + hue, the downbeat colour turn
     col += glo;
+    h.glow = saturate(dot(max(glo, 0.), 1.) / max(dot(max(col, 0.), 1.), 1e-4));   // EFB.4
     col *= float3(.8, .7, .7);
     col = mix(col, float3(1.), ref * .3);
     return col;
@@ -219,19 +251,87 @@ static inline float3 efb_srgb_to_linear(float3 c) {
     return select(pow((c + 0.055) / 1.055, 2.4), c / 12.92, c <= 0.04045);
 }
 
+// MARK: - Temporal reconstruction (EFB.4)
+
+/// Kali's camera for one frame: the fragment's own setup, as a value (it builds the ray with
+/// `M · normalize((uv · rot(roll), .5)) + sway`).
+struct EFBCamera {
+    float3 from;
+    float3x3 m;      // efb_lookat: orthonormal columns (right, up, forward)
+    float3 sway;     // Kali's view sway, added to the ray after the rotation
+    float roll;
+};
+
+static EFBCamera efb_camera(float travel, float camT, float time, float roll) {
+    EFBCamera c;
+    c.from = efb_path(camT);
+    c.from.x += .2;
+    float3 fw = normalize(efb_path(travel + .5) - c.from);
+    c.m = efb_lookat(fw, float3(fw.x * 2., 1., 0.));
+    float sw = sin(time) * .3;
+    c.sway = float3(sw, 0., sw);
+    c.roll = roll;
+    return c;
+}
+
+/// The render pixel whose ray runs along `v` (world, from the camera; any length). The ray is
+/// `M n + w` with n a unit vector, so `μv − w` must be unit length: one positive root, |w| < 1.
+static float2 efb_project(float3 v, EFBCamera c, float aspect, float2 size) {
+    float vv = max(dot(v, v), 1e-12), vw = dot(v, c.sway), ww = dot(c.sway, c.sway);
+    float mu = (vw + sqrt(max(vw * vw - vv * (ww - 1.), 0.))) / vv;
+    float3 n = transpose(c.m) * (mu * v - c.sway);
+    float2 uv = (n.xy * (.5 / max(n.z, 1e-4))) * efb_rot(-c.roll);   // undo `uv * rot(roll)`
+    return float2((uv.x / aspect + .5) * size.x, (.5 - uv.y) * size.y);
+}
+
+/// Kali's tunnel warp at `time`, applied to x/y (z is unchanged): the domain the shells are fixed in.
+static float2 efb_warp(float3 p, float time) {
+    float2 q = (p.xy - efb_path(p.z).xy) * efb_rot(p.z + time * .5);
+    float s = sin(p.z * .5 + time * .5);
+    return q * (1.3 - s * s * .7);
+}
+
+/// The world point that held tunnel surface point `p` (seen at `time`) at `prevTime`: the inverse warp.
+static float3 efb_tunnel_prev(float3 p, float time, float prevTime) {
+    float s = sin(p.z * .5 + prevTime * .5);
+    float2 q = efb_warp(p, time) / (1.3 - s * s * .7);
+    return float3(efb_path(p.z).xy + q * efb_rot(-(p.z + prevTime * .5)), p.z);
+}
+
+/// Sphere-local point of world `p` (efb_coso's transform), and back for another spin / cluster position.
+static float3 efb_sphere_local(float3 p, float3 sphpos, float spin) {
+    float3 pp = (p - sphpos) * .7;
+    pp.xy = pp.xy * efb_rot(pp.z * 2.);
+    pp.xz = pp.xz * efb_rot(spin * 2.);
+    pp.yz = pp.yz * efb_rot(spin);
+    return pp;
+}
+
+static float3 efb_sphere_world(float3 pp, float3 sphpos, float spin) {
+    pp.yz = pp.yz * efb_rot(-spin);
+    pp.xz = pp.xz * efb_rot(-spin * 2.);
+    pp.xy = pp.xy * efb_rot(-pp.z * 2.);
+    return pp / .7 + sphpos;
+}
+
 // MARK: - Fragment
 
-fragment float4 energetic_flyby_fragment(VertexOut in [[stage_in]],
-                                         constant FeatureVector& features [[buffer(0)]],
-                                         constant EnergeticFlybyStateGPU& st [[buffer(6)]]) {
+fragment TemporalFragmentOutReactive energetic_flyby_fragment(VertexOut in [[stage_in]],
+                                                              constant FeatureVector& features [[buffer(0)]],
+                                                              constant EnergeticFlybyStateGPU& st [[buffer(6)]],
+                                                              constant TemporalFrame& tf [[buffer(9)]]) {
     EFBMarch k;
     k.br = 0.; k.tub = 0.; k.hit = 0.;
     k.pos = float3(0.); k.sphpos = float3(0.);
     k.time = st.time;
     k.spin = st.spin;
 
-    float2 uv = float2(in.uv.x - .5, .5 - in.uv.y);   // Kali: gl_FragCoord/resolution - .5, y up
-    uv.x *= max(features.aspect_ratio, 1e-4);          // Kali: uv /= vec2(res.y/res.x, 1)
+    // EFB.4: the jittered sample point. Zero jitter (every non-reconstructing path) adds exactly 0.
+    float2 jit = tf.render_size.x > 0. ? tf.jitter / tf.render_size : float2(0.);
+    float2 suv = in.uv + jit;
+    float2 uv = float2(suv.x - .5, .5 - suv.y);        // Kali: gl_FragCoord/resolution - .5, y up
+    float aspect = max(features.aspect_ratio, 1e-4);
+    uv.x *= aspect;                                    // Kali: uv /= vec2(res.y/res.x, 1)
     float t = st.travel;                               // EFB: Kali's t = time → the flight position
     float3 from = efb_path(st.camT);                   // EFB: no park on the shipped path (camT == t)
     k.sphpos = efb_path(t + .5);
@@ -240,7 +340,36 @@ fragment float4 energetic_flyby_fragment(VertexOut in [[stage_in]],
     float3 dir = normalize(float3(uv * efb_rot(st.roll), .5));   // EFB: + roll, the bank
     dir = efb_lookat(fw, float3(fw.x * 2., 1., 0.)) * dir;
     dir.xz += sin(k.time) * .3;
-    float3 col = efb_march(from, dir, k, st);
+    EFBHit h;
+    h.p = from; h.surface = 0.; h.rod = 0.; h.glow = 0.;
+    float3 sphpos = k.sphpos;
+    float3 col = efb_march(from, dir, k, st, h);
     col = mix(float3(.5) * length(col), col, .8);
-    return float4(efb_srgb_to_linear(saturate(col)), 1.);
+
+    TemporalFragmentOutReactive o;
+    o.color = float4(efb_srgb_to_linear(saturate(col)), 1.);
+
+    // EFB.4: depth, motion and reactive — only on the reconstruct path (render_size is zero everywhere else).
+    o.depth = 1.;
+    o.motion = float2(0.);
+    o.reactive = 0.;
+    if (tf.render_size.x <= 0.) return o;
+    EFBCamera prev = efb_camera(st.prevTravel, st.prevCamT, st.prevTime, st.prevRoll);
+    float2 size = tf.render_size;
+    float2 s = in.position.xy + tf.jitter;
+    if (h.surface > .5) {
+        EFBMarch kc = k;
+        float dd = efb_de(h.p, kc);
+        float3 pPrev = st.cameraOnlyMotion > .5 ? h.p : kc.tub * .3 <= dd
+            ? efb_tunnel_prev(h.p, st.time, st.prevTime)
+            : efb_sphere_world(efb_sphere_local(h.p, sphpos, st.spin), efb_path(st.prevTravel + .5), st.prevSpin);
+        float z = max(dot(h.p - from, fw), kEFBNearZ);
+        o.depth = saturate(kEFBFarZ * (z - kEFBNearZ) / (z * (kEFBFarZ - kEFBNearZ)));
+        o.motion = efb_project(pPrev - prev.from, prev, aspect, size) - s;
+    } else {
+        o.motion = efb_project(dir, prev, aspect, size) - s;   // a direction: camera rotation only
+    }
+    float turn = saturate(abs(st.hue - st.prevHue) / kEFBHueReactive);
+    o.reactive = h.glow * max(turn, h.rod);
+    return o;
 }

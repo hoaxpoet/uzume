@@ -519,7 +519,8 @@ struct DirectTemporalReconstructionSidecarTests {
         #expect(proof.temporalPipelineState != nil, "opted-in scene gets the MRT pipeline")
         let builtIn = PresetLoader(device: context.device, pixelFormat: context.pixelFormat)
         #expect(!builtIn.presets.isEmpty)
-        #expect(builtIn.presets.allSatisfy { $0.temporalPipelineState == nil },
-                "no shipped scene declares the block, so none gets an MRT pipeline")
+        // EFB.4: Energetic Flyby is the one shipped scene that declares the block (its named consumer).
+        let optedIn = builtIn.presets.filter { $0.temporalPipelineState != nil }.map(\.descriptor.name)
+        #expect(optedIn == ["Energetic Flyby"], "MRT pipelines built for \(optedIn)")
     }
 }
