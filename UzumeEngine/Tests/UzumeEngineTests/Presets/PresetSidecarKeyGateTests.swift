@@ -56,6 +56,11 @@ struct PresetSidecarKeyGateTests {
     /// Adding a row here is a decision, not a formality — it says the mechanism is wired
     /// and waiting, not that nobody checked.
     private static let deliberateZeroAdopterKeys: [String: String] = [
+        "temporal_reconstruction": """
+            MFX.2 built direct-path MetalFX reconstruction and proved it on a test-only scene \
+            (`MFXProofScene`); no shipped scene changes in that increment. Energetic Flyby is the \
+            named consumer and adopts it at EFB.4, where Matt judges it against native 4K.
+            """,
         "natural_cycle_seconds": """
             D-246: Arachne was the only adopter and was removed. The key feeds \
             `PresetMaxDuration`, which is generic (V.7.6.2) and still governs how long any \

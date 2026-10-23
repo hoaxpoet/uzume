@@ -123,6 +123,32 @@ extension PresetLoader {
             int count;
         };
 
+        // MFX.2 — direct-path temporal reconstruction. Matches Swift `DirectTemporalFrame`
+        // (32 bytes) at fragment buffer 9 on the direct path; zeroed for scenes that do not
+        // reconstruct. A scene declaring `temporal_reconstruction` returns `TemporalFragmentOut`
+        // (or `...Reactive`): linear colour, Metal NDC depth (0 = near, 1 = background), and
+        // motion in render pixels as previous position − current position.
+        struct TemporalFrame {
+            float2 jitter;        // render pixels, +x right, +y down: sample at position.xy + jitter
+            float2 render_size;
+            float2 output_size;
+            uint frame_index;
+            uint reset;           // 1 on a frame whose history was discarded
+        };
+
+        struct TemporalFragmentOut {
+            float4 color  [[color(0)]];
+            float  depth  [[color(1)]];
+            float2 motion [[color(2)]];
+        };
+
+        struct TemporalFragmentOutReactive {
+            float4 color    [[color(0)]];
+            float  depth    [[color(1)]];
+            float2 motion   [[color(2)]];
+            float  reactive [[color(3)]];   // 1 = ignore history for this pixel
+        };
+
         // Matches Swift FeedbackParams layout (8 floats = 32 bytes).
         struct FeedbackParams {
             float decay, base_zoom, base_rot;

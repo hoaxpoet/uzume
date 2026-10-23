@@ -144,6 +144,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-260 | Accepted | **Spotify track lists come from on-device screen reading, not the Web API** — the user scrolls the playlist once while Uzume reads Spotify's window (or drops screenshots); no Spotify request, no login; screen-read rows resolve through a verified catalog lookup (SCAN, 2026-09-28) |
 | D-261 | Accepted | **Testers get a Developer ID–notarized DMG; macOS 15+, Apple Silicon only** — direct download, not the Mac App Store (no sandbox); team Plait & Pattern; one-command `Scripts/release.sh`; one permission screen (CLEAN.2.5b, 2026-09-29) |
 | D-262 | Accepted | **The beta-readiness decision set (AUDIT.2, 13 decisions)** — roster called at 27; Volumetric Lithograph ships excluded; Fractal Tree excluded pre-Apple8; tier-1 render cap + Alfvén tier-1 exclusion (no M1 to measure); consent-first problem reports; dead controls hidden; local files need no Screen Recording; Mac-region storefront; the privacy sentence; hard cuts stay; macOS 15+ / Apple silicon recruiting copy; D-113 stays open; nothing deleted without a per-item yes (Matt 2026-09-29) |
+| D-263 | Accepted (capability); adoption is Matt's call at EFB.4 | **MetalFX temporal reconstruction returns, on the direct path, for a named consumer (MFX.2) — reverses D-213's MFX.1 half.** Opt-in sidecar `temporal_reconstruction`; Energetic Flyby is the consumer (EFB.4). Measured on an exact-motion proof scene: crisper than the stretch when the camera holds still, **softer than the stretch in forward flight** (Energetic Flyby's motion); ~40 % cheaper than native 4K. Under Phase VQ: the drawable is fixed at the display's pixel mode and tier-1 scenes render at the cap into an in-app canvas (A4); frame interpolation deferred to VQ.4a (A5). §Rationale below. |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6258,4 +6259,47 @@ refinement is noted.
 13. **No branch, stash or worktree is deleted without Matt's per-item yes** (I19 stays a list).
 
 **Calls made during Phase BR on top of the set** (each recorded where it was made): BR.18 K6a — streaming keeps the preview's energy level for Fireflies and Kagura (option A); BR.20 — Membrane's strike contrast 0.8 (A2) and Waveform's 0.6 s bar fall (A′), BUG-176; BR.14 F14 — closing the window ends the session.
+
+## D-263: MetalFX temporal reconstruction on the direct path (MFX.2) — reverses D-213's MFX.1 half
+
+**Date:** 2026-10-21 · **Increment:** MFX.2 (Phase VQ) · **Status:** Accepted as a capability; whether any scene
+ships on it is Matt's call at EFB.4 · **Reverses:** D-213 for MFX.1 only (RMENV.2/.3 stay deleted).
+
+**Why.** D-213 deleted MFX.1 because it had no consumer. Energetic Flyby is one: p95 ~21 ms at 2560×1440 and ~60 ms at
+native 4K on an M2 Pro, so it ships at 30 fps stretched 1.5× on 4K displays (*"still pixelated on fullscreen"*), and
+Matt wants *"a solution where we can significantly upgrade graphical quality … without as much load on the machine."*
+
+**What was built.** A direct scene opts in with a sidecar block (SHADER_CRAFT §17): its fragment writes linear colour,
+NDC depth and exact analytic motion (previous − current, render pixels) as MRT, casts rays through a Halton(2,3)
+jitter from buffer(9), and `DirectTemporalReconstructor` runs `MTLFXTemporalScaler` into its own output texture, which
+is copied to the drawable. Conventions were measured, not assumed: jitter handed to MetalFX negated, motion scale 1;
+depth convention made no measurable difference. Phase VQ amendments applied: **A4** — the drawable is sized once to
+the display's pixel mode and never resizes on a scene switch; on tier 1 every other scene renders at the BR.6b cap
+into a canvas stretched in-app (D-262 #4's cap kept, its mechanism moved from the window compositor into the engine).
+**A5** — frame interpolation skipped: two presents per frame need a present clock the main-thread MTKView loop lacks,
+and interpolated frames would bypass the recorder the flash analyzer reads (BR.1); it lands with VQ.4a. Offline,
+MetalFX interpolation landed 2.4× closer to the true midpoint than a blend (|Δ| 0.031 vs 0.073), motion gate 0 spikes.
+
+**What it measured** (proof scene: lattice of 1–2 px striped rods + a turning ring; vs a 2×2-supersampled reference,
+gradient energy 1.0 = reference; release GPU on the M2 Pro Mac mini):
+
+| Motion | Reconstructed | Bilinear stretch | MetalFX spatial |
+|---|---|---|---|
+| Camera still, ring turns | **0.69**, \|Δ\| 0.014 | 0.57, \|Δ\| 0.029 | 1.50, \|Δ\| 0.043 |
+| Sideways pan | 0.47, \|Δ\| 0.029 | 0.58, \|Δ\| 0.029 | 1.52 |
+| Forward flight (4K, 104 frames) | **0.46**, \|Δ\| 0.020 | 0.62, \|Δ\| 0.016 | 1.54, \|Δ\| 0.026 |
+
+Native 4K 46.2 / 47.0 ms p50/p95; internal 2560×1440 22.6 / 23.4; MetalFX upscale 5.2 / 5.8; reconstructed total
+27.9 / 29.0 (−40 %). No ghost trail (max 0.07 % of the ring's flat disc). Internal scale 0.67 → 1.0 did not recover
+forward-flight sharpness (0.25 → 0.29 of native), so it is the temporal accumulation, not the upscale ratio.
+
+**Consequence for EFB.4.** The evidence predicts reconstruction will look *softer* than today's stretch in Energetic
+Flyby's flight — Matt rejected soft as firmly as pixelated (*"crisp and clean"*). EFB.4's side-by-side on the TV is
+still the decider (the proof scene is not Kali's fractal), and it should carry a MetalFX spatial column: it held native
+1-sample crispness on the same frames at the stretch's cost class. **Rule:** temporal reconstruction is for scenes whose
+frame does not mostly move at once; for fly-throughs, judge it on the glass before adopting.
+
+**References.** D-201 (frames must share structure), D-213 (deletion this reverses in part), D-262 #4 (tier-1 cap),
+`prompts/MFX.2-prompt.md` (Phase VQ amendments A1–A5), `DirectTemporalReconstructionTests`, sheet
+`/tmp/uzume_visual/mfx2/mfx2_sheet_native_recon_stretch_spatial.png`.
 

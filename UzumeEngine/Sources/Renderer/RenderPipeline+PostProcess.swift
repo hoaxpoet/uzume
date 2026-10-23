@@ -51,7 +51,7 @@ extension RenderPipeline {
         ) else { return }
 
         // Lazy-allocate the chain's textures if drawableSizeWillChange hasn't fired.
-        let size = view.drawableSize
+        let size = renderSize(of: view)
         chain.ensureAllocated(width: Int(size.width), height: Int(size.height))
 
         let noiseTextures = textureManagerLock.withLock { textureManager }

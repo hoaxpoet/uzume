@@ -1,0 +1,260 @@
+// DirectTemporalReconstructor — MetalFX temporal reconstruction for the `direct` path (MFX.2).
+//
+// A direct scene that declares `temporal_reconstruction` renders at `internal_scale × drawable`
+// into colour + depth + motion (MRT, see the preamble's `TemporalFrame` / `TemporalFragmentOut`),
+// with a Halton(2,3) sub-pixel jitter per frame. The temporal scaler accumulates those jittered
+// frames into a drawable-sized image: real sub-pixel detail rebuilt from history, unlike the NB.8
+// bilinear stretch which only interpolates the pixels it has. (Frame interpolation, MFX.2 task 5,
+// was skipped under VQ amendment A5: it needs a present clock; it lands with VQ.4a.)
+//
+// Prior art: MFX.1's `MetalFXTemporalUpscaler` (ray-march G-buffer path, deleted at D-213 with no
+// consumer). This is its direct-path sibling; Energetic Flyby (EFB.4) is the named consumer.
+//
+// Conventions (all checked by `DirectTemporalReconstructionTests`, not assumed):
+//   • jitter is in render pixels, +x right, +y down; the scene samples at `position.xy + jitter`;
+//   • motion is in render pixels: previous position − current position (MetalFX's convention);
+//   • depth is Metal NDC, 0 = near, 1 = background (not reversed).
+
+import Foundation
+import Metal
+import MetalFX
+import os
+import simd
+import Shared
+
+private let logger = Logger(subsystem: "io.uzume.renderer", category: "DirectTemporalReconstructor")
+
+// MARK: - DirectTemporalFrame
+
+/// Per-frame values the reconstruct path binds at fragment `buffer(9)`. Mirrors MSL `TemporalFrame`
+/// in the preamble (32 bytes). Every other direct draw binds it zeroed.
+public struct DirectTemporalFrame: Sendable, Equatable {
+    /// Sub-pixel offset in render pixels (+x right, +y down), each component in −0.5…0.5.
+    public var jitter: SIMD2<Float> = .zero
+    /// Internal render size, pixels.
+    public var renderSize: SIMD2<Float> = .zero
+    /// Reconstructed (drawable) size, pixels.
+    public var outputSize: SIMD2<Float> = .zero
+    /// Frames since the last history reset.
+    public var frameIndex: UInt32 = 0
+    /// 1 on a frame whose history was discarded.
+    public var reset: UInt32 = 0
+
+    public init() {}
+}
+
+// MARK: - DirectTemporalReconstructor
+
+/// Owns the MetalFX temporal scaler for one opted-in direct scene, plus the internal render
+/// targets, the scaler's output texture and the jitter sequence.
+public final class DirectTemporalReconstructor {
+
+    public static let colorFormat = TemporalReconstructionSpec.colorFormat
+    public static let depthFormat = TemporalReconstructionSpec.depthFormat
+    public static let motionFormat = TemporalReconstructionSpec.motionFormat
+    public static let reactiveFormat = TemporalReconstructionSpec.reactiveFormat
+    public static let outputFormat: MTLPixelFormat = .rgba16Float
+
+    /// Jitter cycle length. Apple's guidance is ≥ 8 × (output/input)² phases; 32 covers a 2× upscale.
+    static let jitterPhases: UInt32 = 32
+
+    /// The internal (render-size) targets the scene's MRT fragment writes.
+    public struct Targets {
+        public let color: MTLTexture
+        public let depth: MTLTexture
+        public let motion: MTLTexture
+        public let reactive: MTLTexture?
+    }
+
+    public let spec: TemporalReconstructionSpec
+    private let device: MTLDevice
+
+    public private(set) var targets: Targets?
+    /// The scaler's output: drawable-sized, never the drawable itself (A2).
+    private var output: MTLTexture?
+    private var scaler: MTLFXTemporalScaler?
+
+    private var frameIndex: UInt32 = 0
+    private var needsReset = true
+
+    public private(set) var outputWidth = 0
+    public private(set) var outputHeight = 0
+    public private(set) var renderWidth = 0
+    public private(set) var renderHeight = 0
+
+    /// Diagnostics: a healthy run resets once per preset switch or cut, not per frame.
+    public private(set) var encodeCount = 0
+    public private(set) var resetCount = 0
+
+    public init(device: MTLDevice, spec: TemporalReconstructionSpec) {
+        self.device = device
+        self.spec = spec
+    }
+
+    /// True when this device has the MetalFX temporal scaler.
+    public static func isSupported(device: MTLDevice) -> Bool {
+        MTLFXTemporalScalerDescriptor.supportsDevice(device)
+    }
+
+    /// Discard the history: preset switch, a cut, any jump reprojection cannot explain.
+    public func reset() {
+        needsReset = true
+        frameIndex = 0
+    }
+
+    // MARK: Jitter
+
+    /// Radical-inverse base-`base` Halton term.
+    static func halton(_ index: UInt32, _ base: UInt32) -> Float {
+        var result: Float = 0
+        var fraction: Float = 1
+        var i = index
+        while i > 0 {
+            fraction /= Float(base)
+            result += fraction * Float(i % base)
+            i /= base
+        }
+        return result
+    }
+
+    /// This frame's jitter in render pixels, −0.5…0.5. Indexed from 1 so frame 0 is not (−0.5, −0.5).
+    public var jitter: SIMD2<Float> {
+        let i = frameIndex % Self.jitterPhases + 1
+        return SIMD2(Self.halton(i, 2) - 0.5, Self.halton(i, 3) - 0.5)
+    }
+
+    /// The `buffer(9)` values for this frame.
+    public var frameUniforms: DirectTemporalFrame {
+        var frame = DirectTemporalFrame()
+        frame.jitter = jitter
+        frame.renderSize = SIMD2(Float(renderWidth), Float(renderHeight))
+        frame.outputSize = SIMD2(Float(outputWidth), Float(outputHeight))
+        frame.frameIndex = frameIndex
+        frame.reset = needsReset ? 1 : 0
+        return frame
+    }
+
+    // MARK: Allocation
+
+    /// (Re)allocate for a drawable size. Cheap when nothing changed; a change rebuilds the scaler
+    /// and resets the history. Call on preset apply (so the first frame does not allocate) and
+    /// per frame (covers resizes).
+    @discardableResult
+    public func prepare(outputWidth: Int, outputHeight: Int) -> Bool {
+        let outW = max(outputWidth, 1), outH = max(outputHeight, 1)
+        if targets != nil, outW == self.outputWidth, outH == self.outputHeight { return true }
+        let inW = max(Int((Float(outW) * spec.internalScale).rounded()), 1)
+        let inH = max(Int((Float(outH) * spec.internalScale).rounded()), 1)
+
+        scaler = makeScaler(inW: inW, inH: inH, outW: outW, outH: outH)
+
+        let renderUsage: MTLTextureUsage = [.renderTarget, .shaderRead]
+        func internalTarget(_ format: MTLPixelFormat, _ usage: MTLTextureUsage?, _ name: String) -> MTLTexture? {
+            makeTexture(format, inW, inH, renderUsage.union(usage ?? []), label: "MFX.2 \(name) \(inW)×\(inH)")
+        }
+        guard let color = internalTarget(Self.colorFormat, scaler?.colorTextureUsage, "colour"),
+              let depth = internalTarget(Self.depthFormat, scaler?.depthTextureUsage, "depth"),
+              let motion = internalTarget(Self.motionFormat, scaler?.motionTextureUsage, "motion")
+        else { return fail(outW, outH) }
+        let reactive = spec.reactiveMask
+            ? internalTarget(Self.reactiveFormat, scaler?.reactiveTextureUsage, "reactive") : nil
+
+        output = nil
+        if let scaler {
+            let usage = scaler.outputTextureUsage.union(.shaderRead)
+            output = makeTexture(Self.outputFormat, outW, outH, usage, label: "MFX.2 output \(outW)×\(outH)")
+            if output == nil { return fail(outW, outH) }
+        }
+
+        targets = Targets(color: color, depth: depth, motion: motion, reactive: reactive)
+        self.outputWidth = outW
+        self.outputHeight = outH
+        renderWidth = inW
+        renderHeight = inH
+        reset()
+        let mode = scaler == nil ? "bilinear fallback (no MetalFX)" : "temporal"
+        logger.info("MFX.2 reconstruct \(inW)×\(inH) → \(outW)×\(outH), \(mode)")
+        return true
+    }
+
+    private func fail(_ outW: Int, _ outH: Int) -> Bool {
+        logger.error("MFX.2 target allocation failed at \(outW)×\(outH)")
+        targets = nil
+        scaler = nil
+        output = nil
+        return false
+    }
+
+    private func makeTexture(_ format: MTLPixelFormat, _ width: Int, _ height: Int,
+                             _ usage: MTLTextureUsage, label: String) -> MTLTexture? {
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: format, width: width, height: height, mipmapped: false)
+        desc.usage = usage
+        desc.storageMode = .private
+        let texture = device.makeTexture(descriptor: desc)
+        texture?.label = label
+        return texture
+    }
+
+    private func makeScaler(inW: Int, inH: Int, outW: Int, outH: Int) -> MTLFXTemporalScaler? {
+        guard Self.isSupported(device: device) else { return nil }
+        let desc = MTLFXTemporalScalerDescriptor()
+        desc.inputWidth = inW
+        desc.inputHeight = inH
+        desc.outputWidth = outW
+        desc.outputHeight = outH
+        desc.colorTextureFormat = Self.colorFormat
+        desc.depthTextureFormat = Self.depthFormat
+        desc.motionTextureFormat = Self.motionFormat
+        desc.outputTextureFormat = Self.outputFormat
+        if spec.reactiveMask {
+            desc.isReactiveMaskTextureEnabled = true
+            desc.reactiveMaskTextureFormat = Self.reactiveFormat
+        }
+        // VQ.0 will charge the scaler as an opaque reservation: log what creating it allocated.
+        let before = device.currentAllocatedSize
+        guard let made = desc.makeTemporalScaler(device: device) else {
+            logger.error("MTLFXTemporalScaler creation failed at \(inW)×\(inH) → \(outW)×\(outH)")
+            return nil
+        }
+        let delta = device.currentAllocatedSize - before
+        logger.info("MFX.2 MTLFXTemporalScaler \(inW)×\(inH) → \(outW)×\(outH): currentAllocatedSize +\(delta) B")
+        made.isDepthReversed = false
+        return made
+    }
+
+    // MARK: Encode
+
+    /// Reconstruct this frame from `targets` into a drawable-sized texture. Returns nil when the
+    /// device has no MetalFX (the caller stretches `targets.color` instead).
+    public func encodeUpscale(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
+        guard let scaler, let targets, let output else { return nil }
+        scaler.colorTexture = targets.color
+        scaler.depthTexture = targets.depth
+        scaler.motionTexture = targets.motion
+        scaler.reactiveMaskTexture = targets.reactive
+        scaler.outputTexture = output
+        scaler.inputContentWidth = renderWidth
+        scaler.inputContentHeight = renderHeight
+        scaler.motionVectorScaleX = 1   // render pixels; measured best of 0.67 / 1 / 1.5 / axis flips
+        scaler.motionVectorScaleY = 1
+        let jit = jitter
+        scaler.jitterOffsetX = jitterSign * jit.x
+        scaler.jitterOffsetY = jitterSign * jit.y
+        scaler.reset = needsReset
+        if needsReset { resetCount += 1 }
+        encodeCount += 1
+        scaler.encode(commandBuffer: commandBuffer)
+        return output
+    }
+
+    /// Sign applied to the scene's jitter when handing it to MetalFX. Measured, not assumed: see
+    /// `DirectTemporalReconstructionTests.jitterConvention` (the only writer besides this default).
+    var jitterSign: Float = -1
+
+    /// Advance to the next frame (next jitter phase). Once per rendered frame.
+    public func advance() {
+        frameIndex &+= 1
+        needsReset = false
+    }
+}

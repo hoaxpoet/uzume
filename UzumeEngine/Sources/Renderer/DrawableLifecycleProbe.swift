@@ -201,11 +201,13 @@ extension RenderPipeline {
         features: FeatureVector,
         commandBuffer: MTLCommandBuffer
     ) {
+        // A4: the frame the paths actually drew — the canvas (today's capped size) or, for a
+        // reconstructing scene, the drawable — so the recorder and the flash analyzer see it.
         guard let hook = onFrameRendered,
-              let drawable = instrumentedDrawable(
-                  from: view, commandBuffer: commandBuffer, site: "draw.captureHook") else { return }
+              let texture = presentedFrameTexture ?? instrumentedDrawable(
+                  from: view, commandBuffer: commandBuffer, site: "draw.captureHook")?.texture else { return }
         let stems = stemFeaturesLock.withLock { latestStemFeatures }
-        hook(drawable.texture, features, stems, commandBuffer)
+        hook(texture, features, stems, commandBuffer)
     }
 
     func recordDrawableLifecycleCompletion(
@@ -231,7 +233,9 @@ extension RenderPipeline {
             site: site,
             now: ProcessInfo.processInfo.systemUptime
         )
-        let descriptor = view.currentRenderPassDescriptor
+        // A4: on a tier-1 Mac the paths draw the canvas; the drawable is acquired separately.
+        let descriptor = canvasRenderPassDescriptor(clearColor: view.clearColor)
+            ?? view.currentRenderPassDescriptor
         drawableLifecycleProbe.endRequest(
             commandBufferID: commandBufferID,
             kind: .renderPassDescriptor,
@@ -245,7 +249,7 @@ extension RenderPipeline {
         from view: MTKView,
         commandBuffer: MTLCommandBuffer,
         site: String
-    ) -> CAMetalDrawable? {
+    ) -> FrameTarget? {
         let commandBufferID = ObjectIdentifier(commandBuffer as AnyObject)
         drawableLifecycleProbe.beginRequest(
             commandBufferID: commandBufferID,
@@ -260,15 +264,17 @@ extension RenderPipeline {
             resolved: drawable != nil,
             drawableID: drawable.map { ObjectIdentifier($0 as AnyObject) }
         )
-        return drawable
+        return drawable.map(frameTarget(for:))
     }
 
     @MainActor
-    func instrumentedPresent(_ drawable: CAMetalDrawable, on commandBuffer: MTLCommandBuffer) {
+    func instrumentedPresent(_ target: FrameTarget, on commandBuffer: MTLCommandBuffer) {
+        resolveCanvas(target, on: commandBuffer)
+        presentedFrameTexture = target.texture
         drawableLifecycleProbe.recordPresent(
             commandBufferID: ObjectIdentifier(commandBuffer as AnyObject),
-            drawableID: ObjectIdentifier(drawable as AnyObject)
+            drawableID: ObjectIdentifier(target.drawable as AnyObject)
         )
-        commandBuffer.present(drawable)
+        commandBuffer.present(target.drawable)
     }
 }

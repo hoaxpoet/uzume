@@ -581,6 +581,13 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// Dragon Bloom's values. Nil for every preset without an overlay.
     public let marks: MarksConfig?
 
+    // MARK: - Temporal Reconstruction (MFX.2)
+
+    /// Opt-in MetalFX temporal reconstruction for a direct-only scene (sidecar
+    /// `temporal_reconstruction`): `PresetLoader` builds an MRT pipeline for it and the direct
+    /// path renders it at the internal size and reconstructs. Nil for every other scene.
+    public let temporalReconstruction: TemporalReconstructionSpec?
+
     // MARK: - CodingKeys
 
     /// Keys for all stored properties — used by both `init(from:)` and `encode(to:)`.
@@ -626,6 +633,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         case textOverlay = "text_overlay"
         case stages
         case marks
+        case temporalReconstruction = "temporal_reconstruction"
     }
 
     // MARK: - Decoding
@@ -772,5 +780,17 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
 
         // MARK: Marks-on-top Overlay (Skein.ENGINE.1.1)
         marks = try container.decodeIfPresent(MarksConfig.self, forKey: .marks)
+
+        // MARK: Temporal Reconstruction (MFX.2)
+        temporalReconstruction = try container.decodeIfPresent(
+            TemporalReconstructionSpec.self, forKey: .temporalReconstruction)
+        // Direct-only: the block replaces the direct draw. Every other paradigm owns its own
+        // targets and history, so a block there would be silently ignored — reject it instead.
+        if temporalReconstruction != nil, passes != [.direct] {
+            throw DecodingError.dataCorruptedError(
+                forKey: .temporalReconstruction,
+                in: container,
+                debugDescription: "temporal_reconstruction needs passes == [\"direct\"]")
+        }
     }
 }

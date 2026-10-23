@@ -7,6 +7,7 @@ import Foundation
 import Orchestrator
 import MetalKit
 import Presets
+import Renderer
 import Session
 import Shared
 import Testing
@@ -255,32 +256,31 @@ struct PreparerAnalysisIsolationTests {
 
 // MARK: - Tier-1 render cap + Alfvén exclusion (BR.6b / decision 4)
 
-@Suite("Tier-1 Macs: capped drawable, no Alfvén (BR.6b)")
+@Suite("Tier-1 Macs: capped scene render size, no Alfvén (BR.6b)")
 @MainActor
 struct Tier1RenderBudgetTests {
 
-    @Test func cappedSize_keepsAspect_neverUpscales_staysWithinBudget() {
-        let cap = CappedMTKView.tier1MaxPixels
+    /// MFX.2 / VQ amendment A4 moved the cap from the drawable into the engine's render canvas.
+    @Test func renderSize_keepsAspect_neverUpscales_staysWithinBudget() {
+        let cap = PixelModeMTKView.tier1MaxPixels
         // MacBook Air 13" fullscreen (2560×1664 backing) and a 5K display.
-        for backing in [CGSize(width: 2560, height: 1664), CGSize(width: 5120, height: 2880),
-                        CGSize(width: 3840, height: 2160)] {
-            let out = CappedMTKView.cappedSize(backing, maxPixels: cap)
+        for drawable in [CGSize(width: 2560, height: 1664), CGSize(width: 5120, height: 2880),
+                         CGSize(width: 3840, height: 2160)] {
+            let out = RenderPipeline.renderSize(drawable: drawable, pixelCap: cap)
             #expect(Double(out.width * out.height) <= cap)
-            #expect(abs(out.width / out.height - backing.width / backing.height) < 0.01)
+            #expect(abs(out.width / out.height - drawable.width / drawable.height) < 0.01)
         }
-        #expect(CappedMTKView.cappedSize(CGSize(width: 3840, height: 2160), maxPixels: cap)
+        #expect(RenderPipeline.renderSize(drawable: CGSize(width: 3840, height: 2160), pixelCap: cap)
                 == CGSize(width: 2560, height: 1440))
         // At or under the budget: untouched.
-        #expect(CappedMTKView.cappedSize(CGSize(width: 1920, height: 1080), maxPixels: cap)
+        #expect(RenderPipeline.renderSize(drawable: CGSize(width: 1920, height: 1080), pixelCap: cap)
                 == CGSize(width: 1920, height: 1080))
     }
 
-    @Test func capOnlyApplies_whenSet() {
-        let view = CappedMTKView(frame: CGRect(x: 0, y: 0, width: 640, height: 360),
-                                 device: MTLCreateSystemDefaultDevice())
-        #expect(view.autoResizeDrawable, "native resolution by default (tier 2)")
-        view.maxDrawablePixels = CappedMTKView.tier1MaxPixels
-        #expect(!view.autoResizeDrawable)
+    @Test func theViewOwnsItsDrawableSize() {
+        let view = PixelModeMTKView(frame: CGRect(x: 0, y: 0, width: 640, height: 360),
+                                    device: MTLCreateSystemDefaultDevice())
+        #expect(!view.autoResizeDrawable, "sized to the display's pixel mode, never by MTKView or a scene")
     }
 
     private final class SizeSpy: NSObject, MTKViewDelegate {
@@ -289,25 +289,25 @@ struct Tier1RenderBudgetTests {
         func draw(in view: MTKView) {}
     }
 
-    /// In a real window larger than the budget, the drawable is capped AND the render pipeline
-    /// (the delegate) is told — so its textures follow the capped size, not the backing size.
-    @Test func inALargeWindow_theDrawableIsCapped_andTheDelegateHearsIt() throws {
+    /// In a real window larger than the budget, the delegate (the render pipeline) is told the
+    /// drawable size, and the size it renders scenes at stays within the tier-1 budget.
+    @Test func inALargeWindow_theDelegateHearsTheDrawable_andScenesRenderWithinBudget() throws {
         let window = NSWindow.offscreen(CGRect(x: 0, y: 0, width: 3840, height: 2160))
         defer { window.close() }
-        let view = CappedMTKView(frame: window.contentLayoutRect, device: MTLCreateSystemDefaultDevice())
+        let view = PixelModeMTKView(frame: window.contentLayoutRect, device: MTLCreateSystemDefaultDevice())
         let spy = SizeSpy()
         view.delegate = spy
         view.isPaused = true
-        view.maxDrawablePixels = CappedMTKView.tier1MaxPixels
         window.contentView = view
         view.layoutSubtreeIfNeeded()
         view.layout()
 
-        let backing = view.convertToBacking(view.bounds).size
-        #expect(Double(backing.width * backing.height) > CappedMTKView.tier1MaxPixels, "window exceeds the budget")
-        #expect(Double(view.drawableSize.width * view.drawableSize.height) <= CappedMTKView.tier1MaxPixels)
         let told = try #require(spy.sizes.last, "the delegate was never told the drawable size")
         #expect(told == view.drawableSize)
+        #expect(Double(view.drawableSize.width * view.drawableSize.height) > PixelModeMTKView.tier1MaxPixels,
+                "the drawable itself is not capped")
+        let render = RenderPipeline.renderSize(drawable: view.drawableSize, pixelCap: PixelModeMTKView.tier1MaxPixels)
+        #expect(Double(render.width * render.height) <= PixelModeMTKView.tier1MaxPixels)
     }
 
     @Test func alfven_excludedOnTier1_keptOnTier2() throws {

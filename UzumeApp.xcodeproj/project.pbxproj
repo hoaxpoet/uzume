@@ -184,6 +184,7 @@
 		H10036 /* FullscreenObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20036; };
 		BR410001 /* LocalizationKeyCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR420001; };
 		BR110001 /* MeshCapabilityCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BR120001; };
+		MF210001 /* DrawablePixelModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = MF220001; };
 		H10037 /* DisplayManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20037; };
 		H10038 /* MultiDisplayToastBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20038; };
 		H10039 /* EscBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = H20039; };
@@ -425,6 +426,7 @@
 		H20036 /* FullscreenObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenObserverTests.swift; sourceTree = "<group>"; };
 		BR420001 /* LocalizationKeyCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKeyCoverageTests.swift; sourceTree = "<group>"; };
 		BR120001 /* MeshCapabilityCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshCapabilityCatalogTests.swift; sourceTree = "<group>"; };
+		MF220001 /* DrawablePixelModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawablePixelModeTests.swift; sourceTree = "<group>"; };
 		H20037 /* DisplayManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManagerTests.swift; sourceTree = "<group>"; };
 		H20038 /* MultiDisplayToastBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiDisplayToastBridgeTests.swift; sourceTree = "<group>"; };
 		H20039 /* EscBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscBehaviorTests.swift; sourceTree = "<group>"; };
@@ -849,6 +851,7 @@
 				BR520002 /* MainThreadWatchdogTests.swift */,
 				BR220002 /* DisplaySleepGuardTests.swift */,
 				BR120001 /* MeshCapabilityCatalogTests.swift */,
+				MF220001 /* DrawablePixelModeTests.swift */,
 				H20037 /* DisplayManagerTests.swift */,
 				H20038 /* MultiDisplayToastBridgeTests.swift */,
 				H20039 /* EscBehaviorTests.swift */,
@@ -1187,6 +1190,7 @@
 				BR510002 /* MainThreadWatchdogTests.swift in Sources */,
 				BR210002 /* DisplaySleepGuardTests.swift in Sources */,
 				BR110001 /* MeshCapabilityCatalogTests.swift in Sources */,
+				MF210001 /* DrawablePixelModeTests.swift in Sources */,
 				H10037 /* DisplayManagerTests.swift in Sources */,
 				H10038 /* MultiDisplayToastBridgeTests.swift in Sources */,
 				H10039 /* EscBehaviorTests.swift in Sources */,

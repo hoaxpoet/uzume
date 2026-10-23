@@ -23,7 +23,8 @@ extension RenderPipeline {
         features: inout FeatureVector,
         stems stemFeatures: StemFeatures,
         particles: (any ParticleGeometry)?,
-        textOverlay: DynamicTextOverlay?
+        textOverlay: DynamicTextOverlay?,
+        temporalFrame: DirectTemporalFrame = DirectTemporalFrame()
     ) {
         encoder.setRenderPipelineState(activePipeline)
         encoder.setFragmentBytes(&features, length: MemoryLayout<FeatureVector>.size, index: 0)
@@ -41,6 +42,9 @@ extension RenderPipeline {
         if let presetBuf3 = directPresetFragmentBuffer3Lock.withLock({ directPresetFragmentBuffer3 }) {
             encoder.setFragmentBuffer(presetBuf3, offset: 0, index: 8)
         }
+        // MFX.2: jitter + sizes for a reconstructing scene; zeroed (and unread) everywhere else.
+        var frame = temporalFrame
+        encoder.setFragmentBytes(&frame, length: MemoryLayout<DirectTemporalFrame>.size, index: 9)
         bindNoiseTextures(to: encoder)
         if let overlay = textOverlay {
             encoder.setFragmentTexture(overlay.texture, index: 12)
