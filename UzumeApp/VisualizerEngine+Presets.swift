@@ -918,14 +918,18 @@ extension VisualizerEngine {
     }
 
     /// EFB.4 developer key: stretch → reconstructed → reconstructed at half scale → native → … on the scene on screen.
-    func cycleReconstructionReviewMode() {
+    /// Returns what to show the viewer: the mode now in force, and whether the scene on screen uses it.
+    @discardableResult
+    func cycleReconstructionReviewMode() -> String {
         let modes = ReconstructionReviewMode.allCases
         reconstructionReviewMode = modes[((modes.firstIndex(of: reconstructionReviewMode) ?? 0) + 1) % modes.count]
+        let label = reconstructionReviewMode.label
         guard let preset = presetLoader.currentPreset, preset.descriptor.temporalReconstruction != nil else {
             logger.info("EFB.4 review: mode=\(self.reconstructionReviewMode.rawValue) (applies to the next reconstructing scene)")
-            return
+            return "\(label) — applies when Energetic Flyby plays"
         }
         applyTemporalReconstruction(preset)
+        return label
     }
 
     private func bindEnergeticFlybyRuntime(_ desc: PresetDescriptor) {
@@ -1094,6 +1098,16 @@ enum ReconstructionReviewMode: String, CaseIterable, Sendable {
     case recon50
     /// True native: the plain render at the drawable's full size (heavy).
     case native
+
+    /// What the viewer is looking at, numbered in the order the key cycles (EFB.4 review toast).
+    var label: String {
+        switch self {
+        case .off: return "1 of 4 · Today: stretched"
+        case .recon: return "2 of 4 · Reconstructed"
+        case .recon50: return "3 of 4 · Reconstructed, half size"
+        case .native: return "4 of 4 · Native (heavy)"
+        }
+    }
 
     /// `UZUME_EFB_RECON`; anything else (or unset) is `recon`.
     init(environment value: String?) {

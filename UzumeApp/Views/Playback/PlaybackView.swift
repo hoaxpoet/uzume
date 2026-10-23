@@ -392,8 +392,8 @@ struct PlaybackView: View {
             onIncreaseAudioOutputLatency: { [weak engine] in
                 engine?.adjustAudioOutputLatency(ms: +5)
             },
-            onCycleReconstructionReview: { [weak engine] in
-                engine?.cycleReconstructionReviewMode()
+            onCycleReconstructionReview: { [weak engine = self.engine, weak tm = self.toastManager] in
+                if let label = engine?.cycleReconstructionReviewMode() { tm?.showReconstructionReviewLabel(label) }
             }
         )
     }
