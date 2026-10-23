@@ -49,7 +49,7 @@ fragment float4 stave_disp_fragment(StaveDispOut in [[stage_in]],
     float frac = fx - float(i0);
 
     float3 col = float3(0.0);
-    for (int b = 0; b < u.bandCount; ++b) {
+    for (int b = 0; b < min(u.bandCount, 16); ++b) {   // VQ.0: StaveBandPlan.count = 8
         int base = b * u.sampleCount;
         float amp = mix(curves[base + i0], curves[base + i1], frac);
 

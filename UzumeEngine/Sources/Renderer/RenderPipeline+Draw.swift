@@ -48,22 +48,19 @@ extension RenderPipeline {
         guard currentFeedbackParams != nil && feedbackTextures.isEmpty && size.width > 0 else {
             return
         }
-        let texWidth = max(Int(size.width), 1)
-        let texHeight = max(Int(size.height), 1)
-        var textures: [MTLTexture] = []
-        for _ in 0..<2 {
-            if let tex = context.makeSharedTexture(
-                width: texWidth,
-                height: texHeight,
-                usage: [.renderTarget, .shaderRead]
-            ) {
-                textures.append(tex)
-            }
-        }
-        if textures.count == 2 {
+        if let textures = makeFeedbackPair(width: Int(size.width), height: Int(size.height)) {
             feedbackTextures = textures
             feedbackIndex = 0
         }
+    }
+
+    /// The feedback ping-pong pair at `width`×`height`, through the render-target budget (VQ.0).
+    func makeFeedbackPair(width: Int, height: Int) -> [MTLTexture]? {
+        let descriptor = context.sizeScaledDescriptor(width: width, height: height)   // GPU-only: private
+        return context.renderTargetBudget.makeTextures(owner: "feedback", [
+            .init(descriptor, label: "feedback ping \(width)×\(height)"),
+            .init(descriptor, label: "feedback pong \(width)×\(height)"),
+        ])
     }
 
     // MARK: Render-Graph Executor

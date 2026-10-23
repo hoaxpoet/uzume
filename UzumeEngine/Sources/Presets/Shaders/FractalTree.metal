@@ -819,7 +819,7 @@ void fractal_tree_mesh_shader(
     int  leaf_depth = 0;
     {
         uint cur = bid;
-        while (cur > 0u && leaf_depth < 6) {
+        while (cur > 0u && leaf_depth < 6) {   // loop-bound: 6 — leaf_depth < 6
             leaf_path[leaf_depth++] = cur;
             cur = (cur - 1u) / 2u;
         }
@@ -938,7 +938,7 @@ void fractal_tree_mesh_shader(
     // them for too much motion ("the trunk is moving too much", "herky-jerky"), and a gait
     // reads from its TIMING, not its size: 3° of sway that arrives on the beat is legible where
     // 15° of unsynced swing is noise.
-    for (int k = leaf_depth - 1; k >= 0; k--) {
+    for (int k = leaf_depth - 1; k >= 0; k--) {   // loop-bound: 6 — leaf_depth ≤ 6 (the ancestry walk above)
         pos     += dir * seg_len;
         seg_len *= 0.62f;
         thick   *= 0.62f;

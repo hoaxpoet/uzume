@@ -102,7 +102,7 @@ static inline VolumeSample cloud_march(
 ) {
     VolumeSample s = vol_sample_zero();
     float dt = (tMax - tMin) / float(steps);
-    for (int i = 0; i < steps; i++) {
+    for (int i = 0; i < min(steps, 128); i++) {   // VQ.0: no caller today; 32 recommended
         float  ti  = tMin + (float(i) + 0.5) * dt;
         float3 pos = ro + rd * ti;
         float  den = cloud_density_cumulus(pos, t, coverageRel);

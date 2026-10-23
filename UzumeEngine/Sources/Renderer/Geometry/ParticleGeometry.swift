@@ -83,6 +83,16 @@ public protocol ParticleGeometry: AnyObject, Sendable {
     /// with the current drawable size. Implementations must be cheap when the size is unchanged.
     func ensureAllocated(width: Int, height: Int)
 
+    /// VQ.0: the budget a conformer with resolution-dependent targets allocates them through.
+    /// `RenderPipeline.setParticleGeometry` attaches it; a conformer used without a pipeline
+    /// (offline harnesses) allocates directly.
+    func attach(renderTargetBudget: RenderTargetBudget)
+
+    /// VQ.0: drop the resolution-dependent targets (the pipeline detached this geometry; the next
+    /// `ensureAllocated` makes them again). Without it a cached geometry holds its 4K trail for the
+    /// rest of the session after its scene has gone.
+    func releaseRenderTargets()
+
     /// Render pass: draw all particles into the active render encoder.
     ///
     /// Called from `RenderPipeline.drawDirect(...)` and
@@ -106,4 +116,28 @@ public extension ParticleGeometry {
 
     /// No-op for the conformers that own no resolution-dependent target.
     func ensureAllocated(width: Int, height: Int) {}
+
+    /// No-op for the conformers that own no resolution-dependent target.
+    func attach(renderTargetBudget: RenderTargetBudget) {}
+
+    /// No-op for the conformers that own no resolution-dependent target.
+    func releaseRenderTargets() {}
+}
+
+// MARK: - Budgeted allocation
+
+extension RenderTargetBudget {
+
+    /// `requests` through `budget` when one is attached (all or nothing), else directly on `device`.
+    static func make(_ requests: [Request], owner: String, budget: RenderTargetBudget?,
+                     device: MTLDevice) -> [MTLTexture]? {
+        if let budget { return budget.makeTextures(owner: owner, requests) }
+        var made: [MTLTexture] = []
+        for request in requests {
+            guard let texture = device.makeTexture(descriptor: request.descriptor) else { return nil }
+            texture.label = request.label
+            made.append(texture)
+        }
+        return made
+    }
 }

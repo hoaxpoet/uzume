@@ -1237,7 +1237,7 @@ fragment float4 raymarch_lighting_fragment(
     int lightCount = clamp(int(scene.lightingParams.x + 0.5), 1, 4);
 
     float3 directLit = float3(0.0);
-    for (int li = 0; li < lightCount; ++li) {
+    for (int li = 0; li < lightCount; ++li) {   // loop-bound: 4 — lightCount = clamp(…, 1, 4)
         float3 lightPos  = lightPI[li].xyz;
         float  intensity = lightPI[li].w;
         float3 lColor    = lightCol[li].xyz;

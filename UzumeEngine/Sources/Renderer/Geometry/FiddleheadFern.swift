@@ -51,6 +51,8 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     // Fields (lazy) and frame targets (drawable-sized)
     var fieldF: MTLTexture?, fieldT: MTLTexture?, fieldC: MTLTexture?
     var hdr: MTLTexture?, bloomA: MTLTexture?, bloomB: MTLTexture?
+    /// VQ.0: the display-size targets (hdr, bloom, history) go through this when attached.
+    var renderTargetBudget: RenderTargetBudget?
     /// TAA history ping-pong (the resolved picture the bloom and display read), and the previous frame's camera.
     var history: [MTLTexture] = []
     var historyIndex = 0
@@ -117,10 +119,26 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
         drawableSize = SIMD2(width, height)
         let (width, height) = internalSize()
         if let hdr, hdr.width == width, hdr.height == height { return }
-        hdr = makeTexture(.rgba16Float, width, height)
-        bloomA = makeTexture(.rgba16Float, max(width / 4, 1), max(height / 4, 1))
-        bloomB = makeTexture(.rgba16Float, max(width / 4, 1), max(height / 4, 1))
-        history = [makeTexture(.rgba16Float, width, height), makeTexture(.rgba16Float, width, height)].compactMap { $0 }
+        // VQ.0: release before allocate; the five through the budget, all or nothing.
+        (hdr, bloomA, bloomB, history) = (nil, nil, nil, [])
+        historyValid = false
+        let (quarterW, quarterH) = (max(width / 4, 1), max(height / 4, 1))
+        func request(_ wide: Int, _ high: Int, _ name: String) -> RenderTargetBudget.Request {
+            .init(targetDescriptor(.rgba16Float, wide, high), label: "Fiddlehead \(name) \(wide)×\(high)")
+        }
+        let requests = [request(width, height, "hdr"), request(quarterW, quarterH, "bloom A"),
+                        request(quarterW, quarterH, "bloom B"), request(width, height, "history 0"),
+                        request(width, height, "history 1")]
+        let owner = "particles.Fiddlehead"
+        guard let made = RenderTargetBudget.make(requests, owner: owner, budget: renderTargetBudget, device: device)
+        else { return }
+        (hdr, bloomA, bloomB, history) = (made[0], made[1], made[2], [made[3], made[4]])
+    }
+
+    public func attach(renderTargetBudget: RenderTargetBudget) { self.renderTargetBudget = renderTargetBudget }
+
+    public func releaseRenderTargets() {
+        (hdr, bloomA, bloomB, history) = (nil, nil, nil, [])
         historyValid = false
     }
 
@@ -162,6 +180,11 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
     }
 
     func makeTexture(_ format: MTLPixelFormat, _ width: Int, _ height: Int, slices: Int = 0) -> MTLTexture? {
+        device.makeTexture(descriptor: targetDescriptor(format, width, height, slices: slices))
+    }
+
+    func targetDescriptor(_ format: MTLPixelFormat, _ width: Int, _ height: Int,
+                          slices: Int = 0) -> MTLTextureDescriptor {
         let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: format,
                                                             width: width,
                                                             height: height,
@@ -169,7 +192,7 @@ public final class FiddleheadFern: ParticleGeometry, @unchecked Sendable {
         if slices > 0 { desc.textureType = .type2DArray; desc.arrayLength = slices }
         desc.usage = [.shaderRead, .shaderWrite]
         desc.storageMode = .private
-        return device.makeTexture(descriptor: desc)
+        return desc
     }
 
     private func startBakeIfNeeded() {

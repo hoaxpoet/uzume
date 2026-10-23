@@ -313,14 +313,27 @@ public final class RayMarchPipeline: @unchecked Sendable {
         let texWidth = max(width, 1)
         let texHeight = max(height, 1)
 
-        gbuffer0    = context.makeSharedTexture(width: texWidth, height: texHeight, pixelFormat: .rg16Float)
-        gbuffer1    = makeSnormTexture(width: texWidth, height: texHeight)
-        gbuffer2    = context.makeSharedTexture(width: texWidth, height: texHeight, pixelFormat: .rgba8Unorm)
-        litTexture  = context.makeSharedTexture(width: texWidth, height: texHeight, pixelFormat: .rgba16Float)
+        // VQ.0: release before allocate; the four through the budget, all or nothing.
+        (gbuffer0, gbuffer1, gbuffer2, litTexture) = (nil, nil, nil, nil)
+        func request(_ format: MTLPixelFormat, _ name: String) -> RenderTargetBudget.Request {
+            let descriptor = context.sizeScaledDescriptor(width: texWidth, height: texHeight, pixelFormat: format)
+            return .init(descriptor, label: "ray-march \(name) \(texWidth)×\(texHeight)")
+        }
+        guard let made = context.renderTargetBudget.makeTextures(owner: "rayMarch", [
+            request(.rg16Float, "gbuffer0 depth"), request(.rgba8Snorm, "gbuffer1 normal+AO"),
+            request(.rgba8Unorm, "gbuffer2 albedo"), request(.rgba16Float, "lit"),
+        ]) else { return }
+        (gbuffer0, gbuffer1, gbuffer2, litTexture) = (made[0], made[1], made[2], made[3])
 
         logger.info("""
             RayMarchPipeline textures allocated: \(texWidth)×\(texHeight)
             """)
+    }
+
+    /// Drop the size-scaled textures (VQ.0 drain → release → allocate). Call only once the frames in
+    /// flight have drained.
+    public func releaseTextures() {
+        (gbuffer0, gbuffer1, gbuffer2, litTexture) = (nil, nil, nil, nil)
     }
 
     /// Lazy allocator — no-op if textures are already allocated.
@@ -458,22 +471,6 @@ public final class RayMarchPipeline: @unchecked Sendable {
 
     // swiftlint:enable function_parameter_count
 
-    // MARK: - Private Helpers
-
-    /// Create an `.rgba8Snorm` texture for G-buffer 1 (normals + AO).
-    /// `MetalContext.makeSharedTexture` doesn't expose snorm formats directly,
-    /// so we build the descriptor manually.
-    private func makeSnormTexture(width: Int, height: Int) -> MTLTexture? {
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba8Snorm,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        desc.storageMode = .shared
-        desc.usage = [.renderTarget, .shaderRead]
-        return context.device.makeTexture(descriptor: desc)
-    }
 }
 
 // MARK: - Errors

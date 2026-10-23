@@ -623,6 +623,7 @@ extension VisualizerEngine {
         case .unknown:
             break
         }
+        startRenderSoakIfRequested()   // VQ.0: no-op unless its developer env vars are set
     }
 
     /// Restores the live plan from a saved snapshot (for undo).

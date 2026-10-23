@@ -56,7 +56,7 @@ static inline float vol_density_sphere(float3 p, float3 c, float r) {
 static inline float vol_density_fbm(float3 p, float scale, int octaves) {
     float3 q = p * scale;
     float den = 0.0, amp = 1.0, freq = 1.0, norm = 0.0;
-    for (int i = 0; i < octaves; i++) {
+    for (int i = 0; i < min(octaves, 8); i++) {   // VQ.0: callers pass 2–4
         den  += perlin3d(q * freq) * amp;
         norm += amp;
         amp  *= 0.5;

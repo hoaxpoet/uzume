@@ -32,7 +32,13 @@ extension RenderPipeline {
     /// Cap the pixel count scenes render at (BR.6b, tier 1), or nil to render at drawable size.
     /// Set once by the app, before the first frame. Main thread.
     public func setRenderPixelCap(_ cap: Double?) {
+        guard cap != renderPixelCap else { return }
         renderPixelCap = cap
+        // VQ.0: the render size changed, so the size-scaled set must follow — commit it like a resize.
+        resizeLock.withLock {
+            guard let committed = committedDrawableSize else { return }
+            pendingResize = PendingResize(size: committed, since: -.infinity)
+        }
     }
 
     /// `drawable` scaled down (never up) to at most `pixelCap` pixels, aspect kept, or `drawable`
@@ -47,7 +53,9 @@ extension RenderPipeline {
 
     /// The size scenes render at for this view's drawable.
     func renderSize(of view: MTKView) -> CGSize {
-        Self.renderSize(drawable: view.drawableSize, pixelCap: renderPixelCap)
+        // VQ.0: the committed size, which lags the drawable through a coalesced resize.
+        let drawable = allocationDrawableSize ?? MainActor.assumeIsolated { view.drawableSize }
+        return Self.renderSize(drawable: drawable, pixelCap: renderPixelCap)
     }
 
     /// The drawable's own size (what the reconstruct path writes), as last reported.
@@ -70,12 +78,10 @@ extension RenderPipeline {
         }
         let width = max(Int(render.width), 1), height = max(Int(render.height), 1)
         if canvasTexture?.width == width, canvasTexture?.height == height { return render }
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: context.pixelFormat, width: width, height: height, mipmapped: false)
-        desc.usage = [.renderTarget, .shaderRead]
-        desc.storageMode = .private
-        canvasTexture = context.device.makeTexture(descriptor: desc)
-        canvasTexture?.label = "Render canvas (BR.6b cap, A4)"
+        canvasTexture = nil   // VQ.0: release before allocate
+        let descriptor = context.sizeScaledDescriptor(width: width, height: height, storage: .private)
+        let label = "render canvas (BR.6b cap, A4) \(width)×\(height)"
+        canvasTexture = context.renderTargetBudget.makeTexture(owner: "canvas", label: label, descriptor: descriptor)
         logger.info("Render canvas \(width)×\(height) → drawable \(Int(drawableSize.width))×\(Int(drawableSize.height))")
         return render
     }

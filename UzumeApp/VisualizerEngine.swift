@@ -951,6 +951,16 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Toggled via the L dev shortcut. Structural-boundary rescheduling still runs.
     var diagnosticPresetLocked: Bool = false
 
+    /// VQ.0 (D-264): scenes the render-target budget refused this session on this Mac. The planner
+    /// never picks them again (`plannableCatalog`); main thread.
+    var renderBudgetRefusedPresetIDs: Set<String> = []
+
+    /// VQ.0: memory-pressure events → the frame-budget governor (`setupRenderStability`).
+    var memoryPressureSource: DispatchSourceMemoryPressure?
+
+    /// VQ.0: the scene cycler / render soak driven by developer env vars (`VisualizerEngine+RenderSoak`).
+    var renderSoak: RenderSoakDriver?
+
     /// LFPLAN.3: the planned preset id the orchestrator wire last auto-applied on the
     /// current track (`nil` at track start → the first planned segment applies). Lets
     /// `applyLiveUpdate` detect a segment-boundary change and apply the new preset
@@ -1132,17 +1142,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
         pipe.frameBudgetManager = FrameBudgetManager(deviceTier: tier, qualityCeilingIsUltra: isUltra)
         // CLEAN.4.6: seed the quality floor in case the app launches already under thermal
         // pressure or Low Power Mode (the observer only fires on subsequent changes).
-        pipe.frameBudgetManager?.setThermalFloor(
-            FrameBudgetManager.qualityFloor(
-                thermalState: ProcessInfo.processInfo.thermalState,
-                lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled
-            )
-        )
+        pipe.frameBudgetManager?.setThermalState(ProcessInfo.processInfo.thermalState,
+                                                 lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled)
         self.mlDispatchScheduler = MLDispatchScheduler(deviceTier: tier, qualityCeilingIsUltra: isUltra)
 
         setupCaptureHook(pipe: pipe, ctx: ctx)
         setupBackgroundTextures(pipe: pipe, ctx: ctx, lib: lib)
         setupDashboardSnapshotPump(pipe: pipe)
+        setupRenderStability(pipe: pipe, ctx: ctx)
 
         loader.onPresetsReloaded = { [weak self] in
             guard let self, let current = self.presetLoader.currentPreset else { return }

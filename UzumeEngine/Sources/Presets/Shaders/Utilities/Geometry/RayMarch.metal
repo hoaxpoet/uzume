@@ -75,7 +75,7 @@ static inline RayMarchHit ray_march_adaptive(
     // sceneSDF or any other concrete SDF.
     float omega = 1.0 + gradFactor;   // over-relaxation factor
     float t = tMin;
-    for (int i = 0; i < maxSteps && t < tMax; i++) {
+    for (int i = 0; i < min(maxSteps, 512) && t < tMax; i++) {   // VQ.0: no caller today; 128 documented
         float3 p = ro + rd * t;
         float  d = sd_sphere(p, 1.0);   // REPLACE with your sceneSDF(p)
         result.steps++;

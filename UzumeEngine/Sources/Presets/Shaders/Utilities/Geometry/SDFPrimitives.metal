@@ -394,7 +394,7 @@ static inline float sd_mandelbulb_iterate(float3 p, float power, int iters) {
     float  dr   = 1.0;
     float  r    = 0.0;
     int    n    = min(iters, 8);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {   // loop-bound: 8 — n = min(iters, 8) above
         r = length(z);
         if (r > 2.0) break;
         float theta = acos(z.z / r) * power;

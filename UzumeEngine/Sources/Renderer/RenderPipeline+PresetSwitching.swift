@@ -73,7 +73,9 @@ extension RenderPipeline {
     func applyFrameRateCap(to view: MTKView) {
         let native = nativeFramesPerSecond ?? view.preferredFramesPerSecond
         nativeFramesPerSecond = native
-        let target = frameRateCap.map { min($0, native) } ?? native
+        // VQ.0: the governor's thermal / Low Power cap combines with the scene's own.
+        let caps = [frameRateCap, frameBudgetManager?.frameRateCap].compactMap { $0 }
+        let target = caps.min().map { min($0, native) } ?? native
         if view.preferredFramesPerSecond != target { view.preferredFramesPerSecond = target }
     }
 
@@ -87,7 +89,13 @@ extension RenderPipeline {
     /// Accepts any `ParticleGeometry` conformer (D-097). Thread-safe — can be
     /// called from any queue.
     public func setParticleGeometry(_ geometry: (any ParticleGeometry)?) {
-        particleLock.withLock { particleGeometry = geometry }
+        geometry?.attach(renderTargetBudget: context.renderTargetBudget)   // VQ.0
+        let outgoing = particleLock.withLock { () -> (any ParticleGeometry)? in
+            defer { particleGeometry = geometry }
+            return particleGeometry
+        }
+        // VQ.0: the app caches these geometries across scenes; their display-size targets must not outlive the scene.
+        if let outgoing, (outgoing as AnyObject) !== (geometry as AnyObject?) { outgoing.releaseRenderTargets() }
     }
 
     /// Attach (or clear) the additive scene-geometry overlay drawn into the mv_warp

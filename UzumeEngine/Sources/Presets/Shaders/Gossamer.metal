@@ -374,7 +374,7 @@ fragment float4 gossamer_fragment(
     float  wavePush   = 0.0;
     float  peakAmp    = 0.0;
 
-    for (uint i = 0; i < gState.wave_count; i++) {
+    for (uint i = 0; i < min(gState.wave_count, 32u); i++) {   // VQ.0: waves[32]
         WaveGPU wave = gState.waves[i];
         if (wave.age <= 0.0 || wave.age >= kMaxWaveLife) continue;
 
@@ -568,7 +568,7 @@ fragment float4 gossamer_fragment(
     float3 waveContrib = float3(0.0);
     float3 waveField   = float3(0.0);   // the same energy WITHOUT coverage — see haze
 
-    for (uint i = 0; i < gState.wave_count; i++) {
+    for (uint i = 0; i < min(gState.wave_count, 32u); i++) {   // VQ.0: waves[32]
         WaveGPU wave = gState.waves[i];
         if (wave.age <= 0.0 || wave.age >= kMaxWaveLife) continue;
 

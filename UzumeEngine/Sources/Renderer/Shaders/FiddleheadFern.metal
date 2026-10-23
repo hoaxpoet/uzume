@@ -65,7 +65,7 @@ kernel void fh_spine_field(constant float2* spines [[buffer(0)]], constant FernP
     float2 q = fh_texelPos(gid, P);
     constant float2* sp = spines + st * ns;
     float best = 1e9, bs = 0.0, side = 1.0;
-    for (int i = 0; i < ns - 1; i++) {
+    for (int i = 0; i < min(ns, 1024) - 1; i++) {   // VQ.0: spineSamples = 768
         float2 a = sp[i], b = sp[i + 1], ab = b - a;
         float u = clamp(dot(q - a, ab) / dot(ab, ab), 0.0, 1.0);
         float d = length(q - a - ab * u);
@@ -89,7 +89,7 @@ static float fh_childT(texture2d_array<float> T, float2 qc, int st, constant Fer
     int nst = int(P.grid.y);
     int j0 = min(st + int(floor(c.shift)), nst - 1), j1 = min(j0 + 1, nst - 1);
     float tc = 1e9;
-    for (int j = (st == 0 ? 0 : j0); j <= j1; j++) { tc = min(tc, fh_sampleT(T, qc, j, P)); }
+    for (int j = (st == 0 ? 0 : j0); j <= min(j1, 63); j++) { tc = min(tc, fh_sampleT(T, qc, j, P)); }
     return tc;
 }
 
@@ -102,7 +102,7 @@ kernel void fh_tree_step(texture2d_array<float> F [[texture(0)]], texture2d_arra
     float2 f = F.read(gid, uint(st)).xy;
     float best = abs(f.x) - fh_width(f.y, P);
     int nch = int(P.grid.x);
-    for (int k = 0; k < nch; k++) {
+    for (int k = 0; k < min(nch, 256); k++) {   // VQ.0: ≤ 2 × 127 sites
         constant FernChild& c = ch[st * nch + k];
         best = min(best, fh_childT(T, fh_toChild(q, c), st, c, P) * c.scale);
     }
@@ -117,7 +117,7 @@ kernel void fh_child_field(texture2d_array<float> T [[texture(0)]], texture2d_ar
     float2 q = fh_texelPos(gid, P);
     float best = 1e9; int bi = 0;
     int nch = int(P.grid.x);
-    for (int k = 0; k < nch; k++) {
+    for (int k = 0; k < min(nch, 256); k++) {   // VQ.0: ≤ 2 × 127 sites
         constant FernChild& c = ch[st * nch + k];
         float d = fh_childT(T, fh_toChild(q, c), st, c, P) * c.scale;
         if (d < best) { best = d; bi = k; }
@@ -161,7 +161,7 @@ static FernHit fh_descend(float2 q0, float scale0, float phi0, float viewH, text
     FernFrame root; root.q = q0; root.scale = scale0; root.phi = phi0; root.id = 0.0; root.phiC = phi0; root.scaleC = scale0; root.L = 0;
     stack[sp++] = root;
     int budget = kFernBudget;
-    while (sp > 0 && budget-- > 0) {
+    while (sp > 0 && budget-- > 0) {   // loop-bound: kFernBudget — budget = kFernBudget
         FernFrame fr = stack[--sp];
         float2 q = fr.q; float scale = fr.scale;
         int st = fh_state(scale, viewH, P);
@@ -196,7 +196,7 @@ static FernHit fh_descend(float2 q0, float scale0, float phi0, float viewH, text
         int lo = max((k0 & ~1) - wn, 0), hi = min((k0 & ~1) + wn + 1, nch - 1);
         // the nearest candidate is pushed LAST, so it is explored first (tightens the bound for the rest)
         int kb = -1; float db = 1e9;
-        for (int kk = lo; kk <= hi; kk++) {
+        for (int kk = lo; kk <= min(hi, 255); kk++) {
             constant FernChild& cc = ch[st * nch + kk];
             float2 qc = fh_toChild(q, cc);
             float dk = fh_sampleT(T, qc, fh_state(scale * cc.scale, viewH, P), P) * scale * cc.scale;
@@ -261,7 +261,7 @@ kernel void fh_render(texture2d_array<float> F [[texture(0)]], texture2d_array<f
     // NERVE IMPULSES: each pulse a front moving down PHI (trunk → branches → leaflet tips): sharp head, short tail
     float pulse = 0.0;
     int np = int(P.tm.w);
-    for (int i = 0; i < np; i++) {
+    for (int i = 0; i < min(np, 32); i++) {   // VQ.0: maxPulses = 32
         float dphi = pulses[i].x - r.phi;
         // a WAVE, not a line: a thin head lit only a few big stems (FH.16 round 2); this band sweeps the leaflets
         float head = exp(-dphi * dphi / 0.012), tail = dphi > 0.0 ? exp(-dphi / 0.35) : 0.0;

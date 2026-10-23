@@ -29,7 +29,7 @@ float sky_fbm(float2 p, int octaves) {
     float val = 0.0;
     float amp = 0.5;
     float freq = 1.0;
-    for (int i = 0; i < octaves; i++) {
+    for (int i = 0; i < min(octaves, 8); i++) {   // VQ.0: callers pass 4–5
         val += amp * sky_noise(p * freq);
         freq *= 2.0;
         amp *= 0.5;

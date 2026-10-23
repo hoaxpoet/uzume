@@ -20,13 +20,40 @@ extension RenderPipeline {
         let width  = max(Int(size.width), 1)
         let height = max(Int(size.height), 1)
 
-        guard let warpTex    = makeWarpTexture(width: width, height: height, format: bundle.feedbackFormat),
-              let composeTex = makeWarpTexture(width: width, height: height, format: bundle.feedbackFormat),
-              let sceneTex   = makeWarpTexture(width: width, height: height, format: bundle.feedbackFormat)
-        else {
+        // VQ.0: release the old set before allocating the new one, then allocate the whole set — warp,
+        // compose, scene and the scene's blur pyramid — through the budget, all or nothing.
+        mvWarpLock.withLock { mvWarpState = nil }
+        let format = bundle.feedbackFormat
+        func request(_ div: Int, _ name: String) -> RenderTargetBudget.Request {
+            let (wide, high) = (max(width / div, 1), max(height / div, 1))
+            let descriptor = context.sizeScaledDescriptor(
+                width: wide,
+                height: high,
+                pixelFormat: format,
+                storage: .private
+            )
+            return .init(descriptor, label: "mv_warp \(name) \(wide)×\(high)")
+        }
+        // Fata Morgana (D-139): the blur-of-prev target at 1/4 RESOLUTION — butterchurn's
+        // blur1 is a downsampled separable gaussian (blurRatios ~0.25), and the
+        // downsample + the warp's bilinear read are what make it a WIDE low-pass (which
+        // drives the warp's coherent large-scale smearing of the blobs into ribbons). A
+        // full-res blur was too narrow (blobs stayed discrete particles).
+        // Glaze (GLAZE.2b.1): a 3-level pyramid (½ + ¼ + ⅛ res) — the resolution halving
+        // widens the per-level gaussian for the multi-scale gel sheen (warp uses blur1+2,
+        // comp uses blur1+2+3). FM: a single ¼-res blur. Others: none.
+        let blurDivs = bundle.isGlaze ? [4, 8, 16] : (bundle.blurState != nil ? [4] : [])
+        let requests = [request(1, "warp"), request(1, "compose"), request(1, "scene")]
+            + blurDivs.enumerated().map { request($1, "blur\($0 + 1)") }
+        guard let made = context.renderTargetBudget.makeTextures(owner: "mvWarp", requests) else {
             mvWarpLogger.error("Failed to allocate mv_warp textures at \(width)×\(height)")
             return
         }
+        let (warpTex, composeTex, sceneTex) = (made[0], made[1], made[2])
+        let blurs = Array(made.dropFirst(3))
+        let blurTex = blurs.first
+        let blurTex2 = blurs.count > 1 ? blurs[1] : nil
+        let blurTex3 = blurs.count > 2 ? blurs[2] : nil
 
         // AV.2.1: clear freshly-allocated textures to the canvas ground — .private GPU
         // memory isn't zero-initialised, so the first post-switch frame can read stale bits
@@ -39,20 +66,6 @@ extension RenderPipeline {
         let canvasClear = MTLClearColor(red: cc.x, green: cc.y, blue: cc.z, alpha: cc.w)
         clearWarpTextures([warpTex, composeTex, sceneTex], to: canvasClear)
 
-        // Fata Morgana (D-139): the blur-of-prev target at 1/4 RESOLUTION — butterchurn's
-        // blur1 is a downsampled separable gaussian (blurRatios ~0.25), and the
-        // downsample + the warp's bilinear read are what make it a WIDE low-pass (which
-        // drives the warp's coherent large-scale smearing of the blobs into ribbons). A
-        // full-res blur was too narrow (blobs stayed discrete particles).
-        // Glaze (GLAZE.2b.1): a 3-level pyramid (½ + ¼ + ⅛ res) — the resolution halving
-        // widens the per-level gaussian for the multi-scale gel sheen (warp uses blur1+2,
-        // comp uses blur1+2+3). FM: a single ¼-res blur. Others: none.
-        func mk(_ div: Int) -> MTLTexture? {
-            makeWarpTexture(width: max(width / div, 1), height: max(height / div, 1), format: bundle.feedbackFormat)
-        }
-        let blurTex  = bundle.isGlaze ? mk(4) : (bundle.blurState != nil ? mk(4) : nil)
-        let blurTex2 = bundle.isGlaze ? mk(8) : nil
-        let blurTex3 = bundle.isGlaze ? mk(16) : nil
         // The blur intermediates always start black — they are not the canvas ground.
         let blurClear = [blurTex, blurTex2, blurTex3].compactMap { $0 }
         if !blurClear.isEmpty { clearWarpTextures(blurClear, to: MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)) }
@@ -100,18 +113,7 @@ extension RenderPipeline {
     /// No-op if no mv_warp state is active.
     public func reallocateMVWarpTextures(size: CGSize) {
         guard let existing = mvWarpLock.withLock({ mvWarpState }) else { return }
-        let bundle = MVWarpPipelineBundle(
-            warpState: existing.warpPipeline,
-            composeState: existing.composePipeline,
-            blitState: existing.blitPipeline,
-            pixelFormat: existing.pixelFormat,
-            feedbackFormat: existing.feedbackFormat,
-            blurState: existing.blurPipeline,
-            isNacre: existing.isNacre,
-            isFloret: existing.isFloret,
-            isGlaze: existing.isGlaze,
-            canvasClearColor: existing.canvasClearColor   // resize re-clears to the same ground (D-143)
-        )
+        let bundle = MVWarpPipelineBundle(rebuilding: existing)   // resize re-clears to the same ground (D-143)
         setupMVWarp(bundle: bundle, size: size)
     }
 
@@ -144,19 +146,5 @@ extension RenderPipeline {
     /// `Σ(1−d)×d^n = 1` holds and the scene converges to 1× brightness at steady state.
     public func setMVWarpDecay(_ decay: Float) {
         mvWarpLock.withLock { mvWarpDecay = decay }
-    }
-
-    // MARK: Texture Helper
-
-    private func makeWarpTexture(width: Int, height: Int, format: MTLPixelFormat) -> MTLTexture? {
-        let desc = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: format,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        desc.usage = [.renderTarget, .shaderRead]
-        desc.storageMode = .private
-        return context.device.makeTexture(descriptor: desc)
     }
 }

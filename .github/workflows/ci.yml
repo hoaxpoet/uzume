@@ -170,3 +170,6 @@ jobs:
 
       - name: Sample-rate literal lint (D-079)
         run: Scripts/check_sample_rate_literals.sh
+
+      - name: Shader loop-bound lint (VQ.0, D-264)
+        run: Scripts/check_shader_loop_bounds.sh
