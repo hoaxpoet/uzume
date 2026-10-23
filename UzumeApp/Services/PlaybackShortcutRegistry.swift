@@ -181,7 +181,7 @@ final class PlaybackShortcutRegistry {
                 id: "cycleReconstructionReview",
                 key: "e",
                 modifiers: [],
-                label: "Energetic Flyby: stretched / reconstructed / native (EFB.4 review)",
+                label: "Energetic Flyby: stretched / reconstructed / reconstructed ½ / native (EFB.4 review)",
                 category: .developer,
                 action: fn
             ))

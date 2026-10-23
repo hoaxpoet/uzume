@@ -261,7 +261,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     var energeticFlybyState: EnergeticFlybyState?
 
     /// EFB.4 review tool (developer builds only): how a reconstructing scene reaches the screen —
-    /// `UZUME_EFB_RECON=off|recon|native`, cycled by the `e` developer key. Public builds always take the
+    /// `UZUME_EFB_RECON=off|recon|recon50|native`, cycled by the `e` developer key. Public builds always take the
     /// sidecar's reconstruction.
     var reconstructionReviewMode = ReconstructionReviewMode(
         environment: ProcessInfo.processInfo.environment["UZUME_EFB_RECON"])

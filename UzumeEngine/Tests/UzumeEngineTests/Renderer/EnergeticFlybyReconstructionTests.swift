@@ -36,7 +36,7 @@ final class EFBReconRig {
     private var textures: [String: MTLTexture] = [:]
 
     /// `reactiveMask: false` loads the same shader with the mask switched off (the colour-lag control arm).
-    init(outW: Int, outH: Int, reactiveMask: Bool = true) throws {
+    init(outW: Int, outH: Int, reactiveMask: Bool = true, internalScale: Float? = nil) throws {
         let ctx = try MetalContext()
         context = ctx
         var src = URL(fileURLWithPath: #filePath)
@@ -45,6 +45,9 @@ final class EFBReconRig {
         let shader = try String(contentsOf: src.appendingPathComponent("EnergeticFlyby.metal"), encoding: .utf8)
         var sidecar = try String(contentsOf: src.appendingPathComponent("EnergeticFlyby.json"), encoding: .utf8)
         if !reactiveMask { sidecar = sidecar.replacingOccurrences(of: "\"reactive_mask\": true", with: "\"reactive_mask\": false") }
+        if let internalScale {
+            sidecar = sidecar.replacingOccurrences(of: "\"internal_scale\": 0.6666667", with: "\"internal_scale\": \(internalScale)")
+        }
         preset = try MFXProofScene.load(shader: shader, sidecar: sidecar, file: "EnergeticFlyby", context: ctx)
         guard let spec = preset.descriptor.temporalReconstruction, preset.temporalPipelineState != nil else {
             throw MFXProofError.noPipeline
@@ -351,37 +354,46 @@ struct EnergeticFlybyReconstructionTests {
     /// Release GPU ms at a 4K drawable: today (cap + stretch), reconstructed, native, spatial (comparison).
     private func timing() throws {
         let rig = try EFBReconRig(outW: 3840, outH: 2160)
+        let half = try EFBReconRig(outW: 3840, outH: 2160, internalScale: 0.5)
         let drive = try Self.drive("there_there", seconds: 10)
         var ms: [String: [Double]] = [:]
         for (i, fv) in drive.enumerated() {
             rig.state.tick(deltaTime: fv.deltaTime, features: fv, stems: .zero)
-            var today: Double?, recon: Double?, native: Double?
+            half.state.tick(deltaTime: fv.deltaTime, features: fv, stems: .zero)
+            var today: Double?, recon: Double?, native: Double?, halfRecon: Double?
             _ = try rig.plain(fv, width: 2560, height: 1440, slot: "today", gpuMs: &today)
             _ = try rig.reconstruct(fv, gpuMs: &recon)
             _ = try rig.plain(fv, width: 3840, height: 2160, slot: "native", gpuMs: &native)
+            _ = try half.reconstruct(fv, gpuMs: &halfRecon)
             guard i >= 10 else { continue }
             for (key, value) in [("today 2560×1440 stretched", today), ("reconstructed 2560×1440 → 3840×2160", recon),
-                                 ("native 3840×2160", native)] {
+                                 ("native 3840×2160", native), ("reconstructed 1920×1080 → 3840×2160 (scale 0.5)", halfRecon)] {
                 if let value { ms[key, default: []].append(value) }
             }
         }
         for (key, values) in ms.sorted(by: { $0.key < $1.key }) {
             let s = values.sorted()
-            print(String(format: "[efb4-timing] %@: p50 %.2f ms, p95 %.2f ms, max %.2f ms (n=%d)",
-                         key, s[s.count / 2], s[Int(Double(s.count) * 0.95)], s.last ?? 0, s.count))
+            print(String(format: "[efb4-timing] %@: p50 %.2f ms, p95 %.2f ms, max %.2f ms, %.1f%% > 33.3 ms (n=%d)",
+                         key, s[s.count / 2], s[Int(Double(s.count) * 0.95)], s.last ?? 0,
+                         Double(s.filter { $0 > 1000 / 30 }.count) / Double(s.count) * 100, s.count))
         }
     }
 
     /// The four modes at three moments of There There, full 4K frames.
     private func stills(_ out: URL) throws {
         let rig = try EFBReconRig(outW: 3840, outH: 2160)
+        let half = try EFBReconRig(outW: 3840, outH: 2160, internalScale: 0.5)
         let drive = try Self.drive("there_there", seconds: 15)
         let moments = [149: "t05", 299: "t10", 449: "t15"]
         for (i, fv) in drive.enumerated() {
             rig.state.tick(deltaTime: fv.deltaTime, features: fv, stems: .zero)
+            half.state.tick(deltaTime: fv.deltaTime, features: fv, stems: .zero)
             var unused: Double?
             let recon = try rig.reconstruct(fv, gpuMs: &unused)   // every frame: the history is the point
+            let recon50 = try half.reconstruct(fv, gpuMs: &unused)
             guard let label = moments[i] else { continue }
+            try EnergeticFlybyRenderTests.writePNG(half.bgra(recon50), 3840, 2160,
+                                                   out.appendingPathComponent("efb4_\(label)_recon50.png"))
             let native = try rig.plain(fv, width: 3840, height: 2160, slot: "native", gpuMs: &unused)
             let today = try rig.plain(fv, width: 2560, height: 1440, slot: "today", gpuMs: &unused)
             let spatial = try rig.spatial(fv, width: 2560, height: 1440)
@@ -390,7 +402,7 @@ struct EnergeticFlybyReconstructionTests {
                                                        out.appendingPathComponent("efb4_\(label)_\(mode).png"))
             }
         }
-        print("[efb4-stills] \(out.path)/efb4_t{05,10,15}_{native,recon,stretch,spatial}.png")
+        print("[efb4-stills] \(out.path)/efb4_t{05,10,15}_{native,recon,recon50,stretch,spatial}.png")
     }
 
     /// The certified flash measure (the worst-case train, 60 settle + 900 frames at 60 fps, 320×180 internal) on the
@@ -437,7 +449,10 @@ struct EnergeticFlybyReconstructionTests {
             }
             let lags = Self.downbeatLags(recon: recon, native: native, hues: hues)
             print("[efb4-lag] reactive mask \(mask ? "on" : "off"): downbeat colour lag (frames, recon behind native) "
-                  + "\(lags) | max \(lags.map(abs).max() ?? 0)")
+                  + "\(lags) | max \(lags.map(abs).max() ?? 0) | "
+                  + String(format: "colour error over the 8 frames after a step %.5f, elsewhere %.5f",
+                           Self.stepError(recon: recon, native: native, hues: hues, after: true),
+                           Self.stepError(recon: recon, native: native, hues: hues, after: false)))
         }
     }
 
@@ -489,6 +504,15 @@ struct EnergeticFlybyReconstructionTests {
             sum += r + g + b
         }
         return diff / max(sum, 1)
+    }
+
+    /// Mean |recon − native| colour index over the 8 frames after each colour step (`after`), or over every other
+    /// frame: a sub-frame measure of how much the reconstruction trails the turn.
+    static func stepError(recon: [Double], native: [Double], hues: [Float], after: Bool) -> Double {
+        var near = Set<Int>()
+        for f in hues.indices.dropFirst() where hues[f] != hues[f - 1] { for j in 0..<8 { near.insert(f + j) } }
+        let frames = recon.indices.filter { near.contains($0) == after }
+        return frames.map { abs(recon[$0] - native[$0]) }.reduce(0, +) / Double(max(frames.count, 1))
     }
 
     /// For each downbeat colour step (the frame the hue starts moving), the shift k in −3…3 frames that best aligns

@@ -904,7 +904,7 @@ extension VisualizerEngine {
     func applyTemporalReconstruction(_ preset: PresetLoader.LoadedPreset) {
         let spec = preset.descriptor.temporalReconstruction
         let mode = spec != nil && BuildFlavor.current.showsDeveloperDiagnostics ? reconstructionReviewMode : .recon
-        pipeline.setTemporalReconstruction(mode == .recon ? spec : nil, pipeline: preset.temporalPipelineState)
+        pipeline.setTemporalReconstruction(mode.spec(from: spec), pipeline: preset.temporalPipelineState)
         if spec != nil, mode == .native {
             pipeline.setRenderPixelCap(nil)
             reconstructionReviewLiftedCap = true
@@ -917,7 +917,7 @@ extension VisualizerEngine {
         if spec != nil { logger.info("EFB.4 review: '\(preset.descriptor.name)' mode=\(mode.rawValue)") }
     }
 
-    /// EFB.4 developer key: today's stretch → reconstructed → true native → … on the scene on screen.
+    /// EFB.4 developer key: stretch → reconstructed → reconstructed at half scale → native → … on the scene on screen.
     func cycleReconstructionReviewMode() {
         let modes = ReconstructionReviewMode.allCases
         reconstructionReviewMode = modes[((modes.firstIndex(of: reconstructionReviewMode) ?? 0) + 1) % modes.count]
@@ -1088,13 +1088,33 @@ extension VisualizerEngine {
 enum ReconstructionReviewMode: String, CaseIterable, Sendable {
     /// Today's path: rendered at the tier-1 cap (≈2560×1440) and stretched bilinearly.
     case off
-    /// MetalFX temporal reconstruction to the drawable (the sidecar's opt-in).
+    /// MetalFX temporal reconstruction to the drawable (the sidecar's opt-in: 2/3 scale, ≈2560×1440 on 4K).
     case recon
+    /// The same at half scale (1920×1080 on 4K): the scale that holds 30 fps on an M2 Pro at 4K (EFB.4 timing).
+    case recon50
     /// True native: the plain render at the drawable's full size (heavy).
     case native
 
     /// `UZUME_EFB_RECON`; anything else (or unset) is `recon`.
     init(environment value: String?) {
         self = value.flatMap(Self.init(rawValue:)) ?? .recon
+    }
+
+    /// The reconstruction this mode applies to a scene that declares `spec`; nil = the plain path.
+    func spec(from spec: TemporalReconstructionSpec?) -> TemporalReconstructionSpec? {
+        guard let spec else { return nil }
+        switch self {
+        case .recon: return spec
+        case .recon50:
+            return TemporalReconstructionSpec(
+                internalScale: 0.5,
+                motionVectors: spec.motionVectors,
+                reactiveMask: spec.reactiveMask,
+                fieldOfViewDegrees: spec.fieldOfViewDegrees,
+                nearPlane: spec.nearPlane,
+                farPlane: spec.farPlane
+            )
+        case .off, .native: return nil
+        }
     }
 }
