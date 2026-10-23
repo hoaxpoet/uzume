@@ -6,7 +6,7 @@
 // The full-scene soak runs in the app (`Scripts/render_soak.sh`): only the app owns `applyPreset`. This one churns
 // the engine's allocation paths for the whole duration — scene switches across feedback, mv_warp (Dragon Bloom),
 // ray-march and staged (Staged Sandbox), each at 4K, with a 1080p ↔ 4K commit every 30 s — and gates on drift:
-// after the first full cycle, Metal's allocation and phys_footprint must not climb.
+// after the first minute (warm-up), Metal's allocation and phys_footprint must not climb.
 
 import Testing
 import Foundation
@@ -53,20 +53,24 @@ struct RenderSoakTests {
         var samples: [(t: Double, metal: Int, footprint: Int)] = []
         var baselineIndex: Int?
         while Date().timeIntervalSince(start) < minutes * 60 {
-            try apply(scene)
+            // One switch per 50 ms, each in its own autorelease pool — what the app's run loop gives every frame.
+            // Without the pool a tight loop parks every autoreleased Metal temporary for the whole run (measured:
+            // phys_footprint +551 MB with Metal's own allocation flat).
+            try autoreleasepool { try apply(scene) }
+            Thread.sleep(forTimeInterval: 0.05)
             scene += 1
-            if Date().timeIntervalSince(lastToggle) >= 30 {
+            if Date().timeIntervalSince(lastToggle) >= 30 { autoreleasepool {
                 size = size == vq0UHD ? vq0HD : vq0UHD
                 rig.resize(size)
                 if scene % 4 == 3 { rayMarch.ensureAllocated(width: Int(size.width), height: Int(size.height)) }
                 rig.idle()
                 lastToggle = Date()
-            }
+            } }
             if scene % 4 == 0, size == vq0UHD {      // sample at the same point of the cycle, at 4K
                 rig.idle()
                 let footprint = Int(MemoryReporter.snapshot()?.residentBytes ?? 0)
                 samples.append((Date().timeIntervalSince(start), rig.ctx.device.currentAllocatedSize, footprint))
-                if baselineIndex == nil { baselineIndex = samples.count - 1 }
+                if baselineIndex == nil, Date().timeIntervalSince(start) >= 60 { baselineIndex = samples.count - 1 }
             }
             #expect(rig.chargedEqualsLive)
             #expect(rig.budget.totalBytes <= rig.budget.ceiling)
