@@ -151,6 +151,32 @@ every scene) and stretched on 4K displays, where Kali's hard edges read as sligh
 is out of reach on an M2 Pro (p95 ~50–60 ms); Matt kept smooth 30 fps over crisp ~20 fps. Recorded in
 KNOWN_ISSUES §Known Limitations.
 
+**EFB.4, temporal reconstruction (2026-10-23; Phase VQ, D-263).** The scene renders smaller and MetalFX rebuilds
+the display's native size from jittered frames. Nothing in the look changed (FA #65): with the jitter zero, the
+shipped path is byte-identical to EFB.3 (40/40 replayed frames, 4/4 faithful stills). What the shader adds, for the
+reconstructor only:
+- **Motion in closed form.** Kali's tunnel is fixed in his warped domain (`p.xy − path(p.z)`, turned by
+  `p.z + time·.5`, scaled by `1.3 − s²·.7`; `z` untouched), so a surface point's previous position is the inverse
+  warp at the previous `time`; a sphere point goes back through the previous spin and cluster position. Both are
+  projected with the previous camera. Kali's ray is not a pinhole (`M·normalize(uv·rot, .5) + sway`), so the
+  projection solves `|μv − w| = 1` for μ: exact (a frame against itself moves ≤ 0.012 px). Warping frame N by the
+  field predicts N+1 on the sharpest 10 % of pixels at |Δ| 0.123 vs 0.169 camera-only and 0.196 for no motion; the
+  remainder is Kali's animated texture and glow, which no motion vector can carry.
+- **Reactive mask:** the glow's share of a pixel while the downbeat turn moves it, and where the rods' own glow
+  dominates. Measured: without it the colour error vs native rises after each downbeat step (0.00125 vs 0.00113
+  elsewhere); with it, it does not (0.00102 vs 0.00110). Neither lags by a whole frame.
+- **Cost at a 4K drawable, M2 Pro, Release** (There There, 30 fps, n = 290): today's stretch p50 23.7 / p95 31.4 ms
+  (2.1 % of frames past 33 ms); reconstructed from 2560×1440 32.2 / 39.3 (**37.9 % past 33 ms** — it does not hold
+  30 fps on this Mac); reconstructed from 1920×1080 21.5 / 25.7 (0 %); native 49.7 / 68.5 (99.3 %).
+- **Look** (1:1 crops, three moments): reconstruction removes the stair-steps on shell and sphere edges (they read
+  like a supersampled image), but the fine texture inside the perforations and the streaks is softer than native,
+  about as soft as the stretch — D-263's forward-flight finding. Half scale keeps the same interiors and brings
+  some stair-steps back. MetalFX spatial (offline only) keeps native's crispness and its stair-steps.
+- **Flash:** identical to the certified path on the worst-case train (0.00/s, regional 3.00/s, red 1.00/s).
+- No frame interpolation (MFX.2 skipped it, amendment A5 → VQ.4a): 30 fps presented.
+
+Matt decides on the 4K display with the developer `e` key (stretch → reconstructed → reconstructed ½ → native).
+
 ## 8. Licence (D-252)
 
 Kali's source carries no licence header, so Shadertoy's default terms apply: **CC BY-NC-SA 3.0**. The port is
@@ -173,6 +199,7 @@ the second NC-SA scene after Aurora Veil, inside D-252's cap of about three. Obl
 | EFB.1 | Faithful port + `EnergeticFlybyState` music drivers + photosensitivity fix + wiring (uncertified) + harness + Release timing | Stop for Matt's live look (local beta playlist + one streaming pass) |
 | EFB.2 | M7 rounds (two maximum, the PHYS escalation rule) | Matt's M7 |
 | EFB.3 | Certification: `audio_routes` green, flash-safe measured, frame budget, soak, NEW_PRESET_CHECKLIST §4 | Matt's sign-off |
+| EFB.4 | Temporal reconstruction (MFX.2): jitter, depth, analytic motion, reactive mask, sidecar opt-in, developer comparison switch, Release evidence (§7) | Matt's side-by-side on the 4K display |
 
 ## 10. Decisions taken in the design seat (defaults; Matt may override)
 
