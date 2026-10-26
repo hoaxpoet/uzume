@@ -11,6 +11,7 @@ import Combine
 import CoreGraphics
 import DSP
 import Foundation
+import Metal
 import ML
 import Orchestrator
 import os.log
@@ -1063,26 +1064,40 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             .object(forKey: "ffoColdStartFixEnabled") as? Bool) ?? true
         self.mirPipeline.ffoColdStartFixEnabled = ffoColdStartFixEnabled
         let tier = Self.detectDeviceTier(device: ctx.device)
-        self.murmurationGeometry = Self.makeMurmurationGeometry(context: ctx, library: lib)
-        self.filigreeGeometry = Self.makeFiligreeGeometry(context: ctx, library: lib)
-        self.mitosisGeometry = Self.makeMitosisGeometry(context: ctx, library: lib)
-        self.alfvenSolver = Self.makeAlfvenSolver(context: ctx, library: lib)
-        self.fiddleheadFern = Self.makeFiddleheadFern(context: ctx, library: lib)
-        self.cytokinesisGeometry = Self.makeCytokinesisGeometry(context: ctx, library: lib)
-        self.ricercarGeometry = Self.makeRicercarGeometry(context: ctx, library: lib)
-        self.cymaticSandGeometry = Self.makeCymaticSandGeometry(context: ctx, library: lib)
-        self.witchlightGeometry = Self.makeWitchlightGeometry(context: ctx, library: lib)
+        // VQ.1: each geometry draws its scene's frame target, so it compiles against that scene's
+        // format (its sidecar `finish` mode), resolved by the loader.
+        let frameFormat = { (name: String) in loader.frameTargetFormat(forPreset: name) }
+        self.murmurationGeometry = Self.makeMurmurationGeometry(
+            context: ctx, pixelFormat: frameFormat("Murmuration"), library: lib)
+        self.filigreeGeometry = Self.makeFiligreeGeometry(
+            context: ctx, pixelFormat: frameFormat("Filigree"), library: lib)
+        self.mitosisGeometry = Self.makeMitosisGeometry(
+            context: ctx, pixelFormat: frameFormat("Mitosis"), library: lib)
+        self.alfvenSolver = Self.makeAlfvenSolver(
+            context: ctx, pixelFormat: frameFormat("Alfvén"), library: lib)
+        self.fiddleheadFern = Self.makeFiddleheadFern(
+            context: ctx, pixelFormat: frameFormat("Fiddlehead"), library: lib)
+        self.cytokinesisGeometry = Self.makeCytokinesisGeometry(
+            context: ctx, pixelFormat: frameFormat("Cytokinesis"), library: lib)
+        self.ricercarGeometry = Self.makeRicercarGeometry(
+            context: ctx, pixelFormat: frameFormat("Ricercar"), library: lib)
+        self.cymaticSandGeometry = Self.makeCymaticSandGeometry(
+            context: ctx, pixelFormat: frameFormat("Cymatic Resonance"), library: lib)
+        self.witchlightGeometry = Self.makeWitchlightGeometry(
+            context: ctx, pixelFormat: frameFormat("Witchlight"), library: lib)
         self.firefliesGeometry = Self.makeFirefliesGeometry(
-            context: ctx, library: lib, beatGrid: pipe.spectralHistory)
+            context: ctx, pixelFormat: frameFormat("Fireflies"), library: lib, beatGrid: pipe.spectralHistory)
         self.staveGeometry = Self.makeStaveGeometry(
             context: ctx,
+            pixelFormat: frameFormat("Stave"),
             library: lib,
             waveform: buf.metalBuffer,
             sampleRate: StemSeparator.modelSampleRate
         )
         self.meniscusGeometry = Self.makeMeniscusGeometry(
-            context: ctx, library: lib, spectrum: fft.magnitudeBuffer)
-        self.kaguraGeometry = Self.makeKaguraGeometry(context: ctx, library: lib)
+            context: ctx, pixelFormat: frameFormat("Meniscus"), library: lib, spectrum: fft.magnitudeBuffer)
+        self.kaguraGeometry = Self.makeKaguraGeometry(
+            context: ctx, pixelFormat: frameFormat("Kagura"), library: lib)
         self.moodClassifier = classifier
         self.stemAnalyzer = analyzer
         self.stemSeparator = sep
@@ -1375,13 +1390,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Returns `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeMurmurationGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let flock = try? Murmuration3DGeometry(
             device: context.device,
             library: library.library,
             configuration: Murmuration3DConfiguration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1394,13 +1410,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeFiligreeGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let web = try? PhysarumGeometry(
             device: context.device,
             library: library.library,
             configuration: PhysarumConfiguration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1414,12 +1431,13 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// because it is really "compute per frame, then draw".
     private static func makeAlfvenSolver(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         do {
             return try AlfvenSolver(device: context.device,
                                     library: library.library,
-                                    pixelFormat: context.pixelFormat)
+                                    pixelFormat: pixelFormat)
         } catch {
             Logging.renderer.error("AlfvenSolver unavailable: \(error)")
             return nil
@@ -1430,12 +1448,13 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// fields are allocated and baked on the preset's first frame, off the frame's own command buffer.
     private static func makeFiddleheadFern(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> FiddleheadFern? {
         do {
             return try FiddleheadFern(device: context.device,
                                       library: library.library,
-                                      pixelFormat: context.pixelFormat)
+                                      pixelFormat: pixelFormat)
         } catch {
             Logging.renderer.error("FiddleheadFern unavailable: \(error)")
             return nil
@@ -1447,13 +1466,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeMitosisGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let colony = try? MitosisGeometry(
             device: context.device,
             library: library.library,
             configuration: MitosisConfiguration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1467,13 +1487,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Returns `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeCytokinesisGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let cells = try? MitosisGen2Geometry(
             device: context.device,
             library: library.library,
             configuration: MitosisGen2Configuration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1502,13 +1523,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// first consumer of that capability in the app.
     private static func makeRicercarGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let echo = try? RicercarEchoGeometry(
             device: context.device,
             library: library.library,
             configuration: RicercarEchoConfiguration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1549,6 +1571,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Returns `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeMeniscusGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary,
         spectrum: UMABuffer<Float>
     ) -> (any ParticleGeometry)? {
@@ -1559,7 +1582,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             device: context.device,
             library: library.library,
             configuration: MeniscusConfiguration(),
-            pixelFormat: context.pixelFormat,
+            pixelFormat: pixelFormat,
             spectrum: spectrum
         ) else {
             return nil
@@ -1574,13 +1597,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeWitchlightGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let stroke = try? WitchlightStroke(
             device: context.device,
             library: library.library,
             configuration: WitchlightConfiguration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1593,11 +1617,12 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// not subclasses). Decodes the bundled clip library (`KaguraClipLibrary.shared()`, KAG.1).
     private static func makeKaguraGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         do {
             let dancer = try KaguraDancer(
-                device: context.device, library: library.library, pixelFormat: context.pixelFormat)
+                device: context.device, library: library.library, pixelFormat: pixelFormat)
             logger.info("Kagura created: point-light dancer, twist (KAG.2)")
             return dancer
         } catch {
@@ -1615,6 +1640,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// precedent of handing a geometry an existing engine buffer.
     private static func makeFirefliesGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary,
         beatGrid: SpectralHistoryBuffer
     ) -> (any ParticleGeometry)? {
@@ -1622,7 +1648,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             device: context.device,
             library: library.library,
             beatGrid: beatGrid,
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1639,6 +1665,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// Meniscus precedent (MEN.2b); no copy, no protocol change.
     private static func makeStaveGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary,
         waveform: MTLBuffer,
         sampleRate: Float
@@ -1648,7 +1675,7 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
             library: library.library,
             waveform: waveform,
             configuration: StaveConfiguration(sampleRate: sampleRate),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }
@@ -1661,13 +1688,14 @@ final class VisualizerEngine: ObservableObject, @unchecked Sendable {
     /// `any ParticleGeometry` (D-097, siblings not subclasses).
     private static func makeCymaticSandGeometry(
         context: MetalContext,
+        pixelFormat: MTLPixelFormat,
         library: Renderer.ShaderLibrary
     ) -> (any ParticleGeometry)? {
         guard let sand = try? CymaticSandGeometry(
             device: context.device,
             library: library.library,
             configuration: CymaticSandConfiguration(),
-            pixelFormat: context.pixelFormat
+            pixelFormat: pixelFormat
         ) else {
             return nil
         }

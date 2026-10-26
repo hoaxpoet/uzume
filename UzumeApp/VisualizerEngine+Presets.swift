@@ -212,6 +212,8 @@ extension VisualizerEngine {
         pipeline.setDirectRenderScale(desc.directRenderScale)
         // MFX.2: nil for every scene without `temporal_reconstruction`.
         pipeline.setTemporalReconstruction(desc.temporalReconstruction, pipeline: preset.temporalPipelineState)
+        // VQ.1: the scene's finish — `legacy` (every shipped scene) leaves its pixels unchanged.
+        pipeline.setFinish(desc.finish, lutURL: preset.finishLUTURL)
         pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
         stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
@@ -427,7 +429,7 @@ extension VisualizerEngine {
                     warpState: warpPipelines.warpState,
                     composeState: warpPipelines.composeState,
                     blitState: warpPipelines.blitState,
-                    pixelFormat: context.pixelFormat,
+                    pixelFormat: desc.finish.frameTargetFormat,
                     feedbackFormat: fbFormat,
                     // Fata Morgana (D-139): non-nil ⇒ the render pipeline runs the fata
                     // branch (blur → custom warp → mirage comp). nil for every other
