@@ -373,6 +373,7 @@ struct PresetAcceptanceTests {
         encoder.setFragmentBuffer(buffers.hist, offset: 0, index: 5)
         encoder.setFragmentBuffer(buffers.presetState, offset: 0, index: 6)
         encoder.setFragmentBuffer(buffers.presetState, offset: 0, index: 7)
+        encoder.setFragmentBuffer(buffers.presetState, offset: 0, index: 9)  // MFX.2 TemporalFrame, zeroed (a reconstructing scene's fragment reads it; production always binds it)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
         cmdBuf.commit()

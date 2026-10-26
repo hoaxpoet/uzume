@@ -168,11 +168,24 @@ struct EnergeticFlybyStateTests {
         #expect(last.faithful == 1 && last.hue == 0 && last.roll == 0 && last.glowBase == 0.5)
     }
 
+    // MARK: - Previous frame (EFB.4)
+
+    @Test("Each frame carries the previous frame's camera, spin and hue (the motion vectors' source)")
+    func previousFrameValues() throws {
+        let (_, trace) = try Self.run(Self.grid(seconds: 3))
+        for i in trace.indices.dropFirst() {
+            let (now, last) = (trace[i], trace[i - 1])
+            #expect(now.prevTime == last.time && now.prevTravel == last.travel && now.prevCamT == last.camT
+                    && now.prevSpin == last.spin && now.prevRoll == last.roll && now.prevHue == last.hue,
+                    "frame \(i)")
+        }
+    }
+
     // MARK: - GPU layout
 
     @Test("EnergeticFlybyStateGPU matches the MSL struct byte for byte (Metal reflection)")
     func gpuLayoutMatchesMSL() throws {
-        #expect(MemoryLayout<EnergeticFlybyStateGPU>.stride == 48)
+        #expect(MemoryLayout<EnergeticFlybyStateGPU>.stride == 64)
         let device = try #require(MTLCreateSystemDefaultDevice())
         // Compile exactly as PresetLoader does (shared preamble + the scene file, fast math, MSL 3.1).
         var url = URL(fileURLWithPath: #filePath)
@@ -201,7 +214,13 @@ struct EnergeticFlybyStateTests {
             "glowBase": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.glowBase)!,
             "hue": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.hue)!,
             "roll": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.roll)!,
-            "faithful": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.faithful)!
+            "faithful": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.faithful)!,
+            "prevTime": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.prevTime)!,
+            "prevTravel": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.prevTravel)!,
+            "prevCamT": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.prevCamT)!,
+            "prevSpin": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.prevSpin)!,
+            "prevRoll": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.prevRoll)!,
+            "prevHue": MemoryLayout<EnergeticFlybyStateGPU>.offset(of: \.prevHue)!
         ]
         for (name, offset) in swiftOffsets {
             let member = members.first { $0.name == name }
