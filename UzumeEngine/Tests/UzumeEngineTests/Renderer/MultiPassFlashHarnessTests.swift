@@ -44,6 +44,12 @@ struct MultiPassFlashHarnessTests {
 
     // MARK: - Gate (one test per preset → its own evidence line + assertion)
 
+    @Test("VQ.1 proof scene is flash-safe through the cinematic finish's multi-pass bloom chain")
+    func finishProofSceneIsFlashSafe() throws {
+        let result = try FinishProofFlash.measure()
+        assertFlashSafe(name: "VQ.1 proof scene (cinematic, multi-pass finish)", samples: result.cinematic)
+    }
+
     @Test("Lumen Mosaic is flash-safe (rayMarch + follower, real headless render)")
     func lumenMosaicIsFlashSafe() async throws {
         assertFlashSafe(name: "Lumen Mosaic", samples: try await flashLuma("Lumen Mosaic"))

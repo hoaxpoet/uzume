@@ -58,8 +58,14 @@ struct PresetSidecarKeyGateTests {
     private static let deliberateZeroAdopterKeys: [String: String] = [
         "temporal_reconstruction": """
             MFX.2 built direct-path MetalFX reconstruction and proved it on a test-only scene \
-            (`MFXProofScene`); no shipped scene changes in that increment. Energetic Flyby is the \
-            named consumer and adopts it at EFB.4, where Matt judges it against native 4K.
+            (`MFXProofScene`); no shipped scene changes in that increment. EFB.4 tried it on \
+            Energetic Flyby and Matt kept the stretch (D-263 amendment), so it still waits for a \
+            consumer whose frame does not mostly move at once.
+            """,
+        "finish": """
+            VQ.1 built the shared finishing stage; `cinematic` is proved on a test-only scene \
+            (`FinishingStageTests`) and no shipped scene opts in, so every scene keeps its pixels. \
+            Ferrofluid Ocean adopts it at VQ.1c, where Matt judges legacy vs cinematic.
             """,
         "natural_cycle_seconds": """
             D-246: Arachne was the only adopter and was removed. The key feeds \
