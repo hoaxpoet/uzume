@@ -295,7 +295,7 @@ extension RenderPipeline {
     ) {
         guard let descriptor = instrumentedRenderPassDescriptor(
                   from: view, commandBuffer: commandBuffer, site: "direct.descriptor"),
-              let drawable = instrumentedDrawable(
+              let target = instrumentedDrawable(
                   from: view, commandBuffer: commandBuffer, site: "direct.drawable") else { return }
 
         // Refresh the dynamic text overlay (CPU write must complete before the GPU
@@ -307,12 +307,13 @@ extension RenderPipeline {
         }
 
         // MFX.2: a scene that declared `temporal_reconstruction` renders at its internal size and
-        // MetalFX rebuilds the drawable-sized frame into the drawable itself (not the A4 canvas).
+        // MetalFX rebuilds the drawable-sized frame, which the present step finishes into the
+        // drawable (not the A4 canvas).
         // Every other scene skips this and takes exactly the paths below.
         if temporalReconstructor != nil,
            drawDirectReconstructed(
                commandBuffer: commandBuffer,
-               drawable: drawable.drawable,
+               target: target,
                features: &features,
                stems: stemFeatures,
                textOverlay: textOverlay) {
@@ -327,9 +328,10 @@ extension RenderPipeline {
         // scale == 1.0 (every other preset) → the normal full-res path below.
         let scale = directRenderScale
         if scale < 0.999,
-           let halfTex = halfResTarget(drawableWidth: drawable.texture.width,
-                                       drawableHeight: drawable.texture.height,
-                                       scale: scale) {
+           let halfTex = halfResTarget(drawableWidth: target.texture.width,
+                                       drawableHeight: target.texture.height,
+                                       scale: scale,
+                                       format: target.texture.pixelFormat) {
             // Pass 1 — preset fragment → half-res offscreen texture.
             let offDesc = MTLRenderPassDescriptor()
             offDesc.colorAttachments[0].texture = halfTex
@@ -352,12 +354,12 @@ extension RenderPipeline {
             descriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
             descriptor.colorAttachments[0].storeAction = .store
             guard let upEnc = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
-            upEnc.setRenderPipelineState(feedbackBlitPipelineState)
+            upEnc.setRenderPipelineState(frameBlitPipeline(for: target.texture.pixelFormat))
             upEnc.setFragmentTexture(halfTex, index: 0)
             upEnc.setFragmentSamplerState(feedbackSamplerState, index: 0)
             upEnc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             upEnc.endEncoding()
-            instrumentedPresent(drawable, on: commandBuffer)
+            instrumentedPresent(target, on: commandBuffer)
             return
         }
 
@@ -374,7 +376,7 @@ extension RenderPipeline {
             particles: particles,
             textOverlay: textOverlay)
         encoder.endEncoding()
-        instrumentedPresent(drawable, on: commandBuffer)
+        instrumentedPresent(target, on: commandBuffer)
     }
 
     // swiftlint:enable function_parameter_count

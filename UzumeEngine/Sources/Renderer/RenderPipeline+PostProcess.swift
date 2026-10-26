@@ -46,7 +46,7 @@ extension RenderPipeline {
         activePipeline: MTLRenderPipelineState,
         chain: PostProcessChain
     ) {
-        guard let drawable = instrumentedDrawable(
+        guard let target = instrumentedDrawable(
             from: view, commandBuffer: commandBuffer, site: "postProcess.drawable"
         ) else { return }
 
@@ -64,13 +64,13 @@ extension RenderPipeline {
             fftBuffer: fftMagnitudeBuffer,
             waveformBuffer: waveformBuffer,
             stemFeatures: stemFeatures,
-            outputTexture: drawable.texture,
+            outputTexture: target.texture,
             commandBuffer: commandBuffer,
             noiseTextures: noiseTextures,
             presetFragmentBuffer: presetBuf
         )
 
-        instrumentedPresent(drawable, on: commandBuffer)
+        instrumentedPresent(target, on: commandBuffer)
     }
     // swiftlint:enable function_parameter_count
 }

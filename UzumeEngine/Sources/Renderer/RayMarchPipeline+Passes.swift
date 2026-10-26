@@ -229,7 +229,8 @@ extension RayMarchPipeline {
 
 extension RayMarchPipeline {
 
-    /// Pass 5 (fallback, no PostProcessChain): ACES composite litTexture → outputTexture.
+    /// Pass 5 (fallback, no PostProcessChain): ACES composite litTexture → outputTexture; into a
+    /// cinematic (`.rgba16Float`) frame target, a linear copy the finishing stage tone-maps (VQ.1).
     func runCompositePass(commandBuffer: MTLCommandBuffer,
                           outputTexture: MTLTexture,
                           overrideSource: MTLTexture? = nil,
@@ -244,7 +245,8 @@ extension RayMarchPipeline {
 
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: desc) else { return }
         gpuTiming?.begin(on: encoder)
-        encoder.setRenderPipelineState(compositePipeline)
+        encoder.setRenderPipelineState(outputTexture.pixelFormat == FinishSpec.cinematicFrameTargetFormat
+                                       ? hdrCopyPipeline : compositePipeline)
         encoder.setFragmentTexture(lit, index: 0)
         encoder.setFragmentSamplerState(sampler, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)

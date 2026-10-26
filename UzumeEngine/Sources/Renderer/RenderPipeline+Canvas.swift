@@ -7,7 +7,9 @@
 // the stretch the window compositor used to do, so nothing looks different. A scene that
 // reconstructs (MFX.2) bypasses the canvas and MetalFX writes the drawable at full size.
 // Without a cap (tier 2), or when the drawable already fits, there is no canvas: paths draw the
-// drawable directly, exactly as before.
+// drawable directly, exactly as before. Which of these a path draws — and the present step — is the
+// frame seam's (RenderPipeline+FrameSeam, VQ.1); a cinematic scene draws the finish's HDR target,
+// sized here to the same render size.
 
 import Metal
 import MetalKit
@@ -15,15 +17,6 @@ import os.log
 import Shared
 
 private let logger = Logger(subsystem: "io.uzume.renderer", category: "RenderCanvas")
-
-// MARK: - FrameTarget
-
-/// What a render path draws into this frame: the canvas when one is active, else the drawable
-/// itself. `instrumentedPresent` resolves the canvas into `drawable` before presenting it.
-struct FrameTarget {
-    let texture: MTLTexture
-    let drawable: CAMetalDrawable
-}
 
 extension RenderPipeline {
 
@@ -72,41 +65,20 @@ extension RenderPipeline {
     func updateCanvas(drawableSize: CGSize) -> CGSize {
         let render = Self.renderSize(drawable: drawableSize, pixelCap: renderPixelCap)
         mvWarpLock.withLock { presentationSize = drawableSize }
+        let width = max(Int(render.width), 1), height = max(Int(render.height), 1)
+        finishingStage?.ensureFrameTarget(width: width, height: height)   // VQ.1: cinematic frame target
         guard render != drawableSize else {
             canvasTexture = nil
             return render
         }
-        let width = max(Int(render.width), 1), height = max(Int(render.height), 1)
         if canvasTexture?.width == width, canvasTexture?.height == height { return render }
         canvasTexture = nil   // VQ.0: release before allocate
-        let descriptor = context.sizeScaledDescriptor(width: width, height: height, storage: .private)
+        let descriptor = context.sizeScaledDescriptor(
+            width: width, height: height, pixelFormat: FinishSpec.legacyFrameTargetFormat, storage: .private)
         let label = "render canvas (BR.6b cap, A4) \(width)×\(height)"
         canvasTexture = context.renderTargetBudget.makeTexture(owner: "canvas", label: label, descriptor: descriptor)
         logger.info("Render canvas \(width)×\(height) → drawable \(Int(drawableSize.width))×\(Int(drawableSize.height))")
         return render
-    }
-
-    /// This frame's target for `drawable`.
-    func frameTarget(for drawable: CAMetalDrawable) -> FrameTarget {
-        FrameTarget(texture: canvasTexture ?? drawable.texture, drawable: drawable)
-    }
-
-    /// A render pass on the canvas, set up like MTKView's own descriptor (clear to the view's clear
-    /// colour, store). Nil when there is no canvas.
-    func canvasRenderPassDescriptor(clearColor: MTLClearColor) -> MTLRenderPassDescriptor? {
-        guard let canvas = canvasTexture else { return nil }
-        let desc = MTLRenderPassDescriptor()
-        desc.colorAttachments[0].texture = canvas
-        desc.colorAttachments[0].loadAction = .clear
-        desc.colorAttachments[0].clearColor = clearColor
-        desc.colorAttachments[0].storeAction = .store
-        return desc
-    }
-
-    /// Stretch the canvas into the drawable (bilinear). No-op when the target is the drawable.
-    func resolveCanvas(_ target: FrameTarget, on commandBuffer: MTLCommandBuffer) {
-        guard target.texture !== target.drawable.texture else { return }
-        copy(target.texture, to: target.drawable.texture, commandBuffer: commandBuffer)
     }
 
     /// Full-screen copy, bilinear when the sizes differ.

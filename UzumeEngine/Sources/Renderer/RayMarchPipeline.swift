@@ -81,6 +81,9 @@ public final class RayMarchPipeline: @unchecked Sendable {
 
     /// Direct depth+albedo diagnostic pipeline — compiled from `raymarch_depth_debug_fragment`.
     let depthDebugPipeline: MTLRenderPipelineState
+    /// VQ.1: a plain linear copy into a cinematic (`.rgba16Float`) frame target — the finishing
+    /// stage blooms and tone-maps, so neither the ACES composite nor the post-process chain runs.
+    let hdrCopyPipeline: MTLRenderPipelineState
 
     // MARK: - G-buffer Debug Mode
 
@@ -246,6 +249,12 @@ public final class RayMarchPipeline: @unchecked Sendable {
         self.gbufferDebugPipeline = bundle.gbufferDebug
         self.depthDebugPipeline = bundle.depthDebug
         self.sampler = bundle.sampler
+        self.hdrCopyPipeline = try shaderLibrary.renderPipelineState(
+            named: "feedback_blit_hdr",
+            vertexFunction: "fullscreen_vertex",
+            fragmentFunction: "feedback_blit_fragment",
+            pixelFormat: FinishSpec.cinematicFrameTargetFormat,
+            device: context.device)
 
         // Allocate the slot-8 zero placeholder once. Sized to match Swift
         // `LumenPatternState.stride` (LM.4.7: 568 bytes — LM.3.2's 376 B
@@ -428,7 +437,10 @@ public final class RayMarchPipeline: @unchecked Sendable {
         // G-buffer debug bypass: skip lighting/ACES entirely.
         // gbuf2 is written directly to the drawable so the 4-quadrant
         // diagnostic colors are unmodified when they reach the screen.
-        if debugGBufferMode {
+        // VQ.1: a cinematic frame target is linear HDR — the debug views (8-bit pipelines) do not
+        // draw it.
+        let cinematicTarget = outputTexture.pixelFormat == FinishSpec.cinematicFrameTargetFormat
+        if debugGBufferMode && !cinematicTarget {
             runGBufferDebugPass(commandBuffer: commandBuffer, outputTexture: outputTexture)
             return
         }
@@ -445,7 +457,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
 
         let colorForPost = litTexture
 
-        if let chain = postProcessChain {
+        if let chain = postProcessChain, !cinematicTarget {
             // Route the (optionally temporally-resolved) colour through bloom + ACES.
             guard let src = colorForPost else { return }
             chain.ensureAllocated(width: src.width, height: src.height)

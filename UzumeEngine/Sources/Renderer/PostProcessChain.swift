@@ -226,6 +226,12 @@ public final class PostProcessChain: @unchecked Sendable {
             return
         }
 
+        // VQ.1: into a cinematic (`.rgba16Float`) frame target the scene draws straight in — the
+        // finishing stage blooms and tone-maps, so this chain's bloom and ACES would run twice.
+        let cinematicTarget = outputTexture.pixelFormat == FinishSpec.cinematicFrameTargetFormat
+        let ownSceneTexture = sceneTexture
+        defer { sceneTexture = ownSceneTexture }
+        if cinematicTarget { sceneTexture = outputTexture }
         runScenePass(
             commandBuffer: commandBuffer,
             scenePipelineState: scenePipelineState,
@@ -236,6 +242,7 @@ public final class PostProcessChain: @unchecked Sendable {
             noiseTextures: noiseTextures,
             presetFragmentBuffer: presetFragmentBuffer
         )
+        if cinematicTarget { return }
         if bloomEnabled {
             runBrightPass(commandBuffer: commandBuffer)
             runBlurH(commandBuffer: commandBuffer)
