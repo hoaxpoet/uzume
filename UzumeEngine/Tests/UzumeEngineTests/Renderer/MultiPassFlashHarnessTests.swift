@@ -380,7 +380,9 @@ struct MultiPassFlashHarnessTests {
     func ferrofluidOceanIsFlashSafe() async throws {
         // The single-pass gate drew Ferrofluid's G-buffer state (gbuf0 = depth, matID). This is
         // the lit frame production shows — the scene behind BUG-041's track-start flashing.
-        assertFlashSafe(name: "Ferrofluid Ocean", samples: try await flashLuma("Ferrofluid Ocean"))
+        // VQ.1c: measured through the cinematic finish it ships with (its sidecar grade).
+        assertFlashSafe(name: "Ferrofluid Ocean (cinematic)",
+                        samples: try await flashLuma("Ferrofluid Ocean", finish: .cinematic))
     }
 
     @Test("Waveform is flash-safe (launch default; spectrum pulsing with the beat train)")
@@ -413,7 +415,8 @@ struct MultiPassFlashHarnessTests {
     /// reduced to per-frame WCAG relative luminance (the flash signal). `frames` (when set)
     /// tiles the 3 s train to a longer window for the slow-cycle particle presets.
     private func flashLuma(
-        _ name: String, settle: Int = 0, frames: Int? = nil, harmonicMotion: Bool = false
+        _ name: String, settle: Int = 0, frames: Int? = nil, harmonicMotion: Bool = false,
+        finish: FinishSpec.Mode = .legacy
     ) async throws -> [FlashHarnessSupport.FlashSample] {
         // `harmonicMotion` layers the TONAL block onto the shared train — see
         // `FlashHarnessSupport.withHarmonicMotion`. Only for presets steered by it; the
@@ -424,6 +427,7 @@ struct MultiPassFlashHarnessTests {
         let stem = FlashHarnessSupport.worstCaseStemTrain()
         let f = frames.map { tile(beat, $0) } ?? beat
         let s = frames.map { tile(stem, $0) } ?? stem
+        let harness = finish == .legacy ? harness : MultiPassRenderHarness(width: 320, height: 180, finishMode: finish)
         return try await harness.renderOffMain(preset: name, features: f, stems: s, settle: settle) {
             FlashHarnessSupport.sample($0, width: 320, height: 180)
         }

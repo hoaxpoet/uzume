@@ -872,7 +872,7 @@ struct MultiPassRenderHarness {
                 outputTexture: outTex, commandBuffer: cmd, noiseTextures: nil,
                 iblManager: ibl, postProcessChain: post,
                 presetFragmentBuffer3: nil, presetHeightTexture: particles.heightTexture)
-            try commit(cmd, outTex, into: &pixels)
+            try commit(cmd, outTex, spec: preset.descriptor.finish, into: &pixels)
         }
     }
 
@@ -1510,11 +1510,14 @@ struct MultiPassRenderHarness {
         return rpd
     }
 
-    private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture, into pixels: inout [UInt8]) throws {
+    /// `spec`: the scene's own finish (its sidecar bloom and grade), as production applies it. The
+    /// default — the cinematic defaults — is every scene without a `finish` block (VQ.1c).
+    private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture,
+                        spec: FinishSpec = FinishSpec(mode: .cinematic), into pixels: inout [UInt8]) throws {
         // VQ.1: a cinematic frame target is finished into the 8-bit image production presents.
         var readTex = outTex
         if outTex.pixelFormat == FinishSpec.cinematicFrameTargetFormat {
-            readTex = try HarnessFinish.shared.finish(outTex, commandBuffer: cmd)
+            readTex = try HarnessFinish.shared.finish(outTex, spec: spec, commandBuffer: cmd)
         }
         cmd.commit()
         cmd.waitUntilCompleted()
@@ -1551,20 +1554,20 @@ struct MultiPassRenderHarness {
 
 // MARK: - HarnessFinish
 
-/// The cinematic finish for the harness's readback (VQ.1): one stage + 8-bit output per size.
+/// The cinematic finish for the harness's readback (VQ.1): one stage + 8-bit output per size and spec.
 final class HarnessFinish: @unchecked Sendable {
     static let shared = HarnessFinish()
     private let lock = NSLock()
     private var stages: [String: (FinishingStage, MTLTexture)] = [:]
 
-    func finish(_ source: MTLTexture, commandBuffer: MTLCommandBuffer) throws -> MTLTexture {
-        let key = "\(source.width)x\(source.height)"
+    func finish(_ source: MTLTexture, spec: FinishSpec, commandBuffer: MTLCommandBuffer) throws -> MTLTexture {
+        let key = "\(source.width)x\(source.height) \(spec)"
         let (stage, out) = try lock.withLock { () throws -> (FinishingStage, MTLTexture) in
             if let made = stages[key] { return made }
             let device = commandBuffer.device
             let ctx = try MetalContext()
             let stage = try FinishingStage(device: device, library: try ShaderLibrary(context: ctx).library,
-                                           outputFormat: .bgra8Unorm_srgb, spec: FinishSpec(mode: .cinematic),
+                                           outputFormat: .bgra8Unorm_srgb, spec: spec,
                                            budget: nil)
             let desc = MTLTextureDescriptor.texture2DDescriptor(
                 pixelFormat: .bgra8Unorm_srgb, width: source.width, height: source.height, mipmapped: false)

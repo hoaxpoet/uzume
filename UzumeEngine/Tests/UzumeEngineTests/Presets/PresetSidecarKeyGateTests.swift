@@ -62,11 +62,6 @@ struct PresetSidecarKeyGateTests {
             Energetic Flyby and Matt kept the stretch (D-263 amendment), so it still waits for a \
             consumer whose frame does not mostly move at once.
             """,
-        "finish": """
-            VQ.1 built the shared finishing stage; `cinematic` is proved on a test-only scene \
-            (`FinishingStageTests`) and no shipped scene opts in, so every scene keeps its pixels. \
-            Ferrofluid Ocean adopts it at VQ.1c, where Matt judges legacy vs cinematic.
-            """,
         "natural_cycle_seconds": """
             D-246: Arachne was the only adopter and was removed. The key feeds \
             `PresetMaxDuration`, which is generic (V.7.6.2) and still governs how long any \

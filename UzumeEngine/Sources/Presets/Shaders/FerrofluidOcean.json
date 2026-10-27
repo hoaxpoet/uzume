@@ -20,6 +20,7 @@
   "scene_fog": 0.04,
   "scene_fog_near": 0.0,
   "scene_far_plane": 40.0,
+  "finish": {"mode": "cinematic", "bloom": {"strength": 0}, "grade": {"exposure": 0.25, "contrast": 1.15, "saturation": 1.05}},
   "audio_routes": [
     { "route": "spike_punch_pulse", "primitive": "pulsePhase01", "kind": "accent" },
     { "route": "spike_punch_gate", "primitive": "pulseAmp01", "kind": "gate" },

@@ -285,10 +285,11 @@ struct FinishingStageTests {
         #expect(inSidecar.finish.mode == .cinematic)
     }
 
-    @Test("No shipped scene opts into the cinematic finish (VQ.1c does Ferrofluid Ocean)")
-    func noShippedSceneIsCinematic() {
+    @Test("Only the scenes Matt reviewed render cinematic (VQ.1c: Ferrofluid Ocean)")
+    func onlyReviewedScenesAreCinematic() {
+        // Opting a scene in changes its look — each adopter is its own increment, judged by Matt.
         let cinematic = _acceptanceFixture.presets.filter { $0.descriptor.finish.mode != .legacy }
-        #expect(cinematic.isEmpty, "\(cinematic.map(\.descriptor.name))")
+        #expect(cinematic.map(\.descriptor.name).sorted() == ["Ferrofluid Ocean"])
     }
 
     // MARK: Display transform

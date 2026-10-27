@@ -24,6 +24,15 @@ let _cinematicFixture: PresetFixtureContext = {
     return PresetFixtureContext(presets: loader.presets)
 }()
 
+/// Every built-in preset loaded with its finish forced to `legacy` (test only) — the roster as
+/// shipped (`_acceptanceFixture`) has adopters on cinematic since VQ.1c.
+let _legacyFixture: PresetFixtureContext = {
+    guard let ctx = try? MetalContext() else { return PresetFixtureContext(presets: []) }
+    let loader = PresetLoader(device: ctx.device, pixelFormat: ctx.pixelFormat, loadBuiltIn: true,
+                              finishOverride: .legacy)
+    return PresetFixtureContext(presets: loader.presets)
+}()
+
 @Suite("Finish format match (VQ.1)")
 struct FinishFormatMatchTests {
 
@@ -32,7 +41,7 @@ struct FinishFormatMatchTests {
     @Test("Every certified scene loads in both finish modes with the mode's frame-target format")
     func everySceneLoadsInBothModes() {
         #expect(Self.certifiedNames.count >= 25, "the roster is present (\(Self.certifiedNames.count))")
-        for (mode, fixture) in [(FinishSpec.Mode.legacy, _acceptanceFixture), (.cinematic, _cinematicFixture)] {
+        for (mode, fixture) in [(FinishSpec.Mode.legacy, _legacyFixture), (.cinematic, _cinematicFixture)] {
             for name in Self.certifiedNames {
                 let preset = fixture.presets.first { $0.descriptor.name == name }
                 #expect(preset != nil, "\(name) failed to load in \(mode) mode")
@@ -45,7 +54,7 @@ struct FinishFormatMatchTests {
     @Test("Every certified scene renders its real path into its mode's frame target (no format mismatch)",
           arguments: [FinishSpec.Mode.legacy, .cinematic])
     func everySceneRendersInMode(_ mode: FinishSpec.Mode) async throws {
-        let fixture = mode == .cinematic ? _cinematicFixture : _acceptanceFixture
+        let fixture = mode == .cinematic ? _cinematicFixture : _legacyFixture
         let harness = MultiPassRenderHarness(width: 160, height: 90, finishMode: mode)
         let drive = FlashHarnessSupport.worstCaseBeatTrain().prefix(3).map { $0 }
         let stems = [StemFeatures](repeating: .zero, count: drive.count)
