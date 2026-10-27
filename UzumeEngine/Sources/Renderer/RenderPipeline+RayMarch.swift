@@ -182,8 +182,15 @@ extension RenderPipeline {
         // render_scale silently gets 0.4. PERF.14 probes at 0.25 and 0.35 both ran at 0.4 and
         // returned identical timings before anyone noticed. If you lower it, check here first.
         let marchScale = Self.marchScale(declared: rayMarchState.renderScale, width: width, height: height)
-        let marchWidth = max(Int((Float(width) * marchScale).rounded()), 1)
-        let marchHeight = max(Int((Float(height) * marchScale).rounded()), 1)
+        var marchWidth = max(Int((Float(width) * marchScale).rounded()), 1)
+        var marchHeight = max(Int((Float(height) * marchScale).rounded()), 1)
+        // VQ.3: a reconstructing scene that declares `internal_scale` marches that fraction of the OUTPUT
+        // (1.0 = anti-aliasing only); without it, its own march size above (unchanged).
+        if let out = rayMarchState.upscaleOutputSize,
+           let internalScale = rayMarchState.temporal?.reconstructor.spec.rayMarchInternalScale {
+            marchWidth = max(Int((Float(out.width) * internalScale).rounded()), 1)
+            marchHeight = max(Int((Float(out.height) * internalScale).rounded()), 1)
+        }
         rayMarchState.ensureAllocated(width: marchWidth, height: marchHeight)
 
         // Update per-frame uniforms: accumulated audio time, aspect ratio, and step-count multiplier.
