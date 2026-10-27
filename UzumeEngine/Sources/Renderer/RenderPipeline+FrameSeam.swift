@@ -13,8 +13,12 @@
 //     hand-off (or the canvas stretch) or the cinematic finish — and where the recorder and the
 //     flash analyzer read (`presentedFrameTexture`), so they see every frame that reaches the glass.
 //
-// Order on screen (Apple, WWDC25 session 211): render → temporal upscale (MFX.2) → finish →
-// frame interpolation (VQ.4a) → present.
+// Order on screen (Apple, WWDC25 session 211): render → upscale (MFX.2 / VQ.3 temporal, or VQ.3
+// spatial) → finish → frame interpolation (VQ.4a) → present. The upscale writes a texture, never
+// the drawable, and runs once, to the drawable's size: a scene under `upscale: spatial` hands its
+// smaller frame target (the tier-1 canvas, an NB.8 half-res target) to the present step, which runs
+// MetalFX spatial BEFORE the finish — so bloom and dither happen at output size. `bilinear` (every
+// shipped scene) is exactly the old present step: a hand-off or the canvas stretch.
 //
 // HANG.1's lifecycle probe brackets every drawable request and present made here.
 
@@ -73,6 +77,28 @@ extension RenderPipeline {
 
     /// The active scene's finish mode.
     public var finishMode: FinishSpec.Mode { finishingStage == nil ? .legacy : .cinematic }
+
+    /// Install the active scene's upscale (VQ.3), resolved from its sidecar at load
+    /// (`UpscaleMode.resolve`). Always releases the previous scene's scaler (VQ.0: no MetalFX
+    /// reservation outlives its scene); under `.spatial` the next one is built by the first frame
+    /// that needs it. Main thread (`applyPreset`).
+    public func setUpscale(_ mode: UpscaleMode) {
+        upscaleMode = mode
+        spatialUpscaler?.release()
+        spatialUpscaler = nil
+    }
+
+    /// The active scene's upscale mode.
+    public var activeUpscaleMode: UpscaleMode { upscaleMode }
+
+    /// The spatial scaler while the active scene takes `.spatial` (built on first use), else nil.
+    func spatialUpscalerIfActive() -> SpatialUpscaler? {
+        guard upscaleMode == .spatial else { return nil }
+        if spatialUpscaler == nil {
+            spatialUpscaler = SpatialUpscaler(device: context.device, budget: context.renderTargetBudget)
+        }
+        return spatialUpscaler
+    }
 
     /// The blit that draws a texture into a frame target of `format` (its pipeline must match it).
     func frameBlitPipeline(for format: MTLPixelFormat) -> MTLRenderPipelineState {
@@ -184,31 +210,63 @@ extension RenderPipeline {
         return drawable.flatMap(frameTarget(for:))
     }
 
-    /// The present step: finish `target.texture` into the drawable, record what reached the
-    /// glass, present. Legacy: a hand-off (no pass) or the canvas stretch, exactly as before VQ.1.
+    /// The present step: [upscale →] finish `target.texture` into the drawable, record what reached
+    /// the glass, present. Legacy + bilinear: a hand-off (no pass) or the canvas stretch, exactly as
+    /// before VQ.1.
     @MainActor
     func instrumentedPresent(_ target: FrameTarget, on commandBuffer: MTLCommandBuffer) {
         let drawable = target.drawable
         if let finish = finishingStage {
-            finish.encode(source: target.texture, output: drawable.texture, commandBuffer: commandBuffer)
+            let image = presentUpscale(target.texture, to: drawable.texture, commandBuffer: commandBuffer)
+            finish.encode(source: image, output: drawable.texture, commandBuffer: commandBuffer)
             presentedFrameTexture = drawable.texture
-            // The recorder locks its video to one frame size (the canvas on a capped Mac); give it
-            // the finished frame at that size, only while something is recording.
-            if onFrameRendered != nil, let canvas = canvasTexture {
-                copy(drawable.texture, to: canvas, commandBuffer: commandBuffer)
-                presentedFrameTexture = canvas
-            }
+            recordAtCanvasSize(drawable.texture, commandBuffer: commandBuffer)
         } else {
-            if target.texture !== drawable.texture {
-                copy(target.texture, to: drawable.texture, commandBuffer: commandBuffer)
+            let image = encodeLegacyPresent(target.texture, into: drawable.texture, commandBuffer: commandBuffer)
+            if image === canvasTexture {
+                presentedFrameTexture = image   // the tier-1 stretch: the recorder reads the canvas
+            } else {
+                presentedFrameTexture = drawable.texture
+                recordAtCanvasSize(drawable.texture, commandBuffer: commandBuffer)
             }
-            presentedFrameTexture = target.texture === canvasTexture ? target.texture : drawable.texture
         }
         drawableLifecycleProbe.recordPresent(
             commandBufferID: ObjectIdentifier(commandBuffer as AnyObject),
             drawableID: ObjectIdentifier(drawable as AnyObject)
         )
         commandBuffer.present(drawable)
+    }
+
+    /// The legacy present step into `output` (the drawable): MetalFX spatial first when the scene
+    /// takes it and `source` is smaller, then the hand-off — a bilinear copy unless `source` is
+    /// `output` itself. Returns the image copied in (`source` itself under `.bilinear`).
+    func encodeLegacyPresent(_ source: MTLTexture, into output: MTLTexture,
+                             commandBuffer: MTLCommandBuffer) -> MTLTexture {
+        let image = presentUpscale(source, to: output, commandBuffer: commandBuffer)
+        if image !== output {
+            copy(image, to: output, commandBuffer: commandBuffer)
+        }
+        return image
+    }
+
+    /// The upscale step (VQ.3): `source` itself unless the scene takes `.spatial` and `source` is
+    /// smaller than `output`, then MetalFX spatial's `output`-sized image (or `source` again if the
+    /// device or the budget declined — the caller then stretches as before).
+    func presentUpscale(_ source: MTLTexture, to output: MTLTexture, commandBuffer: MTLCommandBuffer) -> MTLTexture {
+        guard source.width < output.width || source.height < output.height,
+              let spatial = spatialUpscalerIfActive() else { return source }
+        return spatial.encode(source,
+                              outputWidth: output.width,
+                              outputHeight: output.height,
+                              commandBuffer: commandBuffer) ?? source
+    }
+
+    /// The recorder locks its video to one frame size (the canvas on a capped Mac): a frame that
+    /// reached the glass at drawable size is copied down to it, only while something records.
+    func recordAtCanvasSize(_ frame: MTLTexture, commandBuffer: MTLCommandBuffer) {
+        guard onFrameRendered != nil, let canvas = canvasTexture else { return }
+        copy(frame, to: canvas, commandBuffer: commandBuffer)
+        presentedFrameTexture = canvas
     }
 
     /// The texture the present step writes (the drawable's): its size is the MFX.2 reconstruct

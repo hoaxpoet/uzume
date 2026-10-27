@@ -467,11 +467,16 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
             + "render_scale=\(scaleText) internal_width=\(internalWidth) "
             + "internal_height=\(internalHeight) internal_megapixels=\(internalMPText)"
             + " drawable_width=\(Int(drawable.width)) drawable_height=\(Int(drawable.height))"
-            + (temporal != nil ? " reconstruct=temporal" : "")
+            + (temporal != nil || rayMarchReconstructs ? " reconstruct=temporal" : "")
     }
 
     var directRenderScale: Float {
         directRenderScaleLock.withLock { _directRenderScale }
+    }
+
+    /// VQ.3: the active ray-march scene reconstructs (its march size, logged above, is MetalFX's input).
+    var rayMarchReconstructs: Bool {
+        rayMarchLock.withLock { rayMarchPipeline?.temporal != nil }
     }
 
     /// The ray-march path's scale, for the session record. Mirrors what `applyPreset` pushed into
@@ -513,6 +518,15 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// The active scene's cinematic finish; nil for a legacy scene (every shipped scene), whose
     /// pixels reach the drawable unchanged. Main thread, like `canvasTexture`.
     var finishingStage: FinishingStage?
+
+    // MARK: - Upscale (VQ.3, `RenderPipeline+FrameSeam`)
+
+    /// The active scene's upscale at every stretch (`setUpscale`) — `.bilinear` for every shipped
+    /// scene. Main thread, like `finishingStage`.
+    var upscaleMode: UpscaleMode = .bilinear
+    /// The MetalFX spatial scaler, built by the first frame that needs it under `.spatial`; nil
+    /// otherwise. Main thread.
+    var spatialUpscaler: SpatialUpscaler?
 
     // MARK: - Resize (VQ.0, `RenderPipeline+Resize`)
 

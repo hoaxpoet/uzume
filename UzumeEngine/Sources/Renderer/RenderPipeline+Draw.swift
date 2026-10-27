@@ -348,6 +348,13 @@ extension RenderPipeline {
                 textOverlay: textOverlay)
             offEnc.endEncoding()
 
+            // VQ.3: under `upscale: spatial` the present step upscales the half-res target itself,
+            // once, to the drawable (MetalFX spatial before the finish) — not twice via the canvas.
+            if upscaleMode == .spatial {
+                instrumentedPresent(FrameTarget(texture: halfTex, drawable: target.drawable), on: commandBuffer)
+                return
+            }
+
             // Pass 2 — bilinear upscale (feedback_blit + the linear clamp sampler)
             // → drawable.
             descriptor.colorAttachments[0].loadAction = .clear

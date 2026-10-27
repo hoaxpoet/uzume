@@ -104,6 +104,7 @@ extension RenderPipeline {
         canvasTexture = nil
         halfResTexture = nil
         temporalReconstructor?.releaseTargets()
+        spatialUpscaler?.release()   // VQ.3: rebuilt at the new size by the next frame that needs it
         let released = context.renderTargetBudget.totalBytes
 
         // Allocate: the drawable pool first (the OS holds it whatever we decide), then the new set.

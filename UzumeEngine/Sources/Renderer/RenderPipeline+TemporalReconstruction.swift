@@ -49,6 +49,7 @@ extension RenderPipeline {
     /// Discard the reconstruction history — a cut the motion vectors cannot explain. Main thread.
     public func resetTemporalHistory() {
         temporalReconstructor?.reset()
+        rayMarchLock.withLock { rayMarchPipeline?.temporal?.reset() }   // VQ.3: the ray-march path
     }
 
     // MARK: - Encode (view-free; tests drive this)
@@ -121,15 +122,9 @@ extension RenderPipeline {
             textOverlay: textOverlay) else { return false }
         // VQ.1: the reconstructed image, not the frame target, is what the present step finishes
         // (render → upscale → finish): legacy copies it into the drawable, cinematic finishes it.
+        // The present step also gives the recorder this frame at the canvas size on a capped Mac
+        // (`recordAtCanvasSize`), as every other scene records the canvas.
         instrumentedPresent(FrameTarget(texture: image, drawable: target.drawable), on: commandBuffer)
-        // The recorder locks its video to one frame size (ARCHITECTURE §Session recording). On a
-        // capped Mac every other scene records the canvas, so record this one there too: the idle
-        // canvas gets a downscaled copy, only while something is recording. (A cinematic finish
-        // already did this in the present step.)
-        if finishingStage == nil, onFrameRendered != nil, let canvas = canvasTexture {
-            copy(image, to: canvas, commandBuffer: commandBuffer)
-            presentedFrameTexture = canvas
-        }
         return true
     }
 }

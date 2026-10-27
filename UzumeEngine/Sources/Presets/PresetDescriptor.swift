@@ -583,10 +583,17 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
 
     // MARK: - Temporal Reconstruction (MFX.2)
 
-    /// Opt-in MetalFX temporal reconstruction for a direct-only scene (sidecar
-    /// `temporal_reconstruction`): `PresetLoader` builds an MRT pipeline for it and the direct
-    /// path renders it at the internal size and reconstructs. Nil for every other scene.
+    /// Opt-in MetalFX temporal reconstruction (sidecar `temporal_reconstruction`). A direct-only
+    /// scene: `PresetLoader` builds an MRT pipeline for it and the direct path renders it at the
+    /// internal size and reconstructs (MFX.2). A ray-march scene: the G-buffer path jitters, reprojects
+    /// and reconstructs (VQ.3, `RayMarchTemporal`). Nil for every other scene.
     public let temporalReconstruction: TemporalReconstructionSpec?
+
+    // MARK: - Upscale (VQ.3)
+
+    /// How the scene's smaller render reaches a larger output (sidecar `upscale`). Nil = the roster
+    /// default (`UpscaleMode.resolve`), which is today's bilinear stretch.
+    public let upscale: UpscaleMode?
 
     // MARK: - Finish (VQ.1)
 
@@ -641,6 +648,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         case stages
         case marks
         case temporalReconstruction = "temporal_reconstruction"
+        case upscale
         case finish
     }
 
@@ -792,14 +800,26 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         // MARK: Temporal Reconstruction (MFX.2)
         temporalReconstruction = try container.decodeIfPresent(
             TemporalReconstructionSpec.self, forKey: .temporalReconstruction)
-        // Direct-only: the block replaces the direct draw. Every other paradigm owns its own
-        // targets and history, so a block there would be silently ignored — reject it instead.
-        if temporalReconstruction != nil, passes != [.direct] {
-            throw DecodingError.dataCorruptedError(
-                forKey: .temporalReconstruction,
-                in: container,
-                debugDescription: "temporal_reconstruction needs passes == [\"direct\"]")
+        // The block replaces the direct draw (analytic motion, MFX.2) or reconstructs the ray-march
+        // G-buffer path (reprojected motion, VQ.3; not under mv_warp, whose feedback owns its own
+        // history). Any other paradigm would silently ignore it — reject it instead.
+        if let spec = temporalReconstruction {
+            let direct = passes == [.direct] && spec.motionVectors == .analytic
+            let rayMarch = passes.contains(.rayMarch) && !passes.contains(.mvWarp)
+                && spec.motionVectors == .reprojected
+            guard direct || rayMarch else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .temporalReconstruction,
+                    in: container,
+                    debugDescription: """
+                        temporal_reconstruction needs passes == ["direct"] with analytic motion, \
+                        or a ray_march scene (no mv_warp) with reprojected motion
+                        """)
+            }
         }
+
+        // MARK: Upscale (VQ.3)
+        upscale = try container.decodeIfPresent(UpscaleMode.self, forKey: .upscale)
 
         // MARK: Finish (VQ.1)
         finish = try container.decodeIfPresent(FinishSpec.self, forKey: .finish) ?? .legacy
