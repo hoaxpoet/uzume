@@ -132,7 +132,9 @@ blur) → frame interpolation → present.** The upscaler writes a texture, neve
 present, is the only thing besides the plain present step that writes the drawable, and it needs the previous
 finished frame.
 
-Prompts are written for VQ.0 and VQ.1 only. Later prompts are written from what those increments measure
+**Order amended 2026-10-27 (Matt): pixelation first — VQ.3 runs before VQ.2.** Prompt: `prompts/VQ.3-prompt.md`.
+
+Prompts are written for VQ.0, VQ.1 and VQ.3. Later prompts are written from what those increments measure
 (CLAUDE.md: commit decisions when the work has produced evidence).
 
 ## 7. What this phase will not do
