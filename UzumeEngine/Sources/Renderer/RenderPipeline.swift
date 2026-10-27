@@ -304,6 +304,11 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Built-in pipeline states for feedback warp and blit passes.
     let feedbackWarpPipelineState: MTLRenderPipelineState
     let feedbackBlitPipelineState: MTLRenderPipelineState
+    /// `feedback_blit` compiled for the cinematic frame target (`.rgba16Float`, VQ.1) — the blit a
+    /// path uses to draw a texture into an HDR frame target (`frameBlitPipeline(for:)`).
+    let hdrBlitPipelineState: MTLRenderPipelineState
+    /// The renderer's shader library: the finishing stage compiles its passes from it (VQ.1).
+    let rendererLibrary: MTLLibrary
     /// Bilinear, clamp-to-edge sampler for feedback texture reads.
     let feedbackSamplerState: MTLSamplerState
 
@@ -502,6 +507,12 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Scenes render here when the cap is below the drawable; resolved into the drawable at
     /// present. Nil otherwise. Main thread.
     var canvasTexture: MTLTexture?
+
+    // MARK: - Finishing stage (VQ.1, `RenderPipeline+FrameSeam`)
+
+    /// The active scene's cinematic finish; nil for a legacy scene (every shipped scene), whose
+    /// pixels reach the drawable unchanged. Main thread, like `canvasTexture`.
+    var finishingStage: FinishingStage?
 
     // MARK: - Resize (VQ.0, `RenderPipeline+Resize`)
 
@@ -763,6 +774,14 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
             pixelFormat: context.pixelFormat,
             device: context.device
         )
+        self.hdrBlitPipelineState = try shaderLibrary.renderPipelineState(
+            named: "feedback_blit_hdr",
+            vertexFunction: "fullscreen_vertex",
+            fragmentFunction: "feedback_blit_fragment",
+            pixelFormat: FinishSpec.cinematicFrameTargetFormat,
+            device: context.device
+        )
+        self.rendererLibrary = shaderLibrary.library
 
         // Bilinear, clamp-to-edge sampler for feedback texture reads.
         let samplerDesc = MTLSamplerDescriptor()

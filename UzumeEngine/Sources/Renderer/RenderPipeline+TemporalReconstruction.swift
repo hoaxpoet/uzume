@@ -101,30 +101,32 @@ extension RenderPipeline {
 
     // MARK: - Present (drawDirect's third branch)
 
-    /// Encode, copy to the drawable and present. Returns false when the reconstructor could not
-    /// run, so `drawDirect` falls back to its normal paths.
+    /// Encode, finish into the drawable and present. Returns false when the reconstructor could
+    /// not run, so `drawDirect` falls back to its normal paths.
     @MainActor
     func drawDirectReconstructed(
         commandBuffer: MTLCommandBuffer,
-        drawable: CAMetalDrawable,
+        target: FrameTarget,
         features: inout FeatureVector,
         stems: StemFeatures,
         textOverlay: DynamicTextOverlay?
     ) -> Bool {
+        let output = outputTexture(of: target)
         guard let image = encodeTemporalReconstruction(
             commandBuffer: commandBuffer,
-            outputWidth: drawable.texture.width,
-            outputHeight: drawable.texture.height,
+            outputWidth: output.width,
+            outputHeight: output.height,
             features: &features,
             stems: stems,
             textOverlay: textOverlay) else { return false }
-        // VQ.1 seam: finishing (bloom, tone map) runs on `image` here, before the copy.
-        copy(image, to: drawable.texture, commandBuffer: commandBuffer)
-        instrumentedPresent(FrameTarget(texture: drawable.texture, drawable: drawable), on: commandBuffer)
-        // The recorder locks its video to one frame size and skips any other (ARCHITECTURE
-        // §Session recording). On a capped Mac every other scene records the canvas, so record this
-        // one there too: the idle canvas gets a downscaled copy, only while something is recording.
-        if onFrameRendered != nil, let canvas = canvasTexture {
+        // VQ.1: the reconstructed image, not the frame target, is what the present step finishes
+        // (render → upscale → finish): legacy copies it into the drawable, cinematic finishes it.
+        instrumentedPresent(FrameTarget(texture: image, drawable: target.drawable), on: commandBuffer)
+        // The recorder locks its video to one frame size (ARCHITECTURE §Session recording). On a
+        // capped Mac every other scene records the canvas, so record this one there too: the idle
+        // canvas gets a downscaled copy, only while something is recording. (A cinematic finish
+        // already did this in the present step.)
+        if finishingStage == nil, onFrameRendered != nil, let canvas = canvasTexture {
             copy(image, to: canvas, commandBuffer: commandBuffer)
             presentedFrameTexture = canvas
         }

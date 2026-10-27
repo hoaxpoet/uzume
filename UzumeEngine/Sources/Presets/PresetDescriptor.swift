@@ -588,6 +588,13 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
     /// path renders it at the internal size and reconstructs. Nil for every other scene.
     public let temporalReconstruction: TemporalReconstructionSpec?
 
+    // MARK: - Finish (VQ.1)
+
+    /// The scene's finishing stage (sidecar `finish`): `legacy` (absent; every shipped scene) or
+    /// `cinematic`. Its `frameTargetFormat` is the format of every pipeline that draws the scene's
+    /// frame target. Settable only so `PresetLoader.finishOverride` can force a mode in tests.
+    public internal(set) var finish: FinishSpec
+
     // MARK: - CodingKeys
 
     /// Keys for all stored properties — used by both `init(from:)` and `encode(to:)`.
@@ -634,6 +641,7 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         case stages
         case marks
         case temporalReconstruction = "temporal_reconstruction"
+        case finish
     }
 
     // MARK: - Decoding
@@ -792,5 +800,8 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
                 in: container,
                 debugDescription: "temporal_reconstruction needs passes == [\"direct\"]")
         }
+
+        // MARK: Finish (VQ.1)
+        finish = try container.decodeIfPresent(FinishSpec.self, forKey: .finish) ?? .legacy
     }
 }

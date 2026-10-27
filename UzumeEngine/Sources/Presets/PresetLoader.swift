@@ -148,6 +148,8 @@ public final class PresetLoader: @unchecked Sendable {
         /// MFX.2: colour + depth + motion (+ reactive) MRT pipeline for a scene that declares
         /// `temporal_reconstruction`. Nil for every other preset.
         public let temporalPipelineState: MTLRenderPipelineState?
+        /// VQ.1: the `.cube` 3D LUT named by the sidecar `finish.lut` (cinematic only), or nil.
+        public let finishLUTURL: URL?
 
         public init(
             descriptor: PresetDescriptor,
@@ -156,7 +158,8 @@ public final class PresetLoader: @unchecked Sendable {
             rayMarchPipelineState: MTLRenderPipelineState? = nil,
             mvWarpPipelines: MVWarpCompiledPipelines? = nil,
             stages: [LoadedStage] = [],
-            temporalPipelineState: MTLRenderPipelineState? = nil
+            temporalPipelineState: MTLRenderPipelineState? = nil,
+            finishLUTURL: URL? = nil
         ) {
             self.descriptor = descriptor
             self.pipelineState = pipelineState
@@ -165,13 +168,18 @@ public final class PresetLoader: @unchecked Sendable {
             self.mvWarpPipelines = mvWarpPipelines
             self.stages = stages
             self.temporalPipelineState = temporalPipelineState
+            self.finishLUTURL = finishLUTURL
         }
     }
 
     // MARK: - Private State
 
     let device: MTLDevice
+    /// The legacy frame-target format (the drawable's 8-bit sRGB) and the default feedback format.
+    /// Pipelines that draw a scene's frame target use `frameTargetFormat(_:)` instead.
     let pixelFormat: MTLPixelFormat
+    /// Test only: force every loaded scene's finish mode (VQ.1 builds the roster in both modes).
+    let finishOverride: FinishSpec.Mode?
     private let lock = NSLock()
     private var watchSource: DispatchSourceFileSystemObject?
     private var watchedDirectoryFD: Int32 = -1
@@ -195,10 +203,12 @@ public final class PresetLoader: @unchecked Sendable {
         device: MTLDevice,
         pixelFormat: MTLPixelFormat,
         watchDirectory: URL? = nil,
-        loadBuiltIn: Bool = true
+        loadBuiltIn: Bool = true,
+        finishOverride: FinishSpec.Mode? = nil
     ) {
         self.device = device
         self.pixelFormat = pixelFormat
+        self.finishOverride = finishOverride
 
         // Load built-in presets from bundle resources.
         if loadBuiltIn {
@@ -329,6 +339,7 @@ public final class PresetLoader: @unchecked Sendable {
             let jsonURL = metalFile.deletingPathExtension().appendingPathExtension("json")
             var descriptor = loadDescriptor(from: jsonURL, fallbackName: baseName)
             descriptor.shaderFileName = metalFile.lastPathComponent
+            if let finishOverride { descriptor.finish.mode = finishOverride }
 
             // Compile the shader.
             guard let pipelines = compileShader(at: metalFile, descriptor: descriptor) else {
@@ -348,7 +359,9 @@ public final class PresetLoader: @unchecked Sendable {
                 rayMarchPipelineState: pipelines.rayMarch,
                 mvWarpPipelines: pipelines.mvWarp,
                 stages: pipelines.stages,
-                temporalPipelineState: pipelines.temporal
+                temporalPipelineState: pipelines.temporal,
+                finishLUTURL: descriptor.finish.mode == .cinematic
+                    ? descriptor.finish.lut.map { directory.appendingPathComponent($0) } : nil
             )
 
             lock.withLock {
@@ -544,7 +557,7 @@ public final class PresetLoader: @unchecked Sendable {
             let pipelineDescriptor = MTLRenderPipelineDescriptor()
             pipelineDescriptor.vertexFunction = vertexFn
             pipelineDescriptor.fragmentFunction = fragmentFn
-            pipelineDescriptor.colorAttachments[0].pixelFormat = isFinal ? pixelFormat : stageFormat
+            pipelineDescriptor.colorAttachments[0].pixelFormat = isFinal ? frameTargetFormat(descriptor) : stageFormat
 
             do {
                 let state = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
@@ -605,7 +618,7 @@ public final class PresetLoader: @unchecked Sendable {
         pipelineDescriptor.vertexFunction = vertexFn
         pipelineDescriptor.fragmentFunction = fragmentFn
         pipelineDescriptor.colorAttachments[0].pixelFormat = descriptor.passes.contains(.postProcess)
-            ? .rgba16Float : pixelFormat
+            ? .rgba16Float : frameTargetFormat(descriptor)
 
         let standardState: MTLRenderPipelineState
         do {
@@ -623,6 +636,9 @@ public final class PresetLoader: @unchecked Sendable {
         // opaque for the drawable blit.
         var feedbackState: MTLRenderPipelineState?
         if descriptor.passes.contains(.feedback) {
+            // VQ.1: the composite draws the feedback texture, which keeps its own format whatever
+            // the frame target's.
+            pipelineDescriptor.colorAttachments[0].pixelFormat = feedbackFormat(descriptor)
             pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
             pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
             pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
@@ -731,7 +747,7 @@ public final class PresetLoader: @unchecked Sendable {
             let previewDesc = MTLRenderPipelineDescriptor()
             previewDesc.vertexFunction = vertexFn
             previewDesc.fragmentFunction = previewFn
-            previewDesc.colorAttachments[0].pixelFormat = pixelFormat
+            previewDesc.colorAttachments[0].pixelFormat = frameTargetFormat(descriptor)
             standardState = (try? device.makeRenderPipelineState(descriptor: previewDesc)) ?? gbufferState
         } else {
             // No separate preview function — use the G-buffer state as the placeholder.
@@ -783,6 +799,19 @@ public final class PresetLoader: @unchecked Sendable {
                 + "\n\n" + Self.mvWarpPreamble
                 + "\n\n" + fragmentSource
         }
+    }
+
+    /// VQ.1: the format of every pipeline that draws `descriptor`'s frame target — its finish
+    /// mode's (`FinishSpec.frameTargetFormat`), resolved here, in one place, at load.
+    func frameTargetFormat(_ descriptor: PresetDescriptor) -> MTLPixelFormat {
+        descriptor.finish.frameTargetFormat
+    }
+
+    /// The format a named scene's frame-target pipelines compile against, for pipelines built
+    /// outside the loader (the app's particle geometries). Legacy when the scene is not loaded.
+    public func frameTargetFormat(forPreset name: String) -> MTLPixelFormat {
+        lock.withLock { presets.first { $0.descriptor.name == name } }?.descriptor.finish.frameTargetFormat
+            ?? FinishSpec.legacyFrameTargetFormat
     }
 
     /// Feedback-buffer pixel format for an mv_warp preset. Always the drawable
@@ -845,7 +874,7 @@ public final class PresetLoader: @unchecked Sendable {
             return nil
         }
         // Warp + compose render INTO the feedback textures → feedbackFormat (float
-        // for Dragon Bloom). The blit renders to the DRAWABLE → drawable pixelFormat.
+        // for Dragon Bloom). The blit renders to the FRAME TARGET → the scene's frame-target format.
         let fbFormat = feedbackFormat(descriptor)
         let warpDesc = MTLRenderPipelineDescriptor()
         warpDesc.vertexFunction = warpVertexFn
@@ -863,7 +892,7 @@ public final class PresetLoader: @unchecked Sendable {
         let blitDesc = MTLRenderPipelineDescriptor()
         blitDesc.vertexFunction = fullscreenVtx
         blitDesc.fragmentFunction = blitFragFn
-        blitDesc.colorAttachments[0].pixelFormat = pixelFormat
+        blitDesc.colorAttachments[0].pixelFormat = frameTargetFormat(descriptor)
         do {
             let warpState    = try device.makeRenderPipelineState(descriptor: warpDesc)
             let composeState = try device.makeRenderPipelineState(descriptor: composeDesc)

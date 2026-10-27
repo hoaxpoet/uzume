@@ -208,6 +208,12 @@ struct PhotosensitivityCertificationTests {
 
     /// Guards against a vacuous pass: if the Shaders bundle fails to load, the
     /// parameterized gate above would run zero certified cases and silently pass.
+    @Test("VQ.1 proof scene is flash-safe through the cinematic finish (bloom does not enlarge flashes)")
+    func finishProofSceneIsFlashSafe() throws {
+        let result = try FinishProofFlash.measure()
+        FlashHarnessSupport.assertFlashSafe(name: "VQ.1 proof scene (cinematic)", samples: result.cinematic)
+    }
+
     @Test("Certified preset set is non-empty (gate is not vacuous)")
     func certifiedSetIsPresent() {
         let certified = _acceptanceFixture.presets.filter { $0.descriptor.certified }

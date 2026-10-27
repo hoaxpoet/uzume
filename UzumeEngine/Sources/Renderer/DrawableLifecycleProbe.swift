@@ -2,7 +2,6 @@
 
 import Foundation
 import Metal
-@preconcurrency import MetalKit
 import Shared
 
 // MARK: - Snapshot
@@ -187,94 +186,5 @@ final class DrawableLifecycleProbe: @unchecked Sendable {
     }
 }
 
-// MARK: - RenderPipeline bridge
-
-extension RenderPipeline {
-    /// Current HANG.1 lifecycle counters. Safe to read from the watchdog task.
-    public func drawableLifecycleSnapshot() -> DrawableLifecycleSnapshot {
-        drawableLifecycleProbe.snapshot(now: ProcessInfo.processInfo.systemUptime)
-    }
-
-    @MainActor
-    func captureRenderedFrame(
-        from view: MTKView,
-        features: FeatureVector,
-        commandBuffer: MTLCommandBuffer
-    ) {
-        // A4: the frame the paths actually drew — the canvas (today's capped size) or, for a
-        // reconstructing scene, the drawable — so the recorder and the flash analyzer see it.
-        guard let hook = onFrameRendered,
-              let texture = presentedFrameTexture ?? instrumentedDrawable(
-                  from: view, commandBuffer: commandBuffer, site: "draw.captureHook")?.texture else { return }
-        let stems = stemFeaturesLock.withLock { latestStemFeatures }
-        hook(texture, features, stems, commandBuffer)
-    }
-
-    func recordDrawableLifecycleCompletion(
-        commandBufferID: ObjectIdentifier,
-        commandBuffer: MTLCommandBuffer
-    ) {
-        drawableLifecycleProbe.recordCompletion(
-            commandBufferID: commandBufferID,
-            succeeded: commandBuffer.status == .completed
-        )
-    }
-
-    @MainActor
-    func instrumentedRenderPassDescriptor(
-        from view: MTKView,
-        commandBuffer: MTLCommandBuffer,
-        site: String
-    ) -> MTLRenderPassDescriptor? {
-        let commandBufferID = ObjectIdentifier(commandBuffer as AnyObject)
-        drawableLifecycleProbe.beginRequest(
-            commandBufferID: commandBufferID,
-            kind: .renderPassDescriptor,
-            site: site,
-            now: ProcessInfo.processInfo.systemUptime
-        )
-        // A4: on a tier-1 Mac the paths draw the canvas; the drawable is acquired separately.
-        let descriptor = canvasRenderPassDescriptor(clearColor: view.clearColor)
-            ?? view.currentRenderPassDescriptor
-        drawableLifecycleProbe.endRequest(
-            commandBufferID: commandBufferID,
-            kind: .renderPassDescriptor,
-            resolved: descriptor != nil
-        )
-        return descriptor
-    }
-
-    @MainActor
-    func instrumentedDrawable(
-        from view: MTKView,
-        commandBuffer: MTLCommandBuffer,
-        site: String
-    ) -> FrameTarget? {
-        let commandBufferID = ObjectIdentifier(commandBuffer as AnyObject)
-        drawableLifecycleProbe.beginRequest(
-            commandBufferID: commandBufferID,
-            kind: .drawable,
-            site: site,
-            now: ProcessInfo.processInfo.systemUptime
-        )
-        let drawable = view.currentDrawable
-        drawableLifecycleProbe.endRequest(
-            commandBufferID: commandBufferID,
-            kind: .drawable,
-            resolved: drawable != nil,
-            drawableID: drawable.map { ObjectIdentifier($0 as AnyObject) }
-        )
-        return drawable.map(frameTarget(for:))
-    }
-
-    @MainActor
-    func instrumentedPresent(_ target: FrameTarget, on commandBuffer: MTLCommandBuffer) {
-        resolveCanvas(target, on: commandBuffer)
-        presentedFrameTexture = target.texture
-        drawableLifecycleProbe.recordPresent(
-            commandBufferID: ObjectIdentifier(commandBuffer as AnyObject),
-            drawableID: ObjectIdentifier(target.drawable as AnyObject)
-        )
-        commandBuffer.present(target.drawable)
-    }
-}
+// The RenderPipeline bridge (instrumented descriptor / drawable / present) lives in the frame
+// seam, RenderPipeline+FrameSeam.swift (VQ.1).

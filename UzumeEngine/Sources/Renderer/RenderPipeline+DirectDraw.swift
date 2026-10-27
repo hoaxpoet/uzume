@@ -58,12 +58,17 @@ extension RenderPipeline {
     /// Lazily (re)allocates the half-res offscreen target for the direct path.
     /// Render-thread only (called from `drawDirect`). Re-creates only when the
     /// scaled dimensions change (drawable resize / scale change).
-    func halfResTarget(drawableWidth: Int, drawableHeight: Int, scale: Float) -> MTLTexture? {
+    func halfResTarget(drawableWidth: Int, drawableHeight: Int, scale: Float,
+                       format: MTLPixelFormat = FinishSpec.legacyFrameTargetFormat) -> MTLTexture? {
         let scaledW = max(Int(Float(drawableWidth) * scale), 1)
         let scaledH = max(Int(Float(drawableHeight) * scale), 1)
-        if let tex = halfResTexture, halfResTextureSize == (scaledW, scaledH) { return tex }
+        if let tex = halfResTexture, halfResTextureSize == (scaledW, scaledH), tex.pixelFormat == format {
+            return tex
+        }
         halfResTexture = nil   // VQ.0: release before allocate
-        let descriptor = context.sizeScaledDescriptor(width: scaledW, height: scaledH, storage: .private)
+        // VQ.1: the frame target's format — the preset pipeline that draws it was compiled for it.
+        let descriptor = context.sizeScaledDescriptor(
+            width: scaledW, height: scaledH, pixelFormat: format, storage: .private)
         let label = "direct half-res \(scaledW)×\(scaledH)"
         let tex = context.renderTargetBudget.makeTexture(owner: "directHalfRes", label: label, descriptor: descriptor)
         halfResTexture = tex

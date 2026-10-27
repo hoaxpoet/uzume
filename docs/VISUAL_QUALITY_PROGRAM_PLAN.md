@@ -1,7 +1,7 @@
 # Visual Quality Program — the TV bar (Phase VQ)
 
 **Opened:** 2026-10-21 · **Owner:** Matt (product/design), Claude Code (implementation)
-**Status:** planned; nothing started. MFX.2 and EFB.4 (prompts written earlier on 2026-10-21) are folded in as
+**Status (2026-10-26):** VQ.0 (#364), MFX.2 (#363) and EFB.4 (#365, not adopted — Matt kept the stretch) merged; VQ.1 built (local, `vq-1`); live status in `docs/ENGINEERING_PLAN.md` §Phase VQ. MFX.2 and EFB.4 (prompts written earlier on 2026-10-21) are folded in as
 increments of this phase; each prompt carries a dated "Phase VQ amendments" block that overrides its tasks where
 they conflict with this plan. Reviewed 2026-10-21 by an independent graphics review; its corrections are applied
 throughout.

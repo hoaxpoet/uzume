@@ -84,7 +84,7 @@ extension PresetLoader {
         meshDesc.objectFunction = objectFn
         meshDesc.meshFunction = meshFn
         meshDesc.fragmentFunction = fragmentFn
-        meshDesc.colorAttachments[0].pixelFormat = pixelFormat
+        meshDesc.colorAttachments[0].pixelFormat = frameTargetFormat(descriptor)
         do {
             let (pipelineState, _) = try device.makeRenderPipelineState(descriptor: meshDesc, options: [])
             meshLogger.info("Created mesh pipeline (native) for \(descriptor.name)")
@@ -109,7 +109,7 @@ extension PresetLoader {
         let fallbackDesc = MTLRenderPipelineDescriptor()
         fallbackDesc.vertexFunction = vertexFn
         fallbackDesc.fragmentFunction = fragmentFn
-        fallbackDesc.colorAttachments[0].pixelFormat = pixelFormat
+        fallbackDesc.colorAttachments[0].pixelFormat = frameTargetFormat(descriptor)
         do {
             let state = try device.makeRenderPipelineState(descriptor: fallbackDesc)
             meshLogger.info("Created mesh pipeline (vertex fallback) for \(descriptor.name)")

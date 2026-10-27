@@ -41,9 +41,23 @@ struct MultiPassRenderHarness {
     /// harness as much as the roster.
     let readback: Bool
 
-    init(width: Int = 320, height: Int = 180, readback: Bool = true) {
+    /// VQ.1: the finish every scene renders under. `.cinematic` loads the roster with its finish
+    /// forced to cinematic (`_cinematicFixture`), draws each path into an `.rgba16Float` frame
+    /// target, and reads back the finished 8-bit image (FinishingStage) — production's order.
+    let finishMode: FinishSpec.Mode
+
+    /// The format every frame-target pipeline and target in this harness uses.
+    var frameFormat: MTLPixelFormat { FinishSpec(mode: finishMode).frameTargetFormat }
+
+    /// The loaded roster for `finishMode`.
+    var presets: [PresetLoader.LoadedPreset] {
+        finishMode == .cinematic ? _cinematicFixture.presets : _acceptanceFixture.presets
+    }
+
+    init(width: Int = 320, height: Int = 180, readback: Bool = true, finishMode: FinishSpec.Mode = .legacy) {
         self.width = width
         self.height = height
+        self.finishMode = finishMode
         // The env var is an ad-hoc override for one-off sweeps; the PARAMETER is what the
         // frame-budget gate uses, because a threshold that depends on an environment variable
         // being set is not a threshold.
@@ -192,7 +206,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let geo = try PhysarumGeometry(device: ctx.device, library: lib.library,
-                                       configuration: PhysarumConfiguration(), pixelFormat: ctx.pixelFormat)
+                                       configuration: PhysarumConfiguration(), pixelFormat: frameFormat)
         let tex = try makeOutputTexture(ctx)
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         // Settle the web first so we measure the steady response, not the initial grow-in.
@@ -227,11 +241,11 @@ struct MultiPassRenderHarness {
                                      settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Witchlight" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Witchlight" }) else {
             throw HarnessError.presetNotFound("Witchlight")
         }
         let geo = try WitchlightStroke(device: ctx.device, library: lib.library,
-                                       configuration: WitchlightConfiguration(), pixelFormat: ctx.pixelFormat)
+                                       configuration: WitchlightConfiguration(), pixelFormat: frameFormat)
         let floatStride = MemoryLayout<Float>.stride
         guard let fft = ctx.makeSharedBuffer(length: 512 * floatStride),
               let wav = ctx.makeSharedBuffer(length: 2048 * floatStride) else {
@@ -288,7 +302,7 @@ struct MultiPassRenderHarness {
                                 settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Stave" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Stave" }) else {
             throw HarnessError.presetNotFound("Stave")
         }
         let floatStride = MemoryLayout<Float>.stride
@@ -299,7 +313,7 @@ struct MultiPassRenderHarness {
         }
         let geo = try StaveTrace(device: ctx.device, library: lib.library, waveform: wav,
                                  configuration: StaveConfiguration(sampleCount: sampleCount, sampleRate: 48_000),
-                                 pixelFormat: ctx.pixelFormat)
+                                 pixelFormat: frameFormat)
         let wavePtr = wav.contents().bindMemory(to: Float.self, capacity: sampleCount * 2)
         // Publish the primitive the way RenderPipeline does — the harness bypasses it, and
         // without this the fan reads zero and the flash measure would be of a flat wave.
@@ -383,7 +397,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let geo = try RicercarEchoGeometry(device: ctx.device, library: lib.library,
-                                           pixelFormat: ctx.pixelFormat)
+                                           pixelFormat: frameFormat)
         // RICERCAR-CERT.1 — the geometry owns a resolution-dependent trail (RICERCAR-WIRE.2);
         // size it to the harness's output before the first update, exactly as
         // RenderPipeline+Draw does per frame in production.
@@ -424,7 +438,7 @@ struct MultiPassRenderHarness {
                                  settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat,
+        let dancer = try KaguraDancer(device: ctx.device, library: lib.library, pixelFormat: frameFormat,
                                       dance: kaguraDance)
         dancer.ensureAllocated(width: width, height: height)
         let span = Double(drive.count + settle) / 60 + 30
@@ -469,11 +483,11 @@ struct MultiPassRenderHarness {
                                    settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Meniscus" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Meniscus" }) else {
             throw HarnessError.presetNotFound("Meniscus")
         }
         let geo = try MeniscusSurface(device: ctx.device, library: lib.library,
-                                      configuration: MeniscusConfiguration(), pixelFormat: ctx.pixelFormat)
+                                      configuration: MeniscusConfiguration(), pixelFormat: frameFormat)
         let floatStride = MemoryLayout<Float>.stride
         guard let fft = ctx.makeSharedBuffer(length: 512 * floatStride),
               let wav = ctx.makeSharedBuffer(length: 2048 * floatStride) else {
@@ -520,7 +534,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let geo = try CymaticSandGeometry(device: ctx.device, library: lib.library,
-                                          configuration: CymaticSandConfiguration(), pixelFormat: ctx.pixelFormat)
+                                          configuration: CymaticSandConfiguration(), pixelFormat: frameFormat)
         // The display cover-fit divides by aspectRatio — set it to the output aspect so
         // the sand fills the frame (an unset 0 would crop everything to black = static).
         let aspect = Float(width) / Float(height)
@@ -559,7 +573,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let solver = try AlfvenSolver(device: ctx.device, library: lib.library,
-                                      pixelFormat: ctx.pixelFormat,
+                                      pixelFormat: frameFormat,
                                       configuration: AlfvenSolverConfiguration())
         return try particleLoop(ctx, drive, stems, reduce) { i, enc in solver.render(encoder: enc, features: drive[i]) }
             update: { i, cmd in solver.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
@@ -574,7 +588,7 @@ struct MultiPassRenderHarness {
                                      settle: Int, _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        let fern = try FiddleheadFern(device: ctx.device, library: lib.library, pixelFormat: ctx.pixelFormat)
+        let fern = try FiddleheadFern(device: ctx.device, library: lib.library, pixelFormat: frameFormat)
         fern.ensureAllocated(width: width, height: height)
         for _ in 0..<1000 where !fern.isReady {
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else { break }
@@ -597,7 +611,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let geo = try MitosisGeometry(device: ctx.device, library: lib.library,
-                                      configuration: MitosisConfiguration(), pixelFormat: ctx.pixelFormat)
+                                      configuration: MitosisConfiguration(), pixelFormat: frameFormat)
         return try particleLoop(ctx, drive, stems, reduce) { i, enc in geo.render(encoder: enc, features: drive[i]) }
             update: { i, cmd in geo.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
     }
@@ -607,7 +621,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let geo = try MitosisGen2Geometry(device: ctx.device, library: lib.library,
-                                          configuration: MitosisGen2Configuration(), pixelFormat: ctx.pixelFormat)
+                                          configuration: MitosisGen2Configuration(), pixelFormat: frameFormat)
         return try particleLoop(ctx, drive, stems, reduce) { i, enc in geo.render(encoder: enc, features: drive[i]) }
             update: { i, cmd in geo.update(features: drive[i], stemFeatures: stems[i], commandBuffer: cmd) }
     }
@@ -647,12 +661,12 @@ struct MultiPassRenderHarness {
                                                 _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Fireflies" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Fireflies" }) else {
             throw HarnessError.presetNotFound("Fireflies")
         }
         let history = SpectralHistoryBuffer(device: ctx.device)
         let geo = try FirefliesGeometry(device: ctx.device, library: lib.library, beatGrid: history,
-                                        pixelFormat: ctx.pixelFormat)
+                                        pixelFormat: frameFormat)
         geo.ensureAllocated(width: width, height: height)
         geo.cameraTimeOffset = cameraTimeOffset
         geo.freezeCamera = freezeCamera
@@ -711,7 +725,7 @@ struct MultiPassRenderHarness {
                                       _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Lumen Mosaic" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Lumen Mosaic" }) else {
             throw HarnessError.presetNotFound("Lumen Mosaic")
         }
         guard let gbufferState = preset.rayMarchPipelineState else {
@@ -780,7 +794,7 @@ struct MultiPassRenderHarness {
                                           _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Ferrofluid Ocean" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Ferrofluid Ocean" }) else {
             throw HarnessError.presetNotFound("Ferrofluid Ocean")
         }
         guard let gbufferState = preset.rayMarchPipelineState else {
@@ -873,7 +887,7 @@ struct MultiPassRenderHarness {
                                                _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == "Volumetric Lithograph" }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == "Volumetric Lithograph" }) else {
             throw HarnessError.presetNotFound("Volumetric Lithograph")
         }
         guard let gbufferState = preset.rayMarchPipelineState else {
@@ -948,7 +962,7 @@ struct MultiPassRenderHarness {
         }
         let pipeline = try RenderPipeline(context: ctx, shaderLibrary: lib, fftBuffer: fft, waveformBuffer: wav)
         pipeline.setTextureManager(noise)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == presetName }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == presetName }) else {
             throw HarnessError.presetNotFound(presetName)
         }
         let size = CGSize(width: width, height: height)
@@ -1059,7 +1073,7 @@ struct MultiPassRenderHarness {
         }
         let pipeline = try RenderPipeline(context: ctx, shaderLibrary: lib, fftBuffer: fft, waveformBuffer: wav)
         pipeline.setTextureManager(noise)
-        guard let preset = _acceptanceFixture.presets.first(where: { $0.descriptor.name == presetName }) else {
+        guard let preset = presets.first(where: { $0.descriptor.name == presetName }) else {
             throw HarnessError.presetNotFound(presetName)
         }
         let size = CGSize(width: width, height: height)
@@ -1069,7 +1083,7 @@ struct MultiPassRenderHarness {
             guard let mvWarp = preset.mvWarpPipelines else { throw HarnessError.presetNotFound("Glaze") }
             let bundle = MVWarpPipelineBundle(
                 warpState: mvWarp.warpState, composeState: mvWarp.composeState, blitState: mvWarp.blitState,
-                pixelFormat: ctx.pixelFormat, feedbackFormat: .rgba16Float,
+                pixelFormat: frameFormat, feedbackFormat: .rgba16Float,
                 blurState: mvWarp.blurState, isGlaze: true)
             pipeline.setupMVWarp(bundle: bundle, size: size)
             pipeline.setMVWarpDecay(preset.descriptor.decay)
@@ -1119,7 +1133,7 @@ struct MultiPassRenderHarness {
         switch desc.feedbackPixelFormat {
         case .bgra8Unorm?:  feedbackFormat = .bgra8Unorm
         case .rgba16Float?: feedbackFormat = .rgba16Float
-        case nil:           feedbackFormat = ctx.pixelFormat
+        case nil:           feedbackFormat = FinishSpec.legacyFrameTargetFormat
         }
         let canvasClear = desc.marks?.canvasClear.map {
             SIMD4<Double>(Double($0.x), Double($0.y), Double($0.z), 1)
@@ -1128,7 +1142,7 @@ struct MultiPassRenderHarness {
             warpState: warp.warpState,
             composeState: warp.composeState,
             blitState: warp.blitState,
-            pixelFormat: ctx.pixelFormat,
+            pixelFormat: frameFormat,
             feedbackFormat: feedbackFormat,
             blurState: warp.blurState,
             isNacre: desc.name == "Nacre",
@@ -1191,7 +1205,7 @@ struct MultiPassRenderHarness {
                                      _ reduce: (_ bgra: [UInt8]) -> T) throws -> [T] {
         let ctx = try MetalContext()
         let loader = PresetLoader(device: ctx.device, pixelFormat: ctx.pixelFormat,
-                                 loadBuiltIn: true)
+                                 loadBuiltIn: true, finishOverride: finishMode)
         guard let preset = loader.presets.first(where: { $0.descriptor.name == presetName }) else {
             throw HarnessError.presetNotFound("\(presetName) did not load through PresetLoader")
         }
@@ -1347,7 +1361,7 @@ struct MultiPassRenderHarness {
         let ctx = try MetalContext()
         let lib = try ShaderLibrary(context: ctx)
         let loader = PresetLoader(device: ctx.device, pixelFormat: ctx.pixelFormat,
-                                 loadBuiltIn: true)
+                                 loadBuiltIn: true, finishOverride: finishMode)
         guard let preset = loader.presets.first(where: { $0.descriptor.name == presetName }) else {
             throw HarnessError.presetNotFound("\(presetName) did not load through PresetLoader")
         }
@@ -1497,18 +1511,23 @@ struct MultiPassRenderHarness {
     }
 
     private func commit(_ cmd: MTLCommandBuffer, _ outTex: MTLTexture, into pixels: inout [UInt8]) throws {
+        // VQ.1: a cinematic frame target is finished into the 8-bit image production presents.
+        var readTex = outTex
+        if outTex.pixelFormat == FinishSpec.cinematicFrameTargetFormat {
+            readTex = try HarnessFinish.shared.finish(outTex, commandBuffer: cmd)
+        }
         cmd.commit()
         cmd.waitUntilCompleted()
         guard cmd.status == .completed else { throw HarnessError.renderFailed }
         gpuTimes?.append((cmd.gpuEndTime - cmd.gpuStartTime) * 1000)
         guard readback else { return }   // see `readback` — timing runs skip this
-        outTex.getBytes(&pixels, bytesPerRow: width * 4,
-                        from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        readTex.getBytes(&pixels, bytesPerRow: width * 4,
+                         from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
     }
 
     private func makeOutputTexture(_ ctx: MetalContext) throws -> MTLTexture {
         let d = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: ctx.pixelFormat, width: width, height: height, mipmapped: false)
+            pixelFormat: frameFormat, width: width, height: height, mipmapped: false)
         d.usage = [.renderTarget, .shaderRead]
         d.storageMode = .shared
         guard let t = ctx.device.makeTexture(descriptor: d) else {
@@ -1517,10 +1536,48 @@ struct MultiPassRenderHarness {
         return t
     }
 
+    /// Whether `presetName` renders through this harness (else a caller uses a single-pass draw).
+    static func renders(_ presetName: String) -> Bool {
+        let others: Set = ["Alfvén", "Ferrofluid Ocean"]
+        return multiPassPresets.contains(presetName) || others.contains(presetName)
+    }
+
     enum HarnessError: Error {
         case presetNotFound(String)
         case setupFailed(String)
         case renderFailed
+    }
+}
+
+// MARK: - HarnessFinish
+
+/// The cinematic finish for the harness's readback (VQ.1): one stage + 8-bit output per size.
+final class HarnessFinish: @unchecked Sendable {
+    static let shared = HarnessFinish()
+    private let lock = NSLock()
+    private var stages: [String: (FinishingStage, MTLTexture)] = [:]
+
+    func finish(_ source: MTLTexture, commandBuffer: MTLCommandBuffer) throws -> MTLTexture {
+        let key = "\(source.width)x\(source.height)"
+        let (stage, out) = try lock.withLock { () throws -> (FinishingStage, MTLTexture) in
+            if let made = stages[key] { return made }
+            let device = commandBuffer.device
+            let ctx = try MetalContext()
+            let stage = try FinishingStage(device: device, library: try ShaderLibrary(context: ctx).library,
+                                           outputFormat: .bgra8Unorm_srgb, spec: FinishSpec(mode: .cinematic),
+                                           budget: nil)
+            let desc = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .bgra8Unorm_srgb, width: source.width, height: source.height, mipmapped: false)
+            desc.usage = [.renderTarget, .shaderRead]
+            desc.storageMode = .shared
+            guard let out = device.makeTexture(descriptor: desc) else {
+                throw MultiPassRenderHarness.HarnessError.setupFailed("finish readback")
+            }
+            stages[key] = (stage, out)
+            return (stage, out)
+        }
+        stage.encode(source: source, output: out, commandBuffer: commandBuffer)
+        return out
     }
 }
 

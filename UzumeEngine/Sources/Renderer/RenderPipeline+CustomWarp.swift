@@ -28,11 +28,11 @@ extension RenderPipeline {
         site: String,
         render: (MTLTexture) -> Void
     ) {
-        guard let drawable = instrumentedDrawable(
+        guard let target = instrumentedDrawable(
             from: view, commandBuffer: commandBuffer, site: site
         ) else { return }
-        render(drawable.texture)
-        instrumentedPresent(drawable, on: commandBuffer)
+        render(target.texture)
+        instrumentedPresent(target, on: commandBuffer)
     }
 
     /// Reduced-motion (U.9 / a11y) frame for a custom-warp preset: the preset's signature

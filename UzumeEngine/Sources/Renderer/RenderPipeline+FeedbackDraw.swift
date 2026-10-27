@@ -87,7 +87,7 @@ extension RenderPipeline {
     ) {
         guard let descriptor = instrumentedRenderPassDescriptor(
                   from: view, commandBuffer: commandBuffer, site: "feedback.particles.descriptor"),
-              let drawable = instrumentedDrawable(
+              let target = instrumentedDrawable(
                   from: view, commandBuffer: commandBuffer, site: "feedback.particles.drawable") else { return }
         descriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         descriptor.colorAttachments[0].loadAction = .clear
@@ -105,7 +105,7 @@ extension RenderPipeline {
             particles?.render(encoder: encoder, features: features)
             encoder.endEncoding()
         }
-        instrumentedPresent(drawable, on: commandBuffer)
+        instrumentedPresent(target, on: commandBuffer)
     }
 
     /// Surface mode: composite the preset additively into the (already warped)
@@ -137,19 +137,19 @@ extension RenderPipeline {
         }
         guard let descriptor = instrumentedRenderPassDescriptor(
                   from: view, commandBuffer: commandBuffer, site: "feedback.surface.descriptor"),
-              let drawable = instrumentedDrawable(
+              let target = instrumentedDrawable(
                   from: view, commandBuffer: commandBuffer, site: "feedback.surface.drawable") else { return }
         descriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         descriptor.colorAttachments[0].loadAction = .clear
         descriptor.colorAttachments[0].storeAction = .store
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) {
-            encoder.setRenderPipelineState(feedbackBlitPipelineState)
+            encoder.setRenderPipelineState(frameBlitPipeline(for: target.texture.pixelFormat))
             encoder.setFragmentTexture(feedbackTexture, index: 0)
             encoder.setFragmentSamplerState(feedbackSamplerState, index: 0)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             encoder.endEncoding()
         }
-        instrumentedPresent(drawable, on: commandBuffer)
+        instrumentedPresent(target, on: commandBuffer)
     }
 
     // swiftlint:enable function_parameter_count

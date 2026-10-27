@@ -21,7 +21,7 @@ extension RenderPipeline {
         warpState: MVWarpState,
         sceneAlreadyRendered: Bool
     ) {
-        guard let drawable = instrumentedDrawable(
+        guard let target = instrumentedDrawable(
             from: view, commandBuffer: commandBuffer, site: "mvWarp.reducedMotion.drawable"
         ) else { return }
         // Nacre (BUG-061): its direct pipeline is compiled for the .rgba16Float feedback
@@ -37,8 +37,8 @@ extension RenderPipeline {
                 commandBuffer: commandBuffer,
                 features: features,
                 warpState: warpState,
-                target: drawable.texture)
-            instrumentedPresent(drawable, on: commandBuffer)
+                target: target.texture)
+            instrumentedPresent(target, on: commandBuffer)
             return
         }
         // Floret (FLORET.2a): same .rgba16Float-direct-pipeline crash class as Nacre
@@ -49,8 +49,8 @@ extension RenderPipeline {
                 commandBuffer: commandBuffer,
                 features: features,
                 warpState: warpState,
-                target: drawable.texture)
-            instrumentedPresent(drawable, on: commandBuffer)
+                target: target.texture)
+            instrumentedPresent(target, on: commandBuffer)
             return
         }
         // Glaze (BUG-061, same class as Nacre): its direct pipeline is .rgba16Float, so the
@@ -61,21 +61,27 @@ extension RenderPipeline {
                 commandBuffer: commandBuffer,
                 features: features,
                 warpState: warpState,
-                target: drawable.texture)
-            instrumentedPresent(drawable, on: commandBuffer)
+                target: target.texture)
+            instrumentedPresent(target, on: commandBuffer)
             return
         }
+        // VQ.1: the direct pipeline is compiled for the feedback format; when the frame target has
+        // another format (a cinematic scene's `.rgba16Float`), draw the scene into the mv_warp scene
+        // texture and present it through the blit (compiled for the frame target) — the BUG-061
+        // class, avoided by construction. Legacy: the formats agree, the path is as before.
+        let directIntoTarget = warpState.feedbackFormat == target.texture.pixelFormat
         if !sceneAlreadyRendered {
             renderSceneToTexture(
                 commandBuffer: commandBuffer,
                 features: &features,
                 stemFeatures: stemFeatures,
                 activePipeline: activePipeline,
-                target: drawable.texture
+                target: directIntoTarget ? target.texture : warpState.sceneTexture
             )
-        } else {
+        }
+        if sceneAlreadyRendered || !directIntoTarget {
             let desc = MTLRenderPassDescriptor()
-            desc.colorAttachments[0].texture = drawable.texture
+            desc.colorAttachments[0].texture = target.texture
             desc.colorAttachments[0].loadAction = .clear
             desc.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
             desc.colorAttachments[0].storeAction = .store
@@ -90,6 +96,6 @@ extension RenderPipeline {
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             encoder.endEncoding()
         }
-        instrumentedPresent(drawable, on: commandBuffer)
+        instrumentedPresent(target, on: commandBuffer)
     }
 }
