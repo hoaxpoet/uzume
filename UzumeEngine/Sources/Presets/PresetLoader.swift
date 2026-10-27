@@ -656,7 +656,7 @@ public final class PresetLoader: @unchecked Sendable {
         // the formats MetalFX reads. `standardState` above is kept (Metal drops the fragment's
         // extra outputs), so a path that has not opted in can still draw the scene.
         var temporalState: MTLRenderPipelineState?
-        if let spec = descriptor.temporalReconstruction {
+        if let spec = descriptor.temporalReconstruction, descriptor.passes == [.direct] {
             guard let state = makeTemporalPipeline(spec, vertexFn, fragmentFn, url) else { return nil }
             temporalState = state
         }

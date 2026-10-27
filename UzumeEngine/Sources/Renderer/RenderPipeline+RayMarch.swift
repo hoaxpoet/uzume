@@ -142,7 +142,7 @@ extension RenderPipeline {
         // When rendering to an offscreen texture for mv_warp, we don't need the drawable
         // during scene rendering. We still need it to exist for command buffer presentation
         // (done by the mv_warp blit pass instead). Acquire it only for the normal path.
-        let outputTex: MTLTexture
+        var outputTex: MTLTexture
         if let offscreen = sceneOutputTexture {
             outputTex = offscreen
         } else {
@@ -157,6 +157,18 @@ extension RenderPipeline {
             ? instrumentedDrawable(
                 from: view, commandBuffer: commandBuffer, site: "rayMarch.present.drawable")
             : nil
+
+        // VQ.3: a scene that reconstructs (or takes `upscale: spatial`) upscales its lit image ONCE, to
+        // the drawable: a legacy composite then writes the drawable itself (not the tier-1 canvas), a
+        // cinematic one hands the upscaled image to the finish. Not under mv_warp's offscreen hand-off.
+        let upscaling = drawable != nil && (rayMarchState.temporal != nil || upscaleMode == .spatial)
+        rayMarchState.spatialUpscaler = upscaling ? spatialUpscalerIfActive() : nil
+        rayMarchState.upscaleOutputSize = nil
+        if upscaling, let drawable {
+            let out = outputTexture(of: drawable)
+            rayMarchState.upscaleOutputSize = (out.width, out.height)
+            if finishingStage == nil { outputTex = out }
+        }
 
         let size = renderSize(of: view)
         let width = Int(size.width)
@@ -275,7 +287,7 @@ extension RenderPipeline {
             azimuth: auroraOrbitAzimuth, aatDelta: aatDelta, arousal: features.arousal)
         lightingStems.auroraOrbitAzimuth = auroraOrbitAzimuth
 
-        rayMarchState.render(
+        let finishSource = rayMarchState.render(
             gbufferPipelineState: activePipeline,
             features: &features,
             fftBuffer: fftMagnitudeBuffer,
@@ -300,7 +312,13 @@ extension RenderPipeline {
         // Present only when rendering directly to the drawable (normal path).
         // When sceneOutputTexture is non-nil, the mv_warp blit pass presents instead.
         if let drawable = drawable {
-            instrumentedPresent(drawable, on: commandBuffer)
+            if let finishSource {
+                instrumentedPresent(FrameTarget(texture: finishSource, drawable: drawable.drawable), on: commandBuffer)
+            } else if rayMarchState.upscaleOutputSize != nil, finishingStage == nil {
+                instrumentedPresent(FrameTarget(texture: outputTex, drawable: drawable.drawable), on: commandBuffer)
+            } else {
+                instrumentedPresent(drawable, on: commandBuffer)
+            }
         }
     }
 

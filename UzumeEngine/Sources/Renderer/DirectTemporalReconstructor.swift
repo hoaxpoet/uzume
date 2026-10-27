@@ -9,6 +9,8 @@
 //
 // Prior art: MFX.1's `MetalFXTemporalUpscaler` (ray-march G-buffer path, deleted at D-213 with no
 // consumer). This is its direct-path sibling; Energetic Flyby (EFB.4) is the named consumer.
+// VQ.3: the ray-march path reuses it in external-input mode (`RayMarchTemporal` owns the lit colour,
+// depth, motion and reactive targets; this owns only the scaler and its output).
 //
 // Conventions (all checked by `DirectTemporalReconstructionTests`, not assumed):
 //   • jitter is in render pixels, +x right, +y down; the scene samples at `position.xy + jitter`;
@@ -94,10 +96,18 @@ public final class DirectTemporalReconstructor {
     /// This instance's scaler reservation (unique, so a successor's charge is never dropped by this deinit).
     private lazy var reservationName = "mfx2 scaler \(ObjectIdentifier(self).hashValue)"
 
-    public init(device: MTLDevice, spec: TemporalReconstructionSpec, budget: RenderTargetBudget? = nil) {
+    /// VQ.3: true when the caller owns the input targets and passes them to `encodeUpscale(…inputs:)`.
+    public let externalInputs: Bool
+
+    /// VQ.3 test hook: false hands MetalFX (and the scene) zero jitter every frame.
+    public var jitterEnabled = true
+
+    public init(device: MTLDevice, spec: TemporalReconstructionSpec, budget: RenderTargetBudget? = nil,
+                externalInputs: Bool = false) {
         self.device = device
         self.spec = spec
         self.budget = budget
+        self.externalInputs = externalInputs
     }
 
     deinit {
@@ -108,6 +118,15 @@ public final class DirectTemporalReconstructor {
     public static func isSupported(device: MTLDevice) -> Bool {
         MTLFXTemporalScalerDescriptor.supportsDevice(device)
     }
+
+    /// The output ÷ input ratios this device's temporal scaler accepts (M2 Pro, macOS 26: 1…3).
+    public static func supportedScaleRange(device: MTLDevice) -> ClosedRange<Float> {
+        MTLFXTemporalScalerDescriptor.supportedInputContentMinScale(device: device)
+            ... MTLFXTemporalScalerDescriptor.supportedInputContentMaxScale(device: device)
+    }
+
+    /// True while MetalFX itself reconstructs (false: no MetalFX, or the last `prepare` failed).
+    public var isTemporal: Bool { scaler != nil && output != nil }
 
     /// Discard the history: preset switch, a cut, any jump reprojection cannot explain.
     public func reset() {
@@ -132,6 +151,7 @@ public final class DirectTemporalReconstructor {
 
     /// This frame's jitter in render pixels, −0.5…0.5. Indexed from 1 so frame 0 is not (−0.5, −0.5).
     public var jitter: SIMD2<Float> {
+        guard jitterEnabled else { return .zero }
         let i = frameIndex % Self.jitterPhases + 1
         return SIMD2(Self.halton(i, 2) - 0.5, Self.halton(i, 3) - 0.5)
     }
@@ -155,9 +175,26 @@ public final class DirectTemporalReconstructor {
     @discardableResult
     public func prepare(outputWidth: Int, outputHeight: Int) -> Bool {
         let outW = max(outputWidth, 1), outH = max(outputHeight, 1)
-        if targets != nil, outW == self.outputWidth, outH == self.outputHeight { return true }
-        let inW = max(Int((Float(outW) * spec.internalScale).rounded()), 1)
-        let inH = max(Int((Float(outH) * spec.internalScale).rounded()), 1)
+        return prepare(inputWidth: max(Int((Float(outW) * spec.internalScale).rounded()), 1),
+                       inputHeight: max(Int((Float(outH) * spec.internalScale).rounded()), 1),
+                       outputWidth: outW,
+                       outputHeight: outH)
+    }
+
+    /// (Re)allocate for an explicit input (render) size — the ray-march path's march size (VQ.3).
+    /// False when the ratio is outside what this device's scaler accepts, or the budget refused.
+    @discardableResult
+    public func prepare(inputWidth: Int, inputHeight: Int, outputWidth: Int, outputHeight: Int) -> Bool {
+        let outW = max(outputWidth, 1), outH = max(outputHeight, 1)
+        let inW = max(inputWidth, 1), inH = max(inputHeight, 1)
+        let prepared = externalInputs ? output != nil : targets != nil
+        if prepared, outW == self.outputWidth, outH == self.outputHeight,
+           inW == renderWidth, inH == renderHeight { return true }
+        let ratio = max(Float(outW) / Float(inW), Float(outH) / Float(inH))
+        if Self.isSupported(device: device), !Self.supportedScaleRange(device: device).contains(ratio) {
+            logger.error("MetalFX temporal cannot upscale \(inW)×\(inH) → \(outW)×\(outH) (\(ratio)×)")
+            return fail(outW, outH)
+        }
 
         // VQ.0: release the old set (targets, output, scaler and its reservation) before allocating.
         targets = nil
@@ -174,10 +211,13 @@ public final class DirectTemporalReconstructor {
             let desc = descriptor(format, inW, inH, renderUsage.union(usage ?? []))
             return .init(desc, label: "MFX.2 \(name) \(inW)×\(inH)")
         }
-        var requests = [internalTarget(Self.colorFormat, scaler?.colorTextureUsage, "colour"),
+        var requests: [Request] = []
+        if !externalInputs {
+            requests = [internalTarget(Self.colorFormat, scaler?.colorTextureUsage, "colour"),
                         internalTarget(Self.depthFormat, scaler?.depthTextureUsage, "depth"),
                         internalTarget(Self.motionFormat, scaler?.motionTextureUsage, "motion")]
-        if spec.reactiveMask {
+        }
+        if spec.reactiveMask, !externalInputs {
             requests.append(internalTarget(Self.reactiveFormat, scaler?.reactiveTextureUsage, "reactive"))
         }
         if let scaler {
@@ -186,9 +226,13 @@ public final class DirectTemporalReconstructor {
             requests.append(.init(desc, label: "MFX.2 output \(outW)×\(outH)"))
         }
         guard let made = makeTextures(requests) else { return fail(outW, outH) }
-        let reactive = spec.reactiveMask ? made[3] : nil
         output = scaler == nil ? nil : made.last
-        targets = Targets(color: made[0], depth: made[1], motion: made[2], reactive: reactive)
+        if !externalInputs {
+            let reactive = spec.reactiveMask ? made[3] : nil
+            targets = Targets(color: made[0], depth: made[1], motion: made[2], reactive: reactive)
+        } else if scaler == nil {
+            return fail(outW, outH)   // nothing to reconstruct with: the caller takes its normal path
+        }
         self.outputWidth = outW
         self.outputHeight = outH
         renderWidth = inW
@@ -274,7 +318,13 @@ public final class DirectTemporalReconstructor {
     /// Reconstruct this frame from `targets` into a drawable-sized texture. Returns nil when the
     /// device has no MetalFX (the caller stretches `targets.color` instead).
     public func encodeUpscale(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
-        guard let scaler, let targets, let output else { return nil }
+        guard let targets else { return nil }
+        return encodeUpscale(commandBuffer: commandBuffer, inputs: targets)
+    }
+
+    /// Reconstruct from caller-owned inputs (VQ.3, external-input mode), each `renderWidth × renderHeight`.
+    public func encodeUpscale(commandBuffer: MTLCommandBuffer, inputs targets: Targets) -> MTLTexture? {
+        guard let scaler, let output else { return nil }
         scaler.colorTexture = targets.color
         scaler.depthTexture = targets.depth
         scaler.motionTexture = targets.motion

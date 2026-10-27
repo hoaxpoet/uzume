@@ -77,6 +77,16 @@ public final class RayMarchPipeline: @unchecked Sendable {
     /// resolution on the upscaled image.
     public var renderScale: Float = 1.0
 
+    // MARK: - Upscale (VQ.3)
+
+    /// Temporal reconstruction for a scene that declares `temporal_reconstruction`; nil otherwise.
+    public var temporal: RayMarchTemporal?
+    /// MetalFX spatial for a scene under `upscale: spatial` (the draw path sets it); nil otherwise.
+    public var spatialUpscaler: SpatialUpscaler?
+    /// What `temporal` / `spatialUpscaler` upscale the lit image to (the drawable); nil = no MetalFX
+    /// step — the composite stretches by UV, as before VQ.3.
+    public var upscaleOutputSize: (width: Int, height: Int)?
+
     // MARK: - Depth Debug Mode
 
     /// Direct depth+albedo diagnostic pipeline — compiled from `raymarch_depth_debug_fragment`.
@@ -343,6 +353,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
     /// flight have drained.
     public func releaseTextures() {
         (gbuffer0, gbuffer1, gbuffer2, litTexture) = (nil, nil, nil, nil)
+        temporal?.release()   // VQ.3: its march-size inputs, output and scaler follow the same size
     }
 
     /// Lazy allocator — no-op if textures are already allocated.
@@ -363,6 +374,12 @@ public final class RayMarchPipeline: @unchecked Sendable {
     /// Pass 3 depends on `postProcessChain`:
     ///   - Nil: `compositePipeline` tone-maps `litTexture` → `outputTexture` directly (SDR).
     ///   - Non-nil: calls `chain.runBloomAndComposite(from: litTexture, to: outputTexture, ...)`.
+    /// VQ.3: with `upscaleOutputSize` set, the lit (linear, pre-tone-map) image is first reconstructed
+    /// (`temporal`, jittered march) or spatially upscaled to that size, and the finish reads that.
+    ///
+    /// - Returns: the upscaled linear image when the frame was upscaled for a CINEMATIC frame target —
+    ///   the composite is skipped and the caller hands this to the finishing stage; nil otherwise
+    ///   (`outputTexture` holds the frame).
     ///
     /// - Parameters:
     ///   - gbufferPipelineState: Preset-compiled G-buffer pipeline (uses `raymarch_gbuffer_fragment`).
@@ -385,6 +402,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
     ///     is bound — required because the preamble declares `texture2d<float> ferrofluidHeight
     ///     [[texture(10)]]` on every ray-march preset. First consumer: Ferrofluid Ocean V.9's
     ///     `FerrofluidParticles` per the V.9 Session 4.5b Phase 1 contract.
+    @discardableResult
     public func render(
         gbufferPipelineState: MTLRenderPipelineState,
         features: inout FeatureVector,
@@ -399,11 +417,15 @@ public final class RayMarchPipeline: @unchecked Sendable {
         presetFragmentBuffer3: MTLBuffer? = nil,
         presetHeightTexture: MTLTexture? = nil,
         passTimingHandler: (@Sendable (RayMarchPassTimings) -> Void)? = nil
-    ) {
-        guard gbuffer0 != nil, gbuffer1 != nil, gbuffer2 != nil, litTexture != nil else {
+    ) -> MTLTexture? {
+        guard let gbuf0 = gbuffer0, gbuffer1 != nil, gbuffer2 != nil, let lit = litTexture else {
             logger.error("RayMarchPipeline.render called before textures allocated — skipping")
-            return
+            return nil
         }
+
+        // VQ.3: the jitter rides the shared ray generation's camera basis for this frame only.
+        let upscale = beginUpscaleFrame(march: gbuf0)
+        defer { sceneUniforms.cameraForward = upscale.unjitteredForward }
 
         // W0.2 — bracket the three logical sections with GPU timestamp counters.
         // The previous PERF.2-pass values timed CPU encoder construction and were
@@ -442,7 +464,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
         let cinematicTarget = outputTexture.pixelFormat == FinishSpec.cinematicFrameTargetFormat
         if debugGBufferMode && !cinematicTarget {
             runGBufferDebugPass(commandBuffer: commandBuffer, outputTexture: outputTexture)
-            return
+            return nil
         }
 
         runLightingPass(
@@ -455,11 +477,17 @@ public final class RayMarchPipeline: @unchecked Sendable {
             gpuTiming: timingFrame?.lighting
         )
 
-        let colorForPost = litTexture
+        // VQ.3: one upscale, to the output size, on the linear image — before bloom / tone mapping.
+        let colorForPost = upscaleLit(lit, gbuffer0: gbuf0, frame: upscale, commandBuffer: commandBuffer)
+        let upscaledForFinish = cinematicTarget && colorForPost !== lit
 
-        if let chain = postProcessChain, !cinematicTarget {
-            // Route the (optionally temporally-resolved) colour through bloom + ACES.
-            guard let src = colorForPost else { return }
+        if upscaledForFinish {
+            // The cinematic stage finishes the output-sized image itself (render → upscale → finish).
+        } else if let chain = postProcessChain, !cinematicTarget {
+            // Route the (optionally temporally-resolved) colour through bloom + ACES. The chain keeps
+            // its march-size bloom targets (allocated by the draw path), so the glow's share of the
+            // screen is what it was; only the composite reads the upscaled image.
+            let src = colorForPost
             chain.ensureAllocated(width: src.width, height: src.height)
             chain.runBloomAndComposite(
                 from: src,
@@ -479,6 +507,7 @@ public final class RayMarchPipeline: @unchecked Sendable {
         if let timingFrame, let passTimingHandler {
             passProfiler?.resolve(timingFrame, after: commandBuffer, handler: passTimingHandler)
         }
+        return upscaledForFinish ? colorForPost : nil
     }
 
     // swiftlint:enable function_parameter_count
