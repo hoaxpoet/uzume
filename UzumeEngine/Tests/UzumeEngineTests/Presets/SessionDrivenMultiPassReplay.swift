@@ -18,7 +18,7 @@
 //   REPLAY_SESSION=~/Documents/uzume_sessions/<dir> \
 //   REPLAY_PRESET="Dragon Bloom" \
 //   REPLAY_MULTIPASS=1 \
-//   [REPLAY_FROM=0 REPLAY_COUNT=90 REPLAY_OUT=/tmp/replay] \
+//   [REPLAY_FROM=0 REPLAY_COUNT=90 REPLAY_OUT=/tmp/replay REPLAY_FINISH=cinematic] \
 //   swift test --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
 import Testing
 import Foundation
@@ -113,7 +113,9 @@ struct SessionDrivenMultiPassReplay {
         // written from.
         let width = Int(env["REPLAY_W"] ?? "") ?? 320
         let height = Int(env["REPLAY_H"] ?? "") ?? 180
-        let harness = try MultiPassRenderHarness(width: width, height: height)
+        // VQ.1c: REPLAY_FINISH=legacy|cinematic forces the finish (default legacy).
+        let finish = env["REPLAY_FINISH"].flatMap(FinishSpec.Mode.init(rawValue:)) ?? .legacy
+        let harness = try MultiPassRenderHarness(width: width, height: height, finishMode: finish)
         // REPLAY_OUT was documented in this file's usage block from PR.10 and never
         // implemented. Writing every Nth frame is what makes the replay a perception
         // check (D-181) instead of a metric-only run.
