@@ -56,6 +56,13 @@ struct PresetSidecarKeyGateTests {
     /// Adding a row here is a decision, not a formality — it says the mechanism is wired
     /// and waiting, not that nobody checked.
     private static let deliberateZeroAdopterKeys: [String: String] = [
+        "temporal_reconstruction": """
+            MFX.2 built direct-path MetalFX reconstruction and proved it on a test-only scene \
+            (`MFXProofScene`); no shipped scene changes in that increment. EFB.4 tried it on \
+            Energetic Flyby and Matt kept the stretch (D-263 amendment); VQ.3a tried the ray-march \
+            path on Lumen Mosaic and Matt saw no clear difference at 1:1 on his 4K monitor (D-265 \
+            amendment), so it waits for a consumer whose gain is visible.
+            """,
         "upscale": """
             VQ.3 (D-265) built MetalFX spatial at every stretch and measured it on test-only proof \
             scenes; no shipped scene changes in that increment. Scenes without the key take \
