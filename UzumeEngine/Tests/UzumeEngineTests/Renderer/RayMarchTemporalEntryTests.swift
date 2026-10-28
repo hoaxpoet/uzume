@@ -12,6 +12,7 @@
 
 import Foundation
 import Metal
+import QuartzCore
 import Testing
 @testable import Presets
 @testable import Renderer
@@ -56,6 +57,23 @@ struct RayMarchTemporalEntryTests {
                 ms.append((cb.gpuEndTime - cb.gpuStartTime) * 1000)
             }
             row("upscale alone", ms)
+            return
+        case "apply":
+            // Wall ms of each piece of `prepareRayMarchUpscale`, on a fresh RayMarchTemporal, three times.
+            let lit = try #require(rig.pipeline.litTexture)
+            let lib = try ShaderLibrary(context: ctx)
+            for _ in 0..<3 {
+                var t = CACurrentMediaTime()
+                func lap() -> Double { let now = CACurrentMediaTime(); defer { t = now }; return (now - t) * 1000 }
+                let temporal = try RayMarchTemporal(device: ctx.device, library: lib.library,
+                                                    spec: .init(motionVectors: .reprojected, reactiveMask: true),
+                                                    budget: nil)
+                let made = lap()
+                #expect(temporal.prepare(inputWidth: 2560, inputHeight: 1440, outputWidth: 3840, outputHeight: 2160))
+                let prepared = lap()
+                let warm = temporal.warmUp(lit: lit, queue: ctx.commandQueue)
+                row("init / prepare (scaler + targets) / warm-up ms", [made, prepared, warm])
+            }
             return
         case "probe":
             for frame in 0..<3 { try rig.frame(time: Float(frame) / 60) }
