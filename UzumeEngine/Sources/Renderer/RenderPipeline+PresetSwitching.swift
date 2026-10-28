@@ -375,44 +375,6 @@ extension RenderPipeline {
         rayMarchPresetHeightTextureLock.withLock { rayMarchPresetHeightTexture = texture }
     }
 
-    /// LM.10: the active ray-march scene's bake (`LoadedPreset.bakePipelineState`), or nil. The slot-10 texture is
-    /// then made by the next frame at the march size — on the GPU, in that frame's command buffer, not on the
-    /// main thread — and again whenever the march size changes. Call on every scene apply.
-    public func setRayMarchBake(_ state: MTLRenderPipelineState?) {
-        rayMarchPresetHeightTextureLock.withLock {
-            rayMarchBakePipeline = state
-            if state != nil { rayMarchPresetHeightTexture = nil }
-        }
-    }
-
-    /// Run the active scene's bake into a `width × height` slot-10 texture if it has none at that size yet.
-    func bakeRayMarchPresetTextureIfNeeded(width: Int, height: Int, sceneUniforms: SceneUniforms,
-                                           commandBuffer: MTLCommandBuffer) {
-        let (state, current) = rayMarchPresetHeightTextureLock.withLock { (rayMarchBakePipeline, rayMarchPresetHeightTexture) }
-        guard let state else { return }
-        if let current, current.width == width, current.height == height { return }
-        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm, width: width, height: height,
-                                                            mipmapped: false)
-        desc.usage = [.renderTarget, .shaderRead]
-        desc.storageMode = .private
-        let pass = MTLRenderPassDescriptor()
-        guard let texture = context.renderTargetBudget.makeTexture(
-                owner: "rayMarchBake", label: "ray-march preset bake \(width)×\(height)", descriptor: desc) else { return }
-        pass.colorAttachments[0].texture = texture
-        pass.colorAttachments[0].loadAction = .dontCare
-        pass.colorAttachments[0].storeAction = .store
-        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        encoder.label = "ray-march preset bake"
-        encoder.setRenderPipelineState(state)
-        var uniforms = sceneUniforms
-        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<SceneUniforms>.stride, index: 4)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-        encoder.endEncoding()
-        rayMarchPresetHeightTextureLock.withLock {
-            if rayMarchBakePipeline === state { rayMarchPresetHeightTexture = texture }
-        }
-    }
-
     /// Attach a dynamic text overlay for presets that declare `text_overlay: true`.
     /// The overlay texture is bound at fragment texture(12) during direct-pass draws.
     /// Pass `nil` to detach (e.g. on preset switch away from a text-overlay preset).

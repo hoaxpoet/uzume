@@ -822,8 +822,9 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
         upscale = try container.decodeIfPresent(UpscaleMode.self, forKey: .upscale)
         if upscale == .native, !passes.contains(.rayMarch) || passes.contains(.mvWarp) {
             throw DecodingError.dataCorruptedError(
-                forKey: .upscale, in: container,
-                debugDescription: "upscale \"native\" is ray_march only (no mv_warp): every other path would ignore it")
+                forKey: .upscale,
+                in: container,
+                debugDescription: "upscale \"native\" is ray_march only (no mv_warp): other paths would ignore it")
         }
 
         // MARK: Finish (VQ.1)

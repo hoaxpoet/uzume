@@ -215,8 +215,11 @@ extension RenderPipeline {
         // The 0.4 floor is a HARD CLAMP, not a suggestion: a sidecar declaring a smaller
         // render_scale silently gets 0.4. PERF.14 probes at 0.25 and 0.35 both ran at 0.4 and
         // returned identical timings before anyone noticed. If you lower it, check here first.
-        let (marchWidth, marchHeight) = Self.marchSize(rayMarchState, renderWidth: width, renderHeight: height,
-                                                       native: upscaleMode == .native)
+        let (marchWidth, marchHeight) = Self.marchSize(
+            rayMarchState,
+            renderWidth: width,
+            renderHeight: height,
+            native: upscaleMode == .native)
         rayMarchState.ensureAllocated(width: marchWidth, height: marchHeight)
 
         // Update per-frame uniforms: accumulated audio time, aspect ratio, and step-count multiplier.
@@ -230,8 +233,11 @@ extension RenderPipeline {
 
         rayMarchState.applyAudioModulation(features: features)
         // LM.10: after the uniforms (the bake traces the scene's camera at this aspect).
-        bakeRayMarchPresetTextureIfNeeded(width: marchWidth, height: marchHeight,
-                                          sceneUniforms: rayMarchState.sceneUniforms, commandBuffer: commandBuffer)
+        bakeRayMarchPresetTextureIfNeeded(
+            width: marchWidth,
+            height: marchHeight,
+            sceneUniforms: rayMarchState.sceneUniforms,
+            commandBuffer: commandBuffer)
 
         // Resolve optional PostProcessChain for bloom: present only when .postProcess is
         // declared alongside .rayMarch in the preset's passes array.
