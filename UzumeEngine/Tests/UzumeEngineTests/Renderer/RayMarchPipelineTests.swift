@@ -48,9 +48,11 @@ final class RayMarchPipelineTests: XCTestCase {
                        thread float& roughness,
                        thread float& metallic,
                        thread int& outMatID,
-                       constant LumenPatternState& lumen) {
+                       constant LumenPatternState& lumen,
+                       texture2d<float> presetTexture) {
         (void)outMatID;
         (void)lumen;
+        (void)presetTexture;
         albedo    = float3(0.7, 0.7, 0.7);
         roughness = 0.5;
         metallic  = 0.0;
