@@ -45,4 +45,37 @@ struct LumenGlassRenderTests {
             print("[lm-glass] \(url.path)")
         }
     }
+
+    /// How sharp at 4K, at what cost: today's stretch (march 2560×1440), MetalFX temporal from the same march,
+    /// and native 4K. Same frames; 4K PNGs + median GPU ms of frames 30–89, one frame at a time (relative —
+    /// quote Release only). LM_GLASS_MODES=<dir>.
+    @Test("Lumen Mosaic glass: stretch vs temporal vs native 4K (LM_GLASS_MODES=<dir>)")
+    func renderModes() throws {
+        guard let out = ProcessInfo.processInfo.environment["LM_GLASS_MODES"] else { return }
+        let dir = URL(fileURLWithPath: out)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ctx = try MetalContext()
+        let frames = 90
+        let beat = FlashHarnessSupport.worstCaseBeatTrain(accentHz: 2, seconds: Double(frames) / 60)
+        let stems = FlashHarnessSupport.worstCaseStemTrain(accentHz: 2, seconds: Double(frames) / 60)
+        let modes: [(String, RayMarchUpscaleRig.Mode)] = [("stretch", .stretch(canvasW: 2560, canvasH: 1440)),
+                                                          ("temporal", .temporal), ("native", .reference(factor: 1))]
+        for name in ["Tenebrism", "Holi"] {
+            let palette = try #require(LumenMosaicPaletteLibrary.all.first { $0.name == name })
+            for (label, mode) in modes {
+                let rig = try RayMarchUpscaleRig(scene: .lumenMosaic, mode: mode, outW: 3840, outH: 2160,
+                                                 marchW: 2560, marchH: 1440, context: ctx, lumenPalette: palette)
+                var gpu: [Double] = []
+                var last: MTLTexture?
+                for i in 0..<frames {
+                    let frame = try rig.frame(time: Float(i) / 60, features: beat[i], stems: stems[i])
+                    last = frame.texture
+                    if i >= 30 { gpu.append(frame.gpuMs) }
+                }
+                try EnergeticFlybyRenderTests.writePNG(try rig.blit.bgra(try #require(last)), 3840, 2160,
+                                                      dir.appendingPathComponent("\(label)_\(name).png"))
+                print(String(format: "[lm-glass-modes] %@ %@: GPU median %.2f ms", name, label, gpu.sorted()[gpu.count / 2]))
+            }
+        }
+    }
 }
