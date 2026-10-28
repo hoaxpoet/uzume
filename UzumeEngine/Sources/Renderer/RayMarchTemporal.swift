@@ -224,6 +224,15 @@ public final class RayMarchTemporal {
         return image
     }
 
+    /// Run MetalFX once off screen and discard the history (scene apply): its first encode is slow.
+    public func warmUp(lit: MTLTexture, queue: MTLCommandQueue) {
+        guard let inputs = lastInputs(color: lit), let cb = queue.makeCommandBuffer() else { return }
+        cb.label = "ray-march temporal warm-up"
+        _ = reconstructor.encodeUpscale(commandBuffer: cb, inputs: inputs)
+        cb.commit()
+        reset()
+    }
+
     // MARK: Diagnostics (tests)
 
     /// MetalFX's inputs as the last `resolve` left them, with `color` (tests: readback, timing).

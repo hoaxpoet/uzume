@@ -326,6 +326,7 @@ extension VisualizerEngine {
                                 library: shaderLibrary.library,
                                 spec: spec,
                                 budget: context.renderTargetBudget)
+                            pipeline.prepareRayMarchUpscale(rmPipeline)
                         } catch {
                             logger.error("Ray-march temporal reconstruction for '\(desc.name)': \(error)")
                         }

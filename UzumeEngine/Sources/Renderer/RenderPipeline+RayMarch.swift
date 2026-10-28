@@ -50,6 +50,36 @@ extension RenderPipeline {
     /// and runs at 60 fps rather than 32.
     static let marchedPixelBudget = 1536 * 864
 
+    /// The march size for `rm` at this render size: `render_scale` under the budget (below), or — VQ.3,
+    /// a reconstructing scene that declares `internal_scale` — that fraction of the OUTPUT (1.0 =
+    /// anti-aliasing only).
+    static func marchSize(_ rm: RayMarchPipeline, renderWidth width: Int, renderHeight height: Int) -> (Int, Int) {
+        if let out = rm.upscaleOutputSize, let internalScale = rm.temporal?.reconstructor.spec.rayMarchInternalScale {
+            return (max(Int((Float(out.width) * internalScale).rounded()), 1),
+                    max(Int((Float(out.height) * internalScale).rounded()), 1))
+        }
+        let scale = marchScale(declared: rm.renderScale, width: width, height: height)
+        return (max(Int((Float(width) * scale).rounded()), 1), max(Int((Float(height) * scale).rounded()), 1))
+    }
+
+    /// VQ.3: build a reconstructing ray-march scene's targets and MetalFX scaler NOW (`applyPreset`) and
+    /// run MetalFX once off screen, so its first frame does not — built lazily, the first frames cost
+    /// > 50 ms of GPU twice live and tripped the governor's hard step-down. Main thread.
+    public func prepareRayMarchUpscale(_ rm: RayMarchPipeline) {
+        guard let temporal = rm.temporal else { return }
+        let drawable = presentationDrawableSize
+        let render = Self.renderSize(drawable: drawable, pixelCap: renderPixelCap)
+        rm.upscaleOutputSize = (max(Int(drawable.width), 1), max(Int(drawable.height), 1))
+        let march = Self.marchSize(rm, renderWidth: max(Int(render.width), 1), renderHeight: max(Int(render.height), 1))
+        rm.ensureAllocated(width: march.0, height: march.1)
+        guard let out = rm.upscaleOutputSize, let lit = rm.litTexture,
+              temporal.prepare(inputWidth: march.0,
+                               inputHeight: march.1,
+                               outputWidth: out.width,
+                               outputHeight: out.height) else { return }
+        temporal.warmUp(lit: lit, queue: context.commandQueue)
+    }
+
     /// Ray-march scale for a drawable of `width` × `height`.
     ///
     /// A `declared` scale of 1.0 means the preset never opted into scaled marching; it is
@@ -181,16 +211,7 @@ extension RenderPipeline {
         // The 0.4 floor is a HARD CLAMP, not a suggestion: a sidecar declaring a smaller
         // render_scale silently gets 0.4. PERF.14 probes at 0.25 and 0.35 both ran at 0.4 and
         // returned identical timings before anyone noticed. If you lower it, check here first.
-        let marchScale = Self.marchScale(declared: rayMarchState.renderScale, width: width, height: height)
-        var marchWidth = max(Int((Float(width) * marchScale).rounded()), 1)
-        var marchHeight = max(Int((Float(height) * marchScale).rounded()), 1)
-        // VQ.3: a reconstructing scene that declares `internal_scale` marches that fraction of the OUTPUT
-        // (1.0 = anti-aliasing only); without it, its own march size above (unchanged).
-        if let out = rayMarchState.upscaleOutputSize,
-           let internalScale = rayMarchState.temporal?.reconstructor.spec.rayMarchInternalScale {
-            marchWidth = max(Int((Float(out.width) * internalScale).rounded()), 1)
-            marchHeight = max(Int((Float(out.height) * internalScale).rounded()), 1)
-        }
+        let (marchWidth, marchHeight) = Self.marchSize(rayMarchState, renderWidth: width, renderHeight: height)
         rayMarchState.ensureAllocated(width: marchWidth, height: marchHeight)
 
         // Update per-frame uniforms: accumulated audio time, aspect ratio, and step-count multiplier.

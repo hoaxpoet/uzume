@@ -442,7 +442,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         // while the marched-pixel budget lowers a 4K frame to 0.4; logging the declaration
         // made frame cost ambiguous by 56% in pixel area.
         let effectiveScale: Float
-        if isRayMarch {
+        if isRayMarch, let internalScale = rayMarchReconstructScale {
+            effectiveScale = internalScale * Float(drawable.width) / Float(pixelWidth)   // VQ.3: of the output
+        } else if isRayMarch {
             effectiveScale = Self.marchScale(
                 declared: rayMarchRenderScale,
                 width: pixelWidth,
@@ -477,6 +479,11 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// VQ.3: the active ray-march scene reconstructs (its march size, logged above, is MetalFX's input).
     var rayMarchReconstructs: Bool {
         rayMarchLock.withLock { rayMarchPipeline?.temporal != nil }
+    }
+
+    /// VQ.3: a reconstructing ray-march scene's declared `internal_scale` (of the drawable), else nil.
+    var rayMarchReconstructScale: Float? {
+        rayMarchLock.withLock { rayMarchPipeline?.temporal?.reconstructor.spec.rayMarchInternalScale }
     }
 
     /// The ray-march path's scale, for the session record. Mirrors what `applyPreset` pushed into
