@@ -146,6 +146,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-262 | Accepted | **The beta-readiness decision set (AUDIT.2, 13 decisions)** — roster called at 27; Volumetric Lithograph ships excluded; Fractal Tree excluded pre-Apple8; tier-1 render cap + Alfvén tier-1 exclusion (no M1 to measure); consent-first problem reports; dead controls hidden; local files need no Screen Recording; Mac-region storefront; the privacy sentence; hard cuts stay; macOS 15+ / Apple silicon recruiting copy; D-113 stays open; nothing deleted without a per-item yes (Matt 2026-09-29) |
 | D-263 | Accepted (capability); **EFB.4: not adopted** (Matt kept the stretch, 2026-10-23) | **MetalFX temporal reconstruction returns, on the direct path, for a named consumer (MFX.2) — reverses D-213's MFX.1 half.** Opt-in sidecar `temporal_reconstruction`; Energetic Flyby is the consumer (EFB.4). Measured on an exact-motion proof scene: crisper than the stretch when the camera holds still, **softer than the stretch in forward flight** (Energetic Flyby's motion); ~40 % cheaper than native 4K. Under Phase VQ: the drawable is fixed at the display's pixel mode and tier-1 scenes render at the cap into an in-app canvas (A4); frame interpolation deferred to VQ.4a (A5). §Rationale below. |
 | D-264 | Accepted | **Phase VQ: the TV bar, and the render-memory budget (VQ.0).** Matt's four 2026-10-21 decisions (every Apple Silicon Mac gets native 4K out; HDR on by default; heavy scenes generate frames to 60; fix pixelation → light and colour → motion → simple scenes, in that order) plus the stability floor: every display-size render target through one budget charged at Metal's own sizes, ceiling `min(largest 4K set × 1.5, 15 % RAM, 25 % working set)` = 858 MiB (the largest set is a reconstructing scene, 572 MiB); a refused scene is skipped for the session on that Mac (option A); a memory *warning* lowers quality but keeps the planned scenes (Matt 2026-10-22); drain → release → allocate on display change; governor backstops for GPU time, command-buffer errors, heat, Low Power, memory pressure; bounded shader loops. §Rationale below. |
+| D-265 | Accepted (capability); **no shipped scene adopts it** | **Sharp upscaling, measured (VQ.3): MetalFX spatial at every stretch, MetalFX temporal on the ray-march path, AA-only.** Spatial is crisp but rings and shimmers MORE than the stretch on a slow pan (so roster-wide adoption needs Matt's look scene by scene); temporal is the best image on a still camera (Lumen Mosaic: stair-steps 0.43 → 0.05 px) and a modest gain in forward flight; Volumetric Lithograph holds 60 fps live with spatial, not with temporal. §Rationale below. |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6360,3 +6361,68 @@ D-167**: those floors were serious → no-bloom, critical → step-0.75); Low Po
 
 **Evidence.** `docs/diagnostics/VQ0_RENDER_MEMORY_INVENTORY.md`, `VQ0_SHADER_LOOP_AUDIT.md`, `VQ0_RENDER_SOAK.md`;
 `RenderTargetBudgetTests`, `FrameBudgetManagerStabilityTests`, `RenderSoakTests`.
+
+## D-265: Sharp upscaling, measured — MetalFX spatial at every stretch, temporal on the ray-march path, AA-only (VQ.3)
+
+**Date:** 2026-10-27 · **Increment:** VQ.3 (Phase VQ; Matt 2026-10-27: pixelation first, VQ.3 before VQ.2) ·
+**Status:** Accepted as a capability; no shipped scene adopts it (each consumer is its own increment with Matt's 4K
+side-by-side) · **Builds on:** D-263 (MFX.2's scaler wrapper and conventions), D-264 (the budget).
+
+**What was built.** One upscale, to the drawable, before the finish (render → upscale → finish → present). *Spatial:*
+sidecar `upscale: "spatial"` (absent = `UpscaleMode.rosterDefault`, `.bilinear` — the one roster switch) runs
+`MTLFXSpatialScaler` in the present step on the canvas / frame target, on the NB.8 half-res target, or on a ray-march
+scene's lit image. *Temporal, ray-march path:* `temporal_reconstruction` with `motion_vectors: "reprojected"` —
+Halton jitter as a per-frame nudge of `cameraForward` (zero jitter = byte-identical march, tested), a motion pass
+reprojecting gbuf0 depth with the previous / current camera, a depth-mismatch reactive mask, MFX.2's reconstructor
+on the lit linear image, feeding the scene's own finish. *AA-only:* `internal_scale: 1.0`. Legacy oracle (VQ.1
+method, frame 60, fixed drive): 27/28 certified scenes byte-identical at 1080p and at a tier-1-capped 4K drawable
+through the production present step; Ferrofluid Ocean and Fiddlehead within their own run-to-run spread, measured on
+unchanged code (Ferrofluid is two-state: 4 re-captures split 1 vs 13 codes at 1080p, 2 vs 7 at 4K). Goldens unchanged.
+
+**What it measured** (4K out; vs an N×N-supersampled reference; gradient energy 1.0 = reference; ringing = over/
+undershoot beside a hard edge ÷ edge contrast; stair = RMS sub-pixel edge-position error, px; shimmer = mean
+|(fₜ−fₜ₋₁) − (rₜ−rₜ₋₁)| on a pan / dolly; optimized build, M2 Pro):
+
+| Case | Stretch | MetalFX spatial | MetalFX temporal | Native |
+|---|---|---|---|---|
+| Flat proof, still, from 1440p (16-sample ref) | grad 0.68, ringing 0, stair 0.42 | grad 1.14, ringing **4.3 %**, stair 0.43 | — | grad 1.37, stair 0.35 |
+| Flat proof, ⅓-px/frame pan, from 1440p | shimmer **0.0100** | shimmer **0.0142** | — | 0.0069 |
+| Flat proof, from 1080p (still / pan) | grad 0.45, stair 0.56 / shimmer 0.0137 | grad 1.06, ringing 4.9 %, stair 0.54 / shimmer 0.0177 | — | — |
+| Ray-march proof, still, from 1440p (2×2 ref) | grad 0.60, stair 1.29, \|Δ\| 0.0022 | grad 1.64, ringing 0.58 (stretch 0.33), stair 1.46 | grad 0.71, **stair 0.44, \|Δ\| 0.0012** | stair 2.02, \|Δ\| 0.0014 |
+| Ray-march proof, dolly, from 1440p | shimmer 0.0025, stair 1.85 | shimmer 0.0040 | shimmer 0.0033, stair 0.82, ghost 0.001 % | shimmer 0.0019 |
+| Lumen Mosaic, still, march 2560×1440 | grad 0.69, stair 0.43, \|Δ\| 0.0055 | grad 1.40, ringing 0.80 (stretch 0.63), \|Δ\| 0.0093 | grad 0.91, **stair 0.05, \|Δ\| 0.0017**, ghost 0 | \|Δ\| 0.0018 |
+| Volumetric Lithograph, dolly, march 1280×720 (tier 1) | grad 0.39, stair 0.51, shimmer 0.0042 | grad 1.45, stair 0.25, shimmer 0.0055 | grad 0.57, stair 0.31, shimmer 0.0045, ghost 0 | grad 1.63 |
+| AA-only (4K → 4K), ray-march proof | — | — | stair 2.02 → **0.71** still, 2.07 → 0.60 dolly | — |
+
+**Cost** (Release, M2 Pro, `.private` targets, saturated queue, completion spacing — the per-buffer span counts
+queueing: 14.7 ms span vs 1.47 ms): spatial 1.47 / 1.49 ms p50/p95 (perceptual) and 1.53 / 1.55 (HDR) from 1440p,
+1.47–1.51 from 1080p (the stretch: 0.10); temporal upscale alone 6.97 / 7.97 from 1440p, 6.55 / 6.72 from 1080p,
+4.30 / 5.48 from 1280×720; AA-only 9.89 / 10.03 at 4K, 4.42 / 4.89 at 1440p, 2.41 / 3.18 at 1080p. **Volumetric
+Lithograph live** (Release app, 4K drawable, pinned, 2 min each, clean window 25–100 s): stretch GPU p50 / p95
+14.9 / 21.3 ms, **60.0 fps**; spatial 16.2 / 22.9, **60.0 fps**, no governor events; temporal from its 1280×720 march
+19.8 / 27.5–28.2, **58.9–59.1 fps**; from 1536×864 26.0 / 26.9, **44.3 fps**. M1 projected by memory bandwidth
+(200 → 68 GB/s, ×2.9): spatial ~4.4 ms, temporal from 720p ~12.6 ms, AA-only at 4K ~29 ms. **Memory** (alone, with the
+4K drawable pool): Lumen Mosaic reconstructing 2560×1440 → 4K 665.6 MiB of the 858 MiB ceiling (scaler 343.9);
+Volumetric Lithograph 404.6 MiB from 1280×720, 447.7 from 1536×864. **Flash:** every case 0.00 / s whole-frame,
+regional and red — identical to the stretch.
+
+**Verdicts.** (1) *Spatial* restores native-like crispness at the stretch's cost class (+1.4 ms) but adds ringing
+(4–5 % of edge contrast on the flat proof; ray-march edges 0.33 → 0.58) and shimmers MORE than the stretch on a slow
+pan (+42 % from 1440p, +29 % from 1080p) — D-263's 1.5× gradient energy is over-sharpening, not detail. A
+roster-wide switch is therefore not supported by the numbers alone; it needs Matt's look per scene (DECISION-NEEDED
+at closeout: default B). (2) *Temporal on the ray-march path* is the best image with a still camera — closer to the
+reference than native, stair-steps nearly gone, no ghosting (Lumen Mosaic) — and a modest gain in forward flight
+(VL: crisper than the stretch, not closer to the reference), which re-confirms D-263's rule. (3) *VL at 60 fps*:
+spatial holds it; temporal does not (59 fps from its own march; 44 from 1536×864). (4) *AA-only* removes most
+stair-stepping (2.0 → 0.7 px) but costs ~10 ms at 4K: a 1080p/1440p tool, not a 4K one on the M2 Pro.
+
+**Open issues for a consumer.** A reconstructing ray-march scene's first two frames cost > 50 ms GPU (131 ms lazily,
+75 ms with the scaler built at apply) and trip the governor's hard step-down at scene entry. A MetalFX scaler is
+charged as the device's `currentAllocatedSize` delta around its creation, so allocations on other threads at that
+moment inflate the charge (seen in tests: a parallel suite's 4K sets got MFX.2's scaler refused) — a consumer must
+check it under live stem preparation. The legacy `PostProcessChain`'s bloom stays at march size (its share of the
+screen unchanged) and its composite reads the upscaled image.
+
+**References.** D-263, D-264; `prompts/VQ.3-prompt.md`; `SpatialUpscaleTests`, `RayMarchTemporalReconstructionTests`,
+`RayMarchUpscaleProofTests`, `MultiPassFlashUpscaleTests`, `FinishLegacyOracleTests` (`FINISH_ORACLE_SIZE=capped4k`);
+RUNBOOK §VQ.3; sheet and stills `/Volumes/Extreme SSD/uzume_vq3/`; live reports `/Users/Shared/vq3_live/`.
