@@ -958,6 +958,20 @@ pin the scene with a 4K drawable (`UZUME_PIN_SCENE`, `UZUME_DRAWABLE_OVERRIDE=38
 `UZUME_LOCAL_FILE_PLAYBACK`, `UZUME_AUTOSTART_ADHOC=1`) and read `frame_gpu_ms` in `features.csv` — the harness
 understates its 4K cost about 2× (PERF.16).
 
+### VQ.3a — scene entry and the side-by-side
+
+```bash
+UZUME_PRIVATE_TARGETS=1 UPSCALE_ENTRY=warm swift test -c release --enable-testable-imports --package-path UzumeEngine --filter RayMarchTemporalEntryTests
+UPSCALE_OUT="/Volumes/Extreme SSD/uzume_vq3a" UPSCALE_SBS=1 swift test -c release --enable-testable-imports --package-path UzumeEngine --filter lumenSideBySide
+```
+
+`UPSCALE_ENTRY` = `stretch` / `lazy` / `warm` / `mfx` / `probe` / `apply` (one per process — MetalFX and the page pool are
+process-wide). In a test process `lazy` spikes only when no freed pages are left to reuse; the live proof is the app
+pinned at 4K (`UZUME_PIN_SCENE`, `UZUME_DRAWABLE_OVERRIDE=3840x2160`, `UZUME_RENDER_SOAK_REPORT`,
+`UZUME_RENDER_SOAK_MINUTES=2`): read `forced_steps`, the `SCENE_SWITCH … apply_ms` line and `frame_gpu_ms` (column 39) of
+`features.csv`. For a mid-session entry, `UZUME_SCENE_CYCLE_SECONDS=10` (alphabetical: Kagura → Lumen Mosaic). On the
+external SSD, run `motion_gate.sh` on an encoded video, not the PNG folder — it globs macOS `._` files.
+
 ## Recording the quality reel
 
 The quality reel is a 3-minute screen capture of Uzume playing the canonical
