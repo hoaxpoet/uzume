@@ -370,7 +370,8 @@ final class RayMarchUpscaleRig {
 
     // swiftlint:disable:next function_body_length
     init(scene: Scene, mode: Mode, outW: Int, outH: Int, marchW: Int, marchH: Int,
-         context: MetalContext? = nil, temporalSpec: TemporalReconstructionSpec? = nil) throws {
+         context: MetalContext? = nil, temporalSpec: TemporalReconstructionSpec? = nil,
+         lumenPalette: LumenPalette? = nil) throws {
         self.scene = scene
         self.mode = mode
         self.outW = outW
@@ -422,7 +423,7 @@ final class RayMarchUpscaleRig {
         }
         if scene == .lumenMosaic {
             guard let engine = LumenPatternEngine(device: ctx.device) else { throw VQ3RigError.setup("lumen") }
-            engine.setPalette(LumenMosaicPaletteLibrary.all[0])
+            engine.setPalette(lumenPalette ?? LumenMosaicPaletteLibrary.all[0])
             lumen = engine
         } else {
             lumen = nil
