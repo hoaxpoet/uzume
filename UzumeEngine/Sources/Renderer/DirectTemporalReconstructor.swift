@@ -282,6 +282,13 @@ public final class DirectTemporalReconstructor {
         return made
     }
 
+    /// A lower bound on what a temporal scaler allocates: ~19 B per output pixel + ~50 B per input pixel, fitted
+    /// to the measured charges (VQ.3/VQ.3a, M2 Pro: 2560×1440 → 4K 344–389 MiB, 1536×864 → 4K 230, 1280×720 → 4K
+    /// 204, 1280×720 → 1440p 141, 640×360 → 720p 35) and below every one of them.
+    static func scalerBytesFloor(inW: Int, inH: Int, outW: Int, outH: Int) -> Int {
+        outW * outH * 19 + inW * inH * 50
+    }
+
     private func makeScaler(inW: Int, inH: Int, outW: Int, outH: Int) -> MTLFXTemporalScaler? {
         guard Self.isSupported(device: device) else { return nil }
         let desc = MTLFXTemporalScalerDescriptor()
@@ -303,8 +310,11 @@ public final class DirectTemporalReconstructor {
             logger.error("MTLFXTemporalScaler creation failed at \(inW)×\(inH) → \(outW)×\(outH)")
             return nil
         }
-        let delta = max(device.currentAllocatedSize - before, 0)
-        logger.info("MFX.2 MTLFXTemporalScaler \(inW)×\(inH) → \(outW)×\(outH): currentAllocatedSize +\(delta) B")
+        // VQ.3a: the delta is device-wide, so memory another thread frees meanwhile hides the scaler's own —
+        // charge at least the fitted floor (which the full test suite showed is what lets an 8 GB Mac refuse it).
+        let floor = Self.scalerBytesFloor(inW: inW, inH: inH, outW: outW, outH: outH)
+        let delta = max(device.currentAllocatedSize - before, floor)
+        logger.info("MFX.2 MTLFXTemporalScaler \(inW)×\(inH) → \(outW)×\(outH): charged \(delta) B (floor \(floor))")
         if let budget, !budget.reserve(reservationName, bytes: delta) {
             scalerRefused = true
             return nil

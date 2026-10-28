@@ -6435,6 +6435,10 @@ frames themselves are no longer slow. Live (Release, M2 Pro, 4K, Lumen Mosaic): 
 at session start (the stretch's session start: 30–39 ms; one frame — the hard ceiling needs two) and 19.7 ms on a mid-session
 entry; 0 forced steps; ≈59.5 fps at GPU p50 ~13 ms (stretch ≈59.9 at 5.7). Still open: entering the scene holds the picture
 0.3–0.6 s (apply 291–620 ms vs 1.4 ms for the stretch), mostly MetalFX building its scaler on the main thread (156–253 ms).
+**The scaler charge gets a floor.** The device-wide `currentAllocatedSize` delta under-counted whenever other threads freed
+memory meanwhile — the full suite failed the 8 GB-Mac floor test 2 of 2 (the scaler was not refused); live stem preparation
+can do the same. `DirectTemporalReconstructor.scalerBytesFloor` (~19 B per output px + ~50 B per input px, fitted below
+every measured charge: 27.7 vs 35 MiB at 640×360 → 720p … 326 vs 344 MiB at 2560×1440 → 4K) is now the minimum charged.
 
 **References.** D-263, D-264; `prompts/VQ.3-prompt.md`; `SpatialUpscaleTests`, `RayMarchTemporalReconstructionTests`,
 `RayMarchUpscaleProofTests`, `MultiPassFlashUpscaleTests`, `FinishLegacyOracleTests` (`FINISH_ORACLE_SIZE=capped4k`);
