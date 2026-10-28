@@ -54,11 +54,13 @@ struct RayMarchTemporalSidecarTests {
         }
     }
 
-    @Test @MainActor func noShippedRayMarchSceneDeclaresIt() throws {
+    /// D-265 option B: a scene reconstructs only after Matt's own before/after. VQ.3a: Lumen Mosaic.
+    @Test @MainActor func onlyAdoptedScenesDeclareIt() throws {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         let loader = PresetLoader(device: device, pixelFormat: .bgra8Unorm_srgb)
-        let declared = loader.presets.filter { $0.descriptor.temporalReconstruction != nil }.map(\.descriptor.name)
-        #expect(declared.isEmpty, "temporal_reconstruction declared by \(declared) — VQ.3 opts no shipped scene in")
+        let declared = loader.presets.filter { $0.descriptor.temporalReconstruction != nil }
+        #expect(declared.map(\.descriptor.name) == ["Lumen Mosaic"], "each adopter needs Matt's look (D-265)")
+        #expect(declared.allSatisfy { $0.descriptor.temporalReconstruction?.motionVectors == .reprojected })
     }
 }
 
