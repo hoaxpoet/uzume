@@ -220,6 +220,7 @@ extension VisualizerEngine {
         // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
         stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
         pipeline.setRayMarchPresetHeightTexture(nil)
+        pipeline.setRayMarchBake(preset.bakePipelineState)   // LM.10: nil for every scene without a bake
         pipeline.setPostProcessChain(nil)
         pipeline.setRayMarchPipeline(nil)
         pipeline.setFeedbackParams(nil)
