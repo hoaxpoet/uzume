@@ -214,6 +214,8 @@ extension VisualizerEngine {
         pipeline.setTemporalReconstruction(desc.temporalReconstruction, pipeline: preset.temporalPipelineState)
         // VQ.1: the scene's finish — `legacy` (every shipped scene) leaves its pixels unchanged.
         pipeline.setFinish(desc.finish, lutURL: preset.finishLUTURL)
+        // VQ.3: the scene's upscale at every stretch — absent = the roster default (the bilinear stretch).
+        pipeline.setUpscale(UpscaleMode.resolve(desc.upscale))
         pipeline.setFrameRateCap(nil)        // EFB.1: the display's rate unless a preset caps it below
         // BUG-181: live stem separation pauses while a scene that reads no stems is on screen.
         stemsStateLock.withLock { onScreenScene = (desc.name, desc.readsStems) }
@@ -314,6 +316,21 @@ extension VisualizerEngine {
 
                     // BUG-101 — resolution scale for ray-march presets declaring `render_scale`.
                     rmPipeline.renderScale = desc.rayMarchRenderScale
+
+                    // VQ.3: MetalFX temporal reconstruction on the G-buffer path (no shipped scene
+                    // declares it). A scaler that cannot be built leaves the scene on its normal path.
+                    if let spec = desc.temporalReconstruction {
+                        do {
+                            rmPipeline.temporal = try RayMarchTemporal(
+                                device: context.device,
+                                library: shaderLibrary.library,
+                                spec: spec,
+                                budget: context.renderTargetBudget)
+                            pipeline.prepareRayMarchUpscale(rmPipeline)
+                        } catch {
+                            logger.error("Ray-march temporal reconstruction for '\(desc.name)': \(error)")
+                        }
+                    }
 
                     currentRayMarchPipeline = rmPipeline
 

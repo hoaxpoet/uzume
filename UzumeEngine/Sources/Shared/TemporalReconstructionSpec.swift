@@ -8,6 +8,11 @@
 // contract now because MetalFX frame interpolation needs them (VQ amendment A3); interpolation
 // itself lands with VQ.4a (A5), so nothing reads them yet.
 //
+// VQ.3: a ray-march scene declares the same block with `motion_vectors: reprojected` — the engine
+// reprojects the G-buffer depth with the previous and current camera (RayMarchTemporal). There,
+// `internal_scale` is optional: absent = the scene's own march size (render_scale and the marched-
+// pixel budget, unchanged); declared = march at that fraction of the OUTPUT (1.0 = anti-aliasing only).
+//
 // Lives in Shared because both the sidecar decoder (Presets) and the draw path (Renderer) read it.
 
 import Foundation
@@ -18,15 +23,20 @@ import Metal
 /// A direct scene's temporal-reconstruction contract (sidecar `temporal_reconstruction`).
 public struct TemporalReconstructionSpec: Codable, Sendable, Equatable {
 
-    /// How the scene produces its motion vectors. Only `analytic` exists: the scene computes each
-    /// pixel's previous-frame position in closed form. Estimated motion is not supported.
+    /// How the scene produces its motion vectors. Estimated (optical-flow) motion is not supported.
     public enum MotionVectors: String, Codable, Sendable {
+        /// Direct scenes: the scene computes each pixel's previous-frame position in closed form.
         case analytic
+        /// Ray-march scenes (VQ.3): the engine reprojects depth with the previous and current camera.
+        case reprojected
     }
 
     /// Internal render size as a fraction of the drawable, clamped to 0.5…1.0 (MetalFX upscales at
     /// most 2× per axis here; 1.0 = temporal anti-aliasing at native size).
     public let internalScale: Float
+    /// `internal_scale` as written, unclamped; nil when absent (VQ.3: a ray-march scene then keeps its
+    /// own march size).
+    public let declaredInternalScale: Float?
     /// Motion-vector source.
     public let motionVectors: MotionVectors
     /// The scene writes a reactive mask at `[[color(3)]]` (1 = ignore history for this pixel).
@@ -47,15 +57,22 @@ public struct TemporalReconstructionSpec: Codable, Sendable, Equatable {
     /// The default internal scale: 2560×1440 from a 3840×2160 drawable.
     public static let defaultInternalScale: Float = 2.0 / 3.0
 
+    /// A ray-march scene's internal scale (VQ.3): nil = its own march size; else clamped to MetalFX's
+    /// 3× ceiling (⅓) … 1.0 (anti-aliasing only).
+    public var rayMarchInternalScale: Float? {
+        declaredInternalScale.map { min(max($0, 1.0 / 3.0), 1.0) }
+    }
+
     public init(
-        internalScale: Float = TemporalReconstructionSpec.defaultInternalScale,
+        internalScale: Float? = nil,
         motionVectors: MotionVectors = .analytic,
         reactiveMask: Bool = false,
         fieldOfViewDegrees: Float = 60,
         nearPlane: Float = 0.05,
         farPlane: Float = 100
     ) {
-        self.internalScale = min(max(internalScale, 0.5), 1.0)
+        self.internalScale = min(max(internalScale ?? Self.defaultInternalScale, 0.5), 1.0)
+        self.declaredInternalScale = internalScale
         self.motionVectors = motionVectors
         self.reactiveMask = reactiveMask
         self.fieldOfViewDegrees = fieldOfViewDegrees
@@ -76,8 +93,7 @@ public struct TemporalReconstructionSpec: Codable, Sendable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         // `motion_vectors` is required: a scene must state where its motion comes from.
         self.init(
-            internalScale: try container.decodeIfPresent(Float.self, forKey: .internalScale)
-                ?? Self.defaultInternalScale,
+            internalScale: try container.decodeIfPresent(Float.self, forKey: .internalScale),
             motionVectors: try container.decode(MotionVectors.self, forKey: .motionVectors),
             reactiveMask: try container.decodeIfPresent(Bool.self, forKey: .reactiveMask) ?? false,
             fieldOfViewDegrees: try container.decodeIfPresent(Float.self, forKey: .fieldOfViewDegrees) ?? 60,

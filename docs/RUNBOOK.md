@@ -937,6 +937,27 @@ Use that exact `…/Release/Uzume.app` path (never a DerivedData glob). The defa
 Session-log lines to read afterwards: `GPU_CAPABILITY`, `RENDER_RESIZE`, `RENDER_BUDGET_REFUSED`,
 `GOVERNOR_FORCED`, `GOVERNOR_FALLBACK_SCENE`, `MEMORY_PRESSURE`, `RENDER_SOAK_MINUTE`.
 
+## VQ.3 upscale proofs, timing and memory (D-265)
+
+Env-gated (minutes of 4K rendering each). Proofs run optimized; timing is quotable only in Release with production
+storage; memory runs ALONE (a MetalFX scaler is charged as the device's `currentAllocatedSize` delta, which any
+parallel suite's allocations inflate). Outputs go to `UPSCALE_OUT`, else `/Volumes/Extreme SSD/uzume_vq3`, else
+`/tmp/uzume_visual/vq3`.
+
+```bash
+UPSCALE_PROOF=1 swift test -c release --enable-testable-imports --package-path UzumeEngine --filter "SpatialUpscaleProof|RayMarchUpscaleProof"
+UPSCALE_TIMING=1 UZUME_PRIVATE_TARGETS=1 swift test -c release --enable-testable-imports --package-path UzumeEngine --filter "RayMarchUpscaleProofTests/timing"
+UPSCALE_MEMORY=1 swift test --package-path UzumeEngine --filter reconstructing4K_fits
+FINISH_ORACLE=compare FINISH_ORACLE_SIZE=capped4k FINISH_ORACLE_A=<a> FINISH_ORACLE_B=<b> FINISH_ORACLE_DIR=<dir> swift test --package-path UzumeEngine --filter FinishLegacyOracle
+```
+
+Lines to read: `[vq3-flat]` (spatial vs stretch vs native, flat proof), `[vq3-rm-proof …]` / `[vq3-lumen]` /
+`[vq3-vl]` / `[vq3-aa-only …]` (per method: gradient energy vs the 2×2 reference, ringing, stair RMS, |Δ| vs reference,
+shimmer, ghost), `[vq3-timing]`, `[vq3-memory]`, `[vq3-flash]`. A live Volumetric Lithograph frame rate needs the app:
+pin the scene with a 4K drawable (`UZUME_PIN_SCENE`, `UZUME_DRAWABLE_OVERRIDE=3840x2160`,
+`UZUME_LOCAL_FILE_PLAYBACK`, `UZUME_AUTOSTART_ADHOC=1`) and read `frame_gpu_ms` in `features.csv` — the harness
+understates its 4K cost about 2× (PERF.16).
+
 ## Recording the quality reel
 
 The quality reel is a 3-minute screen capture of Uzume playing the canonical

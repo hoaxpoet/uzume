@@ -50,6 +50,36 @@ extension RenderPipeline {
     /// and runs at 60 fps rather than 32.
     static let marchedPixelBudget = 1536 * 864
 
+    /// The march size for `rm` at this render size: `render_scale` under the budget (below), or — VQ.3,
+    /// a reconstructing scene that declares `internal_scale` — that fraction of the OUTPUT (1.0 =
+    /// anti-aliasing only).
+    static func marchSize(_ rm: RayMarchPipeline, renderWidth width: Int, renderHeight height: Int) -> (Int, Int) {
+        if let out = rm.upscaleOutputSize, let internalScale = rm.temporal?.reconstructor.spec.rayMarchInternalScale {
+            return (max(Int((Float(out.width) * internalScale).rounded()), 1),
+                    max(Int((Float(out.height) * internalScale).rounded()), 1))
+        }
+        let scale = marchScale(declared: rm.renderScale, width: width, height: height)
+        return (max(Int((Float(width) * scale).rounded()), 1), max(Int((Float(height) * scale).rounded()), 1))
+    }
+
+    /// VQ.3: build a reconstructing ray-march scene's targets and MetalFX scaler NOW (`applyPreset`) and
+    /// run MetalFX once off screen, so its first frame does not — built lazily, the first frames cost
+    /// > 50 ms of GPU twice live and tripped the governor's hard step-down. Main thread.
+    public func prepareRayMarchUpscale(_ rm: RayMarchPipeline) {
+        guard let temporal = rm.temporal else { return }
+        let drawable = presentationDrawableSize
+        let render = Self.renderSize(drawable: drawable, pixelCap: renderPixelCap)
+        rm.upscaleOutputSize = (max(Int(drawable.width), 1), max(Int(drawable.height), 1))
+        let march = Self.marchSize(rm, renderWidth: max(Int(render.width), 1), renderHeight: max(Int(render.height), 1))
+        rm.ensureAllocated(width: march.0, height: march.1)
+        guard let out = rm.upscaleOutputSize, let lit = rm.litTexture,
+              temporal.prepare(inputWidth: march.0,
+                               inputHeight: march.1,
+                               outputWidth: out.width,
+                               outputHeight: out.height) else { return }
+        temporal.warmUp(lit: lit, queue: context.commandQueue)
+    }
+
     /// Ray-march scale for a drawable of `width` × `height`.
     ///
     /// A `declared` scale of 1.0 means the preset never opted into scaled marching; it is
@@ -142,7 +172,7 @@ extension RenderPipeline {
         // When rendering to an offscreen texture for mv_warp, we don't need the drawable
         // during scene rendering. We still need it to exist for command buffer presentation
         // (done by the mv_warp blit pass instead). Acquire it only for the normal path.
-        let outputTex: MTLTexture
+        var outputTex: MTLTexture
         if let offscreen = sceneOutputTexture {
             outputTex = offscreen
         } else {
@@ -158,6 +188,18 @@ extension RenderPipeline {
                 from: view, commandBuffer: commandBuffer, site: "rayMarch.present.drawable")
             : nil
 
+        // VQ.3: a scene that reconstructs (or takes `upscale: spatial`) upscales its lit image ONCE, to
+        // the drawable: a legacy composite then writes the drawable itself (not the tier-1 canvas), a
+        // cinematic one hands the upscaled image to the finish. Not under mv_warp's offscreen hand-off.
+        let upscaling = drawable != nil && (rayMarchState.temporal != nil || upscaleMode == .spatial)
+        rayMarchState.spatialUpscaler = upscaling ? spatialUpscalerIfActive() : nil
+        rayMarchState.upscaleOutputSize = nil
+        if upscaling, let drawable {
+            let out = outputTexture(of: drawable)
+            rayMarchState.upscaleOutputSize = (out.width, out.height)
+            if finishingStage == nil { outputTex = out }
+        }
+
         let size = renderSize(of: view)
         let width = Int(size.width)
         let height = Int(size.height)
@@ -169,9 +211,7 @@ extension RenderPipeline {
         // The 0.4 floor is a HARD CLAMP, not a suggestion: a sidecar declaring a smaller
         // render_scale silently gets 0.4. PERF.14 probes at 0.25 and 0.35 both ran at 0.4 and
         // returned identical timings before anyone noticed. If you lower it, check here first.
-        let marchScale = Self.marchScale(declared: rayMarchState.renderScale, width: width, height: height)
-        let marchWidth = max(Int((Float(width) * marchScale).rounded()), 1)
-        let marchHeight = max(Int((Float(height) * marchScale).rounded()), 1)
+        let (marchWidth, marchHeight) = Self.marchSize(rayMarchState, renderWidth: width, renderHeight: height)
         rayMarchState.ensureAllocated(width: marchWidth, height: marchHeight)
 
         // Update per-frame uniforms: accumulated audio time, aspect ratio, and step-count multiplier.
@@ -275,7 +315,7 @@ extension RenderPipeline {
             azimuth: auroraOrbitAzimuth, aatDelta: aatDelta, arousal: features.arousal)
         lightingStems.auroraOrbitAzimuth = auroraOrbitAzimuth
 
-        rayMarchState.render(
+        let finishSource = rayMarchState.render(
             gbufferPipelineState: activePipeline,
             features: &features,
             fftBuffer: fftMagnitudeBuffer,
@@ -300,7 +340,13 @@ extension RenderPipeline {
         // Present only when rendering directly to the drawable (normal path).
         // When sceneOutputTexture is non-nil, the mv_warp blit pass presents instead.
         if let drawable = drawable {
-            instrumentedPresent(drawable, on: commandBuffer)
+            if let finishSource {
+                instrumentedPresent(FrameTarget(texture: finishSource, drawable: drawable.drawable), on: commandBuffer)
+            } else if rayMarchState.upscaleOutputSize != nil, finishingStage == nil {
+                instrumentedPresent(FrameTarget(texture: outputTex, drawable: drawable.drawable), on: commandBuffer)
+            } else {
+                instrumentedPresent(drawable, on: commandBuffer)
+            }
         }
     }
 

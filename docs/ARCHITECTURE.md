@@ -244,8 +244,45 @@ before), cinematic runs `FinishingStage.encode`, sampling the frame target at th
 tier-1 stretch happens inside the finish and the dither lands on output pixels. It sets
 `presentedFrameTexture`, which the recorder hook and the flash analyzer read (while recording on a capped Mac,
 a cinematic frame is copied to the canvas so the video keeps one frame size). Order on screen (WWDC25 211):
-render → temporal upscale (MFX.2) → finish → [frame interpolation, VQ.4a] → present. The MFX.2 reconstruct path
+render → upscale (MFX.2 / VQ.3) → finish → [frame interpolation, VQ.4a] → present. The MFX.2 reconstruct path
 hands the MetalFX output, not a frame target, to the present step.
+
+**The upscale step (VQ.3, D-265).** Wherever a smaller image reaches a larger output, a scene either stretches it
+bilinearly (`bilinear`, every shipped scene) or takes MetalFX — and then exactly ONE upscale runs, to the drawable's
+size, on the image before the finish (so bloom and dither happen at output size; the upscaler writes a budgeted
+texture, never the drawable). Two options, each per scene, resolved at load (`applyPreset`):
+- **Spatial** (sidecar `upscale: "spatial"`; `UpscaleMode`, `SpatialUpscaler`): `MTLFXSpatialScaler`, single frame,
+  no motion vectors — any scene. `presentUpscale` runs it in the present step on the canvas / frame target
+  (perceptual mode for the 8-bit sRGB canvas, HDR mode for a cinematic `.rgba16Float` target); the NB.8 path hands
+  its half-res target straight to the present step; a ray-march scene upscales its lit image (HDR mode) and
+  composites into the drawable. Absent = `UpscaleMode.rosterDefault` — the one switch for the whole roster
+  (`.bilinear`; a consumer increment flips it; a scene keeps the stretch with `upscale: "bilinear"`).
+- **Temporal on the ray-march path** (sidecar `temporal_reconstruction` with `motion_vectors: "reprojected"`;
+  `RayMarchTemporal`): Halton jitter on the shared ray generation's camera basis, a motion pass that reprojects
+  the G-buffer depth with the previous and current camera, a reactive mask where the surface moved, then MFX.2's
+  `DirectTemporalReconstructor` (external-input mode) on the lit, linear image → the scene's finish (legacy ACES
+  composite / `PostProcessChain`, whose bloom stays at march size, or the cinematic stage). `internal_scale` 1.0 =
+  anti-aliasing only. Wins over `upscale` when a scene declares both. Not under `mv_warp`.
+
+A scene that upscales through MetalFX bypasses the tier-1 canvas (its image is already drawable-sized); while
+recording, the present step copies the drawable down to the canvas so the video keeps one frame size
+(`recordAtCanvasSize`). Switching scene or resizing releases the scaler and its reservation (VQ.0).
+
+**Upscale inventory (VQ.3 task 1).** Every place a smaller image becomes a larger one, verified by grep
+(`width / 2|/ 4|* scale|halfRes|marchScale|canvas`) over `Sources/Renderer`, 2026-10-27:
+
+| Upscale | In → out | Encoding | Who reaches it | VQ.3 option |
+|---|---|---|---|---|
+| Tier-1 canvas → drawable (present step, `copy`) | canvas `.bgra8Unorm_srgb` (≈2560×1440) → drawable `.bgra8Unorm_srgb` | encoded (sRGB) | every legacy scene on a tier-1 Mac (no GPU "m3"/"m4") | spatial (perceptual) |
+| Cinematic frame target → drawable (inside `FinishingStage`'s composite) | `.rgba16Float` render size → drawable | linear HDR | Ferrofluid Ocean on tier 1 | spatial (HDR) before the finish |
+| NB.8 half-res direct (`halfResTarget` → frame target) | frame-target format at `render_scale` × → frame target | encoded (legacy) / linear (cinematic) | Nimbus (`render_scale` 0.5) | spatial, straight to the drawable |
+| Ray-march composite (`litTexture` sampled by UV) | `.rgba16Float` march size → frame target | linear HDR, tone-mapped in the same pass | Volumetric Lithograph (`render_scale` 0.5 → march 1280×720 on tier 1, 1536×864 at uncapped 4K); Lumen Mosaic / Ferrofluid march at render size (no upscale) | spatial (HDR) or temporal, to the drawable |
+| MFX.2 output → drawable (`copy`) | drawable-sized `.rgba16Float` → drawable | linear → encoded | no shipped scene (EFB.4 kept the stretch) | — (1:1; without MetalFX it stretches the internal colour) |
+| `PostProcessChain` bloom (half-res) → composite | `.rgba16Float` ½ chain size → output | linear | Lumen Mosaic, Volumetric Lithograph | — (a blur; stays at march size) |
+| `FinishingStage` bloom mip chain → composite | 540-px base chain → output | linear | Ferrofluid Ocean (bloom strength 0: not run) | — (height-relative by design) |
+| Fiddlehead bloom (quarter-res) → its composite | `.rgba16Float` ¼ → render size | linear | Fiddlehead | — (a blur) |
+| Dynamic text overlay (2048×1024) sampled into the frame | `.rgba8Unorm` → render size | encoded | Spectral Cartograph (diagnostic) | — |
+| Recording copy drawable → canvas | drawable → canvas | — | any MetalFX-upscaled or cinematic scene while recording | — (a downscale) |
 
 **Finish modes and the frame-target format.** A scene's sidecar `finish.mode` decides its frame-target format
 (`FinishSpec.frameTargetFormat`: legacy `.bgra8Unorm_srgb`, a constant — not the drawable's format, so VQ.2 can
@@ -278,6 +315,7 @@ rounding on ~10 % of pixels, and that bias re-banded the gradient: 0.31 LSB wors
 - `FrameBudgetManager` — Pure-state frame timing governor attached to `RenderPipeline`. Receives one `FrameTimingSample` per completed frame (via `commandBuffer.addCompletedHandler` → `@MainActor` hop) and walks a `QualityLevel` ladder: `full → noBloom → reducedRayMarch → reducedParticles → reducedMesh`. Downshifts after 3 consecutive overruns; upshifts after 180 consecutive sub-budget frames (asymmetric hysteresis). Per-tier configuration: tier1 (M1/M2) 14ms target, tier2 (M3+) 16ms target. `reset()` is called on every preset change so the governor starts optimistic. Disabled when `QualityCeiling` is `.ultra`. (D-057)
 - `PostProcessChain` — HDR bloom + ACES tone mapping for the legacy ray-march scenes. `bloomEnabled` gates the bright-pass + blur stages; composite always runs for ACES tone-mapping. Into a cinematic frame target it only draws the scene (VQ.1: the finishing stage blooms and tone-maps). Deleted in its own commit after the last consumer migrates (VQ.5, D-213).
 - `FinishingStage` — the shared cinematic finish (VQ.1; see §Frame seam above).
+- `SpatialUpscaler` / `RayMarchTemporal` — the VQ.3 upscale step (see §The upscale step above).
 - `RayMarchPipeline` — Deferred 3-pass: G-buffer → PBR lighting → composite. (The `reducedMotion` OR-gate was deleted with SSGI at RECON.18.)
 - `IBLManager` — Image-based lighting (irradiance + prefiltered environment + BRDF LUT).
 - `ParticleGeometry` conformers (`Murmuration3DGeometry`, `Physarum`, …) — GPU compute particle systems. `activeParticleFraction` scales compute dispatch count for governor-level particle reduction. (The original `ProceduralGeometry` conformer and its `Particles.metal` were retired at RECON.17 with the 2D flock.)
@@ -724,8 +762,10 @@ UzumeEngine/
     RenderPipeline+Draw     → Per-frame render-graph executor (renderFrame). **LFSTEM.1e:** `perFrameStemPublish` fires FIRST, before the frame snapshots `latestStemFeatures` — that snapshot serves the particles update, the preset tick and the draw, so publishing after it would land a frame late. It is a separate hook from `meshPresetTick` because that slot is owned by whichever preset needs per-frame state (Skein's painter clock), and one closure cannot serve both. Walks activePasses, dispatches the first available pass. MV-2 multi-pass flow: when .mvWarp is present, a preceding .rayMarch pass renders to warpState.sceneTexture and continues the loop instead of returning. Fallback path is drawDirect.
     RenderPipeline+DirectDraw → W0.2 scalable direct-render path. `PresetDescriptor.render_scale` reaches `setDirectRenderScale(_:)`; a scale below 1 renders into `halfResTarget` then bilinearly upscales (`feedback_blit` + linear-clamp sampler). Nimbus declares 0.5 in its sidecar; no preset-name hard-code remains. Default 1.0. MetalFX Temporal is not wired here: a scene opts into it explicitly (next lines).
     RenderPipeline+TemporalReconstruction → MFX.2 (D-263): the third direct-path branch. A scene whose sidecar declares `temporal_reconstruction` renders its MRT fragment (colour + depth + motion, jittered via buffer(9)) at `internal_scale × drawable`, `DirectTemporalReconstructor` rebuilds the drawable-sized image, and the present step finishes it into the DRAWABLE (never the canvas; legacy: a copy). `encodeTemporalReconstruction` is view-free so tests drive the production encode. `setTemporalReconstruction(_:pipeline:)` from `applyPreset` (nil for every other scene). VQ.1: the scaler's output, not a frame target, is what `instrumentedPresent` finishes (render → upscale → finish). No frame interpolation (A5 → VQ.4a).
-    DirectTemporalReconstructor → MFX.2: owns the `MTLFXTemporalScaler` (internal → drawable size), the labelled internal targets (formats from `TemporalReconstructionSpec`), the scaler's own output texture, and the Halton(2,3) jitter (32 phases, reset on preset switch / `resetTemporalHistory()` / resize). Conventions MEASURED, not assumed: jitter handed to MetalFX negated (still-frame |Δ| vs native 0.024 vs 0.052), motion-vector scale 1 in render pixels (best of 0.67 / 1 / 1.5 and both axis flips). Logs the scaler's `currentAllocatedSize` delta at creation (for VQ.0's budget). No MetalFX → bilinear stretch of the internal colour.
+    DirectTemporalReconstructor → MFX.2 (VQ.3: also the ray-march path's scaler wrapper — `externalInputs` mode owns only the scaler + output and encodes caller-owned inputs; `prepare(inputWidth:…)` for an explicit march size, refused outside `supportedScaleRange`; `jitterEnabled` test hook): owns the `MTLFXTemporalScaler` (internal → drawable size), the labelled internal targets (formats from `TemporalReconstructionSpec`), the scaler's own output texture, and the Halton(2,3) jitter (32 phases, reset on preset switch / `resetTemporalHistory()` / resize). Conventions MEASURED, not assumed: jitter handed to MetalFX negated (still-frame |Δ| vs native 0.024 vs 0.052), motion-vector scale 1 in render pixels (best of 0.67 / 1 / 1.5 and both axis flips). Logs the scaler's `currentAllocatedSize` delta at creation (for VQ.0's budget). No MetalFX → bilinear stretch of the internal colour.
     FrameBudgetManager+Stability → VQ.0 (D-264, amends D-167): GPU-time ceiling (2 frames > 50 ms → lowest rung, held ≥ 5 s), command-buffer errors (3 in 10 s → fallback scene), `thermalResponse` (fair / serious + 30 fps / critical → fallback; Low Power no-bloom + 30 fps), `setMemoryPressure` (warning → lowest rung; critical → fallback); every forced step recorded with its cause.
+    SpatialUpscaler → VQ.3 (D-265): `MTLFXSpatialScaler` from one input size + format to one output size, rebuilt when either changes; perceptual for sRGB input, HDR for `.rgba16Float`; output keeps the input's format (MetalFX will not mix sRGB and non-sRGB). The scaler's `currentAllocatedSize` delta is a budget reservation (`mfx spatial …`) and its output a budgeted target (owner `spatialUpscale`); a declined shape is not retried per frame; `release()` on scene switch / resize. Nil from `encode` → the caller stretches as before.
+    RayMarchTemporal → VQ.3 (D-265): temporal reconstruction on the ray-march G-buffer path. `applyJitter` nudges `cameraForward` by the Halton jitter (a constant image-plane offset for every ray of the shared ray generation; zero jitter = byte-identical uniforms); `resolve` runs the motion pass (`raymarch_temporal_fragment`: depth / motion / reactive at march size, depth ping-ponged as next frame's history) and MFX.2's `DirectTemporalReconstructor` in external-input mode on the lit linear image. `prepare` refuses a ratio outside MetalFX's range (M2 Pro: 1–3×) or a budget refusal — the scene then takes its normal path. Owned by the scene's `RayMarchPipeline.temporal`; released with its textures.
     RenderTargetBudget → VQ.0 (D-264): the one allocator for display-size render targets, owned by `MetalContext`. Charges each texture's `allocatedSize` (pre-checked with `heapTextureSizeAndAlign`) plus named reservations (drawable pool, MetalFX scaler); all-or-nothing `makeTextures(owner:_:)`; weak tracking, so `totalBytes` is what Metal still holds; `reclaim` hook waits for the frames in flight before refusing; `ceiling(...)` = min(largest 4K set × 1.5, 15 % RAM, 25 % working set); `storageMode(cpuReads:)` policy (`.private` unless the CPU reads back or under XCTest).
     RenderPipeline+Resize → VQ.0: coalesced drawable resizes (`recordDrawableSize` from the delegate, `commitPendingResizeIfStable` from `draw`, 150 ms), `commitResize` = drain the last frame → release every subsystem's old set → charge the drawable pool (`maximumDrawableCount` 3) → allocate; `beginSceneSwitch` (refusal epoch); `reclaimInFlightTargets` (the budget's reclaim hook).
     GPUCapability → VQ.0: the measured launch line (chip, IORegistry `gpu-core-count`, RAM, working set, budget ceiling, drawable native size) for the session log and the problem report. `DeviceTier` is not derived from it.
@@ -761,6 +801,7 @@ UzumeEngine/
     RayMarchPipeline        → Deferred 3-pass: G-buffer textures, lighting pipeline, composite pipeline. W0.2 brackets the three logical groups with `RayMarchPassProfiler` GPU timestamp counters. (The reducedMotion OR-gate went with SSGI at RECON.18.)
     RayMarchPassProfiler    → Triple-buffered `MTLCounterSampleBuffer`: six draw-boundary timestamp samples per ray-march frame resolve asynchronously into G-buffer / lighting / post-process GPU milliseconds. Absent on devices without counter support; never substitutes CPU encode time.
     RayMarchPipeline+Passes → Per-pass encoders: runGBufferPass, runMeshGBufferPass (FA#66 mesh branch), runLightingPass, runDepthDebugPass (dead — CA.7a-FU-2), runGBufferDebugPass (G key), runCompositePass. Slot-8 (LumenPatternState) + slot-10 (FerrofluidParticles height) placeholder fallbacks live here.
+    RayMarchPipeline+Upscale → VQ.3: `beginUpscaleFrame` (prepare + jitter, restored after the frame) and `upscaleLit` (temporal, else spatial, to `upscaleOutputSize`) — called from `render`; with `upscaleOutputSize` nil nothing runs (today's path).
     RayMarchPipeline+PipelineStates → Static factory buildPipelineBundle returning compiled lighting/composite/gbufferDebug/depthDebug pipeline states + sampler. Single call site: RayMarchPipeline.init.
     PostProcessChain        → HDR scene texture, bloom ping-pong, 4 pipeline states, ACES composite. bloomEnabled gates bright-pass + blur; composite always runs for ACES tone-mapping. runBloomAndComposite is the ray-march integration path (consumes externally-rendered HDR scene texture from RayMarchPipeline).
     IBLManager              → Irradiance cubemap (32²) + prefiltered env (128², 5 mips) + BRDF LUT (512²)
@@ -814,6 +855,7 @@ UzumeEngine/
     Shaders/PostProcess.metal → Bright pass, Gaussian blur H/V, ACES composite (the three legacy ray-march scenes; a cinematic frame target skips it)
     Shaders/FinishingStage.metal → VQ.1 cinematic finish: `finish_prefilter_kernel` (footprint box average, soft knee), `finish_downsample_kernel` (Jimenez 2014 13-tap; Karis average on the first level), `finish_upsample_kernel` (3×3 tent, added in place into the finer level), `finish_composite_fragment` (grade → Lottes 2016 with headroom → LUT → IGN TPDF dither in the encoded domain, rounded to the output code). `FinishUniforms` mirrors the Swift struct (64 bytes).
     Shaders/RayMarch.metal   → Cook-Torrance PBR deferred lighting (IBL ambient tinted by lightColor), composite fragment, depth/G-buffer debug pipelines
+    Shaders/RayMarchTemporal.metal → VQ.3 motion pass for ray-march temporal reconstruction: rebuilds each pixel's world point along the jittered ray (`rm_rayDir`; sorts after RayMarch.metal in the combined library), projects it with the current and previous unjittered cameras (inverse bases from the CPU, so they need not be orthonormal) → motion (previous − current, render px), depth (gbuf0's normalized depth), reactive (relative depth mismatch at the reprojected pixel, best of 3×3, smoothstep tolerance…2×).
     Shaders/NoiseGen.metal   → Compute kernels: gen_perlin_2d, gen_perlin_3d, gen_fbm_rgba, gen_blue_noise
     Shaders/IBL.metal        → IBL generation kernels + sampling utilities
   Presets/
@@ -1017,6 +1059,7 @@ UzumeEngine/
     PlaybackClockSmoother   → LFSTEM.1d. `MIRPipeline.elapsedSeconds` advances in **100 ms steps** on the local-file path (measured on session `2026-08-27T13-24-37Z`: 1,714 steps of exactly 0.100 s, and 39 % of analysis frames do not advance it at all) — right on average, coarse instant to instant. Harmless for `instrumentFamilySeries` on its 1 s hop; a staircase for LFSTEM.1's 23 ms stem grid, where values held for 2–6 frames then jumped 4+ grid frames onto whatever deviation spike was there (observed |Δ| up to 6.0 on `bassEnergyDev` — Matt's "twitchy"). `position(rawSeconds:now:)` holds the position in a BAND that follows the clock — never behind it, never more than `maxDeadReckonSeconds` (0.25) ahead, monotone inside — so a tick corrects drift without rewinding, while a discontinuity further away than the band is wide (seek, track change) resyncs exactly. Round 1 resynced on every tick and therefore rewound on 27 of 1,871 frames by up to 3.2 series frames, because dead reckoning legitimately runs past the tick that confirms it; `reset()` on track change. Pure and clock-injected, gated by `PlaybackClockSmootherTests` (the staircase case fails without it: 16 of 35 frames do not advance).
     PrepStageTiming         → PREP.1 / D-242 per-stage preparation timing. `PrepStageProbe` (per-track handle: `measure(stage) { }` / `measureAsync` / `notingAudioSeconds`) over a `PrepStageSink` collector that writes a `preparation.csv` sidecar beside `features.csv` — one row per (track, stage) with wall ms, process CPU ms (`getrusage`), `cpu_cores` = CPU per wall second (below 1.0 = waiting on disk or a GPU command buffer, which is how a saturated stage is told from a blocked one), decoded duration and ms per second of audio. `PrepStage` holds the canonical stage names. OFF unless `UZUME_PREP_TIMING=1`: `PrepStageProbe.disabled` is the production default and falls straight through to the body — measured indistinguishable from the probe removed. Gated by `PrepStageTimingTests` (the ms-vs-s conversion, the backfill, the inert disabled probe).
     StemFeatureSeries       → LFSTEM.1 pre-analysed stem features in playback order: `frames` on a uniform grid of `hopSeconds` (the 1024-sample analysis hop, ~23 ms — the separation period would flatten the transients accent routes read) plus `sample(atPlaybackSeconds:)`, nearest-frame and clamping past the end. Local-file only, `.empty` everywhere else — a streaming tap has no future to analyse, the same asymmetry `LoudnessProfile` carries; `sample` returns nil on an empty series so callers fall back to live separation. Built by `SessionPreparer.analyzeStemSeries`.
+    UpscaleMode             → VQ.3 sidecar `upscale` (`bilinear` / `spatial`; absent = `rosterDefault`, `.bilinear` — the one switch that moves the whole roster) and `resolve(_:)`, applied once at load.
     FinishSpec              → VQ.1 sidecar `finish` block (`mode` legacy / cinematic, `bloom`, `grade`, `lut`; absent = legacy) and the frame-target format rule: `frameTargetFormat` — legacy `.bgra8Unorm_srgb` (a constant, not the drawable's), cinematic `.rgba16Float` — that every frame-target pipeline compiles against. `loadCubeLUT(url:device:)` reads a `.cube` 3D LUT. In `Shared` so `Presets` (decode, format resolution) and `Renderer` (the finish) both reach it.
     AnalyzedFrame           → Timestamped container: AudioFrame + FFTResult + StemData + FeatureVector + EmotionalState + StructuralPrediction.
     BeatSyncSnapshot        → Per-frame beat-sync diagnostic snapshot (9 fields: barPhase01, beatsPerBar, beatInBar, isDownbeat, sessionMode, lockState, gridBPM, playbackTimeS, driftMs). CLAUDE.md §Defect Handling load-bearing artifact for the `dsp.beat` domain. NSLock-guarded on VisualizerEngine.
@@ -1319,6 +1362,25 @@ finishes the frame target into the drawable. Contract for any new pass or path:
   the display transform use). Do not tone-map or sRGB-encode into it; the finish does both.
 - Verify a new path in both modes under validation:
   `MTL_DEBUG_LAYER=1 swift test --package-path UzumeEngine --filter FinishFormatMatch`.
+
+### Upscale Step (VQ.3)
+
+Order on screen: **render (jittered) → upscale → finish → present**. A path never upscales twice and never writes the
+drawable from an upscaler:
+
+- A path that renders below the output hands its **pre-stretch** image to the present step (the canvas, an NB.8
+  half-res target) — `presentUpscale` runs MetalFX spatial there when the scene takes `.spatial`, else the present
+  step stretches as before. Do not pre-stretch into the canvas first.
+- A ray-march scene that upscales sets `RayMarchPipeline.upscaleOutputSize` to the drawable's size: the lit image is
+  upscaled (spatial, or `temporal`) BEFORE bloom / ACES; a legacy composite then writes the drawable directly (via
+  `outputTexture(of:)`), a cinematic `render` returns the upscaled image for the finish.
+- Ray-march temporal: the jitter is a per-frame nudge of `SceneUniforms.cameraForward` (restored after the frame), so
+  every ray built as `fwd + ndc.x·xFov·rt − ndc.y·yFov·up` — the preamble's G-buffer fragment and `rm_rayDir` — is
+  jittered consistently. A pass that builds rays any other way must add `TemporalFrame`-style jitter itself (none
+  does today: all three ray-march scenes use the shared G-buffer fragment). Motion = previous − current, render
+  pixels; depth = gbuf0's normalized depth; jitter handed to MetalFX negated (D-263, re-measured VQ.3).
+- MetalFX inputs and outputs are budgeted (`RenderTargetBudget`: targets + the scaler's `currentAllocatedSize`
+  delta as a reservation) and released on scene switch and resize.
 
 ### Texture Binding Layout
 ```
