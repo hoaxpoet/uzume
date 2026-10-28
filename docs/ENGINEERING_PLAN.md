@@ -444,6 +444,7 @@ gates (plan §4 "Stability") apply to every increment after it.
 | **VQ.4a** Frame pacing | engine | queued | Display-link clock off the main thread, paced presents, on-glass time; frame interpolation lands here. |
 | **VQ.4b** Motion blur | engine | queued | Per-pixel motion blur in the finish from the motion vectors. |
 | **VQ.5** Roster on the TV | preset (batches) | queued | The roster on the cinematic finish in batches of 4–6, each with Matt's TV review. |
+| **LM.10** Lumen Mosaic: stained hammered glass at full 4K | preset + engine | 🟡 built 2026-10-28 on branch `lm-glass` (local) — **pending the live 4K run and Matt's look** (D-266) | Matt: "STAINED hammered glass", slim sheened dark lead, glinting dark glass; then "definition not high enough for 4K" + "how are you going to make it run smoothly". Each piece is a sheet of hammered glass (~10 dimple-lenses across, crescent, thickness, glint, backlight drift) in sheened lead; frost seam + dome retired. Glass baked once (`preset_bake_fragment` → slot 10), rendered `upscale: "native"`: full 4K **4.26 ms** GPU vs 16.9 computed and 7.6 for the 2560×1440 stretch (Release, M2 Pro); first frame 20–26 ms once. Gates: flash 0.00/s, golden, rubric, motion. References local-only (`~/.uzume/lm_refs`). |
 | **VQ.6** TV mode | UX | queued | Choosing the TV; fullscreen there; unplug behaviour; real output mode; A/V offset calibration. |
 
 ### Phase MFX — temporal reconstruction (increments of Phase VQ, opened 2026-10-21; D-263)

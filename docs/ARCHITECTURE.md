@@ -1395,6 +1395,8 @@ texture(8)  = blueNoise  (256² .r8Unorm IGN dither)
 texture(9)  = IBL irradiance cubemap (32² .rgba16Float) — ray-march lighting pass
 texture(10) = IBL prefiltered env (128² .rgba16Float, 5 mip levels) — ray-march lighting pass
               | per-preset baked height field (e.g. Ferrofluid Ocean V.9 Session 4.5b 1024² .r16Float UMA) — ray-march G-buffer pass. Different encoders; no overlap.
+              | LM.10: a scene's own `preset_bake_fragment` output at the march size (Lumen Mosaic's glass, rgba8Unorm),
+                made by the engine on the first frame / resize; `sceneSDF` and `sceneMaterial` (`presetTexture`) both see it.
 texture(11) = BRDF LUT (512² .rg16Float) — ray-march lighting pass
 texture(12) = DynamicTextOverlay (2048×1024 .rgba8Unorm, .storageModeShared UMA) — direct-pass only.
               Bound by RenderPipeline.drawDirect when a text-overlay preset is active
@@ -1543,7 +1545,8 @@ out-param); read by `raymarch_lighting_fragment` and dispatched on:
   soft shadows + IBL ambient + IBL specular + atmospheric fog. Existing presets
   (Volumetric Lithograph) all stay on this
   path; their `sceneMaterial` bodies leave `outMatID` at the caller's default 0.
-- `matID == 1` — frosted backlit glass dielectric (Lumen Mosaic). Albedo
+- `matID == 1` — backlit glass dielectric (Lumen Mosaic; **LM.10: stained hammered glass — the frost
+  description below is history, see D-266**). Albedo
   carries the backlight intensity AND the frosted-glass surface
   character; the lighting path is the round-4 baseline simplified:
   `albedo × kLumenEmissionGain + irradiance × kLumenIBLFloor × ao`,

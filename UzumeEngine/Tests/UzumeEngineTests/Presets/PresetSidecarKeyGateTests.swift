@@ -62,13 +62,6 @@ struct PresetSidecarKeyGateTests {
             Energetic Flyby and Matt kept the stretch (D-263 amendment), so it still waits for a \
             consumer whose frame does not mostly move at once.
             """,
-        "upscale": """
-            VQ.3 (D-265) built MetalFX spatial at every stretch and measured it on test-only proof \
-            scenes; no shipped scene changes in that increment. Scenes without the key take \
-            `UpscaleMode.rosterDefault` (bilinear); consumers adopt it one at a time (VQ.3b, VQ.3s) \
-            after Matt's 4K side-by-side, and `"bilinear"` becomes the per-scene opt-out if the \
-            roster default is ever flipped.
-            """,
         "natural_cycle_seconds": """
             D-246: Arachne was the only adopter and was removed. The key feeds \
             `PresetMaxDuration`, which is generic (V.7.6.2) and still governs how long any \
