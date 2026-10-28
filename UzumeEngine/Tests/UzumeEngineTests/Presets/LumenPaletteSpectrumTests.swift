@@ -43,13 +43,6 @@ private enum LMPalette {
     static let trebleTeamCutoff: UInt32      = 90
     static let sectionBeatLength: Float      = 64.0
 
-    // LM.6 — cell-depth gradient + hot-spot. Mirror the .metal constants.
-    static let cellEdgeDarkness: Float       = 0.55
-    static let depthGradientFalloff: Float   = 1.0
-    static let hotSpotRadius: Float          = 0.15
-    static let hotSpotShape: Float           = 4.0
-    static let hotSpotIntensity: Float       = 0.30
-
     // LM.9 — pale-tone-share gate (D-LM-cream-rescission / §12.7).
     static let palePredicateThreshold: Float = 0.65
     static let palePanelShareCeiling: Float  = 0.30
@@ -466,78 +459,5 @@ struct LumenPaletteTrackSequenceTests {
             #expect(!recent.contains(pass1[i]),
                     "anti-repeat-3 violated at step \(i): \(pass1[i]) appears in recent \(recent); full sequence \(pass1)")
         }
-    }
-}
-
-// MARK: - LM.6 helpers — mirror of the depth-gradient + hot-spot block in
-// `sceneMaterial`. Pure scalar arithmetic; same math the shader applies
-// per-pixel to `cell_hue` between palette lookup and frost diffusion.
-
-private func lmSmoothstep(_ edge0: Float, _ edge1: Float, _ x: Float) -> Float {
-    if edge0 >= edge1 { return x < edge0 ? 0 : 1 }
-    let t = max(0, min(1, (x - edge0) / (edge1 - edge0)))
-    return t * t * (3 - 2 * t)
-}
-
-private func lmMix(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * t }
-
-/// Per-pixel multiplier the LM.6 depth gradient applies to `cell_hue`.
-/// 1.0 at centre (`f1 = 0`); `kCellEdgeDarkness` at edge (`f1 = f2`).
-private func lmCellDepthFactor(f1: Float, f2: Float) -> Float {
-    let cellRadius = f2 * LMPalette.depthGradientFalloff
-    let depth01 = 1.0 - lmSmoothstep(0, cellRadius, f1)
-    return lmMix(LMPalette.cellEdgeDarkness, 1.0, depth01)
-}
-
-/// Per-pixel multiplier the LM.6 hot-spot applies to `cell_hue`. The
-/// shader form `cell_hue += hotSpot × intensity × cell_hue` is
-/// equivalent to `cell_hue *= (1 + hotSpot × intensity)`; we return
-/// that scalar so the test can compare directly.
-private func lmHotSpotMultiplier(f1: Float, f2: Float) -> Float {
-    let edge = LMPalette.hotSpotRadius * f2
-    let raw = 1.0 - lmSmoothstep(0, edge, f1)
-    let shaped = pow(raw, LMPalette.hotSpotShape)
-    return 1.0 + shaped * LMPalette.hotSpotIntensity
-}
-
-// MARK: - Suite 7: LM.6 — Cell-depth gradient (preserved verbatim)
-
-@Suite("LM.6 — cell-depth gradient")
-struct LumenCellDepthGradientTests {
-
-    @Test func test_cellCentre_isBrighterThanEdge() {
-        let f2: Float = 0.1
-        let centre = lmCellDepthFactor(f1: 0,  f2: f2)
-        let edge   = lmCellDepthFactor(f1: f2, f2: f2)
-        #expect(centre > edge, "centre factor \(centre) not > edge factor \(edge)")
-        #expect(abs(centre - 1.0) < 1e-5, "centre depth factor should be 1.0, got \(centre)")
-        #expect(abs(edge - LMPalette.cellEdgeDarkness) < 1e-5,
-                "edge factor should be kCellEdgeDarkness (\(LMPalette.cellEdgeDarkness)), got \(edge)")
-    }
-
-    @Test func test_hotSpot_brightensCellCentre() {
-        let f2: Float = 0.1
-        let peakMul = lmHotSpotMultiplier(f1: 0, f2: f2)
-        let expectedPeak: Float = 1.0 + LMPalette.hotSpotIntensity
-        #expect(abs(peakMul - expectedPeak) < 1e-5,
-                "hot-spot peak multiplier should be \(expectedPeak), got \(peakMul)")
-
-        let outsideMul = lmHotSpotMultiplier(f1: LMPalette.hotSpotRadius * f2 + 1e-3, f2: f2)
-        #expect(abs(outsideMul - 1.0) < 1e-5,
-                "hot-spot multiplier outside kHotSpotRadius × f2 should be 1.0, got \(outsideMul)")
-    }
-
-    @Test func test_depthGradient_smoothAcrossRadius() {
-        let f2: Float = 0.1
-        let samples: [Float] = [0, 0.25 * f2, 0.5 * f2, 0.75 * f2, f2]
-        let factors = samples.map { lmCellDepthFactor(f1: $0, f2: f2) }
-        for i in 1..<factors.count {
-            let prev = factors[i - 1]
-            let curr = factors[i]
-            #expect(curr < prev - 1e-6,
-                    "depth gradient not monotonic at sample \(i): \(prev) → \(curr)")
-        }
-        #expect(abs(factors.first! - 1.0) < 1e-5)
-        #expect(abs(factors.last!  - LMPalette.cellEdgeDarkness) < 1e-5)
     }
 }
