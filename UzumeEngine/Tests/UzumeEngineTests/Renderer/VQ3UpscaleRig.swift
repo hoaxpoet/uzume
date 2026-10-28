@@ -398,6 +398,7 @@ final class RayMarchUpscaleRig {
         case let .reference(factor):
             march = (outW * factor, outH * factor)
             compositeSize = march
+            ctx.renderTargetBudget.ceiling = 1 << 40   // a 2× 4K reference is far over any Mac's render budget
         case .spatial, .temporal: break
         }
         self.marchW = march.0

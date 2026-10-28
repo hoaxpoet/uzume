@@ -190,51 +190,51 @@ struct RayMarchUpscaleProofTests {
             print(String(format: "[vq3-timing] %@: p50 %.2f ms, p95 %.2f ms (n=%d)", label,
                          s[s.count / 2], s[min(Int(Double(s.count) * 0.95), s.count - 1)], s.count))
         }
-        func time(_ body: (MTLCommandBuffer) -> Void) -> Double {
-            guard let cb = ctx.commandQueue.makeCommandBuffer() else { return 0 }
-            body(cb)
-            cb.commit()
-            cb.waitUntilCompleted()
-            return (cb.gpuEndTime - cb.gpuStartTime) * 1000
+        /// `count` command buffers submitted back to back (the queue stays saturated, so the GPU clocks
+        /// stay up — VQ.1's method), timed by COMPLETION SPACING: with ~10 buffers in flight each one's
+        /// own gpuStart…gpuEnd span includes queueing (measured: spatial 14.7 ms span vs 1.47 ms spacing,
+        /// and 1.48 ms one-at-a-time). The first `skip` dropped.
+        func timed(_ count: Int = 140, skip: Int = 20, _ body: (MTLCommandBuffer) -> Void) -> [Double] {
+            var buffers: [MTLCommandBuffer] = []
+            for _ in 0..<count {
+                guard let cb = ctx.commandQueue.makeCommandBuffer() else { return [] }
+                body(cb)
+                cb.commit()
+                buffers.append(cb)
+            }
+            buffers.last?.waitUntilCompleted()
+            let ends = buffers.dropFirst(skip).map(\.gpuEndTime)
+            return zip(ends.dropFirst(), ends).map { ($0 - $1) * 1000 }
         }
-        let frames = 140, skip = 20
         for input in [(2560, 1440), (1920, 1080)] {
             // Spatial: the tier-1 canvas (perceptual, sRGB) and a linear HDR frame (cinematic / ray-march lit).
             for format in [ctx.pixelFormat, MTLPixelFormat.rgba16Float] {
                 let source = try blit.texture(format, input.0, input.1)
                 let scaler = SpatialUpscaler(device: ctx.device, budget: nil)
-                var ms: [Double] = []
-                for frame in 0..<frames {
-                    let t = time { _ = scaler.encode(source, outputWidth: Self.outW, outputHeight: Self.outH, commandBuffer: $0) }
-                    if frame >= skip { ms.append(t) }
-                }
-                stats("spatial \(format == .rgba16Float ? "hdr" : "perceptual") \(input.0)×\(input.1) → 4K", ms)
+                stats("spatial \(format == .rgba16Float ? "hdr" : "perceptual") \(input.0)×\(input.1) → 4K", timed {
+                    _ = scaler.encode(source, outputWidth: Self.outW, outputHeight: Self.outH, commandBuffer: $0)
+                })
             }
-            // Bilinear stretch of the same canvas (today's present-step copy), for scale.
+            // Today's bilinear stretch of the same canvas (the present-step copy), for scale.
             let canvas = try blit.texture(ctx.pixelFormat, input.0, input.1)
             let drawable = try blit.texture(ctx.pixelFormat, Self.outW, Self.outH)
-            stats("bilinear stretch \(input.0)×\(input.1) → 4K",
-                  (0..<frames).map { _ in time { blit.encode(canvas, into: drawable, commandBuffer: $0) } }.dropFirst(skip).map { $0 })
+            stats("bilinear stretch \(input.0)×\(input.1) → 4K", timed { blit.encode(canvas, into: drawable, commandBuffer: $0) })
         }
         // Temporal + AA-only: the ray-march proof scene's real inputs; the upscale timed alone.
-        for march in [(2560, 1440), (1920, 1080), (Self.outW, Self.outH)] {
-            let rig = try RayMarchUpscaleRig(scene: .proof, mode: .temporal, outW: Self.outW, outH: Self.outH,
+        let cases = [(2560, 1440), (1920, 1080), (1536, 864), (1280, 720)].map { ($0, (Self.outW, Self.outH)) }
+            + [(3840, 2160), (2560, 1440), (1920, 1080)].map { ($0, $0) }   // AA-only at each size
+        for (march, out) in cases {
+            let rig = try RayMarchUpscaleRig(scene: .proof, mode: .temporal, outW: out.0, outH: out.1,
                                              marchW: march.0, marchH: march.1, context: ctx)
             for frame in 0..<4 { try rig.frame(time: Float(frame) / 60) }
             let recon = try #require(rig.temporal?.reconstructor)
             let lit = try #require(rig.pipeline.litTexture)
             let inputs = try #require(rig.temporal?.lastInputs(color: lit))
-            var ms: [Double] = []
-            var whole: [Double] = []
-            for frame in 0..<frames {
-                let t = time { _ = recon.encodeUpscale(commandBuffer: $0, inputs: inputs) }
+            let label = march == out ? "AA-only \(out.0)×\(out.1) (1:1)" : "temporal \(march.0)×\(march.1) → 4K"
+            stats(label + " (upscale alone)", timed {
+                _ = recon.encodeUpscale(commandBuffer: $0, inputs: inputs)
                 recon.advance()
-                if frame >= skip { ms.append(t) }
-                if frame >= frames - 30 { whole.append(try rig.frame(time: Float(frame) / 60).gpuMs) }
-            }
-            let label = march.0 == Self.outW ? "AA-only 3840×2160 → 4K" : "temporal \(march.0)×\(march.1) → 4K"
-            stats(label + " (upscale alone)", ms)
-            stats(label + " (whole proof-scene frame)", whole)
+            })
         }
     }
 
