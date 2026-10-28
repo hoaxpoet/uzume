@@ -63,8 +63,9 @@ extension RenderPipeline {
     }
 
     /// VQ.3: build a reconstructing ray-march scene's targets and MetalFX scaler NOW (`applyPreset`) and
-    /// run MetalFX once off screen, so its first frame does not — built lazily, the first frames cost
-    /// > 50 ms of GPU twice live and tripped the governor's hard step-down. Main thread.
+    /// run MetalFX once off screen, waited on, so its first frame does not — built lazily, the first
+    /// frames cost > 50 ms of GPU twice live and tripped the governor's hard step-down (VQ.3a: the cost
+    /// is the first touch of the freshly allocated memory; see `RayMarchTemporal.warmUp`). Main thread.
     public func prepareRayMarchUpscale(_ rm: RayMarchPipeline) {
         guard let temporal = rm.temporal else { return }
         let drawable = presentationDrawableSize
@@ -77,7 +78,8 @@ extension RenderPipeline {
                                inputHeight: march.1,
                                outputWidth: out.width,
                                outputHeight: out.height) else { return }
-        temporal.warmUp(lit: lit, queue: context.commandQueue)
+        let ms = temporal.warmUp(lit: lit, queue: context.commandQueue)
+        rmLogger.info("Ray-march temporal warm-up \(march.0)×\(march.1) → \(out.width)×\(out.height): \(ms) ms")
     }
 
     /// Ray-march scale for a drawable of `width` × `height`.
