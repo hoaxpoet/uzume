@@ -299,8 +299,9 @@ enum RayMarchProof {
 
     void sceneMaterial(float3 p, int matID, constant FeatureVector& f, constant SceneUniforms& s,
                        constant StemFeatures& stems, thread float3& albedo, thread float& roughness,
-                       thread float& metallic, thread int& outMatID, constant LumenPatternState& lumen) {
-        (void)matID; (void)f; (void)s; (void)stems; (void)lumen;
+                       thread float& metallic, thread int& outMatID, constant LumenPatternState& lumen,
+                       texture2d<float> presetTexture) {
+        (void)matID; (void)f; (void)s; (void)stems; (void)lumen; (void)presetTexture;
         outMatID = 0;
         metallic = 0.0;
         roughness = 0.6;
@@ -354,12 +355,15 @@ final class RayMarchUpscaleRig {
     let blit: VQ3Blit
     let pipeline: RayMarchPipeline
     private let gbufferState: MTLRenderPipelineState
+    private let bakeState: MTLRenderPipelineState?
     private let chain: PostProcessChain?
     private let ibl: IBLManager
     private let noise: TextureManager?
     private let fft: MTLBuffer, wave: MTLBuffer
     private let lumen: LumenPatternEngine?
     private let composite: MTLTexture
+    /// LM.10: the scene's baked slot-10 texture at the march size (`useBake`), as production makes it.
+    private(set) var bakeTexture: MTLTexture?
     let output: MTLTexture
     private let baseCamera: SIMD4<Float>
     private var audioTime: Float = 0
@@ -371,7 +375,7 @@ final class RayMarchUpscaleRig {
     // swiftlint:disable:next function_body_length
     init(scene: Scene, mode: Mode, outW: Int, outH: Int, marchW: Int, marchH: Int,
          context: MetalContext? = nil, temporalSpec: TemporalReconstructionSpec? = nil,
-         lumenPalette: LumenPalette? = nil) throws {
+         lumenPalette: LumenPalette? = nil, useBake: Bool = false) throws {
         self.scene = scene
         self.mode = mode
         self.outW = outW
@@ -391,6 +395,7 @@ final class RayMarchUpscaleRig {
         }
         guard let state = preset.rayMarchPipelineState else { throw VQ3RigError.setup("no G-buffer state") }
         gbufferState = state
+        bakeState = useBake ? preset.bakePipelineState : nil
 
         var march = (marchW, marchH)
         var compositeSize = (outW, outH)
@@ -464,10 +469,23 @@ final class RayMarchUpscaleRig {
                                                           baseCamera.z + dollySpeed * time, baseCamera.w)
         lumen?.tick(features: fv, stems: stems)
         guard let cb = context.commandQueue.makeCommandBuffer() else { throw VQ3RigError.setup("cb") }
+        if let bakeState, bakeTexture == nil {
+            bakeTexture = try blit.texture(.rgba8Unorm, marchW, marchH)
+            let pass = MTLRenderPassDescriptor()
+            pass.colorAttachments[0].texture = bakeTexture
+            pass.colorAttachments[0].loadAction = .dontCare
+            pass.colorAttachments[0].storeAction = .store
+            let encoder = cb.makeRenderCommandEncoder(descriptor: pass)
+            encoder?.setRenderPipelineState(bakeState)
+            var uniforms = pipeline.sceneUniforms
+            encoder?.setFragmentBytes(&uniforms, length: MemoryLayout<SceneUniforms>.stride, index: 4)
+            encoder?.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            encoder?.endEncoding()
+        }
         pipeline.render(gbufferPipelineState: gbufferState, features: &fv, fftBuffer: fft, waveformBuffer: wave,
                         stemFeatures: stems, outputTexture: mode == .spatial || mode == .temporal ? output : composite,
                         commandBuffer: cb, noiseTextures: noise, iblManager: ibl, postProcessChain: chain,
-                        presetFragmentBuffer3: lumen?.patternBuffer)
+                        presetFragmentBuffer3: lumen?.patternBuffer, presetHeightTexture: bakeTexture)
         switch mode {
         case .stretch: blit.encode(composite, into: output, commandBuffer: cb)
         case let .reference(factor): blit.encode(composite, into: output, box: factor, commandBuffer: cb)

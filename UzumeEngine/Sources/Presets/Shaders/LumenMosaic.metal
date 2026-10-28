@@ -143,53 +143,9 @@ constant float kFocalDist = 3.0f;
 /// adds Lipschitz headroom.
 constant float kCellDensity = 15.0f;
 
-/// Lipschitz-safe SDF displacement amplitude for the Voronoi domed-cell
-/// relief. **Round 7 (2026-05-10): set to 0.** The relief geometry
-/// produced sub-pixel normal noise that the frost-scatter lighting
-/// path amplified into per-pixel white dots inside cells (Matt
-/// 2026-05-10: "Why is there a dot in every colored cell?"). Surface
-/// character is baked into albedo by `sceneMaterial` instead (LMG: hammer
-/// dimples, lead came — see the LMG constants). The panel's geometric normal stays a clean
-/// flat (0, 0, -1) per pixel; no more per-pixel relief noise.
-constant float kReliefAmplitude = 0.0f;
-
-/// Lipschitz-safe SDF displacement amplitude for the in-cell frost.
-/// fbm8 at scale 80 reaches gradient ≈ 80; 0.0008 keeps Lipschitz
-/// contribution below 0.07.
-///
-/// **Round 7 (2026-05-10): set to 0.** The fbm8 frost displacement
-/// was producing per-pixel central-difference normal deviations that
-/// the round-7 frost-scatter lighting path amplified into visible
-/// white pixel artifacts ("dots in every cell"). The frost was
-/// originally decorative — intended for specular sparkle that the
-/// matID == 1 path does not use. Disabling it cleans up the
-/// per-pixel dots while preserving the Voronoi cell-relief edge
-/// gradient, which remains the only normal feature driving frost
-/// scatter at cell ridges. A future round can re-introduce a
-/// different frost mechanism (e.g. a procedural noise tile applied
-/// in the lighting frag rather than as an SDF displacement) if
-/// micro-glints are needed for cert.
-constant float kFrostAmplitude = 0.0f;
-
-/// Distance from the panel face inside which `sceneSDF` evaluates the
-/// relief + frost displacement; outside this band the SDF returns the
-/// raw `box_dist` so distant march samples skip the voronoi + fbm8
-/// cost. The band must be wider than the maximum displacement
-/// (kReliefAmplitude + kFrostAmplitude = 0.0048) by enough that the
-/// G-buffer fragment's eps=0.001 central-differences normal samples
-/// always fall inside the band when evaluated at a hit position
-/// (box_dist ≈ 0). 0.02 world units = ≈ 4× the maximum displacement;
-/// the safety margin also covers cases where the eventual hit's normal
-/// eps lands marginally outside the displaced surface. Eliminates ~30×
-/// of the voronoi + fbm8 cost per frame at 1080p (sphere tracing only
-/// touches the band on the last 1–2 march steps before convergence).
-constant float kReliefBandRadius = 0.02f;
-
-/// fbm8 spatial scale for the in-cell frost. Per SHADER_CRAFT.md §4.5b
-/// convention (mat_pattern_glass companion frost). 80 cycles per world
-/// unit ≈ 16 cycles per cell at kCellDensity = 30, so frost reads as
-/// sub-cell micro-texture, not as a competing macro pattern.
-constant float kFrostScale = 80.0f;
+/// The panel's surface is FLAT (LM.10 removed LM.3.2's relief + frost displacement, both at amplitude 0 since round
+/// 7, 2026-05-10 — "Why is there a dot in every colored cell?" — yet still evaluated, voronoi + fbm8, on every
+/// near-surface SDF tap). All surface character is albedo, baked once (`preset_bake_fragment`).
 
 /// LM.3.2 — uniform-cell-intensity baseline. Replaces LM.3.1's agent-static-
 /// field model after Matt's 2026-05-09 rejection ("fixed-color cells with
@@ -555,42 +511,12 @@ static inline float3 lm_cell_palette(uint cellHash,
                   lumen.palette[idx].b);
 }
 
-/// Voronoi domed-cell relief field. Returns a per-pixel scalar in
-/// [0, ≈ 1]: 1 at cell centres (where v.f1 → 0), 0 at cell edges (where
-/// v.f1 → cell_radius). The smoothstep on (f2 - f1) sharpens the falloff
-/// to a thin inter-cell ridge — this is what gives pattern glass its
-/// "dimple plus crisp seam" character (SHADER_CRAFT.md §4.5b).
-///
-/// Sampled at panel-face uv, NOT in raw world space, so cell density
-/// is decoupled from the panel's world-space size and can be retuned
-/// (LM.6) by changing kCellDensity alone.
-static inline float lm_cell_relief(float2 panel_uv) {
-    VoronoiResult v = voronoi_f1f2(panel_uv, kCellDensity);
-    float dome = (1.0f - saturate(v.f1 * kCellDensity));
-    float ridge = smoothstep(0.0f, 0.04f, v.f2 - v.f1);
-    return dome * ridge;
-}
-
-/// In-cell frost field. fbm8 at scale 80 gives 8 octaves of Perlin
-/// centred near 0 with practical range ≈ [-0.7, 0.7]. Kept as a raw
-/// fbm8 read here; sceneSDF subtracts the value (after centre-shift)
-/// as a Lipschitz-safe displacement so the central-differences normal
-/// in raymarch_gbuffer_fragment picks up the perturbation. Per
-/// SHADER_CRAFT.md §4.5b the frost is the canonical micro layer for
-/// pattern glass.
-static inline float lm_frost(float3 p) {
-    return fbm8(p * kFrostScale);
-}
-
 // ── Scene SDF ──────────────────────────────────────────────────────────────
 
 /// Static glass panel — one `sd_box` at z = 0, sized 1.50 × the visible
 /// frame's world-space half-extents at the panel plane (so panel edges
-/// are never visible). Voronoi domed-cell relief and fbm8 in-cell frost
-/// are baked into the SDF as small Lipschitz-safe displacements on top
-/// of the box. The G-buffer central-differences normal then picks up
-/// per-cell relief + sub-pixel frost variation without any sceneMaterial
-/// normal-output channel (the D-021 signature has none).
+/// are never visible). Flat (LM.10: the relief + frost displacements, at
+/// amplitude 0 since LM.3.2 round 7, are gone).
 ///
 /// `f` and `stems` are accepted for D-021 conformance but unused here —
 /// LM.1 has zero audio reactivity per Decision G.1 + design doc §3.
@@ -607,35 +533,7 @@ float sceneSDF(float3 p,
     // frame on every side. Per contract §P.1.
     float2 cam_t = lm_camera_tangents(s);
     float3 panel_size = float3(cam_t * kPanelOversize, kPanelThickness);
-    float box_dist = sd_box(p, panel_size);
-
-    // Band-limited relief + frost evaluation. Sphere tracing visits ~128
-    // march samples per pixel; at 1080p with ~50% panel coverage that's
-    // ~7M voronoi + ~7M fbm8 calls per frame if every sample evaluates
-    // both. Most samples are far from the panel surface where the
-    // displacement contribution is noise-floor anyway. Gating on
-    // `box_dist > kReliefBandRadius` returns the raw box SDF for the
-    // ~99% of march samples that fall outside the band. The eventual
-    // hit + its 6 central-differences-normal neighbours all sit within
-    // box_dist ≈ ±0.001, well inside the 0.02 band.
-    if (box_dist > kReliefBandRadius) {
-        return box_dist;
-    }
-
-    // Cell-relief displacement in panel-face uv. voronoi_f1f2 ≈ 0.11 ms
-    // at 1080p; the gate above limits this evaluation to near-surface
-    // samples (typically 1–2 steps before march convergence).
-    float2 panel_uv = p.xy / cam_t;
-    float relief = lm_cell_relief(panel_uv);
-    float frost  = lm_frost(p) - 0.5f;     // re-centre to [-0.5, +0.5]
-
-    // Subtract relief + frost from the box distance so the panel surface
-    // bumps outward at cell centres + bumps in/out at frost peaks. Both
-    // amplitudes are tuned for Lipschitz safety against the box's unit
-    // gradient (see kReliefAmplitude / kFrostAmplitude rationale above).
-    return box_dist
-         - relief * kReliefAmplitude
-         - frost  * kFrostAmplitude;
+    return sd_box(p, panel_size);
 }
 
 // ── LMG hammer dimples ─────────────────────────────────────────────────────
@@ -646,6 +544,56 @@ float sceneSDF(float3 p,
 static inline float lm_dimple_height(float2 uv) {
     float r = voronoi_f1f2(uv, 1.0f).f1 / kDimpleRadius;
     return r < 1.0f ? (1.0f - r * r) * (1.0f - r * r) : 0.0f;
+}
+
+/// The hammered glass at `panel_uv`, independent of colour and time (LM.10: baked once at full size by
+/// `preset_bake_fragment`, else evaluated inline): x = dimple height (→ thickness), y = brightness multiplier
+/// (crescent × lift × backlight drift), z = glint² × drift. Dimples run at kDimplesPerPiece × the piece density,
+/// offset per piece by its UNSEEDED id hash, so the pattern breaks at every lead line like separately cut glass
+/// and is the same on every track. Slope by central differences.
+static inline float3 lm_glass_terms(float2 panel_uv, uint cell_id) {
+    uint pieceHash = lm_hash_u32(cell_id);
+    float2 sheetOffset = float2(float(pieceHash & 0xFFFFu), float(pieceHash >> 16)) * (1.0f / 4096.0f);
+    float2 duv = panel_uv * (kCellDensity * kDimplesPerPiece) + sheetOffset;
+    const float e = 0.08f;
+    float h = lm_dimple_height(duv);
+    float2 slope = float2(lm_dimple_height(duv + float2(e, 0)) - lm_dimple_height(duv - float2(e, 0)),
+                          lm_dimple_height(duv + float2(0, e)) - lm_dimple_height(duv - float2(0, e))) / (2.0f * e);
+    float facing = dot(slope, kBacklightDir);   // > 0: the slope bends the backlight toward the viewer
+    // The far side of each dimple falls into a dark crescent (ref 02's signature); the lit side lifts a little.
+    float lens = (1.0f - kCrescentDepth * smoothstep(0.45f, 0.95f, -facing)) * (1.0f + kLensStrength * saturate(facing));
+    float glint = saturate((facing - kGlintThreshold) / (1.0f - kGlintThreshold));
+    float drift = 1.0f - kBacklightDrift * saturate(0.5f + fbm4(float3(panel_uv * 0.6f, 0.37f)));
+    return float3(h, lens * drift, glint * glint * drift);
+}
+
+/// Bake encoding (rgba8Unorm): the brightness multiplier peaks at 1.25 (lift), so it is stored ÷ this.
+constant float kGlassBakeMulScale = 1.5f;
+
+/// Screen uv (0,0 = top left) of world point `p`: the inverse of the G-buffer's ray, exact wherever along the
+/// ray the march stopped.
+static inline float2 lm_screen_uv(float3 p, constant SceneUniforms& s) {
+    float3 d = p - s.cameraOriginAndFov.xyz;
+    float z = dot(d, s.cameraForward.xyz);
+    float yFov = tan(s.cameraOriginAndFov.w * 0.5f);
+    float2 ndc = float2(dot(d, s.cameraRight.xyz) / (z * yFov * s.sceneParamsA.y), -dot(d, s.cameraUp.xyz) / (z * yFov));
+    return ndc * 0.5f + 0.5f;
+}
+
+/// LM.10 — the glass, baked once at the march size (the engine runs this when a ray-march scene defines it; see
+/// `RenderPipeline.setRayMarchBake`). Each texel takes its pixel's own ray to the panel's front face — where the
+/// march lands — so texel and G-buffer pixel see the same panel_uv; sceneMaterial finds the texel by
+/// `lm_screen_uv`.
+fragment float4 preset_bake_fragment(VertexOut in [[stage_in]], constant SceneUniforms& s [[buffer(4)]]) {
+    float2 ndc = in.uv * 2.0f - 1.0f;
+    float yFov = tan(s.cameraOriginAndFov.w * 0.5f);
+    float3 ray = s.cameraForward.xyz + ndc.x * yFov * s.sceneParamsA.y * s.cameraRight.xyz
+               - ndc.y * yFov * s.cameraUp.xyz;
+    float3 cam = s.cameraOriginAndFov.xyz;
+    float3 p = cam + ray * ((-kPanelThickness - cam.z) / ray.z);
+    float2 panel_uv = p.xy / lm_camera_tangents(s);
+    float3 t = lm_glass_terms(panel_uv, uint(voronoi_f1f2(panel_uv, kCellDensity).id));
+    return float4(t.x, t.y / kGlassBakeMulScale, t.z, 1.0f);
 }
 
 // ── Scene Material ─────────────────────────────────────────────────────────
@@ -689,7 +637,8 @@ void sceneMaterial(float3 p,
                    thread float& roughness,
                    thread float& metallic,
                    thread int& outMatID,
-                   constant LumenPatternState& lumen) {
+                   constant LumenPatternState& lumen,
+                   texture2d<float> presetTexture) {
     (void)matID;
     (void)stems;
 
@@ -699,7 +648,11 @@ void sceneMaterial(float3 p,
     // oversize factor by dividing through `cameraTangents` only —
     // contract §P.1 frame-edge invariant.
     float2 cam_t   = lm_camera_tangents(s);
-    float2 panel_uv = p.xy / cam_t;
+    // LM.10: on the panel's exact front face along this pixel's ray — the march stops up to 0.001·t short, which
+    // would shift the pieces and dimples by a pixel at the frame edges relative to the bake (and frame to frame).
+    float3 cam = s.cameraOriginAndFov.xyz;
+    float3 face = cam + (p - cam) * ((-kPanelThickness - cam.z) / (p.z - cam.z));
+    float2 panel_uv = face.xy / cam_t;
 
     // Voronoi cell membership. `v.id` is the deterministic per-cell hash
     // (`voronoi_f1f2.id` is `int`; we cast to uint for the bit-mixing
@@ -723,27 +676,22 @@ void sceneMaterial(float3 p,
 
     // ── LMG — the piece's own sheet of hammered glass ───────────────────────────
     //
-    // Dimples run at kDimplesPerPiece × the piece density, offset per piece by its hash, so the pattern breaks
-    // at every lead line like separately cut glass. Slope by central differences (½ dimple-unit step is coarse
-    // enough to stay smooth across the 3×3 Voronoi search).
-    float2 sheetOffset = float2(float(cellHash & 0xFFFFu), float(cellHash >> 16)) * (1.0f / 4096.0f);
-    float2 duv = panel_uv * (kCellDensity * kDimplesPerPiece) + sheetOffset;
-    const float e = 0.08f;
-    float h  = lm_dimple_height(duv);
-    float2 slope = float2(lm_dimple_height(duv + float2(e, 0)) - lm_dimple_height(duv - float2(e, 0)),
-                          lm_dimple_height(duv + float2(0, e)) - lm_dimple_height(duv - float2(0, e))) / (2.0f * e);
-    float facing = dot(slope, kBacklightDir);   // > 0: the slope bends the backlight toward the viewer
-
+    // The glass terms come from the bake when the engine made one (LM.10: full-size, once), else inline —
+    // identical up to the bake's 8-bit encoding (`LumenGlassBakeTests`).
+    float3 terms;
+    if (presetTexture.get_width() > 1) {
+        constexpr sampler nearest(coord::normalized, filter::nearest, address::clamp_to_edge);
+        float4 baked = presetTexture.sample(nearest, lm_screen_uv(p, s));
+        terms = float3(baked.x, baked.y * kGlassBakeMulScale, baked.z);
+    } else {
+        terms = lm_glass_terms(panel_uv, cell_id);
+    }
     // Thickness (Beer–Lambert): thin at the dimple centre, thick on the ridges → colour deepens there.
-    float thickness = mix(kThickGlass, kThinGlass, h);
-    float3 glass = pow(max(cell_hue, float3(1e-4f)), float3(thickness));
-    // Lens: the far side of each dimple falls into a dark crescent (ref 02's signature); the lit side lifts a little.
-    glass *= (1.0f - kCrescentDepth * smoothstep(0.45f, 0.95f, -facing)) * (1.0f + kLensStrength * saturate(facing));
+    float3 glass = pow(max(cell_hue, float3(1e-4f)), float3(mix(kThickGlass, kThinGlass, terms.x))) * terms.y;
     // Glint: focused light in the glass's own hue at full brightness (near-black glass still glints).
-    float glint = saturate((facing - kGlintThreshold) / (1.0f - kGlintThreshold));
     float3 hue = cell_hue / max(max3(cell_hue.r, cell_hue.g, cell_hue.b), 0.02f);
-    glass += glint * glint * kGlintStrength * hue;
-    glass *= cell_intensity * (1.0f - kBacklightDrift * saturate(0.5f + fbm4(float3(panel_uv * 0.6f, 0.37f))));
+    glass += terms.z * kGlintStrength * hue;
+    glass *= cell_intensity;
 
     // ── LMG — lead came between pieces ─────────────────────────────────────────
     //
