@@ -58,7 +58,7 @@ struct RayMarchTemporalSidecarTests {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         let loader = PresetLoader(device: device, pixelFormat: .bgra8Unorm_srgb)
         let declared = loader.presets.filter { $0.descriptor.temporalReconstruction != nil }.map(\.descriptor.name)
-        #expect(declared.isEmpty, "temporal_reconstruction declared by \(declared) — VQ.3 opts no shipped scene in")
+        #expect(declared.isEmpty, "temporal_reconstruction declared by \(declared) — no shipped scene adopts it (VQ.3a: Lumen Mosaic kept the stretch, D-265)")
     }
 }
 

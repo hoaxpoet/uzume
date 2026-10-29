@@ -1382,6 +1382,12 @@ drawable from an upscaler:
   pixels; depth = gbuf0's normalized depth; jitter handed to MetalFX negated (D-263, re-measured VQ.3).
 - MetalFX inputs and outputs are budgeted (`RenderTargetBudget`: targets + the scaler's `currentAllocatedSize`
   delta as a reservation) and released on scene switch and resize.
+- Scene entry (VQ.3a): `prepareRayMarchUpscale` builds the scaler and targets in `applyPreset` and runs MetalFX once,
+  WAITED (`RayMarchTemporal.warmUp`). The first GPU touch of freshly allocated memory is slow — the OS commits the pages
+  then (Release, M2 Pro: 253 MiB of fresh targets 143 ms the first time, 0.2 ms the next) — and an unwaited warm-up ran
+  into the scene's first frames (> 50 ms twice → the governor's hard step-down). Apply already blocks the render loop
+  for the VQ.0 drain, so the wait lands in the switch, not in frames. The switch still holds the picture 0.3–0.6 s, mostly
+  the scaler build (CPU); building it off the main thread is the open lever.
 
 ### Texture Binding Layout
 ```

@@ -161,6 +161,45 @@ struct RayMarchUpscaleProofTests {
         try Self.writeStills(uncapped, prefix: "volumetric_lithograph_1536x864")
     }
 
+    /// VQ.3a: Matt's side-by-side — the same 1920×2160 centre of the 4K frame, today's stretch left, temporal
+    /// right, 1:1 pixels on a 4K screen; every frame of a 120 BPM beat + stem train (cells step, lights move)
+    /// into `lumen_sbs/` for the clip, frame 180 also as the still. `UPSCALE_SBS=1`.
+    @Test("Lumen Mosaic stretch | temporal side-by-side frames at 4K (UPSCALE_SBS=1)")
+    func lumenSideBySide() throws {
+        guard ProcessInfo.processInfo.environment["UPSCALE_SBS"] == "1" else { return }
+        let ctx = try MetalContext()
+        let rigs = try [RayMarchUpscaleRig.Mode.stretch(canvasW: 2560, canvasH: 1440), .temporal].map {
+            try RayMarchUpscaleRig(scene: .lumenMosaic, mode: $0, outW: Self.outW, outH: Self.outH,
+                                   marchW: 2560, marchH: 1440, context: ctx)
+        }
+        let settle = 24, frames = 300, still = 180
+        let beat = FlashHarnessSupport.worstCaseBeatTrain(accentHz: 2, seconds: Double(settle + frames) / 60)
+        let stems = FlashHarnessSupport.worstCaseStemTrain(accentHz: 2, seconds: Double(settle + frames) / 60)
+        let dir = try Self.outputDir().appendingPathComponent("lumen_sbs")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let half = Self.outW / 2, x0 = Self.outW / 4
+        for i in 0..<(settle + frames) {
+            let images = try rigs.map { try $0.blit.bgra($0.frame(time: Float(i) / 60, features: beat[i], stems: stems[i]).texture) }
+            guard i >= settle else { continue }
+            var sbs = [UInt8](repeating: 0, count: Self.outW * Self.outH * 4)
+            for y in 0..<Self.outH {
+                for (side, image) in images.enumerated() {
+                    let src = (y * Self.outW + x0) * 4, dst = (y * Self.outW + side * half) * 4
+                    sbs.replaceSubrange(dst..<(dst + half * 4), with: image[src..<(src + half * 4)])
+                }
+                for x in (half - 2)..<(half + 2) { (0..<3).forEach { sbs[(y * Self.outW + x) * 4 + $0] = 40 } }
+            }
+            let frame = i - settle
+            try EnergeticFlybyRenderTests.writePNG(sbs, Self.outW, Self.outH,
+                                                  dir.appendingPathComponent(String(format: "frame_%04d.png", frame)))
+            if frame == still {
+                try EnergeticFlybyRenderTests.writePNG(sbs, Self.outW, Self.outH,
+                                                      dir.appendingPathComponent("lumen_mosaic_stretch_vs_temporal.png"))
+            }
+        }
+        print("[vq3a-sbs] \(frames) frames → \(dir.path)")
+    }
+
     // MARK: AA-only (task 4)
 
     @Test("AA-only (temporal at scale 1.0): stair-steps native vs AA-only vs reference (UPSCALE_PROOF=1)")

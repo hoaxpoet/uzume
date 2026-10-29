@@ -59,8 +59,9 @@ struct PresetSidecarKeyGateTests {
         "temporal_reconstruction": """
             MFX.2 built direct-path MetalFX reconstruction and proved it on a test-only scene \
             (`MFXProofScene`); no shipped scene changes in that increment. EFB.4 tried it on \
-            Energetic Flyby and Matt kept the stretch (D-263 amendment), so it still waits for a \
-            consumer whose frame does not mostly move at once.
+            Energetic Flyby and Matt kept the stretch (D-263 amendment); VQ.3a tried the ray-march \
+            path on Lumen Mosaic and Matt saw no clear difference at 1:1 on his 4K monitor (D-265 \
+            amendment), so it waits for a consumer whose gain is visible.
             """,
         "natural_cycle_seconds": """
             D-246: Arachne was the only adopter and was removed. The key feeds \
