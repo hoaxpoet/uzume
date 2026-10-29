@@ -107,6 +107,11 @@ final class SettingsViewModel: ObservableObject {
         set { store.showTrackInformation = newValue }
     }
 
+    var hdrOutput: Bool {
+        get { store.hdrOutput }
+        set { store.hdrOutput = newValue }
+    }
+
     var sessionRecorderEnabled: Bool {
         get { store.sessionRecorderEnabled }
         set { store.sessionRecorderEnabled = newValue }

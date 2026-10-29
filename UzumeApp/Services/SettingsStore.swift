@@ -36,6 +36,7 @@ final class SettingsStore: ObservableObject {
         static let showUncertifiedPresets   = "uzume.settings.visuals.showUncertifiedPresets"
         static let preparationView          = "uzume.settings.visuals.preparationView"
         static let showTrackInformation     = "uzume.settings.visuals.showTrackInformation"
+        static let hdrOutput                = "uzume.settings.visuals.hdrOutput"
         // Diagnostics
         static let sessionRecorderEnabled  = "uzume.settings.diagnostics.sessionRecorderEnabled"
         static let sessionRetention        = "uzume.settings.diagnostics.sessionRetention"
@@ -80,6 +81,12 @@ final class SettingsStore: ObservableObject {
     /// during a session. Default true. Only ever what is playing now (D-238). DS.6.
     @Published var showTrackInformation: Bool = true {
         didSet { defaults.set(showTrackInformation, forKey: Keys.showTrackInformation) }
+    }
+
+    /// Use HDR on a display that can show it (VQ.2). Default true (Matt, D-264; re-confirmed
+    /// 2026-10-29). Off keeps the SDR drawable on every display.
+    @Published var hdrOutput: Bool = true {
+        didSet { defaults.set(hdrOutput, forKey: Keys.hdrOutput) }
     }
 
     // MARK: - Diagnostics
@@ -127,6 +134,9 @@ final class SettingsStore: ObservableObject {
         showTrackInformation = defaults.object(forKey: Keys.showTrackInformation) == nil
             ? true
             : defaults.bool(forKey: Keys.showTrackInformation)
+        hdrOutput = defaults.object(forKey: Keys.hdrOutput) == nil
+            ? true
+            : defaults.bool(forKey: Keys.hdrOutput)
         sessionRecorderEnabled = defaults.object(forKey: Keys.sessionRecorderEnabled) == nil
             ? true
             : defaults.bool(forKey: Keys.sessionRecorderEnabled)
