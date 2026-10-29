@@ -1358,7 +1358,9 @@ finishes the frame target into the drawable. Contract for any new pass or path:
 - A pipeline that draws the frame target compiles against the scene's `finish.frameTargetFormat` — legacy
   `.bgra8Unorm_srgb`, cinematic `.rgba16Float` — from `PresetLoader.frameTargetFormat(_:)` / `(forPreset:)`, or picks
   at draw time by the target texture's `pixelFormat` (`frameBlitPipeline(for:)`). Never compile one for
-  `context.pixelFormat` (the drawable's — it changes at VQ.2). Intermediates keep their own formats.
+  the drawable's format (`RenderPipeline.drawableFormat`, which VQ.2 switches to `.rgba16Float` on HDR).
+  `context.pixelFormat` is the **legacy frame format** — a constant `.bgra8Unorm_srgb`, never the drawable's.
+  Intermediates keep their own formats.
 - A cinematic frame target holds **linear, scene-referred** colour (values above 1.0 are highlights the bloom and
   the display transform use). Do not tone-map or sRGB-encode into it; the finish does both.
 - Verify a new path in both modes under validation:
@@ -1382,6 +1384,31 @@ drawable from an upscaler:
   pixels; depth = gbuf0's normalized depth; jitter handed to MetalFX negated (D-263, re-measured VQ.3).
 - MetalFX inputs and outputs are budgeted (`RenderTargetBudget`: targets + the scaler's `currentAllocatedSize`
   delta as a reservation) and released on scene switch and resize.
+
+### HDR Output (VQ.2, D-267)
+
+The drawable is HDR when the user's setting is on and the window's screen's **potential** EDR headroom exceeds 1
+(`HDROutput.isActive`; the app's `PixelModeMTKView` decides on window move, screen-parameter change and setting
+change, logging `HDR_STATE`). On HDR:
+
+- **Drawable:** `.rgba16Float`, linear, in the display's own colour space extended
+  (`CGColorSpaceCreateExtendedLinearized`), SDR white = 1.0. The SDR layer does no colour matching (`colorspace`
+  nil), so the display's own space keeps every colour where SDR puts it.
+- **Two formats, one name each:** `context.pixelFormat` = the legacy frame format (constant); `drawableFormat` =
+  what the drawable is now. Only the finish's composite and the present step's copy write the drawable, and both
+  pick their pipeline from its format — switching recompiles no scene.
+- **Legacy scenes** draw 8-bit as always: into the canvas (allocated at full size on HDR too) or, for a path that
+  upscales to the drawable, `edrLegacyOutput` (`outputTexture(of:)`). The present step's copy samples the sRGB
+  target and writes linear — every 8-bit code lands on the same code (tested). If the budget refuses that 8-bit
+  target, the next frame falls back to SDR.
+- **Cinematic scenes** opt in with `finish.hdr`; the pipeline sets the finish's `headroom` each frame to
+  `HDROutput.headroom(current:)` (the display's current headroom, capped at 4×, 1 under Reduce Motion). Without
+  `finish.hdr` the headroom stays 1 and the scene shows the same codes as on SDR.
+- **Flash cap:** light above SDR white is added after the SDR part (graded, LUT-mapped, dithered as before) and
+  scaled so no ninth of the screen (any 2×2 block of a 6×6 cell grid — FlashAnalyzer v2's regions) averages above
+  SDR white in its brightest channel (`finish_region_kernel`). A full-screen flash is never brighter than on SDR.
+- A format change is a display change: drain, rebuild the finish, drain → release → allocate (the pool is
+  re-charged at the float size, ~192 MiB at 4K vs ~97).
 
 ### Texture Binding Layout
 ```

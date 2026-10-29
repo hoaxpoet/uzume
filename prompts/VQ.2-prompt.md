@@ -45,6 +45,22 @@ Agreed with Matt on 2026-10-29, when this prompt was agreed.
 | How bright do the brightest moments get? | **Highlights pop, the picture stays** (Matt's pick, the recommendation) | Small bright things (sparks, glints, the cores of glows) may go up to **4× SDR white**, or the display's limit if lower. No ninth of the screen averages above SDR white, so a full-screen flash is never brighter than today. |
 | HDR on by default? | **Yes** (D-264, 2026-10-21; re-confirmed 2026-10-29) | On every display that reports HDR headroom, the MacBook Pro's own screen included. A setting turns it off. |
 
+## Run-time amendments (2026-10-29, engineering; D-267)
+
+Three engineering corrections found while building. None changes Matt's two decisions.
+
+- **Colour space: the display's own, not Display P3.** Today's SDR layer does no colour matching
+  (`CAMetalLayer.colorspace` is nil), so the display shows the bytes in its own primaries. A Rec.709 → P3 matrix
+  would have desaturated every scene on a wide-gamut display. The HDR drawable is linear in the display's own colour
+  space, extended (`CGColorSpaceCreateExtendedLinearized`), so a legacy pixel lands where SDR puts it. Tasks 2–3's
+  P3 wording is superseded. The LG's profile is exact sRGB (TRC and gamut, checked), so on it this is also exact sRGB.
+- **The regional cap bounds the brightest channel, not luminance.** Otherwise a 4× pure-red flash passes, because
+  red is a fifth of luminance.
+- **Flash measurement anchors both ways.** Task 5's claim that SDR-white anchoring is "stricter" is wrong for
+  WCAG's darker-state rule: a 1× → 4× swing has a darker state of 1.0, so it is not a flash in SDR-white units. The
+  gate measures each arm against SDR white **and** against the display's peak. The capped arm must pass both; the
+  uncapped negative control fails the peak-anchored measure.
+
 ## Skills to invoke
 
 - `shader-authoring` — before any `.metal` edit (the conversion pass, the finish's headroom and cap).

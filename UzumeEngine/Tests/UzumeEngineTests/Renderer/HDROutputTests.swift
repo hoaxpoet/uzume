@@ -473,3 +473,68 @@ struct HDRMemoryTests {
         }
     }
 }
+
+// MARK: - Cost
+
+/// HDR_TIMING=1, Release (`swift test -c release --enable-testable-imports`), UZUME_PRIVATE_TARGETS=1,
+/// run ALONE: GPU ms per 4K frame of the finish (SDR vs HDR with the region cap) and of the legacy
+/// present step (SDR vs HDR drawable), by completion spacing on a saturated queue (D-265).
+@Suite("HDR cost (VQ.2)", .serialized)
+@MainActor
+struct HDRCostTests {
+
+    static func spacing(_ ctx: MetalContext, frames: Int = 400, _ encode: (MTLCommandBuffer) -> Void) -> (Double, Double) {
+        let log = GPUTimeLog()
+        var last: MTLCommandBuffer?
+        for _ in 0..<frames {
+            guard let frame = ctx.commandQueue.makeCommandBuffer() else { continue }
+            encode(frame)
+            frame.addCompletedHandler { log.append($0.gpuEndTime * 1000) }
+            frame.commit()
+            last = frame
+        }
+        last?.waitUntilCompleted()
+        let ends = log.ms.sorted()
+        var ms = zip(ends.dropFirst(), ends).map { $0 - $1 }.dropFirst(50).map { $0 }
+        ms.sort()
+        return (ms[ms.count / 2], ms[Int(Double(ms.count) * 0.95)])
+    }
+
+    static func privateTexture(_ ctx: MetalContext, _ format: MTLPixelFormat, _ w: Int, _ h: Int) throws -> MTLTexture {
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: format, width: w, height: h, mipmapped: false)
+        desc.usage = [.renderTarget, .shaderRead]
+        desc.storageMode = .private
+        return try #require(ctx.device.makeTexture(descriptor: desc))
+    }
+
+    @Test("4K GPU ms: finish SDR vs HDR (cap on); legacy present SDR vs HDR drawable (HDR_TIMING=1)")
+    func cost() throws {
+        guard ProcessInfo.processInfo.environment["HDR_TIMING"] == "1" else { return }
+        #if DEBUG
+        print("[vq2-timing] WARNING: Debug build — numbers are not quotable (CLAUDE.md)")
+        #endif
+        let rig = try FinishProofRig(width: 3840, height: 2160)
+        let ctx = rig.context
+        for (label, format, hdr) in [("finish, SDR drawable", MTLPixelFormat.bgra8Unorm_srgb, false),
+                                     ("finish, HDR drawable, headroom 4 + cap", HDROutput.drawableFormat, true)] {
+            let stage = try rig.stage(output: format, spec: FinishSpec(mode: .cinematic, hdr: hdr), dither: true)
+            stage.headroom = hdr ? HDROutput.peakCap : 1
+            let out = try Self.privateTexture(ctx, format, 3840, 2160)
+            let target = try #require(stage.ensureFrameTarget(width: 3840, height: 2160))
+            try HDRTestSupport.run(ctx) { rig.scene.encode(into: target, params: rig.params(), commandBuffer: $0) }
+            let (p50, p95) = Self.spacing(ctx) { stage.encode(source: target, output: out, commandBuffer: $0) }
+            print(String(format: "[vq2-timing] %@ (3840×2160), %@: p50 %.3f ms, p95 %.3f ms", label, ctx.device.name, p50, p95))
+        }
+        let present = try OraclePresentRig.shared()
+        for (label, w, h, format) in [("legacy present, tier-1 canvas → SDR drawable", 2560, 1440, MTLPixelFormat.bgra8Unorm_srgb),
+                                      ("legacy present, tier-1 canvas → HDR drawable", 2560, 1440, HDROutput.drawableFormat),
+                                      ("legacy present, native 8-bit target → HDR drawable", 3840, 2160, HDROutput.drawableFormat)] {
+            let source = try Self.privateTexture(present.context, FinishSpec.legacyFrameTargetFormat, w, h)
+            let out = try Self.privateTexture(present.context, format, 3840, 2160)
+            let (p50, p95) = Self.spacing(present.context) {
+                _ = present.pipeline.encodeLegacyPresent(source, into: out, commandBuffer: $0)
+            }
+            print(String(format: "[vq2-timing] %@: p50 %.3f ms, p95 %.3f ms", label, p50, p95))
+        }
+    }
+}

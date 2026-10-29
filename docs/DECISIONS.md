@@ -6479,3 +6479,32 @@ looks right — approve LM.10's full-4K glass".
 **References.** D-265; `LumenGlassBakeTests`, `LumenGlassRenderTests` (`LM_GLASS_OUT`, `LM_GLASS_MODES`, `LM_GLASS_SEQ`);
 `docs/presets/LUMEN_MOSAIC_DESIGN.md` §11; RUNBOOK §LM.10.
 
+
+## D-267: HDR output — EDR drawable from the display's potential headroom, highlights to 4× SDR white, flashes capped per ninth (VQ.2)
+
+**Date:** 2026-10-29 · **Increment:** VQ.2 (Phase VQ) · **Status:** Accepted as a capability; **no shipped scene opts
+in** (each consumer is its own increment with Matt's look on an HDR display) · **Builds on:** D-264 (Matt's
+2026-10-21 "HDR on by default"; the budget), VQ.1 (the finish's headroom input).
+
+**Matt's decisions (2026-10-29).** *How bright?* **"Highlights pop, the picture stays"** — small bright things up to
+4× SDR white (or the display's limit if lower); no large area brighter than SDR white. *Default?* **On** on every
+display that reports HDR, the MacBook Pro's own screen included; a setting turns it off.
+
+**The rule.** HDR when the setting is on and the window's screen's **potential** headroom > 1 (a dimmed SDR panel
+reports current headroom > 1, so current alone is the wrong test). The drawable is then `.rgba16Float`, linear, in
+the display's own colour space, extended (`CGColorSpaceCreateExtendedLinearized`) — not Display P3 as planned:
+today's SDR layer does no colour matching (`colorspace` nil), so a P3 matrix would have desaturated every scene on a
+wide-gamut display; the display's own space keeps every colour where SDR puts it (the LG's profile is exact sRGB,
+checked). Two formats with one name each: `context.pixelFormat` = the legacy frame format (constant); the drawable's
+format follows HDR, and only the finish and the present step's copy write the drawable — no scene pipeline
+recompiles. Legacy scenes keep drawing 8-bit (the canvas, at full size on HDR too); the copy writes linear. A
+cinematic scene opts in with `finish.hdr`; its headroom is the display's current headroom, capped at 4×, 1 under
+Reduce Motion / Dim Flashing Lights. A format change is a display change (drain → release → allocate). If the budget
+refuses the 8-bit target, the next frame falls back to SDR.
+
+**The flash cap.** Light above SDR white is added after the SDR part (graded, LUT-mapped, dithered exactly as before)
+and scaled so no ninth of the screen — any 2×2 block of a 6×6 cell grid, a superset of FlashAnalyzer v2's regions —
+averages above SDR white **in its brightest channel** (luminance alone lets a 4× pure-red flash through). A whole-
+screen flash is therefore never brighter than on SDR. Measured against SDR white AND against the display's peak:
+WCAG's darker-state rule (< 0.8) makes a 1× → 4× swing invisible in SDR-white units, so the prompt's "SDR anchoring is
+stricter" was wrong; the gate needs the peak-anchored measure to see an HDR flash.
