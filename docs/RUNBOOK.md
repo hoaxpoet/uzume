@@ -986,6 +986,34 @@ encode it to a video first on the external SSD), the stretch vs native computed 
 `COMPARE_REF_DIR=~/.uzume/lm_refs Scripts/compare_render.sh lumen_mosaic <dir>`. A live run needs an unlocked screen —
 a locked or sleeping display draws nothing (0 frames in the soak report).
 
+## VQ.2 HDR output — turning it on, reading it, the proof (D-267)
+
+**macOS must report HDR first.** An external HDR monitor or TV reports headroom only when System Settings ›
+Displays › (that display) › **High Dynamic Range** is on; until then Uzume stays SDR (potential headroom 1.0). Check
+what each screen reports: `NSScreen.maximumPotentialExtendedDynamicRangeColorComponentValue` (> 1 = HDR capable)
+and `maximumExtendedDynamicRangeColorComponentValue` (headroom now). The app logs a line on every decision:
+
+```bash
+/usr/bin/log stream --predicate 'subsystem == "io.uzume.mac" && category == "HDR"' --info
+```
+
+`HDR_STATE screen=<name> potential=<x> setting=<on/off> active=<true/false> current=<y>`; the engine logs
+`HDR output on/off` (`io.uzume.renderer`, category `HDR`). The setting is Settings › Visuals › Display (developer
+build only until a scene opts in; key `uzume.settings.visuals.hdrOutput`).
+
+**The proof.** Launch the Release app's binary with `UZUME_HDR_PROOF=1` (an env var: `open` does not pass it):
+every frame shows the HDR test pattern instead of the scene — five glints (scene 1 → 64), a glowing core, a slowly
+sweeping dot and a large bright square that the regional cap holds at white. Toggle the setting to compare HDR
+with SDR. Tests and timing:
+
+```bash
+swift test --package-path UzumeEngine --filter HDR
+HDR_TIMING=1 UZUME_PRIVATE_TARGETS=1 swift test -c release --enable-testable-imports --package-path UzumeEngine --filter HDRCost
+```
+
+Lines: `[vq2-identity]`, `[vq2-headroom]`, `[vq2-banding]`, `[vq2-flash]` (capped and uncapped arms, flashes/s
+whole/regional/red, SDR-anchored and peak-anchored), `[vq2-memory]`, `[vq2-timing]` (Release only).
+
 ## Recording the quality reel
 
 The quality reel is a 3-minute screen capture of Uzume playing the canonical

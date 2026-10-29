@@ -326,6 +326,9 @@
 "settings.visuals.preparation.hint"       = "Mysterious keeps the playlist unseen until the music starts. Detailed shows each track's tempo, key and mood as it is heard. You can change this while a session is preparing.";
 "settings.visuals.track_information.title" = "During a session";
 "settings.visuals.track_information.label" = "Show track information";
+"settings.visuals.hdr.title" = "Display";
+"settings.visuals.hdr.label" = "Use HDR on displays that support it";
+"settings.visuals.hdr.hint"  = "On an HDR display, the brightest small details can shine brighter than white. Large areas never get brighter than they are without HDR. Displays without HDR are unaffected.";
 "settings.visuals.track_information.hint"  = "Keeps the current track’s title, artist and artwork, and the scene now on screen, in a corner during the session. Off leaves nothing but the performance. Either way, what comes next stays unseen. You can change this during a session.";
 
 "settings.visuals.blocklist.title" = "Hidden scene families";

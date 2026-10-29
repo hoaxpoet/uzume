@@ -1,8 +1,12 @@
 // MetalView — NSViewRepresentable wrapping MTKView with RenderPipeline as delegate.
 
 import MetalKit
+import os.log
 import Renderer
+import Shared
 import SwiftUI
+
+private let hdrLogger = Logger(subsystem: "io.uzume.mac", category: "HDR")
 
 // MARK: - MetalView
 
@@ -17,6 +21,9 @@ struct MetalView: NSViewRepresentable {
 
     /// Render pipeline used as the MTKView delegate.
     let pipeline: RenderPipeline
+
+    /// The HDR setting (VQ.2): HDR when on and the window's display supports it.
+    let hdrEnabled: Bool
 
     /// Creates and configures the underlying `MTKView`.
     func makeNSView(context nsViewContext: Context) -> MTKView {
@@ -45,12 +52,13 @@ struct MetalView: NSViewRepresentable {
         // The render surface carries no semantic meaning for VoiceOver.
         view.setAccessibilityElement(false)
 
+        view.hdrSetting = hdrEnabled
         return view
     }
 
-    /// Updates the MTKView when SwiftUI state changes.
+    /// Updates the MTKView when SwiftUI state changes: the HDR setting.
     func updateNSView(_ nsView: MTKView, context: Context) {
-        // No dynamic SwiftUI state to push into the view yet.
+        (nsView as? PixelModeMTKView)?.hdrSetting = hdrEnabled
     }
 }
 
@@ -73,12 +81,33 @@ final class PixelModeMTKView: MTKView {
     }
     static let drawableOverrideChanged = Notification.Name("io.uzume.drawableOverrideChanged")
 
+    /// The HDR setting (VQ.2); the drawable goes HDR when it is on and the screen supports it.
+    var hdrSetting = true {
+        didSet { if hdrSetting != oldValue { applyDynamicRange() } }
+    }
+    /// The last decision logged, so `HDR_STATE` prints on a change only.
+    private var loggedHDRState: String?
+
     override init(frame frameRect: CGRect, device: MTLDevice?) {
         super.init(frame: frameRect, device: device)
         autoResizeDrawable = false
         let center = NotificationCenter.default
         center.addObserver(forName: Self.drawableOverrideChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.applyPixelMode() }
+        }
+        // VQ.2: HDR switched on or off in System Settings, a display plugged in or out.
+        let screens = NSApplication.didChangeScreenParametersNotification
+        center.addObserver(forName: screens, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyDynamicRange() }
+        }
+        // VQ.2: the window moved to another display.
+        let moved = NSWindow.didChangeScreenNotification
+        center.addObserver(forName: moved, object: nil, queue: .main) { [weak self] note in
+            let movedWindow = ObjectIdentifier(note.object as AnyObject)
+            MainActor.assumeIsolated {
+                guard let self, let window = self.window, ObjectIdentifier(window) == movedWindow else { return }
+                self.applyDynamicRange()
+            }
         }
     }
 
@@ -100,6 +129,24 @@ final class PixelModeMTKView: MTKView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applyPixelMode()
+        applyDynamicRange()
+    }
+
+    /// HDR when the setting is on and the window's screen can ever exceed SDR white (its POTENTIAL
+    /// headroom: a dimmed SDR panel reports current headroom > 1). Logs `HDR_STATE` on a change.
+    private func applyDynamicRange() {
+        guard let pipeline = delegate as? RenderPipeline else { return }
+        let screen = window?.screen
+        let potential = screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1
+        let active = HDROutput.isActive(settingOn: hdrSetting, potentialHeadroom: potential)
+        let current = screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1
+        let name = screen?.localizedName ?? "none"
+        let state = "screen=\(name) potential=\(potential) setting=\(hdrSetting) active=\(active)"
+        if state != loggedHDRState {
+            loggedHDRState = state
+            hdrLogger.info("HDR_STATE \(state, privacy: .public) current=\(current, privacy: .public)")
+        }
+        pipeline.setOutputEDR(active, view: self, displayColorSpace: screen?.colorSpace?.cgColorSpace)
     }
 
     /// The drawable for a view whose backing is `viewBacking` on a display whose full backing is

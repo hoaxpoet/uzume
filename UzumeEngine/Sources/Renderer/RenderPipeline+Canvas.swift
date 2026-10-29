@@ -67,7 +67,8 @@ extension RenderPipeline {
         mvWarpLock.withLock { presentationSize = drawableSize }
         let width = max(Int(render.width), 1), height = max(Int(render.height), 1)
         finishingStage?.ensureFrameTarget(width: width, height: height)   // VQ.1: cinematic frame target
-        guard render != drawableSize else {
+        // VQ.2: on HDR a legacy scene still draws 8-bit, so the canvas exists at full size too.
+        guard render != drawableSize || outputIsEDR else {
             canvasTexture = nil
             return render
         }
@@ -88,7 +89,7 @@ extension RenderPipeline {
         pass.colorAttachments[0].loadAction = .dontCare
         pass.colorAttachments[0].storeAction = .store
         guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        encoder.setRenderPipelineState(feedbackBlitPipelineState)
+        encoder.setRenderPipelineState(frameBlitPipeline(for: target.pixelFormat))   // VQ.2: the EDR drawable
         encoder.setFragmentTexture(source, index: 0)
         encoder.setFragmentSamplerState(feedbackSamplerState, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)

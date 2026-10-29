@@ -63,7 +63,13 @@ final class SettingsViewModel: ObservableObject {
     init(store: SettingsStore, about: AboutSectionData = .current()) {
         self.store = store
         self.about = about
+        // The bindings below are computed over the store, so the sheet redraws only when the store's
+        // change reaches it: without this a toggle changed the setting but never moved (VQ.2: "the
+        // toggle is disabled").
+        storeChanges = store.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
+
+    private var storeChanges: AnyCancellable?
 
     // MARK: - Bindings (forwarded to store)
 
@@ -105,6 +111,11 @@ final class SettingsViewModel: ObservableObject {
     var showTrackInformation: Bool {
         get { store.showTrackInformation }
         set { store.showTrackInformation = newValue }
+    }
+
+    var hdrOutput: Bool {
+        get { store.hdrOutput }
+        set { store.hdrOutput = newValue }
     }
 
     var sessionRecorderEnabled: Bool {

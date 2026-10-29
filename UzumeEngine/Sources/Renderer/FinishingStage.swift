@@ -39,7 +39,7 @@ struct FinishUniforms {
     var bloomLevels: Float
     var frame: UInt32
     var useLUT: UInt32
-    var pad: UInt32 = 0
+    var hdrOutput: UInt32
 }
 
 // MARK: - FinishingStage
@@ -55,6 +55,9 @@ public final class FinishingStage: @unchecked Sendable {
     /// Chain levels: 540 → 270 → 135 → 68 → 34 → 17 px tall. The coarsest texel is ~6 % of the
     /// frame height at every resolution.
     public static let bloomLevelCount = 6
+    /// Region cap grid (VQ.2): 6×6 cells, a ninth of the screen = 2×2 cells.
+    static let regionCellsPerSide = 6
+    static let regionCellCount = regionCellsPerSide * regionCellsPerSide
 
     /// Lottes 2016 curve parameters (the talk's defaults): contrast, shoulder, the scene value
     /// that maps to display peak, and the mid-grey anchor.
@@ -68,8 +71,14 @@ public final class FinishingStage: @unchecked Sendable {
 
     /// The scene's finish settings.
     public let spec: FinishSpec
-    /// Display peak over SDR white: 1.0 for SDR. VQ.2 feeds the display's EDR headroom here.
+    /// Display peak over SDR white: 1.0 for SDR. On an HDR output (VQ.2) the pipeline sets it each
+    /// frame from the display (`HDROutput.headroom`) for a scene whose `finish.hdr` is on.
     public var headroom: Float = 1
+    /// The output is the linear float HDR drawable (VQ.2): light above SDR white is kept, capped
+    /// per ninth of the screen at an average of SDR white (`finish_region_kernel`).
+    public let hdrOutput: Bool
+    /// Tests only: false drops the regional cap (the flash gate's negative control must fail).
+    var regionCapEnabled = true
     /// One output code value in encoded units; 0 disables dither (tests measure the undithered
     /// image). 1/255 for the 8-bit drawable.
     public var ditherLSB: Float = 1.0 / 255.0
@@ -84,6 +93,9 @@ public final class FinishingStage: @unchecked Sendable {
     private let downsamplePipeline: MTLComputePipelineState
     private let upsamplePipeline: MTLComputePipelineState
     private let compositePipeline: MTLRenderPipelineState
+    private let regionPipeline: MTLComputePipelineState
+    /// 6×6 region cells (FinishingStage.metal `kRegionCells`), written by the region kernel.
+    private let regionCells: MTLBuffer
     private let sampler: MTLSamplerState
     private let lut: MTLTexture
     private let hasLUT: Bool
@@ -93,7 +105,8 @@ public final class FinishingStage: @unchecked Sendable {
 
     /// - Parameters:
     ///   - library: the renderer library (FinishingStage.metal + Common.metal).
-    ///   - outputFormat: the format the finish writes — the drawable's.
+    ///   - outputFormat: the format the finish writes — the drawable's (`HDROutput.drawableFormat`
+    ///     on HDR, VQ.2).
     ///   - lut: the scene's 3D LUT (`FinishSpec.loadCubeLUT`), or nil.
     ///   - budget: VQ.0 render-target budget; nil allocates directly (tests).
     public init(device: MTLDevice, library: MTLLibrary, outputFormat: MTLPixelFormat,
@@ -110,6 +123,13 @@ public final class FinishingStage: @unchecked Sendable {
         prefilterPipeline = try kernel("finish_prefilter_kernel")
         downsamplePipeline = try kernel("finish_downsample_kernel")
         upsamplePipeline = try kernel("finish_upsample_kernel")
+        regionPipeline = try kernel("finish_region_kernel")
+        hdrOutput = outputFormat == HDROutput.drawableFormat
+        guard let cells = device.makeBuffer(length: Self.regionCellCount * MemoryLayout<SIMD2<Float>>.stride,
+                                            options: .storageModeShared) else {
+            throw MetalContextError.noDevice
+        }
+        regionCells = cells
         let desc = MTLRenderPipelineDescriptor()
         desc.label = "finish_composite"
         desc.vertexFunction = library.makeFunction(name: "fullscreen_vertex")
@@ -222,6 +242,20 @@ public final class FinishingStage: @unchecked Sendable {
             uniforms.bloomStrength = 0
         }
         let bloom = bloomOn ? bloomChain[0] : source
+        if uniforms.hdrOutput == 1, let encoder = commandBuffer.makeComputeCommandEncoder() {
+            // VQ.2: the region cells the composite caps against, after the bloom it includes.
+            encoder.label = "finish region cap"
+            encoder.setComputePipelineState(regionPipeline)
+            encoder.setBytes(&uniforms, length: MemoryLayout<FinishUniforms>.stride, index: 0)
+            encoder.setBuffer(regionCells, offset: 0, index: 1)
+            encoder.setTexture(source, index: 0)
+            encoder.setTexture(bloom, index: 1)
+            encoder.setSamplerState(sampler, index: 0)
+            let side = Self.regionCellsPerSide
+            encoder.dispatchThreadgroups(MTLSize(width: side, height: side, depth: 1),
+                                         threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
+            encoder.endEncoding()
+        }
         run(commandBuffer, into: output, compositePipeline, [source, bloom, lut], &uniforms)
         frameIndex &+= 1
     }
@@ -250,6 +284,7 @@ public final class FinishingStage: @unchecked Sendable {
             encoder.setFragmentTexture(texture, index: index)
         }
         encoder.setFragmentBytes(uniforms, length: MemoryLayout<FinishUniforms>.stride, index: 0)
+        encoder.setFragmentBuffer(regionCells, offset: 0, index: 1)
         encoder.setFragmentSamplerState(sampler, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
@@ -272,7 +307,8 @@ public final class FinishingStage: @unchecked Sendable {
             ditherLSB: ditherLSB,
             bloomLevels: Float(Self.bloomLevelCount),
             frame: frameIndex,
-            useLUT: hasLUT ? 1 : 0)
+            useLUT: hasLUT ? 1 : 0,
+            hdrOutput: hdrOutput && headroom > 1 ? (regionCapEnabled ? 1 : 2) : 0)
     }
 
     // MARK: Display transform

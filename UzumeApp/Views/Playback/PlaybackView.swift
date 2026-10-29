@@ -123,7 +123,7 @@ struct PlaybackView: View {
     var body: some View {
         ZStack {
             // Layer 1: Metal render
-            MetalView(context: engine.context, pipeline: engine.pipeline)
+            MetalView(context: engine.context, pipeline: engine.pipeline, hdrEnabled: settingsStore.hdrOutput)
 
             // Layer 2: Track-change center animation (only while track information is shown)
             TrackChangeAnimationView(

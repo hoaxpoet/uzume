@@ -1,5 +1,6 @@
 // SettingsViewModelTests — Tests for SettingsViewModel (U.8 Part A).
 
+import Combine
 import Foundation
 import Testing
 @testable import UzumeApp
@@ -40,6 +41,18 @@ struct SettingsViewModelTests {
 
         vm.sessionRecorderEnabled = false
         #expect(store.sessionRecorderEnabled == false)
+    }
+
+    /// VQ.2: the sheet binds to the view model, whose properties are computed over the store — a change
+    /// must reach the view model's subscribers or a toggle never redraws (looked disabled live).
+    @Test func storeChange_republishesFromViewModel() {
+        let (vm, _) = makeVM()
+        var fired = 0
+        let sub = vm.objectWillChange.sink { fired += 1 }
+        vm.hdrOutput = false
+        #expect(fired >= 1)
+        #expect(vm.hdrOutput == false)
+        sub.cancel()
     }
 
     @Test func resetOnboarding_forwardsToStore() {

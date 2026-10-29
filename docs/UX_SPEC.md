@@ -792,6 +792,7 @@ All user-facing strings live in `Localizable.strings` (even though v1 is English
 - **Quality ceiling** — Auto / Performance (disables SSGI, reduces mesh density) / Balanced (default) / Ultra (ignores frame-budget governor; for recording/capture)
 - **Output display** — picker listing all connected displays. Selecting moves Uzume there. (§7.9 Mode A)
 - **Reduced motion** — Matches system (default) / Always on / Always off
+- **Use HDR on displays that support it** (section "Display") — On (default; Matt, D-264, re-confirmed 2026-10-29) / Off. On an HDR display the brightest small details may shine up to 4× brighter than white; large areas never exceed white; SDR displays are unaffected; takes effect at once (VQ.2, D-267). Key `uzume.settings.visuals.hdrOutput`. *Developer build only until a shipped scene shows HDR light (VQ.2a) — until then it changes nothing a user sees.* Reduce Motion / Dim Flashing Lights turn the highlights off.
 - **Scene family blocklist** — multi-select; excludes families the user doesn't enjoy. This is the only catalog-narrowing control. There is deliberately **no "Include Milkdrop scenes" switch** — Milkdrop-inspired scenes are simply Uzume scenes (D-119 / D-215 §13.5, Matt 2026-08-07); the dead "Coming in a future update" row was removed at MD.0.
 - **Show live-adaptation toasts** — Off (default) / On. Brief Curator-only acknowledgments on `+` / `-` / `⌘R` (per §7.4)
 - **Adaptive learning from feedback** — Off (default, post-v1) / On. Uses nudge history to tune weights.

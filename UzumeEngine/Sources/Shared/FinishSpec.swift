@@ -84,13 +84,19 @@ public struct FinishSpec: Codable, Sendable, Equatable {
     public var grade: Grade
     /// Optional 3D LUT: a `.cube` file name next to the scene's shader (cinematic only).
     public var lut: String?
+    /// HDR highlights (VQ.2, cinematic only): on an HDR display the finish maps light above SDR
+    /// white up to the display's headroom (capped, `HDROutput`). Absent = false: headroom 1.0,
+    /// the scene looks as it does on SDR.
+    public var hdr: Bool
 
     /// Creates a finish.
-    public init(mode: Mode = .legacy, bloom: Bloom = Bloom(), grade: Grade = Grade(), lut: String? = nil) {
+    public init(mode: Mode = .legacy, bloom: Bloom = Bloom(), grade: Grade = Grade(), lut: String? = nil,
+                hdr: Bool = false) {
         self.mode = mode
         self.bloom = bloom
         self.grade = grade
         self.lut = lut
+        self.hdr = hdr
     }
 
     public init(from decoder: Decoder) throws {
@@ -99,6 +105,7 @@ public struct FinishSpec: Codable, Sendable, Equatable {
         bloom = try container.decodeIfPresent(Bloom.self, forKey: .bloom) ?? Bloom()
         grade = try container.decodeIfPresent(Grade.self, forKey: .grade) ?? Grade()
         lut = try container.decodeIfPresent(String.self, forKey: .lut)
+        hdr = try container.decodeIfPresent(Bool.self, forKey: .hdr) ?? false
     }
 
     /// The default finish: the scene's own pixels.

@@ -48,6 +48,7 @@ extension RenderPipeline {
     /// thread (`applyPreset`).
     public func setFinish(_ spec: FinishSpec, lutURL: URL? = nil) {
         finishingStage = nil   // VQ.0: release before allocate
+        finishLUTURL = lutURL
         guard spec.mode == .cinematic else { return }
         var lut: MTLTexture?
         if let lutURL {
@@ -63,7 +64,7 @@ extension RenderPipeline {
             let stage = try FinishingStage(
                 device: context.device,
                 library: rendererLibrary,
-                outputFormat: context.pixelFormat,
+                outputFormat: drawableFormat,
                 spec: spec,
                 lut: lut,
                 budget: context.renderTargetBudget)
@@ -269,7 +270,11 @@ extension RenderPipeline {
         presentedFrameTexture = canvas
     }
 
-    /// The texture the present step writes (the drawable's): its size is the MFX.2 reconstruct
-    /// path's output size.
-    func outputTexture(of target: FrameTarget) -> MTLTexture { target.drawable.texture }
+    /// The texture an upscaling path writes at the drawable's size (its size is the MFX.2
+    /// reconstruct path's output size): the drawable itself, or on HDR for a legacy scene the 8-bit
+    /// `edrLegacyOutput` the present step converts into it (VQ.2).
+    func outputTexture(of target: FrameTarget) -> MTLTexture {
+        guard outputIsEDR, finishingStage == nil else { return target.drawable.texture }
+        return edrLegacyOutputTexture(matching: target.drawable.texture) ?? target.drawable.texture
+    }
 }
