@@ -40,11 +40,18 @@ struct SpatialUpscaleSidecarTests {
         #expect(throws: (any Error).self) { try Self.decode("\"fsr\"") }
     }
 
-    @Test @MainActor func noShippedSceneDeclaresIt() throws {
+    /// D-265 option B: `spatial` moves a scene only after Matt's own before/after — none yet. LM.10: Lumen
+    /// Mosaic renders `native` (its glass baked once; Matt's 4K look).
+    @Test @MainActor func onlyAdoptedScenesDeclareIt() throws {
         guard let device = MTLCreateSystemDefaultDevice() else { return }
         let loader = PresetLoader(device: device, pixelFormat: .bgra8Unorm_srgb)
-        let declared = loader.presets.filter { $0.descriptor.upscale != nil }.map(\.descriptor.name)
-        #expect(declared.isEmpty, "upscale declared by \(declared) — VQ.3 opts no shipped scene in")
+        let declared = loader.presets.filter { $0.descriptor.upscale != nil }
+        #expect(declared.map(\.descriptor.name) == ["Lumen Mosaic"], "each adopter needs Matt's look (D-265)")
+        #expect(declared.allSatisfy { $0.descriptor.upscale == .native })
+    }
+
+    @Test func nativeIsRayMarchOnly() throws {
+        #expect(throws: (any Error).self) { try Self.decode("\"native\"") }
     }
 }
 

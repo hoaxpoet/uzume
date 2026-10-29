@@ -613,7 +613,9 @@ void sceneMaterial(float3 p,
                    thread float& roughness,
                    thread float& metallic,
                    thread int& outMatID,
-                   constant LumenPatternState& lumen) {
+                   constant LumenPatternState& lumen,
+                   texture2d<float> presetTexture) {
+    (void)presetTexture;
     (void)p; (void)matID; (void)f; (void)s; (void)stems; (void)lumen;
     albedo    = float3(0.02, 0.03, 0.05);  // §4.6 ferrofluid base
     roughness = 0.08;                       // near-mirror

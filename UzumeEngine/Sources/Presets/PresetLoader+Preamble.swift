@@ -595,7 +595,10 @@ extension PresetLoader {
         // and silenced via `(void)lumen;`). `ferrofluidHeight` is the V.9
         // Session 4.5b slot-10 baked spike-field texture; only Ferrofluid
         // Ocean samples it, every other ray-march preset silences via
-        // `(void)ferrofluidHeight;`. Ray-march buffer slots 6/7 carry no
+        // `(void)ferrofluidHeight;`. `sceneMaterial` receives the same slot-10
+        // texture as `presetTexture` (LM.10: Lumen Mosaic's baked glass, made by
+        // its `preset_bake_fragment`); scenes that do not read it silence it via
+        // `(void)presetTexture;`. Ray-march buffer slots 6/7 carry no
         // meaning here — Rosette (WHIT.2b) briefly used slot 6 for its own
         // cross-frame CPU state (`RosetteUniforms`) via this same forward-
         // declaration mechanism, removed along with the preset at its
@@ -617,7 +620,8 @@ extension PresetLoader {
                            thread float& roughness,
                            thread float& metallic,
                            thread int& outMatID,
-                           constant LumenPatternState& lumen);
+                           constant LumenPatternState& lumen,
+                           texture2d<float> presetTexture);
 
         // ── G-buffer fragment (compiled per-preset with sceneSDF + sceneMaterial) ──
         fragment GBufferOutput raymarch_gbuffer_fragment(
@@ -720,7 +724,7 @@ extension PresetLoader {
             float  metallic  = 0.0;
             int    outMatID  = 0;     // default: standard dielectric (matID 0)
             sceneMaterial(hitPos, 0, features, scene, stems,
-                          albedo, roughness, metallic, outMatID, lumen);
+                          albedo, roughness, metallic, outMatID, lumen, ferrofluidHeight);
 
             // Pack roughness + metallic into 8 bits (upper 4b + lower 4b) → [0,1].
             int    rByte = int(clamp(roughness, 0.0, 1.0) * 15.0 + 0.5);

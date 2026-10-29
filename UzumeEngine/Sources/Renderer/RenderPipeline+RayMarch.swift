@@ -53,7 +53,9 @@ extension RenderPipeline {
     /// The march size for `rm` at this render size: `render_scale` under the budget (below), or — VQ.3,
     /// a reconstructing scene that declares `internal_scale` — that fraction of the OUTPUT (1.0 =
     /// anti-aliasing only).
-    static func marchSize(_ rm: RayMarchPipeline, renderWidth width: Int, renderHeight height: Int) -> (Int, Int) {
+    static func marchSize(_ rm: RayMarchPipeline, renderWidth width: Int, renderHeight height: Int,
+                          native: Bool = false) -> (Int, Int) {
+        if native, let out = rm.upscaleOutputSize { return out }   // LM.10: `upscale: native` — the drawable itself
         if let out = rm.upscaleOutputSize, let internalScale = rm.temporal?.reconstructor.spec.rayMarchInternalScale {
             return (max(Int((Float(out.width) * internalScale).rounded()), 1),
                     max(Int((Float(out.height) * internalScale).rounded()), 1))
@@ -191,7 +193,9 @@ extension RenderPipeline {
         // VQ.3: a scene that reconstructs (or takes `upscale: spatial`) upscales its lit image ONCE, to
         // the drawable: a legacy composite then writes the drawable itself (not the tier-1 canvas), a
         // cinematic one hands the upscaled image to the finish. Not under mv_warp's offscreen hand-off.
-        let upscaling = drawable != nil && (rayMarchState.temporal != nil || upscaleMode == .spatial)
+        // LM.10: `native` takes the same route at the drawable's own size (nothing to upscale; the lit image IS it).
+        let upscaling = drawable != nil
+            && (rayMarchState.temporal != nil || upscaleMode == .spatial || upscaleMode == .native)
         rayMarchState.spatialUpscaler = upscaling ? spatialUpscalerIfActive() : nil
         rayMarchState.upscaleOutputSize = nil
         if upscaling, let drawable {
@@ -211,7 +215,11 @@ extension RenderPipeline {
         // The 0.4 floor is a HARD CLAMP, not a suggestion: a sidecar declaring a smaller
         // render_scale silently gets 0.4. PERF.14 probes at 0.25 and 0.35 both ran at 0.4 and
         // returned identical timings before anyone noticed. If you lower it, check here first.
-        let (marchWidth, marchHeight) = Self.marchSize(rayMarchState, renderWidth: width, renderHeight: height)
+        let (marchWidth, marchHeight) = Self.marchSize(
+            rayMarchState,
+            renderWidth: width,
+            renderHeight: height,
+            native: upscaleMode == .native)
         rayMarchState.ensureAllocated(width: marchWidth, height: marchHeight)
 
         // Update per-frame uniforms: accumulated audio time, aspect ratio, and step-count multiplier.
@@ -224,6 +232,12 @@ extension RenderPipeline {
         rayMarchState.sceneUniforms.sceneParamsB.z = rayMarchState.stepCountMultiplier
 
         rayMarchState.applyAudioModulation(features: features)
+        // LM.10: after the uniforms (the bake traces the scene's camera at this aspect).
+        bakeRayMarchPresetTextureIfNeeded(
+            width: marchWidth,
+            height: marchHeight,
+            sceneUniforms: rayMarchState.sceneUniforms,
+            commandBuffer: commandBuffer)
 
         // Resolve optional PostProcessChain for bloom: present only when .postProcess is
         // declared alongside .rayMarch in the preset's passes array.

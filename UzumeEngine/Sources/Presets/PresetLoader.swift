@@ -150,6 +150,9 @@ public final class PresetLoader: @unchecked Sendable {
         public let temporalPipelineState: MTLRenderPipelineState?
         /// VQ.1: the `.cube` 3D LUT named by the sidecar `finish.lut` (cinematic only), or nil.
         public let finishLUTURL: URL?
+        /// LM.10: a ray-march scene's `preset_bake_fragment` (rgba8Unorm, full-screen), run by the engine once per
+        /// render size into the slot-10 texture `sceneMaterial` reads. Nil when the scene defines none.
+        public let bakePipelineState: MTLRenderPipelineState?
 
         public init(
             descriptor: PresetDescriptor,
@@ -159,7 +162,8 @@ public final class PresetLoader: @unchecked Sendable {
             mvWarpPipelines: MVWarpCompiledPipelines? = nil,
             stages: [LoadedStage] = [],
             temporalPipelineState: MTLRenderPipelineState? = nil,
-            finishLUTURL: URL? = nil
+            finishLUTURL: URL? = nil,
+            bakePipelineState: MTLRenderPipelineState? = nil
         ) {
             self.descriptor = descriptor
             self.pipelineState = pipelineState
@@ -169,6 +173,7 @@ public final class PresetLoader: @unchecked Sendable {
             self.stages = stages
             self.temporalPipelineState = temporalPipelineState
             self.finishLUTURL = finishLUTURL
+            self.bakePipelineState = bakePipelineState
         }
     }
 
@@ -361,7 +366,8 @@ public final class PresetLoader: @unchecked Sendable {
                 stages: pipelines.stages,
                 temporalPipelineState: pipelines.temporal,
                 finishLUTURL: descriptor.finish.mode == .cinematic
-                    ? descriptor.finish.lut.map { directory.appendingPathComponent($0) } : nil
+                    ? descriptor.finish.lut.map { directory.appendingPathComponent($0) } : nil,
+                bakePipelineState: pipelines.bake
             )
 
             lock.withLock {
@@ -476,6 +482,7 @@ public final class PresetLoader: @unchecked Sendable {
         let mvWarp: MVWarpCompiledPipelines?
         let stages: [LoadedStage]
         let temporal: MTLRenderPipelineState?
+        var bake: MTLRenderPipelineState?
 
         init(standard: MTLRenderPipelineState,
              feedback: MTLRenderPipelineState? = nil,
@@ -754,7 +761,20 @@ public final class PresetLoader: @unchecked Sendable {
             standardState = gbufferState
         }
 
-        return CompiledShader(standard: standardState, rayMarch: gbufferState)
+        var compiled = CompiledShader(standard: standardState, rayMarch: gbufferState)
+        if let bakeFn = library.makeFunction(name: "preset_bake_fragment") {
+            let bakeDesc = MTLRenderPipelineDescriptor()
+            bakeDesc.vertexFunction = vertexFn
+            bakeDesc.fragmentFunction = bakeFn
+            bakeDesc.colorAttachments[0].pixelFormat = .rgba8Unorm
+            do {
+                compiled.bake = try device.makeRenderPipelineState(descriptor: bakeDesc)
+            } catch {
+                logger.error("Bake pipeline creation failed for \(url.lastPathComponent): \(error)")
+                return nil
+            }
+        }
+        return compiled
     }
 
     /// Compile an mv_warp preset: injects `shaderPreamble + rayMarchGBufferPreamble +

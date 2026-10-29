@@ -607,6 +607,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// Ferrofluid Ocean V.9 (`FerrofluidParticles.heightTexture`, per V.9
     /// Session 4.5b Phase 1).
     var rayMarchPresetHeightTexture: MTLTexture?
+    /// LM.10: the active ray-march scene's `preset_bake_fragment`, run into `rayMarchPresetHeightTexture` whenever
+    /// the march size changes. Guarded by `rayMarchPresetHeightTextureLock`.
+    var rayMarchBakePipeline: MTLRenderPipelineState?
     let rayMarchPresetHeightTextureLock = NSLock()
 
     // MARK: - Dynamic Text Overlay (texture 12)

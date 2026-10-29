@@ -785,6 +785,7 @@ UzumeEngine/
     RenderPipeline+StagedEncode → the encode half of a staged frame (ALFVEN.1). `encodeOffscreenStages` walks the stages, runs each stage's `iterations` loop over its ping-pong pair and commits the swaps; `encodeStage` binds one stage (features/FFT/waveform/stems/spectral history, per-preset buffers 6/7/8, noise, `samples` at 13–19, persistent previous state at 20). Split from RenderPipeline+Staged for file length.
     RenderPipeline+StagedWatchdog → non-finite guard on persistent staged state (ALFVEN.1, ALFVEN_DESIGN.md §8.3). `probeStagedPersistentState` reads one rotating 16×16 texel block per persistent stage per frame from .shared memory and silently re-zeroes the pair on NaN/Inf; `textureBlockIsNonFinite` handles rgba16Float/rgba32Float/rg32Float.
     RenderPipeline+BudgetGovernor → applyQualityLevel(_:): translates FrameBudgetManager.QualityLevel into per-subsystem flags (bloom on/off, ray-march step count 0.75×, particle fraction 0.5×, mesh density 0.5×). Each level is a strict superset of the previous (D-057).
+    RenderPipeline+Bake → LM.10 (D-266): setRayMarchBake + bakeRayMarchPresetTextureIfNeeded — a ray-march scene's `preset_bake_fragment` run into the slot-10 texture at the march size by the frame that needs it (GPU, no main-thread stall), again on a size change. Lumen Mosaic bakes its glass there.
     RenderPipeline+PresetSwitching → All per-preset setter API: setActivePipelineState, setFeedbackParams, setMeshGenerator/+PresetBuffer/+PresetTick/+PresetFragmentBuffer, setParticleGeometry, setPostProcessChain, setRayMarchPipeline, setFeatures (mood-preserving per D-024), setMood, setStemFeatures, setDirectPresetFragmentBuffer{,2,3} (D-092/D-094/D-LM-buffer-slot-8), setRayMarchPresetHeightTexture/+ComputeDispatch (V.9 Session 4.5b), setMeshGBufferEncoder (V.9 Session 4.5c — Ferrofluid Ocean round-57 retirement set nil in live), setDynamicTextOverlay/+TextOverlayCallback, setPerFrameStemPublish (LFSTEM.1e — the render-frame stem sample for pre-analysed series; BUG-109 measured the analysis-frame call site capping stem motion at 12.8 Hz against the series' 43 Hz grid).
     RenderPipeline+AudioDrivers → Per-frame audio-reactive uniform drivers split out of the draw path: the per-track aurora warmup ramp (BUG-041) and `auroraOrbitStep` — the integrate-don't-multiply azimuth accumulator shipping `StemFeatures.auroraOrbitAzimuth` (BUG-047).
     RenderPipeline+CustomWarp → Scaffolding shared by the four custom-warp presets (Nacre, Floret, Glaze, Fata Morgana), added at RECON.23: `drawCustomWarp` (acquire drawable → run the preset's own render into it → present, target-parameterised so the live path and the diag harness share code, FA #66) and `renderCustomWarpReducedMotion` (generic over the preset's uniform struct — comps the CURRENT un-advanced feedback, no warp and no swap; exists rather than reusing `drawMVWarpReducedMotion` because these presets' direct pipelines are `.rgba16Float` and would crash against an 8-bit drawable, BUG-061). The feedback LOOPS stay per-preset — they genuinely differ (Glaze runs a blur pyramid, Fata Morgana adds a blur target and shapes).
@@ -1395,6 +1396,8 @@ texture(8)  = blueNoise  (256² .r8Unorm IGN dither)
 texture(9)  = IBL irradiance cubemap (32² .rgba16Float) — ray-march lighting pass
 texture(10) = IBL prefiltered env (128² .rgba16Float, 5 mip levels) — ray-march lighting pass
               | per-preset baked height field (e.g. Ferrofluid Ocean V.9 Session 4.5b 1024² .r16Float UMA) — ray-march G-buffer pass. Different encoders; no overlap.
+              | LM.10: a scene's own `preset_bake_fragment` output at the march size (Lumen Mosaic's glass, rgba8Unorm),
+                made by the engine on the first frame / resize; `sceneSDF` and `sceneMaterial` (`presetTexture`) both see it.
 texture(11) = BRDF LUT (512² .rg16Float) — ray-march lighting pass
 texture(12) = DynamicTextOverlay (2048×1024 .rgba8Unorm, .storageModeShared UMA) — direct-pass only.
               Bound by RenderPipeline.drawDirect when a text-overlay preset is active
@@ -1543,7 +1546,8 @@ out-param); read by `raymarch_lighting_fragment` and dispatched on:
   soft shadows + IBL ambient + IBL specular + atmospheric fog. Existing presets
   (Volumetric Lithograph) all stay on this
   path; their `sceneMaterial` bodies leave `outMatID` at the caller's default 0.
-- `matID == 1` — frosted backlit glass dielectric (Lumen Mosaic). Albedo
+- `matID == 1` — backlit glass dielectric (Lumen Mosaic; **LM.10: stained hammered glass — the frost
+  description below is history, see D-266**). Albedo
   carries the backlight intensity AND the frosted-glass surface
   character; the lighting path is the round-4 baseline simplified:
   `albedo × kLumenEmissionGain + irradiance × kLumenIBLFloor × ao`,
