@@ -20,6 +20,7 @@
 import Foundation
 import Metal
 import os.log
+import QuartzCore
 import simd
 import Shared
 
@@ -224,13 +225,22 @@ public final class RayMarchTemporal {
         return image
     }
 
-    /// Run MetalFX once off screen and discard the history (scene apply): its first encode is slow.
-    public func warmUp(lit: MTLTexture, queue: MTLCommandQueue) {
-        guard let inputs = lastInputs(color: lit), let cb = queue.makeCommandBuffer() else { return }
+    /// Run MetalFX once off screen, WAIT for it, and discard the history (scene apply). Returns the
+    /// wall ms. Its first encode is slow because it is the first GPU touch of memory just allocated —
+    /// the scaler's ~390 MiB at 4K out and these targets — and the OS commits fresh pages on that touch
+    /// (VQ.3a, Release M2 Pro: 253 MiB of fresh targets cleared 143 ms the first time, 0.2 ms the next).
+    /// Not waiting let that run into the scene's first frames: > 50 ms GPU twice, the governor's
+    /// hard step-down. Apply already blocks the render loop (VQ.0 drain), so the wait lands there.
+    @discardableResult
+    public func warmUp(lit: MTLTexture, queue: MTLCommandQueue) -> Double {
+        guard let inputs = lastInputs(color: lit), let cb = queue.makeCommandBuffer() else { return 0 }
+        let started = CACurrentMediaTime()
         cb.label = "ray-march temporal warm-up"
         _ = reconstructor.encodeUpscale(commandBuffer: cb, inputs: inputs)
         cb.commit()
+        cb.waitUntilCompleted()
         reset()
+        return (CACurrentMediaTime() - started) * 1000
     }
 
     // MARK: Diagnostics (tests)
