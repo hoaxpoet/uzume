@@ -241,6 +241,27 @@ extension FlashAnalyzer {
         }
     }
 
+    /// Per-region R, G, B means of a linear float RGBA frame (VQ.2, the HDR drawable), divided by
+    /// `anchor`: 1 measures in SDR-white units; the display's peak measures as WCAG's "relative to
+    /// the display's maximum" does on an HDR screen. Values are not clamped.
+    public static func regions(linearRGBA: [Float], width: Int, height: Int, anchor: Double = 1) -> [FlashRegionSample] {
+        regionRects.map { rect in
+            let x0 = Int(rect.x * Double(width)), x1 = min(width, Int((rect.x + rect.size) * Double(width)))
+            let y0 = Int(rect.y * Double(height)), y1 = min(height, Int((rect.y + rect.size) * Double(height)))
+            var red = 0.0, green = 0.0, blue = 0.0
+            for row in y0..<max(y0, y1) {
+                for col in x0..<max(x0, x1) {
+                    let index = (row * width + col) * 4
+                    red += Double(linearRGBA[index])
+                    green += Double(linearRGBA[index + 1])
+                    blue += Double(linearRGBA[index + 2])
+                }
+            }
+            let scale = 1 / (Double(max((x1 - x0) * (y1 - y0), 1)) * anchor)
+            return FlashRegionSample(red: red * scale, green: green * scale, blue: blue * scale)
+        }
+    }
+
     /// The general-flash rule per region; the worst region's report.
     /// - Parameter frames: per frame, one sample per region (same count every frame).
     public static func analyzeRegional(_ frames: [[FlashRegionSample]], fps: Double) -> FlashReport {
