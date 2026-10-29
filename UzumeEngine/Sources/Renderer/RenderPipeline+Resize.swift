@@ -102,6 +102,7 @@ extension RenderPipeline {
             stagedBackTextures.removeAll(keepingCapacity: true)
         }
         canvasTexture = nil
+        edrLegacyOutput = nil
         halfResTexture = nil
         temporalReconstructor?.releaseTargets()
         spatialUpscaler?.release()   // VQ.3: rebuilt at the new size by the next frame that needs it

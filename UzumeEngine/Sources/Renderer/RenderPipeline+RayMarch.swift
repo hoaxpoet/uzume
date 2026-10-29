@@ -201,7 +201,9 @@ extension RenderPipeline {
         if upscaling, let drawable {
             let out = outputTexture(of: drawable)
             rayMarchState.upscaleOutputSize = (out.width, out.height)
-            if finishingStage == nil { outputTex = out }
+            // VQ.2: never a legacy composite into the HDR drawable (the 8-bit target was refused):
+            // it then writes the canvas and the present step stretches that.
+            if finishingStage == nil, out.pixelFormat == context.pixelFormat { outputTex = out }
         }
 
         let size = renderSize(of: view)

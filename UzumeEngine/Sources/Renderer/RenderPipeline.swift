@@ -535,6 +535,18 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     /// otherwise. Main thread.
     var spatialUpscaler: SpatialUpscaler?
 
+    // MARK: - HDR output (VQ.2, `RenderPipeline+HDR`)
+
+    /// The drawable is the linear float EDR format (`HDROutput`). Main thread.
+    var outputIsEDR = false
+    /// The active finish's `.cube`, kept so an output-format change can rebuild the finish.
+    var finishLUTURL: URL?
+    /// On HDR, the drawable-size 8-bit image a legacy path that upscales to the drawable writes
+    /// instead of it (the present step converts it). Nil otherwise. Main thread.
+    var edrLegacyOutput: MTLTexture?
+    /// The developer HDR proof (`UZUME_HDR_PROOF=1`, `RenderPipeline+HDRProof`); nil otherwise.
+    var hdrProof: HDRProof?
+
     // MARK: - Resize (VQ.0, `RenderPipeline+Resize`)
 
     /// Guards the resize state below (delegate callback and render loop).
@@ -882,6 +894,7 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
     public func draw(in view: MTKView) { // swiftlint:disable:this function_body_length
         // VQ.0: commit a coalesced resize (drain → release → allocate) before taking a frame slot.
         commitPendingResizeIfStable(now: CACurrentMediaTime(), view: view)
+        updateDynamicRange(view: view)   // VQ.2
 
         // Wait for an available frame slot (triple buffering).
         context.inflightSemaphore.wait()
@@ -957,7 +970,9 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         // the swap. The empty command buffer still commits + signals the inflight
         // semaphore below, so triple-buffering never stalls.
         if willRenderActiveFrame {
-            renderFrame(commandBuffer: commandBuffer, view: view, features: &features)
+            if !drawHDRProof(commandBuffer: commandBuffer, view: view) {   // VQ.2 developer proof
+                renderFrame(commandBuffer: commandBuffer, view: view, features: &features)
+            }
             // Session recording hook — after renderFrame so drawable has the final image.
             captureRenderedFrame(from: view, features: features, commandBuffer: commandBuffer)
         }
