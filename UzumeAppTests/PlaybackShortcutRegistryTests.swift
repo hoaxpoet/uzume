@@ -144,7 +144,7 @@ extension PublicBuildShortcutTests {
         #expect(!BuildFlavor.public.exposesUnwiredControls && BuildFlavor.developer.exposesUnwiredControls)
     }
 
-    /// E5 / E14 source shape: tier + quality ceiling, and blocklist + toast toggle, sit behind the flag.
+    /// E5 / E14 source shape: tier + quality ceiling, blocklist + toast toggle, and (VQ.2) HDR sit behind the flag.
     @Test func settings_hideTheUnwiredControls() throws {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -152,10 +152,12 @@ extension PublicBuildShortcutTests {
             .appendingPathComponent("UzumeApp/Views/Settings/VisualsSettingsSection.swift")
         let src = try String(contentsOf: url, encoding: .utf8)
         let gates = src.components(separatedBy: "if BuildFlavor.current.exposesUnwiredControls {")
-        #expect(gates.count == 3, "two gated blocks")
+        #expect(gates.count == 4, "three gated blocks")
         #expect(gates[1].prefix(900).contains("viewModel.deviceTierOverride"))
         #expect(gates[1].prefix(1_800).contains("viewModel.qualityCeiling"))
-        #expect(gates[2].prefix(900).contains("viewModel.excludedPresetCategories"))
-        #expect(gates[2].prefix(1_200).contains("viewModel.showLiveAdaptationToasts"))
+        // VQ.2: the HDR toggle — no shipped scene shows HDR light until VQ.2a.
+        #expect(gates[2].prefix(600).contains("viewModel.hdrOutput"))
+        #expect(gates[3].prefix(900).contains("viewModel.excludedPresetCategories"))
+        #expect(gates[3].prefix(1_200).contains("viewModel.showLiveAdaptationToasts"))
     }
 }

@@ -96,12 +96,13 @@ final class PixelModeMTKView: MTKView {
             MainActor.assumeIsolated { self?.applyPixelMode() }
         }
         // VQ.2: HDR switched on or off in System Settings, a display plugged in or out.
-        center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil,
-                           queue: .main) { [weak self] _ in
+        let screens = NSApplication.didChangeScreenParametersNotification
+        center.addObserver(forName: screens, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.applyDynamicRange() }
         }
         // VQ.2: the window moved to another display.
-        center.addObserver(forName: NSWindow.didChangeScreenNotification, object: nil, queue: .main) { [weak self] note in
+        let moved = NSWindow.didChangeScreenNotification
+        center.addObserver(forName: moved, object: nil, queue: .main) { [weak self] note in
             let movedWindow = ObjectIdentifier(note.object as AnyObject)
             MainActor.assumeIsolated {
                 guard let self, let window = self.window, ObjectIdentifier(window) == movedWindow else { return }
@@ -139,7 +140,8 @@ final class PixelModeMTKView: MTKView {
         let potential = screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1
         let active = HDROutput.isActive(settingOn: hdrSetting, potentialHeadroom: potential)
         let current = screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1
-        let state = "screen=\(screen?.localizedName ?? "none") potential=\(potential) setting=\(hdrSetting) active=\(active)"
+        let name = screen?.localizedName ?? "none"
+        let state = "screen=\(name) potential=\(potential) setting=\(hdrSetting) active=\(active)"
         if state != loggedHDRState {
             loggedHDRState = state
             hdrLogger.info("HDR_STATE \(state, privacy: .public) current=\(current, privacy: .public)")

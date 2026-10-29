@@ -61,8 +61,11 @@ extension RenderPipeline {
     /// The proof, built on first use and its finish rebuilt for the drawable's current format.
     private func hdrProofForCurrentOutput() -> HDRProof? {
         func stage() -> FinishingStage? {
-            try? FinishingStage(device: context.device, library: rendererLibrary, outputFormat: drawableFormat,
-                                spec: FinishSpec(mode: .cinematic, hdr: true), budget: context.renderTargetBudget)
+            try? FinishingStage(device: context.device,
+                                library: rendererLibrary,
+                                outputFormat: drawableFormat,
+                                spec: FinishSpec(mode: .cinematic, hdr: true),
+                                budget: context.renderTargetBudget)
         }
         if let proof = hdrProof {
             if proof.stage.hdrOutput != outputIsEDR, let rebuilt = stage() { proof.stage = rebuilt }

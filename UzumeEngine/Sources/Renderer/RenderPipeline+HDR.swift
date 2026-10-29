@@ -48,7 +48,8 @@ extension RenderPipeline {
         if size.width >= 1, size.height >= 1 {
             commitResize(to: size, view: view)
         }
-        hdrLogger.info("HDR output \(edr ? "on" : "off", privacy: .public): drawable \(String(describing: self.drawableFormat), privacy: .public)")
+        let format = String(describing: drawableFormat)
+        hdrLogger.info("HDR output \(edr ? "on" : "off", privacy: .public): drawable \(format, privacy: .public)")
     }
 
     /// Each frame: the finish's headroom from the display's current headroom (it changes with
@@ -76,8 +77,10 @@ extension RenderPipeline {
         if let tex = edrLegacyOutput, tex.width == drawable.width, tex.height == drawable.height { return tex }
         edrLegacyOutput = nil   // VQ.0: release before allocate
         let descriptor = context.sizeScaledDescriptor(
-            width: drawable.width, height: drawable.height,
-            pixelFormat: FinishSpec.legacyFrameTargetFormat, storage: .private)
+            width: drawable.width,
+            height: drawable.height,
+            pixelFormat: FinishSpec.legacyFrameTargetFormat,
+            storage: .private)
         let label = "HDR legacy output \(drawable.width)×\(drawable.height)"
         edrLegacyOutput = context.renderTargetBudget.makeTexture(owner: "hdr", label: label, descriptor: descriptor)
         return edrLegacyOutput

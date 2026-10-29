@@ -244,7 +244,8 @@ extension FlashAnalyzer {
     /// Per-region R, G, B means of a linear float RGBA frame (VQ.2, the HDR drawable), divided by
     /// `anchor`: 1 measures in SDR-white units; the display's peak measures as WCAG's "relative to
     /// the display's maximum" does on an HDR screen. Values are not clamped.
-    public static func regions(linearRGBA: [Float], width: Int, height: Int, anchor: Double = 1) -> [FlashRegionSample] {
+    public static func regions(linearRGBA: [Float], width: Int, height: Int,
+                               anchor: Double = 1) -> [FlashRegionSample] {
         regionRects.map { rect in
             let x0 = Int(rect.x * Double(width)), x1 = min(width, Int((rect.x + rect.size) * Double(width)))
             let y0 = Int(rect.y * Double(height)), y1 = min(height, Int((rect.y + rect.size) * Double(height)))
