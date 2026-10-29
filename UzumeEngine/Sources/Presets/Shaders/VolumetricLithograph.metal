@@ -868,7 +868,9 @@ void sceneMaterial(float3 p,
                    thread float& roughness,
                    thread float& metallic,
                    thread int& outMatID,
-                   constant LumenPatternState& lumen) {
+                   constant LumenPatternState& lumen,
+                   texture2d<float> presetTexture) {
+    (void)presetTexture;
     // outMatID stays at the caller's default (0 = standard dielectric); VL
     // ships through the existing Cook-Torrance dielectric path.
     (void)outMatID;

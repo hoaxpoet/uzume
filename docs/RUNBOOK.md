@@ -972,6 +972,20 @@ pinned at 4K (`UZUME_PIN_SCENE`, `UZUME_DRAWABLE_OVERRIDE=3840x2160`, `UZUME_REN
 `features.csv`. For a mid-session entry, `UZUME_SCENE_CYCLE_SECONDS=10` (alphabetical: Kagura → Lumen Mosaic). On the
 external SSD, run `motion_gate.sh` on an encoded video, not the PNG folder — it globs macOS `._` files.
 
+## LM.10 Lumen Mosaic glass — renders, parity, cost (D-266)
+
+```bash
+LM_GLASS_OUT="/Volumes/Extreme SSD/uzume_lm_glass/x" swift test --package-path UzumeEngine --filter LumenGlassRenderTests/renderPalettes
+UZUME_PRIVATE_TARGETS=1 LM_GLASS_MODES="/Volumes/Extreme SSD/uzume_lm_glass/modes" swift test -c release --enable-testable-imports --package-path UzumeEngine --filter "LumenGlassRenderTests/renderModes"
+swift test --package-path UzumeEngine --filter LumenGlassBakeTests
+```
+
+4K per palette (Tenebrism / Obsidian / Holi / Autumnal; `LM_GLASS_SEQ=1` adds a frame sequence for `motion_gate.sh` —
+encode it to a video first on the external SSD), the stretch vs native computed vs native baked with GPU ms
+(`[lm-glass-modes]`, quote Release only), and baked-vs-inline parity (`[lm-bake]`). References are local-only:
+`COMPARE_REF_DIR=~/.uzume/lm_refs Scripts/compare_render.sh lumen_mosaic <dir>`. A live run needs an unlocked screen —
+a locked or sleeping display draws nothing (0 frames in the soak report).
+
 ## Recording the quality reel
 
 The quality reel is a 3-minute screen capture of Uzume playing the canonical

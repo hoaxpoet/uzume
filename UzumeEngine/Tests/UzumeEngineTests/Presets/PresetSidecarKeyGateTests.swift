@@ -63,13 +63,6 @@ struct PresetSidecarKeyGateTests {
             path on Lumen Mosaic and Matt saw no clear difference at 1:1 on his 4K monitor (D-265 \
             amendment), so it waits for a consumer whose gain is visible.
             """,
-        "upscale": """
-            VQ.3 (D-265) built MetalFX spatial at every stretch and measured it on test-only proof \
-            scenes; no shipped scene changes in that increment. Scenes without the key take \
-            `UpscaleMode.rosterDefault` (bilinear); consumers adopt it one at a time (VQ.3b, VQ.3s) \
-            after Matt's 4K side-by-side, and `"bilinear"` becomes the per-scene opt-out if the \
-            roster default is ever flipped.
-            """,
         "natural_cycle_seconds": """
             D-246: Arachne was the only adopter and was removed. The key feeds \
             `PresetMaxDuration`, which is generic (V.7.6.2) and still governs how long any \

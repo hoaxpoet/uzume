@@ -14,12 +14,17 @@ import Foundation
 
 // MARK: - UpscaleMode
 
-/// The upscale a scene takes at every stretch (sidecar `upscale`: `"bilinear"` or `"spatial"`).
+/// The upscale a scene takes at every stretch (sidecar `upscale`: `"bilinear"`, `"spatial"` or, ray-march only,
+/// `"native"`).
 public enum UpscaleMode: String, Codable, Sendable {
     /// Today's bilinear stretch.
     case bilinear
     /// MetalFX spatial upscaling, to the output size, before the finish.
     case spatial
+    /// LM.10, ray-march scenes only: march at the drawable's FULL size — no stretch, no tier-1 cap. For a scene
+    /// whose per-pixel cost is small enough to afford it (Lumen Mosaic, its glass baked once). Every other path
+    /// treats it as `bilinear`.
+    case native
 
     /// What a scene without a sidecar `upscale` gets. **The roster switch**: a consumer increment
     /// (VQ.3s) flips it after Matt's review; a scene that must keep the stretch then declares
