@@ -155,8 +155,9 @@ extension PublicBuildShortcutTests {
         #expect(gates.count == 3, "two gated blocks")
         #expect(gates[1].prefix(900).contains("viewModel.deviceTierOverride"))
         #expect(gates[1].prefix(1_800).contains("viewModel.qualityCeiling"))
-        // VQ.2a: the HDR toggle is public — Ferrofluid Ocean shows HDR light.
-        #expect(gates[0].contains("viewModel.hdrOutput"))
+        // VQ.2a: the HDR toggle is public — Ferrofluid Ocean shows HDR light. Its section sits at the same
+        // indent as the gates, not inside one.
+        #expect(src.contains("\n            Section(NSLocalizedString(\"settings.visuals.hdr.title\""))
         #expect(gates[2].prefix(900).contains("viewModel.excludedPresetCategories"))
         #expect(gates[2].prefix(1_200).contains("viewModel.showLiveAdaptationToasts"))
     }
