@@ -68,6 +68,10 @@ static constant int kRegionSamples = 64;
 
 static constant float3 kFinishLuma = float3(0.2126, 0.7152, 0.0722);
 static constant float kMidGrey = 0.18;
+/// HDR highlight ramp (VQ.2a), mirrors `FinishingStage.hdrKneeIn` / `lottesHDRMax`: graded scene
+/// light below the knee shows exactly as on SDR; from it to the curve's max it ramps to the peak.
+static constant float kHDRKneeIn = 1.0;
+static constant float kLottesHDRMax = 8.0;
 
 // MARK: - Helpers
 
@@ -99,13 +103,19 @@ static inline float finish_tpdf(float u) {
 }
 
 /// Grade (scene-referred: exposure, contrast about mid-grey, saturation) then the Lottes display
-/// transform, per channel: linear scene light → linear display light in [0, headroom].
+/// transform, per channel: linear scene light → linear display light in [0, headroom]. On HDR the
+/// SDR curve is kept and only light above the knee gains the extra headroom (VQ.2a: scaling the
+/// whole curve lifted every upper midtone — Ferrofluid's spike sides doubled, not its glints).
 static inline float3 finish_tone(float3 c, constant FinishUniforms& u) {
     c = max(c * u.exposure, 0.0);
     c = kMidGrey * pow(c / kMidGrey, u.contrast);
     c = max(mix(float3(dot(c, kFinishLuma)), c, u.saturation), 0.0);
     float3 z = pow(c, u.lottesA);
-    return u.headroom * z / (pow(z, u.lottesD) * u.lottesB + u.lottesC);
+    float3 y = z / (pow(z, u.lottesD) * u.lottesB + u.lottesC);
+    if (u.headroom > 1.0) {
+        y += (u.headroom - 1.0) * smoothstep(log2(kHDRKneeIn), log2(kLottesHDRMax), log2(max(c, 1e-6)));
+    }
+    return y;
 }
 
 /// The scene plus its bloom, as the composite and the region kernel both read it.

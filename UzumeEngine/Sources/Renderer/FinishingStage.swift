@@ -66,6 +66,10 @@ public final class FinishingStage: @unchecked Sendable {
     public static let lottesHDRMax: Float = 8.0
     public static let lottesMidIn: Float = 0.18
     public static let lottesMidOut: Float = 0.267
+    /// VQ.2a: graded scene light below this shows exactly as on SDR on an HDR display; above it the
+    /// light ramps (smoothly, in stops) to the display's peak at `lottesHDRMax`. Mirrors
+    /// `kHDRKneeIn` in FinishingStage.metal. SDR shows it at ~0.8 of white.
+    public static let hdrKneeIn: Float = 1.0
 
     // MARK: State
 
@@ -291,7 +295,7 @@ public final class FinishingStage: @unchecked Sendable {
     }
 
     func makeUniforms() -> FinishUniforms {
-        let curve = Self.lottesCoefficients(headroom: headroom)
+        let curve = Self.lottesCoefficients()
         return FinishUniforms(
             bloomStrength: spec.bloom.strength,
             bloomThreshold: spec.bloom.threshold,
@@ -316,12 +320,11 @@ public final class FinishingStage: @unchecked Sendable {
     // swiftlint:disable identifier_name
     // a, b, c, d are the paper's names for the curve's coefficients.
 
-    /// Lottes 2016 `b`, `c` for `y = xᵃ / (xᵃᵈ·b + c)`, solved so `y(midIn) = midOut / headroom`
-    /// and `y(hdrMax) = 1`; the shader scales by `headroom`, so mid-grey holds still while the
-    /// peak follows the display.
-    public static func lottesCoefficients(headroom: Float) -> (b: Float, c: Float) {
+    /// Lottes 2016 `b`, `c` for `y = xᵃ / (xᵃᵈ·b + c)`, solved so `y(midIn) = midOut` and
+    /// `y(hdrMax) = 1` — the SDR curve, which HDR keeps below `hdrKneeIn` (VQ.2a).
+    public static func lottesCoefficients() -> (b: Float, c: Float) {
         let a = lottesContrast, d = lottesShoulder, hdrMax = lottesHDRMax, midIn = lottesMidIn
-        let midOut = lottesMidOut / max(headroom, 1)
+        let midOut = lottesMidOut
         let ad = a * d
         let denom = (pow(hdrMax, ad) - pow(midIn, ad)) * midOut
         let b = (-pow(midIn, a) + pow(hdrMax, a) * midOut) / denom
@@ -332,8 +335,11 @@ public final class FinishingStage: @unchecked Sendable {
 
     /// The display transform on the CPU, for tests: scene value → display value.
     public static func displayTransform(_ x: Float, headroom: Float = 1) -> Float {
-        let curve = lottesCoefficients(headroom: headroom)
+        let curve = lottesCoefficients()
         let z = pow(max(x, 0), lottesContrast)
-        return headroom * z / (pow(z, lottesShoulder) * curve.b + curve.c)
+        let sdr = z / (pow(z, lottesShoulder) * curve.b + curve.c)
+        guard headroom > 1 else { return sdr }
+        let ramp = min(max((log2(max(x, 1e-6)) - log2(hdrKneeIn)) / (log2(lottesHDRMax) - log2(hdrKneeIn)), 0), 1)
+        return sdr + (headroom - 1) * ramp * ramp * (3 - 2 * ramp)
     }
 }
