@@ -998,8 +998,8 @@ and `maximumExtendedDynamicRangeColorComponentValue` (headroom now). The app log
 ```
 
 `HDR_STATE screen=<name> potential=<x> setting=<on/off> active=<true/false> current=<y>`; the engine logs
-`HDR output on/off` (`io.uzume.renderer`, category `HDR`). The setting is Settings › Visuals › Display (developer
-build only until a scene opts in; key `uzume.settings.visuals.hdrOutput`).
+`HDR output on/off` (`io.uzume.renderer`, category `HDR`). The setting is Settings › Visuals › Display (public since
+VQ.2a; key `uzume.settings.visuals.hdrOutput`).
 
 **The proof.** Launch the Release app's binary with `UZUME_HDR_PROOF=1` (an env var: `open` does not pass it):
 every frame shows the HDR test pattern instead of the scene — five glints (scene 1 → 64), a glowing core, a slowly
@@ -1013,6 +1013,19 @@ HDR_TIMING=1 UZUME_PRIVATE_TARGETS=1 swift test -c release --enable-testable-imp
 
 Lines: `[vq2-identity]`, `[vq2-headroom]`, `[vq2-banding]`, `[vq2-flash]` (capped and uncapped arms, flashes/s
 whole/regional/red, SDR-anchored and peak-anchored), `[vq2-memory]`, `[vq2-timing]` (Release only).
+
+**A scene on HDR, offline (VQ.2a).** The real-audio replay renders a cinematic scene through the finish twice — SDR
+and HDR at the given headroom — and reports what HDR adds; per sampled frame it writes a 10-bit PQ side-by-side
+(`sbs_NNNN.heic`, SDR left, HDR right; open in Preview on an HDR display at 1:1) and a mask (`sbs_NNNN.mask.png`,
+magenta where HDR > SDR white):
+
+```bash
+REPLAY_SESSION=UzumeEngine/Tests/UzumeEngineTests/Fixtures/route_coverage/so_what REPLAY_PRESET="Ferrofluid Ocean" REPLAY_MULTIPASS=1 REPLAY_FINISH=cinematic REPLAY_HDR=4 REPLAY_OUT=/tmp/vq2a swift test --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
+```
+
+(the other variables — frame range, size, `REPLAY_EVERY` — are in the replay's header). Read: share of
+pixels above SDR white, p99.9 brightest channel, largest ninth (≤ 1), dark troughs SDR vs HDR (must match), mean
+luma, and flash against both anchors.
 
 ## Recording the quality reel
 

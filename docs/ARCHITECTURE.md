@@ -1414,6 +1414,10 @@ change, logging `HDR_STATE`). On HDR:
 - **Cinematic scenes** opt in with `finish.hdr`; the pipeline sets the finish's `headroom` each frame to
   `HDROutput.headroom(current:)` (the display's current headroom, capped at 4×, 1 under Reduce Motion). Without
   `finish.hdr` the headroom stays 1 and the scene shows the same codes as on SDR.
+- **Display curve on HDR (VQ.2a, D-268):** the SDR Lottes curve exactly, plus `(headroom − 1) · smoothstep` in
+  log2 from graded scene 1.0 (`FinishingStage.hdrKneeIn`) to 8 (`lottesHDRMax`), per channel. Below 1.0, HDR ==
+  SDR; only highlights brighten. (Scaling the whole curve, as VQ.2 first did, lifted upper midtones ~1.5×.)
+  Adopters: Ferrofluid Ocean (razor glints).
 - **Flash cap:** light above SDR white is added after the SDR part (graded, LUT-mapped, dithered as before) and
   scaled so no ninth of the screen (any 2×2 block of a 6×6 cell grid — FlashAnalyzer v2's regions) averages above
   SDR white in its brightest channel (`finish_region_kernel`). A full-screen flash is never brighter than on SDR.
