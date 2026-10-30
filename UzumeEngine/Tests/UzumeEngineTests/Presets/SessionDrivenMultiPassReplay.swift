@@ -19,6 +19,8 @@
 //   REPLAY_PRESET="Dragon Bloom" \
 //   REPLAY_MULTIPASS=1 \
 //   [REPLAY_FROM=0 REPLAY_COUNT=90 REPLAY_OUT=/tmp/replay REPLAY_FINISH=cinematic] \
+//   [REPLAY_HDR=4  — VQ.2a: also finish every frame for an HDR display at this headroom; prints
+//    SDR-vs-HDR light and the flash reports, and REPLAY_OUT gets SDR|HDR side-by-side .heic] \
 //   swift test --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
 import Testing
 import Foundation
@@ -26,6 +28,7 @@ import Metal
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
+import CoreImage
 @testable import Renderer
 @testable import Presets
 @testable import Shared
@@ -115,7 +118,9 @@ struct SessionDrivenMultiPassReplay {
         let height = Int(env["REPLAY_H"] ?? "") ?? 180
         // VQ.1c: REPLAY_FINISH=legacy|cinematic forces the finish (default legacy).
         let finish = env["REPLAY_FINISH"].flatMap(FinishSpec.Mode.init(rawValue:)) ?? .legacy
-        let harness = try MultiPassRenderHarness(width: width, height: height, finishMode: finish)
+        var harness = try MultiPassRenderHarness(width: width, height: height, finishMode: finish)
+        let hdr = env["REPLAY_HDR"].flatMap(Float.init).map { HDRReplay(headroom: $0) }
+        if let hdr { harness.hdrFrames = HDRFrameLog(headroom: hdr.headroom) { hdr.receive($0, width, height) } }
         // REPLAY_OUT was documented in this file's usage block from PR.10 and never
         // implemented. Writing every Nth frame is what makes the replay a perception
         // check (D-181) instead of a metric-only run.
@@ -130,7 +135,12 @@ struct SessionDrivenMultiPassReplay {
             if let outDir, frameIndex % every == 0 {
                 let url = outDir.appendingPathComponent(String(format: "f_%04d.png", frameIndex))
                 try? Self.writePNG(bgra: bgra, width: width, height: height, to: url)
+                if let hdr {
+                    let url = outDir.appendingPathComponent(String(format: "sbs_%04d.heic", frameIndex))
+                    try? hdr.writeSideBySide(sdr: bgra, width: width, height: height, to: url)
+                }
             }
+            hdr?.receiveSDR(bgra)
             return Self.stats(bgra)
         }
         if let outDir { print("[multipass-replay] frames → \(outDir.path)") }
@@ -147,6 +157,7 @@ struct SessionDrivenMultiPassReplay {
           meanLuma   mean \(String(format: "%.3f", mean(lum)))  max \(String(format: "%.3f", lum.max() ?? 0))
           nearWhite  mean \(String(format: "%.3f", mean(measured.map(\.nearWhite))))  (= EMPTY accumulator; oracle holds 0.000)
         """)
+        hdr?.report()
         // PR.5: the TRAJECTORY, not just the mean. Dragon Bloom's fill is documented as a
         // feedback attractor that develops over ~20 s (DRAGON_BLOOM_PLAN.md L4 item 3), so
         // a single mean cannot tell "converged and wrong" apart from "still filling".
@@ -171,7 +182,7 @@ struct SessionDrivenMultiPassReplay {
     }
 
     /// BGRA8 bytes → an sRGB PNG. Same recipe as the sketch render tests.
-    static func writePNG(bgra: [UInt8], width: Int, height: Int, to url: URL) throws {
+    nonisolated static func writePNG(bgra: [UInt8], width: Int, height: Int, to url: URL) throws {
         struct PNGError: Error {}
         guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { throw PNGError() }
         let info = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue
@@ -191,5 +202,119 @@ struct SessionDrivenMultiPassReplay {
         else { throw PNGError() }
         CGImageDestinationAddImage(dest, image, nil)
         guard CGImageDestinationFinalize(dest) else { throw PNGError() }
+    }
+}
+
+// MARK: - HDRReplay
+
+/// VQ.2a — the HDR half of a replay: per-frame light above SDR white and dark troughs for SDR and
+/// HDR, the largest ninth-of-the-screen mean (the regional cap holds it ≤ 1), and the photosensitive
+/// flash reports anchored at SDR white and at the display's peak (VQ.2's two anchors).
+final class HDRReplay {
+    let headroom: Float
+    private var latest: [Float] = []
+    private var sdrWhole: [Double] = [], peakWhole: [Double] = []
+    private var sdrRegions: [[FlashRegionSample]] = [], peakRegions: [[FlashRegionSample]] = []
+    private var maxRegionMean = 0.0
+    private var hdrAbove: [Double] = [], hdrP999: [Double] = [], hdrDark: [Double] = [], hdrLuma: [Double] = []
+    private var sdrDark: [Double] = [], sdrLuma: [Double] = []
+
+    init(headroom: Float) { self.headroom = headroom }
+
+    func receive(_ px: [Float], _ width: Int, _ height: Int) {
+        latest = px
+        let sdr = FlashAnalyzer.regions(linearRGBA: px, width: width, height: height)
+        let peak = FlashAnalyzer.regions(linearRGBA: px, width: width, height: height, anchor: Double(headroom))
+        sdrRegions.append(sdr)
+        peakRegions.append(peak)
+        maxRegionMean = max(maxRegionMean, sdr.map { Double(max($0.red, $0.green, $0.blue)) }.max() ?? 0)
+        let whole = sdr.prefix(9).map(\.luminance).reduce(0, +) / 9
+        sdrWhole.append(whole)
+        peakWhole.append(whole / Double(headroom))
+        var maxes = [Float](), dark = 0, luma = 0.0
+        maxes.reserveCapacity(px.count / 4)
+        for i in stride(from: 0, to: px.count, by: 4) {
+            maxes.append(max(px[i], px[i + 1], px[i + 2]))
+            let y = 0.2126 * Double(px[i]) + 0.7152 * Double(px[i + 1]) + 0.0722 * Double(px[i + 2])
+            luma += y
+            if y < 0.01 { dark += 1 }
+        }
+        let n = Double(maxes.count)
+        hdrAbove.append(Double(maxes.filter { $0 > 1 }.count) / n)
+        hdrP999.append(Double(maxes.sorted()[Int(n * 0.999)]))
+        hdrDark.append(Double(dark) / n)
+        hdrLuma.append(luma / n)
+    }
+
+    func receiveSDR(_ bgra: [UInt8]) {
+        var dark = 0, luma = 0.0
+        for i in stride(from: 0, to: bgra.count, by: 4) {
+            let y = 0.2126 * Self.decode(bgra[i + 2]) + 0.7152 * Self.decode(bgra[i + 1])
+                + 0.0722 * Self.decode(bgra[i])
+            luma += y
+            if y < 0.01 { dark += 1 }
+        }
+        let n = Double(bgra.count / 4)
+        sdrDark.append(Double(dark) / n)
+        sdrLuma.append(luma / n)
+    }
+
+    func report() {
+        func mean(_ a: [Double]) -> Double { a.isEmpty ? 0 : a.reduce(0, +) / Double(a.count) }
+        func f(_ v: Double) -> String { String(format: "%.4f", v) }
+        func flashes(_ whole: [Double], _ regions: [[FlashRegionSample]]) -> String {
+            let r = [FlashAnalyzer.analyze(relativeLuminance: whole, fps: 60),
+                     FlashAnalyzer.analyzeRegional(regions, fps: 60),
+                     FlashAnalyzer.analyzeRed(regions, fps: 60)]
+            return zip(["whole", "regional", "red"], r).map { "\($0) \($1.isSafe ? "safe" : "FLASH")" }
+                .joined(separator: ", ")
+        }
+        print("""
+        [multipass-replay] HDR at headroom \(headroom) over \(hdrAbove.count) frames:
+          share of pixels above SDR white  mean \(f(mean(hdrAbove)))  max \(f(hdrAbove.max() ?? 0))
+          p99.9 brightest channel          mean \(f(mean(hdrP999)))  max \(f(hdrP999.max() ?? 0))  (× SDR white)
+          largest ninth-of-screen mean      \(f(maxRegionMean))  (cap holds ≤ 1)
+          dark troughs (luma < 0.01)        SDR \(f(mean(sdrDark)))  HDR \(f(mean(hdrDark)))
+          mean luma (linear)                SDR \(f(mean(sdrLuma)))  HDR \(f(mean(hdrLuma)))
+          flash, SDR-white anchor:  \(flashes(sdrWhole, sdrRegions))
+          flash, peak anchor:       \(flashes(peakWhole, peakRegions))
+        """)
+    }
+
+    /// SDR (left) | HDR (right) as a 10-bit PQ HEIC: an HDR display shows the right half's light above
+    /// SDR white; the left is today's picture. Both halves linear in sRGB primaries (the LG's own).
+    func writeSideBySide(sdr bgra: [UInt8], width: Int, height: Int, to url: URL) throws {
+        struct SBSError: Error {}
+        var px = [Float](repeating: 1, count: width * 2 * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let s = (y * width + x) * 4
+                let l = (y * width * 2 + x) * 4
+                let r = l + width * 4
+                px[l] = Float(Self.decode(bgra[s + 2]))
+                px[l + 1] = Float(Self.decode(bgra[s + 1]))
+                px[l + 2] = Float(Self.decode(bgra[s]))
+                px[r] = latest[s]; px[r + 1] = latest[s + 1]; px[r + 2] = latest[s + 2]
+            }
+        }
+        guard let linear = CGColorSpace(name: CGColorSpace.extendedLinearSRGB),
+              let pq = CGColorSpace(name: CGColorSpace.itur_2100_PQ) else { throw SBSError() }
+        let data = px.withUnsafeBufferPointer { Data(buffer: $0) }
+        let image = CIImage(bitmapData: data, bytesPerRow: width * 2 * 16,
+                            size: CGSize(width: width * 2, height: height), format: .RGBAf, colorSpace: linear)
+            .transformed(by: CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -CGFloat(height)))
+        try CIContext().writeHEIF10Representation(of: image, to: url, colorSpace: pq)
+        // Where the HDR frame goes above SDR white, marked magenta on today's picture (for reading).
+        var mask = bgra
+        for i in stride(from: 0, to: mask.count, by: 4) where max(latest[i], latest[i + 1], latest[i + 2]) > 1 {
+            mask[i] = 255; mask[i + 1] = 0; mask[i + 2] = 255
+        }
+        try SessionDrivenMultiPassReplay.writePNG(bgra: mask, width: width, height: height,
+                                                  to: url.deletingPathExtension().appendingPathExtension("mask.png"))
+    }
+
+    private static func decode(_ code: UInt8) -> Double {
+        let e = Double(code) / 255
+        return e <= 0.04045 ? e / 12.92 : pow((e + 0.055) / 1.055, 2.4)
     }
 }
