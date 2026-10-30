@@ -83,7 +83,7 @@ struct HDROutputRuleTests {
         #expect(HDROutput.peakCap == 4, "Matt 2026-10-29: highlights up to 4× SDR white")
     }
 
-    @Test("Sidecar `finish.hdr`: absent = off; no shipped scene opts in yet")
+    @Test("Sidecar `finish.hdr`: absent = off; only scenes whose look Matt approved opt in")
     func sidecarOptIn() throws {
         let decoded = try JSONDecoder().decode(FinishSpec.self, from: Data(#"{"mode":"cinematic","hdr":true}"#.utf8))
         #expect(decoded.hdr)
@@ -91,7 +91,8 @@ struct HDROutputRuleTests {
         let loader = PresetLoader(device: try #require(MTLCreateSystemDefaultDevice()), pixelFormat: .bgra8Unorm_srgb,
                                   loadBuiltIn: true)
         let adopters = loader.presets.filter { $0.descriptor.finish.hdr }.map(\.descriptor.name)
-        #expect(adopters.isEmpty, "a scene opts into HDR in its own consumer increment, with Matt's look: \(adopters)")
+        // VQ.2a: Ferrofluid Ocean (razor glints). A new adopter lands in its own consumer increment, with Matt's look.
+        #expect(adopters.sorted() == ["Ferrofluid Ocean"], "HDR adopters: \(adopters)")
     }
 }
 
@@ -170,7 +171,7 @@ struct HDRLegacyIdentityTests {
 @Suite("HDR cinematic identity (VQ.2)")
 struct HDRCinematicIdentityTests {
 
-    @Test("A cinematic scene without `finish.hdr` (Ferrofluid Ocean's case) shows the same codes on the HDR drawable")
+    @Test("A cinematic scene without `finish.hdr` shows the same codes on the HDR drawable")
     func cinematicWithoutOptIn() throws {
         let rig = try FinishProofRig(width: 1920, height: 1080)
         let params = rig.params()
