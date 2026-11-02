@@ -294,10 +294,13 @@ struct FinishingStageTests {
 
     // MARK: Display transform
 
-    @Test("Lottes display transform: mid-grey anchored, peak = headroom, monotonic")
+    @Test("Lottes display transform: mid-grey anchored, SDR below the HDR knee, peak = headroom, monotonic")
     func displayTransform() {
         for headroom: Float in [1, 2, 4] {
             #expect(abs(FinishingStage.displayTransform(0.18, headroom: headroom) - 0.267) < 1e-3)
+            for x: Float in [0.05, 0.3, 0.6, FinishingStage.hdrKneeIn] {   // VQ.2a: the picture stays
+                #expect(FinishingStage.displayTransform(x, headroom: headroom) == FinishingStage.displayTransform(x))
+            }
             #expect(abs(FinishingStage.displayTransform(8, headroom: headroom) - headroom) < 1e-3 * headroom)
             var previous: Float = -1
             for step in 0...200 {

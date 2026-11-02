@@ -501,6 +501,15 @@ static float3 rm_ferrofluidSky(float3 R,
     constexpr float kCurtainStripeThickness = 0.70;
     constexpr float kCurtainAzimuthFloor    = -0.70;
     constexpr float kCurtainAzimuthPeak     = 0.80;
+    // VQ.2a (2026-10-29, Matt: "razor glints"): the curtain's hot core — a thin, very bright line at
+    // its centre, added on top of the wide round-51 curtain (which stays as it was). A near-mirror
+    // spike side reflecting it shows a crisp line along the ridge (04_specular_razor_highlights);
+    // round 37 got that line by thinning the WHOLE curtain and lost round 51's per-spike contrast.
+    // The flat substrate reflects R.y ≈ 0.3–0.9 and never sees it. Its light lands above the
+    // finish's HDR knee, so an HDR display shows the core up to its peak; SDR, a near-white line.
+    constexpr float kCurtainCoreThickness   = 0.04;
+    constexpr float kCurtainCoreAzimuth     = 0.75;
+    constexpr float kCurtainCoreGain        = 4.0;
     float vertFalloff = smoothstep(kCurtainStripeThickness, 0.0,
                                    abs(R.y - kCurtainElevation));
 
@@ -508,6 +517,7 @@ static float3 rm_ferrofluidSky(float3 R,
     float  R_az_len   = length(R_az);
     bool   R_at_pole  = R_az_len < 1e-4;
     float  azimuthAlign;
+    float  coreAlign = 0.0;   // VQ.2a hot core, below
     if (R_at_pole) {
         // Near-zenith degeneracy: azimuth undefined. The pole reads as
         // "fully aligned" with every direction; the vertical-stripe falloff
@@ -520,6 +530,7 @@ static float3 rm_ferrofluidSky(float3 R,
         float  dotAz      = dot(R_az_norm, curtainDir);
         azimuthAlign = smoothstep(kCurtainAzimuthFloor,
                                   kCurtainAzimuthPeak, dotAz);
+        coreAlign = smoothstep(kCurtainCoreAzimuth, 1.0, dotAz);
     }
 
     // ── Curtain intensity: baseline-while-music-plays + drums modulation ─
@@ -600,8 +611,9 @@ static float3 rm_ferrofluidSky(float3 R,
             + 0.35 * sin(curtainAzimuth * 0.5);
     float3 curtainHue = rm_palette(t);
 
-    float3 aurora = curtainHue * curtainIntensity
-                  * vertFalloff * azimuthAlign * liveGate;
+    float coreFalloff = smoothstep(kCurtainCoreThickness, 0.0, abs(R.y - kCurtainElevation));
+    float3 aurora = curtainHue * curtainIntensity * liveGate
+                  * (vertFalloff * azimuthAlign + kCurtainCoreGain * coreFalloff * coreAlign);
     return baseSky + aurora;
 }
 

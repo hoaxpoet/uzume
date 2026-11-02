@@ -100,22 +100,18 @@ struct VisualsSettingsSection: View {
                     .foregroundColor(.secondary)
             }
 
-            // VQ.2: HDR output, on by default. No shipped scene shows HDR light until its own consumer
-            // increment (VQ.2a), so until then the toggle changes nothing a user sees — developer
-            // build only (UX_SPEC: hide unwired controls).
-            if BuildFlavor.current.exposesUnwiredControls {
-                Section(NSLocalizedString("settings.visuals.hdr.title", comment: "")) {
-                    Toggle(
-                        NSLocalizedString("settings.visuals.hdr.label", comment: ""),
-                        isOn: Binding(
-                            get: { viewModel.hdrOutput },
-                            set: { viewModel.hdrOutput = $0 }
-                        )
+            // VQ.2: HDR output, on by default. Public since VQ.2a — Ferrofluid Ocean's glints shine above white.
+            Section(NSLocalizedString("settings.visuals.hdr.title", comment: "")) {
+                Toggle(
+                    NSLocalizedString("settings.visuals.hdr.label", comment: ""),
+                    isOn: Binding(
+                        get: { viewModel.hdrOutput },
+                        set: { viewModel.hdrOutput = $0 }
                     )
-                    Text(NSLocalizedString("settings.visuals.hdr.hint", comment: ""))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                )
+                Text(NSLocalizedString("settings.visuals.hdr.hint", comment: ""))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             // BR.15 (E5, E14): the family blocklist has no consumer, and the adaptation toasts belong

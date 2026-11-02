@@ -652,6 +652,11 @@ struct MultiPassRenderHarness {
     /// excluded). Timing probes only. A reference, so the caller reads what `render` appended.
     var gpuTimes: GPUTimeLog?
 
+    /// VQ.2a — when non-nil, every committed cinematic frame is ALSO finished for an HDR display
+    /// (`.rgba16Float`, the scene's spec with `hdr` on, the log's headroom) and its linear pixels
+    /// handed to the log. Measurement only; the 8-bit readback is unchanged.
+    var hdrFrames: HDRFrameLog?
+
     /// Fireflies (FF.1). Mirrors `RenderPipeline.encodePresetVisualization` on the direct path:
     /// the world fragment through the preset's own compiled pipeline, then the swarm sprites
     /// into the same encoder. `settle` frames advance the swarm without capture.
@@ -1516,12 +1521,25 @@ struct MultiPassRenderHarness {
                         spec: FinishSpec = FinishSpec(mode: .cinematic), into pixels: inout [UInt8]) throws {
         // VQ.1: a cinematic frame target is finished into the 8-bit image production presents.
         var readTex = outTex
+        var hdrTex: MTLTexture?
         if outTex.pixelFormat == FinishSpec.cinematicFrameTargetFormat {
             readTex = try HarnessFinish.shared.finish(outTex, spec: spec, commandBuffer: cmd)
+            if let hdrFrames {
+                var hdrSpec = spec
+                hdrSpec.hdr = true
+                hdrTex = try HarnessFinish.shared.finish(outTex, spec: hdrSpec, commandBuffer: cmd,
+                                                         headroom: hdrFrames.headroom)
+            }
         }
         cmd.commit()
         cmd.waitUntilCompleted()
         guard cmd.status == .completed else { throw HarnessError.renderFailed }
+        if let hdrTex, let hdrFrames {
+            var half = [Float16](repeating: 0, count: width * height * 4)
+            hdrTex.getBytes(&half, bytesPerRow: width * 8, from: MTLRegionMake2D(0, 0, width, height),
+                            mipmapLevel: 0)
+            hdrFrames.receive(half.map(Float.init))
+        }
         gpuTimes?.append((cmd.gpuEndTime - cmd.gpuStartTime) * 1000)
         guard readback else { return }   // see `readback` — timing runs skip this
         readTex.getBytes(&pixels, bytesPerRow: width * 4,
@@ -1560,17 +1578,21 @@ final class HarnessFinish: @unchecked Sendable {
     private let lock = NSLock()
     private var stages: [String: (FinishingStage, MTLTexture)] = [:]
 
-    func finish(_ source: MTLTexture, spec: FinishSpec, commandBuffer: MTLCommandBuffer) throws -> MTLTexture {
-        let key = "\(source.width)x\(source.height) \(spec)"
+    /// `headroom` > 1: finish for an HDR display into a linear `.rgba16Float` output (VQ.2a).
+    func finish(_ source: MTLTexture, spec: FinishSpec, commandBuffer: MTLCommandBuffer,
+                headroom: Float = 1) throws -> MTLTexture {
+        let format: MTLPixelFormat = headroom > 1 ? HDROutput.drawableFormat : .bgra8Unorm_srgb
+        let key = "\(source.width)x\(source.height) \(spec) \(headroom)"
         let (stage, out) = try lock.withLock { () throws -> (FinishingStage, MTLTexture) in
             if let made = stages[key] { return made }
             let device = commandBuffer.device
             let ctx = try MetalContext()
             let stage = try FinishingStage(device: device, library: try ShaderLibrary(context: ctx).library,
-                                           outputFormat: .bgra8Unorm_srgb, spec: spec,
+                                           outputFormat: format, spec: spec,
                                            budget: nil)
+            stage.headroom = headroom
             let desc = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .bgra8Unorm_srgb, width: source.width, height: source.height, mipmapped: false)
+                pixelFormat: format, width: source.width, height: source.height, mipmapped: false)
             desc.usage = [.renderTarget, .shaderRead]
             desc.storageMode = .shared
             guard let out = device.makeTexture(descriptor: desc) else {
@@ -1615,6 +1637,20 @@ final class EnergeticFlybyTraceLog: @unchecked Sendable {
     var states: [EnergeticFlybyStateGPU] { lock.withLock { values } }
 
     func append(_ value: EnergeticFlybyStateGPU) { lock.withLock { values.append(value) } }
+}
+
+// MARK: - HDRFrameLog
+
+/// VQ.2a — the HDR-finished frames of a harness render, handed one at a time to `receive` (linear
+/// RGBA, SDR white = 1) so a long replay never holds them all.
+final class HDRFrameLog: @unchecked Sendable {
+    let headroom: Float
+    let receive: ([Float]) -> Void
+
+    init(headroom: Float, receive: @escaping ([Float]) -> Void) {
+        self.headroom = headroom
+        self.receive = receive
+    }
 }
 
 // MARK: - GPUTimeLog
