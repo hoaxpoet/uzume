@@ -22,7 +22,7 @@ private let logger = Logger(subsystem: "io.uzume.renderer", category: "Finishing
 
 // MARK: - FinishUniforms
 
-/// Mirrors `FinishUniforms` in FinishingStage.metal (64 bytes). Keep the two in step.
+/// Mirrors `FinishUniforms` in FinishingStage.metal (68 bytes). Keep the two in step.
 struct FinishUniforms {
     var bloomStrength: Float
     var bloomThreshold: Float
@@ -40,6 +40,7 @@ struct FinishUniforms {
     var frame: UInt32
     var useLUT: UInt32
     var hdrOutput: UInt32
+    var displayReferred: UInt32
 }
 
 // MARK: - FinishingStage
@@ -90,6 +91,9 @@ public final class FinishingStage: @unchecked Sendable {
     public private(set) var frameTarget: MTLTexture?
     /// The bloom chain, base first. Allocated on first use; follows the frame's aspect.
     public private(set) var bloomChain: [MTLTexture] = []
+    /// A display-referred scene's SDR part (VQ.2b): the frame target clamped to SDR white at the legacy
+    /// frame target's own 8-bit codes, render size. Nil for every other scene.
+    public private(set) var sdrTarget: MTLTexture?
 
     private let device: MTLDevice
     private let budget: RenderTargetBudget?
@@ -98,6 +102,7 @@ public final class FinishingStage: @unchecked Sendable {
     private let upsamplePipeline: MTLComputePipelineState
     private let compositePipeline: MTLRenderPipelineState
     private let regionPipeline: MTLComputePipelineState
+    private let clampPipeline: MTLRenderPipelineState?
     /// 6×6 region cells (FinishingStage.metal `kRegionCells`), written by the region kernel.
     private let regionCells: MTLBuffer
     private let sampler: MTLSamplerState
@@ -140,6 +145,14 @@ public final class FinishingStage: @unchecked Sendable {
         desc.fragmentFunction = library.makeFunction(name: "finish_composite_fragment")
         desc.colorAttachments[0].pixelFormat = outputFormat
         compositePipeline = try device.makeRenderPipelineState(descriptor: desc)
+        if spec.displayReferred {
+            desc.label = "finish_clamp"
+            desc.fragmentFunction = library.makeFunction(name: "finish_clamp_fragment")
+            desc.colorAttachments[0].pixelFormat = FinishSpec.legacyFrameTargetFormat
+            clampPipeline = try device.makeRenderPipelineState(descriptor: desc)
+        } else {
+            clampPipeline = nil
+        }
 
         let samplerDesc = MTLSamplerDescriptor()
         samplerDesc.minFilter = .linear
@@ -176,6 +189,7 @@ public final class FinishingStage: @unchecked Sendable {
         if let target = frameTarget, target.width == width, target.height == height { return target }
         frameTarget = nil   // VQ.0: release before allocate
         let desc = Self.descriptor(width: width, height: height)
+        desc.pixelFormat = spec.frameTargetFormat   // VQ.2b: 32-bit for a display-referred scene
         frameTarget = allocate(desc, label: "finish frame target \(width)×\(height)")
         return frameTarget
     }
@@ -199,6 +213,18 @@ public final class FinishingStage: @unchecked Sendable {
             levelH = max((levelH + 1) / 2, 1)
         }
         return true
+    }
+
+    /// The display-referred SDR part at the source's size (VQ.2b), allocated through the budget on first
+    /// use, like the bloom chain. Nil when refused: the composite then reads the source (still clamped at
+    /// white, without the legacy codes).
+    private func ensureSDRTarget(width: Int, height: Int) -> MTLTexture? {
+        if let target = sdrTarget, target.width == width, target.height == height { return target }
+        sdrTarget = nil   // VQ.0: release before allocate
+        let desc = Self.descriptor(width: width, height: height)
+        desc.pixelFormat = FinishSpec.legacyFrameTargetFormat
+        sdrTarget = allocate(desc, label: "finish SDR part \(width)×\(height)")
+        return sdrTarget
     }
 
     private static func descriptor(width: Int, height: Int) -> MTLTextureDescriptor {
@@ -226,7 +252,9 @@ public final class FinishingStage: @unchecked Sendable {
     /// cannot be allocated.
     public func encode(source: MTLTexture, output: MTLTexture, commandBuffer: MTLCommandBuffer) {
         var uniforms = makeUniforms()
-        let bloomOn = spec.bloom.strength > 0 && ensureBloomChain(width: source.width, height: source.height)
+        // VQ.2b: a display-referred scene takes no bloom (its SDR picture is the legacy one).
+        let bloomOn = spec.bloom.strength > 0 && !spec.displayReferred
+            && ensureBloomChain(width: source.width, height: source.height)
         if bloomOn, let encoder = commandBuffer.makeComputeCommandEncoder() {
             // One serial encoder: each dispatch sees the previous one's writes.
             encoder.label = "finish bloom"
@@ -246,6 +274,12 @@ public final class FinishingStage: @unchecked Sendable {
             uniforms.bloomStrength = 0
         }
         let bloom = bloomOn ? bloomChain[0] : source
+        // VQ.2b: the SDR part at the legacy codes. Other scenes bind the source in its slot (never read).
+        var sdr = source
+        if let clampPipeline, let target = ensureSDRTarget(width: source.width, height: source.height) {
+            run(commandBuffer, into: target, clampPipeline, [source], &uniforms)
+            sdr = target
+        }
         if uniforms.hdrOutput == 1, let encoder = commandBuffer.makeComputeCommandEncoder() {
             // VQ.2: the region cells the composite caps against, after the bloom it includes.
             encoder.label = "finish region cap"
@@ -254,13 +288,14 @@ public final class FinishingStage: @unchecked Sendable {
             encoder.setBuffer(regionCells, offset: 0, index: 1)
             encoder.setTexture(source, index: 0)
             encoder.setTexture(bloom, index: 1)
+            encoder.setTexture(sdr, index: 3)
             encoder.setSamplerState(sampler, index: 0)
             let side = Self.regionCellsPerSide
             encoder.dispatchThreadgroups(MTLSize(width: side, height: side, depth: 1),
                                          threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
             encoder.endEncoding()
         }
-        run(commandBuffer, into: output, compositePipeline, [source, bloom, lut], &uniforms)
+        run(commandBuffer, into: output, compositePipeline, [source, bloom, lut, sdr], &uniforms)
         frameIndex &+= 1
     }
 
@@ -308,11 +343,12 @@ public final class FinishingStage: @unchecked Sendable {
             lottesD: Self.lottesShoulder,
             lottesB: curve.b,
             lottesC: curve.c,
-            ditherLSB: ditherLSB,
+            ditherLSB: spec.displayReferred ? 0 : ditherLSB,   // VQ.2b: the legacy pixels had none
             bloomLevels: Float(Self.bloomLevelCount),
             frame: frameIndex,
             useLUT: hasLUT ? 1 : 0,
-            hdrOutput: hdrOutput && headroom > 1 ? (regionCapEnabled ? 1 : 2) : 0)
+            hdrOutput: hdrOutput && headroom > 1 ? (regionCapEnabled ? 1 : 2) : 0,
+            displayReferred: spec.displayReferred ? 1 : 0)
     }
 
     // MARK: Display transform
@@ -333,11 +369,12 @@ public final class FinishingStage: @unchecked Sendable {
     }
     // swiftlint:enable identifier_name
 
-    /// The display transform on the CPU, for tests: scene value → display value.
-    public static func displayTransform(_ x: Float, headroom: Float = 1) -> Float {
+    /// The display transform on the CPU, for tests: scene value → display value. `displayReferred`
+    /// (VQ.2b): no curve below SDR white, the same HDR ramp above it.
+    public static func displayTransform(_ x: Float, headroom: Float = 1, displayReferred: Bool = false) -> Float {
         let curve = lottesCoefficients()
         let z = pow(max(x, 0), lottesContrast)
-        let sdr = z / (pow(z, lottesShoulder) * curve.b + curve.c)
+        let sdr = displayReferred ? min(max(x, 0), 1) : z / (pow(z, lottesShoulder) * curve.b + curve.c)
         guard headroom > 1 else { return sdr }
         let ramp = min(max((log2(max(x, 1e-6)) - log2(hdrKneeIn)) / (log2(lottesHDRMax) - log2(hdrKneeIn)), 0), 1)
         return sdr + (headroom - 1) * ramp * ramp * (3 - 2 * ramp)

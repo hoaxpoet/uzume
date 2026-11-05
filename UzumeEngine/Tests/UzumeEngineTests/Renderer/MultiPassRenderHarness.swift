@@ -1441,7 +1441,7 @@ struct MultiPassRenderHarness {
         let history = SpectralHistoryBuffer(device: ctx.device)
         // The real generated textures, not placeholders — see the note above.
         let textures = try TextureManager(context: ctx, shaderLibrary: lib)
-        let target = try makeOutputTexture(ctx)
+        let target = try makeOutputTexture(ctx, format: preset.descriptor.finish.frameTargetFormat)   // VQ.2b
         return try renderLoop(drive, reduce) { frame, pixels in
             guard let cmd = ctx.commandQueue.makeCommandBuffer() else {
                 throw HarnessError.renderFailed
@@ -1484,7 +1484,8 @@ struct MultiPassRenderHarness {
             textures.bindTextures(to: enc)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             enc.endEncoding()
-            try commit(cmd, target, into: &pixels)
+            // VQ.2b: the scene's own finish (Energetic Flyby's is display-referred), as production applies it.
+            try commit(cmd, target, spec: preset.descriptor.finish, into: &pixels)
         }
     }
 
@@ -1522,7 +1523,8 @@ struct MultiPassRenderHarness {
         // VQ.1: a cinematic frame target is finished into the 8-bit image production presents.
         var readTex = outTex
         var hdrTex: MTLTexture?
-        if outTex.pixelFormat == FinishSpec.cinematicFrameTargetFormat {
+        if [FinishSpec.cinematicFrameTargetFormat, FinishSpec.displayReferredFrameTargetFormat]   // VQ.2b: 32-bit too
+            .contains(outTex.pixelFormat) {
             readTex = try HarnessFinish.shared.finish(outTex, spec: spec, commandBuffer: cmd)
             if let hdrFrames {
                 var hdrSpec = spec
@@ -1546,9 +1548,9 @@ struct MultiPassRenderHarness {
                          from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
     }
 
-    private func makeOutputTexture(_ ctx: MetalContext) throws -> MTLTexture {
+    private func makeOutputTexture(_ ctx: MetalContext, format: MTLPixelFormat? = nil) throws -> MTLTexture {
         let d = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: frameFormat, width: width, height: height, mipmapped: false)
+            pixelFormat: format ?? frameFormat, width: width, height: height, mipmapped: false)
         d.usage = [.renderTarget, .shaderRead]
         d.storageMode = .shared
         guard let t = ctx.device.makeTexture(descriptor: d) else {

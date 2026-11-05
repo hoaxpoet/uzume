@@ -829,5 +829,14 @@ public struct PresetDescriptor: Sendable, Codable, Identifiable {
 
         // MARK: Finish (VQ.1)
         finish = try container.decodeIfPresent(FinishSpec.self, forKey: .finish) ?? .legacy
+        // VQ.2b: a display-referred finish is a direct scene's own colour, drawn straight into a float
+        // frame target at full size. The other paths (ray march, feedback, the half-res blit) draw that
+        // target through pipelines built for the 16-bit format — reject rather than mismatch.
+        if finish.displayReferred, finish.mode != .cinematic || passes != [.direct] || directRenderScale < 1 {
+            throw DecodingError.dataCorruptedError(
+                forKey: .finish,
+                in: container,
+                debugDescription: "finish.display_referred needs mode \"cinematic\", passes [\"direct\"] and render_scale 1")
+        }
     }
 }
