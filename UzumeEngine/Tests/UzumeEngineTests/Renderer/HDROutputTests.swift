@@ -91,8 +91,9 @@ struct HDROutputRuleTests {
         let loader = PresetLoader(device: try #require(MTLCreateSystemDefaultDevice()), pixelFormat: .bgra8Unorm_srgb,
                                   loadBuiltIn: true)
         let adopters = loader.presets.filter { $0.descriptor.finish.hdr }.map(\.descriptor.name)
-        // VQ.2a: Ferrofluid Ocean (razor glints). A new adopter lands in its own consumer increment, with Matt's look.
-        #expect(adopters.sorted() == ["Ferrofluid Ocean"], "HDR adopters: \(adopters)")
+        // VQ.2a: Ferrofluid Ocean (razor glints); VQ.2b: Energetic Flyby (its light rods). A new adopter lands in
+        // its own consumer increment, with Matt's look.
+        #expect(adopters.sorted() == ["Energetic Flyby", "Ferrofluid Ocean"], "HDR adopters: \(adopters)")
     }
 }
 
@@ -525,6 +526,20 @@ struct HDRCostTests {
             try HDRTestSupport.run(ctx) { rig.scene.encode(into: target, params: rig.params(), commandBuffer: $0) }
             let (p50, p95) = Self.spacing(ctx) { stage.encode(source: target, output: out, commandBuffer: $0) }
             print(String(format: "[vq2-timing] %@ (3840×2160), %@: p50 %.3f ms, p95 %.3f ms", label, ctx.device.name, p50, p95))
+        }
+        // VQ.2b: Energetic Flyby's display-referred finish from the tier-1 canvas (its render size on the M2 Pro)
+        // into the 4K drawable — the clamp pass, then the composite (+ the HDR ramp's taps and the cap on HDR).
+        for (label, format, hdr) in [("display-referred finish, tier-1 canvas → SDR drawable", MTLPixelFormat.bgra8Unorm_srgb, false),
+                                     ("display-referred finish, tier-1 canvas → HDR drawable, headroom 4 + cap",
+                                      HDROutput.drawableFormat, true)] {
+            let spec = FinishSpec(mode: .cinematic, bloom: FinishSpec.Bloom(strength: 0), hdr: hdr, displayReferred: true)
+            let stage = try FinishingStage(device: ctx.device, library: try ShaderLibrary(context: ctx).library,
+                                           outputFormat: format, spec: spec, budget: nil)
+            stage.headroom = hdr ? HDROutput.peakCap : 1
+            let source = try Self.privateTexture(ctx, FinishSpec.displayReferredFrameTargetFormat, 2560, 1440)
+            let out = try Self.privateTexture(ctx, format, 3840, 2160)
+            let (p50, p95) = Self.spacing(ctx) { stage.encode(source: source, output: out, commandBuffer: $0) }
+            print(String(format: "[vq2-timing] %@: p50 %.3f ms, p95 %.3f ms", label, p50, p95))
         }
         let present = try OraclePresentRig.shared()
         for (label, w, h, format) in [("legacy present, tier-1 canvas → SDR drawable", 2560, 1440, MTLPixelFormat.bgra8Unorm_srgb),

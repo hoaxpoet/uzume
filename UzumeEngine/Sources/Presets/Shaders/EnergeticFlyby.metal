@@ -94,6 +94,11 @@ constant float kEFBNearZ = .05;
 constant float kEFBFarZ = 20.;
 /// EFB.4 reactive mask: a glow colour turn of this many radians in one frame ignores history fully.
 constant float kEFBHueReactive = .05;
+/// VQ.2b: which of Kali's clipped light shines above SDR white on HDR — (rods, sphere cluster, the rest:
+/// tunnel glow and surfaces). 1 keeps a source's light above white, 0 clips it at white as today.
+constant float3 kEFBShine = float3(1., 0., 0.);   // Matt, 2026-11-05: "B: rods only"
+/// VQ.2b: the sphere cluster is the rod glow gathered within this distance of its centre (EFB.1's burst radius).
+constant float kEFBCoreRadius = .25;
 
 /// EFB.4: where the march ended and what it saw, for depth and motion (never read by the colour).
 struct EFBHit {
@@ -101,6 +106,7 @@ struct EFBHit {
     float surface;   // 1 = a surface (Kali's `d < .01`), 0 = no hit
     float rod;       // share of the final glow that is the rods' own (above the tunnel floor)
     float glow;      // share of the pixel's light that is the glow (the part the colour turn rotates)
+    float core;      // VQ.2b: share of the rod glow gathered at the sphere cluster (kEFBCoreRadius)
 };
 
 // MARK: - Kali's functions (verbatim)
@@ -209,13 +215,16 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         // gathered in the first steps whites out the frame (05_anti_whole_frame_whiteout). Fade in only
         // that near-camera glow, only while a rod is there (camGlow < 1) — no whole-frame dimming, which
         // measured as its own flash.
-        g += .1 / (.1 + k.br * 13.) * sc * mix(smoothstep(0., kEFBCamFade, td), 1., max(camGlow, st.faithful));   // faithful: no fix
+        float dg = .1 / (.1 + k.br * 13.) * sc * mix(smoothstep(0., kEFBCamFade, td), 1., max(camGlow, st.faithful));   // faithful: no fix
+        g += dg;
+        if (length(p - k.sphpos) < kEFBCoreRadius) h.core += dg;   // VQ.2b
         li += .1 / (.1 + k.tub * 5.) * sc;
     }
     // EFB: Kali scaled the whole glow by (.5 + so*1.5), a per-frame strobe. The shipped glow is steady at
     // st.glowBase (energy-driven, 1.25 at a typical passage — his average); the downbeat turns its colour.
     // EFB.4: what the march saw, for depth and motion (the reactive mask reads the rods' share)
     h.rod = g > li * .15 ? 1. - li * .15 / g : 0.;
+    h.core = h.core / max(g, 1e-6);   // VQ.2b
     if (ref == 0.) h.p = p;
     h.surface = (ref == 1. || d < .01) ? 1. : 0.;
     float glowScale;
@@ -341,13 +350,24 @@ fragment TemporalFragmentOutReactive energetic_flyby_fragment(VertexOut in [[sta
     dir = efb_lookat(fw, float3(fw.x * 2., 1., 0.)) * dir;
     dir.xz += sin(k.time) * .3;
     EFBHit h;
-    h.p = from; h.surface = 0.; h.rod = 0.; h.glow = 0.;
+    h.p = from; h.surface = 0.; h.rod = 0.; h.glow = 0.; h.core = 0.;
     float3 sphpos = k.sphpos;
     float3 col = efb_march(from, dir, k, st, h);
     col = mix(float3(.5) * length(col), col, .8);
 
     TemporalFragmentOutReactive o;
-    o.color = float4(efb_srgb_to_linear(saturate(col)), 1.);
+    // VQ.2b: Kali's colour is display-referred and runs past white in places; it is written linear and
+    // NOT clamped into the cinematic finish's float target (sidecar `display_referred`). Below 1 the finish
+    // shows it exactly as the old `saturate` did; above 1 is the light the clamp removed, which only the
+    // HDR ramp shows (D-268). The sRGB curve is continued past 1 (monotonic, the same at 1).
+    //
+    // Which light shines (kEFBShine, Matt's VQ.2b choice) weights the part above white per pixel by its
+    // source's share; the rest is clipped at white exactly as the old `saturate` did.
+    float3 lin = efb_srgb_to_linear(max(col, 0.));
+    float3 sdr = min(lin, 1.);
+    float rods = h.glow * h.rod;
+    float shine = dot(kEFBShine, float3(rods * (1. - h.core), rods * h.core, 1. - rods));
+    o.color = float4(sdr + (lin - sdr) * shine, 1.);
 
     // EFB.4: depth, motion and reactive — only on the reconstruct path (render_size is zero everywhere else).
     o.depth = 1.;

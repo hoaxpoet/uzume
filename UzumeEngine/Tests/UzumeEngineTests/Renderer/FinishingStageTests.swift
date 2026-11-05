@@ -279,17 +279,23 @@ struct FinishingStageTests {
 
         #expect(throws: DecodingError.self) { try decode(#"{"mode":"filmic"}"#) }
 
+        #expect(!partial.displayReferred)
+        #expect(try decode(#"{"mode":"cinematic","display_referred":true}"#).displayReferred)   // VQ.2b
+
         let inSidecar = try JSONDecoder().decode(PresetDescriptor.self, from: Data("""
             {"name":"T","family":"geometric","passes":["direct"],"finish":{"mode":"cinematic"}}
             """.utf8))
         #expect(inSidecar.finish.mode == .cinematic)
     }
 
-    @Test("Only the scenes Matt reviewed render cinematic (VQ.1c: Ferrofluid Ocean)")
+    @Test("Only the scenes Matt reviewed render cinematic (VQ.1c: Ferrofluid Ocean; VQ.2b: Energetic Flyby)")
     func onlyReviewedScenesAreCinematic() {
         // Opting a scene in changes its look — each adopter is its own increment, judged by Matt.
+        // Energetic Flyby's finish is display-referred: its SDR picture is the legacy one (VQ.2b).
         let cinematic = _acceptanceFixture.presets.filter { $0.descriptor.finish.mode != .legacy }
-        #expect(cinematic.map(\.descriptor.name).sorted() == ["Ferrofluid Ocean"])
+        #expect(cinematic.map(\.descriptor.name).sorted() == ["Energetic Flyby", "Ferrofluid Ocean"])
+        let displayReferred = _acceptanceFixture.presets.filter { $0.descriptor.finish.displayReferred }
+        #expect(displayReferred.map(\.descriptor.name) == ["Energetic Flyby"])
     }
 
     // MARK: Display transform
@@ -308,6 +314,12 @@ struct FinishingStageTests {
                 #expect(y >= previous)
                 previous = y
             }
+            // VQ.2b display-referred: identity up to white, the same ramp above it.
+            for x: Float in [0, 0.05, 0.5, 1] {
+                #expect(FinishingStage.displayTransform(x, headroom: headroom, displayReferred: true) == x)
+            }
+            #expect(abs(FinishingStage.displayTransform(8, headroom: headroom, displayReferred: true) - headroom) < 1e-5)
+            #expect(FinishingStage.displayTransform(30, displayReferred: true) == 1)
         }
     }
 
