@@ -22,7 +22,7 @@ private let logger = Logger(subsystem: "io.uzume.renderer", category: "Finishing
 
 // MARK: - FinishUniforms
 
-/// Mirrors `FinishUniforms` in FinishingStage.metal (68 bytes). Keep the two in step.
+/// Mirrors `FinishUniforms` in FinishingStage.metal (72 bytes). Keep the two in step.
 struct FinishUniforms {
     var bloomStrength: Float
     var bloomThreshold: Float
@@ -41,6 +41,7 @@ struct FinishUniforms {
     var useLUT: UInt32
     var hdrOutput: UInt32
     var displayReferred: UInt32
+    var overRise: Float
 }
 
 // MARK: - FinishingStage
@@ -59,6 +60,9 @@ public final class FinishingStage: @unchecked Sendable {
     /// Region cap grid (VQ.2): 6×6 cells, a ninth of the screen = 2×2 cells.
     static let regionCellsPerSide = 6
     static let regionCellCount = regionCellsPerSide * regionCellsPerSide
+    /// VQ.2b (Matt: "Shine eases in"): how fast a display-referred scene's light above white may change,
+    /// in mean brightest-channel × SDR white over a cell, per second.
+    static let overRisePerSecond: Float = 0.5
 
     /// Lottes 2016 curve parameters (the talk's defaults): contrast, shoulder, the scene value
     /// that maps to display peak, and the mid-grey anchor.
@@ -82,6 +86,9 @@ public final class FinishingStage: @unchecked Sendable {
     /// The output is the linear float HDR drawable (VQ.2): light above SDR white is kept, capped
     /// per ninth of the screen at an average of SDR white (`finish_region_kernel`).
     public let hdrOutput: Bool
+    /// The frame's duration in seconds, for the eased light above white (VQ.2b). The pipeline sets it per
+    /// frame; the 60 Hz default is the test harness's clock.
+    public var frameDeltaTime: Float = 1.0 / 60.0
     /// Tests only: false drops the regional cap (the flash gate's negative control must fail).
     var regionCapEnabled = true
     /// One output code value in encoded units; 0 disables dither (tests measure the undithered
@@ -103,7 +110,8 @@ public final class FinishingStage: @unchecked Sendable {
     private let compositePipeline: MTLRenderPipelineState
     private let regionPipeline: MTLComputePipelineState
     private let clampPipeline: MTLRenderPipelineState?
-    /// 6×6 region cells (FinishingStage.metal `kRegionCells`), written by the region kernel.
+    /// 6×6 region cells (FinishingStage.metal `kRegionCells`), written by the region kernel; the eased
+    /// mean in each (VQ.2b) carries over from frame to frame.
     private let regionCells: MTLBuffer
     private let sampler: MTLSamplerState
     private let lut: MTLTexture
@@ -134,7 +142,7 @@ public final class FinishingStage: @unchecked Sendable {
         upsamplePipeline = try kernel("finish_upsample_kernel")
         regionPipeline = try kernel("finish_region_kernel")
         hdrOutput = outputFormat == HDROutput.drawableFormat
-        guard let cells = device.makeBuffer(length: Self.regionCellCount * MemoryLayout<SIMD2<Float>>.stride,
+        guard let cells = device.makeBuffer(length: Self.regionCellCount * MemoryLayout<SIMD3<Float>>.stride,
                                             options: .storageModeShared) else {
             throw MetalContextError.noDevice
         }
@@ -331,6 +339,9 @@ public final class FinishingStage: @unchecked Sendable {
 
     func makeUniforms() -> FinishUniforms {
         let curve = Self.lottesCoefficients()
+        let output: UInt32 = hdrOutput && headroom > 1 ? (regionCapEnabled ? 1 : 2) : 0
+        // A stall may not let the light jump: at most a tenth of a second's change in one frame.
+        let eased = spec.displayReferred && output == 1
         return FinishUniforms(
             bloomStrength: spec.bloom.strength,
             bloomThreshold: spec.bloom.threshold,
@@ -347,8 +358,9 @@ public final class FinishingStage: @unchecked Sendable {
             bloomLevels: Float(Self.bloomLevelCount),
             frame: frameIndex,
             useLUT: hasLUT ? 1 : 0,
-            hdrOutput: hdrOutput && headroom > 1 ? (regionCapEnabled ? 1 : 2) : 0,
-            displayReferred: spec.displayReferred ? 1 : 0)
+            hdrOutput: output,
+            displayReferred: spec.displayReferred ? 1 : 0,
+            overRise: eased ? Self.overRisePerSecond * min(max(frameDeltaTime, 0), 0.1) : 0)
     }
 
     // MARK: Display transform
