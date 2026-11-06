@@ -99,6 +99,10 @@ constant float kEFBHueReactive = .05;
 constant float3 kEFBShine = float3(1., 0., 0.);   // Matt, 2026-11-05: "B: rods only"
 /// VQ.2b: the sphere cluster is the rod glow gathered within this distance of its centre (EFB.1's burst radius).
 constant float kEFBCoreRadius = .25;
+/// VQ.2b (Matt, 2026-11-06): the thin, very bright line down each rod's centre on HDR only. How near its axis
+/// a ray must pass, in the rods' own distance (`efb_coso`, whose axes read .005 at their closest).
+constant float kEFBLineRadius = .004;
+constant float kEFBRodAxis = .005;
 
 /// EFB.4: where the march ended and what it saw, for depth and motion (never read by the colour).
 struct EFBHit {
@@ -107,6 +111,7 @@ struct EFBHit {
     float rod;       // share of the final glow that is the rods' own (above the tunnel floor)
     float glow;      // share of the pixel's light that is the glow (the part the colour turn rotates)
     float core;      // VQ.2b: share of the rod glow gathered at the sphere cluster (kEFBCoreRadius)
+    float nearest;   // VQ.2b: how near a rod the ray passed, past the camera fade (a rod at the camera is no line)
 };
 
 // MARK: - Kali's functions (verbatim)
@@ -218,6 +223,7 @@ static float3 efb_march(float3 from, float3 dir, thread EFBMarch& k,
         float dg = .1 / (.1 + k.br * 13.) * sc * mix(smoothstep(0., kEFBCamFade, td), 1., max(camGlow, st.faithful));   // faithful: no fix
         g += dg;
         if (length(p - k.sphpos) < kEFBCoreRadius) h.core += dg;   // VQ.2b
+        if (td > kEFBCamFade) h.nearest = min(h.nearest, k.br);    // VQ.2b
         li += .1 / (.1 + k.tub * 5.) * sc;
     }
     // EFB: Kali scaled the whole glow by (.5 + so*1.5), a per-frame strobe. The shipped glow is steady at
@@ -350,7 +356,7 @@ fragment TemporalFragmentOutReactive energetic_flyby_fragment(VertexOut in [[sta
     dir = efb_lookat(fw, float3(fw.x * 2., 1., 0.)) * dir;
     dir.xz += sin(k.time) * .3;
     EFBHit h;
-    h.p = from; h.surface = 0.; h.rod = 0.; h.glow = 0.; h.core = 0.;
+    h.p = from; h.surface = 0.; h.rod = 0.; h.glow = 0.; h.core = 0.; h.nearest = 1000.;
     float3 sphpos = k.sphpos;
     float3 col = efb_march(from, dir, k, st, h);
     col = mix(float3(.5) * length(col), col, .8);
@@ -367,7 +373,10 @@ fragment TemporalFragmentOutReactive energetic_flyby_fragment(VertexOut in [[sta
     float3 sdr = min(lin, 1.);
     float rods = h.glow * h.rod;
     float shine = dot(kEFBShine, float3(rods * (1. - h.core), rods * h.core, 1. - rods));
-    o.color = float4(sdr + (lin - sdr) * shine, 1.);
+    // Alpha is the rod line: the share of the display's headroom it adds, white, on HDR only. The clamp into
+    // the SDR part never reads it, so SDR cannot change. It lives only where the rod is already near white.
+    float line = (1. - smoothstep(0., kEFBLineRadius, h.nearest - kEFBRodAxis)) * smoothstep(.6, 1., max3(sdr.r, sdr.g, sdr.b));
+    o.color = float4(sdr + (lin - sdr) * shine, line * shine);
 
     // EFB.4: depth, motion and reactive — only on the reconstruct path (render_size is zero everywhere else).
     o.depth = 1.;

@@ -147,8 +147,9 @@ static inline float3 finish_display_referred_over(texture2d<float> scene, float2
     int2 i = int2(floor(p));
     float3 t[4];
     for (int k = 0; k < 4; k++) {
-        float3 c = max(scene.read(uint2(clamp(i + int2(k & 1, k >> 1), int2(0), hi))).rgb, 1e-6);
-        t[k] = (u.headroom - 1.0) * smoothstep(log2(kHDRKneeIn), log2(kLottesHDRMax), log2(c));
+        float4 c = scene.read(uint2(clamp(i + int2(k & 1, k >> 1), int2(0), hi)));
+        // Alpha: light the scene adds on HDR only, as a share of the headroom (Energetic Flyby's rod line).
+        t[k] = (u.headroom - 1.0) * max(smoothstep(log2(kHDRKneeIn), log2(kLottesHDRMax), log2(max(c.rgb, 1e-6))), c.a);
     }
     return mix(mix(t[0], t[1], f.x), mix(t[2], t[3], f.x), f.y);
 }

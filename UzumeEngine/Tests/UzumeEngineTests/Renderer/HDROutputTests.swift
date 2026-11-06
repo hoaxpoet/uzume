@@ -395,7 +395,7 @@ struct HDREasedLightTests {
 
     /// The mean light above SDR white over the centre ninth, per frame, of a display-referred stage shown
     /// every 4th column at each frame's scene value (the rest dark).
-    static func overSeries(_ values: [Float], eased: Bool) throws -> [Double] {
+    static func overSeries(_ values: [Float], eased: Bool, line: Float = 0) throws -> [Double] {
         let ctx = try MetalContext()
         let library = try ShaderLibrary(context: ctx).library
         let spec = FinishSpec(mode: .cinematic, hdr: true, displayReferred: true)
@@ -410,7 +410,7 @@ struct HDREasedLightTests {
             for y in 0..<height {
                 for x in stride(from: 0, to: width, by: 4) {
                     let p = (y * width + x) * 4
-                    px[p] = value; px[p + 1] = value; px[p + 2] = value; px[p + 3] = 1
+                    px[p] = value; px[p + 1] = value; px[p + 2] = value; px[p + 3] = line
                 }
             }
             src.replace(region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0, withBytes: px,
@@ -445,6 +445,16 @@ struct HDREasedLightTests {
         // Negative control: the same step without the easing is a jump.
         let uneased = try Self.overSeries(Array(values.prefix(2)), eased: false)
         #expect(uneased[0] > 0.7)
+    }
+
+    @Test("A display-referred scene's alpha adds white light above SDR white on HDR (Energetic Flyby's rod line)")
+    func lineFromAlpha() throws {
+        // Mid-grey is nowhere near the ramp. A full line takes a quarter of the pixels to peak: (0.5 + 3 − 1) / 4.
+        let plain = try Self.overSeries([0.5], eased: false)
+        let lined = try Self.overSeries([0.5], eased: false, line: 1)
+        print(String(format: "[vq2b-line] mean above white: no line %.4f, line %.4f", plain[0], lined[0]))
+        #expect(plain[0] == 0, "negative control: no line, no light above white")
+        #expect(abs(lined[0] - 0.625) < 0.02)
     }
 
     @Test("Only a display-referred scene is eased")
