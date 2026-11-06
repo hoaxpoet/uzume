@@ -217,6 +217,7 @@ final class HDRReplay {
     private var sdrRegions: [[FlashRegionSample]] = [], peakRegions: [[FlashRegionSample]] = []
     private var maxRegionMean = 0.0
     private var hdrAbove: [Double] = [], hdrP999: [Double] = [], hdrDark: [Double] = [], hdrLuma: [Double] = []
+    private var lumaAbove: [Double] = [], lumaP999: [Double] = []   // VQ.2b: what the eye reads, not one channel
     private var sdrDark: [Double] = [], sdrLuma: [Double] = []
     /// VQ.2b: the SDR picture's own flash series (the baseline), and below SDR white — every pixel the HDR
     /// frame keeps at or under white — how far HDR's codes stray from SDR's and both pictures' mean luma there.
@@ -236,15 +237,18 @@ final class HDRReplay {
         let whole = sdr.prefix(9).map(\.luminance).reduce(0, +) / 9
         sdrWhole.append(whole)
         peakWhole.append(whole / Double(headroom))
-        var maxes = [Float](), dark = 0, luma = 0.0
+        var maxes = [Float](), lumas = [Double](), dark = 0, luma = 0.0
         maxes.reserveCapacity(px.count / 4)
         for i in stride(from: 0, to: px.count, by: 4) {
             maxes.append(max(px[i], px[i + 1], px[i + 2]))
             let y = 0.2126 * Double(px[i]) + 0.7152 * Double(px[i + 1]) + 0.0722 * Double(px[i + 2])
             luma += y
+            lumas.append(y)
             if y < 0.01 { dark += 1 }
         }
         let n = Double(maxes.count)
+        lumaAbove.append(Double(lumas.filter { $0 > 1 }.count) / n)
+        lumaP999.append(lumas.sorted()[Int(n * 0.999)])
         hdrAbove.append(Double(maxes.filter { $0 > 1 }.count) / n)
         hdrP999.append(Double(maxes.sorted()[Int(n * 0.999)]))
         hdrDark.append(Double(dark) / n)
@@ -295,6 +299,8 @@ final class HDRReplay {
         [multipass-replay] HDR at headroom \(headroom) over \(hdrAbove.count) frames:
           share of pixels above SDR white  mean \(f(mean(hdrAbove)))  max \(f(hdrAbove.max() ?? 0))
           p99.9 brightest channel          mean \(f(mean(hdrP999)))  max \(f(hdrP999.max() ?? 0))  (× SDR white)
+          share with luminance above white mean \(f(mean(lumaAbove)))  max \(f(lumaAbove.max() ?? 0))
+          p99.9 luminance                  mean \(f(mean(lumaP999)))  max \(f(lumaP999.max() ?? 0))  (× SDR white)
           largest ninth-of-screen mean      \(f(maxRegionMean))  (cap holds ≤ 1)
           dark troughs (luma < 0.01)        SDR \(f(mean(sdrDark)))  HDR \(f(mean(hdrDark)))
           mean luma (linear)                SDR \(f(mean(sdrLuma)))  HDR \(f(mean(hdrLuma)))
