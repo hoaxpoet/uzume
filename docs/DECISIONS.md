@@ -150,6 +150,7 @@ Each decision records the what, why, and any relevant context that would prevent
 | D-266 | Accepted (LM.10; Matt approved the full-4K glass 2026-10-28) | **Lumen Mosaic: stained hammered glass, baked once, rendered at full 4K.** A ray-march scene may bake its static surface once (`preset_bake_fragment` → slot 10, read by `sceneMaterial`) and render at the drawable's full size (`upscale: "native"`, ray-march only). LM full 4K baked: 4.26 ms GPU (Release, M2 Pro) vs 16.9 computed and 7.6 for the 2560×1440 stretch. |
 | D-267 | Accepted (capability); **no shipped scene opts in**; Matt's look on the LG 2026-10-29 | **HDR output (VQ.2): EDR drawable from the display's potential headroom; highlights to 4× SDR white; no ninth of the screen above SDR white.** Drawable linear in the display's own colour space (keeps SDR's colours); legacy scenes unchanged by construction; `finish.hdr` opt-in; regional cap on the brightest channel; flashes measured against SDR white and the display's peak. On by default. §Rationale below. |
 | D-268 | Accepted (VQ.2a; Matt on the LG side-by-side 2026-10-30, "glints look right"; live in-app look pending) | **HDR highlight ramp + Ferrofluid Ocean's razor glints (VQ.2a).** On HDR the finish keeps the SDR display curve exactly and adds the extra headroom only to graded light above 1.0 (log-space smoothstep 1 → 8), so the picture stays and only highlights brighten (D-267's whole-curve scale lifted upper midtones ~1.5×). Ferrofluid Ocean opts in (`finish.hdr`) with a thin hot core at the aurora curtain's centre — the glints — and the HDR setting goes public. §Rationale below. |
+| D-269 | Accepted (VQ.2b; Matt on the LG side-by-side 2026-11-06, "the rod line clearly reads"; live 2026-11-09, "The rods look right in motion") | **Display-referred scenes into the cinematic finish; light above white eases; Energetic Flyby's rods shine on HDR (VQ.2b).** `finish.display_referred`: the scene's own colour, clamped, is the SDR picture to the code (no grade, curve, bloom, dither); the D-268 ramp adds HDR light; the frame target's alpha carries white light for HDR only. Light above white moves at most 0.5 × SDR white per second per region, both ways, so it cannot pulse into a flash. Energetic Flyby opts in: rods only, plus a thin, very bright line down each rod's centre. §Rationale below. |
 | D-241 | Accepted — M7 passed 2026-09-03 | **The performance chrome is retokenized in place, and after inactivity it is gone completely (DS.6, 2026-09-03; Matt's call on the inactivity question, the prompt's defaults on the other two).** `PlaybackChromeView` and its children stay the composition they were and are drawn from the design system only: no colour outside `UzumeAppColor`, `DashboardTokens` confined to `Views/Dashboard/`, no second control tree. (1) The track card's "Planned"/"Reactive" pill is **removed** — it reported the session's structure, which the surprise model ([D-238]) keeps from the listener; `OrchestratorDisplayState` is deleted. (2) **After 3 s of inactivity the chrome disappears completely** — Matt: *"Chrome should disappear completely after a brief period of inactivity so that the user can focus on the visuals. When mouse activity is detected or the user taps the screen, the chrome returns."* Nothing stays on screen; mouse movement, a tap, any key press and a track change bring all of it back; Space toggles it. This is a deliberate deviation from `COMPONENTS.md`'s "cannot become undiscoverable", recorded upstream as a product decision for `uzume-site` to adopt. (3) **Track information is a preference**, `uzume.settings.visuals.showTrackInformation`, default shown, persisted; the cluster's "Show/Hide track info" control (the DS.4a words, [D-239]) and Settings move the same value; hidden means the card, its artwork and the track-change announcement are gone from the tree. (4) Tap, **key press and track change** restore the chrome — UX_SPEC §7.2 had promised key and track change; only the mouse was wired. (5) The first hide timer waits for the arrival ([D-240]) to fade before its 3 s. (6) State changes take the design system's 240 ms exponential ease-out (`UzumeAppMotion`, app-side because the vendored tokens carry no motion); reduced motion crossfades. (7) "Still preparing" is a status placement: `StatusTone.info` on its opaque field, not a colour of its own ([D-234]). (8) The transport bar takes `--shadow-raised` and loses the purple glow. Backdrop numbers unchanged; `PresetContrastCertificationTests` untouched. §Rationale below. |
 | D-240 | Accepted — M7 passed 2026-09-03 | **Ready is the arrival — two ready experiences, one camera push (DS.5, 2026-09-03, Matt's design pass + live prototype approval).** Local-file sessions never saw `.ready` — `ContentView` routed them straight to `PlaybackView` (an LF.4 shortcut) while the engine's `.ready` observer started the audio in the same tick — and `ReadyViewModel` knew only `PlaylistSource?`, so it would have read "press play in your music app" had it been shown. Now the cave from preparation is fully open behind both ready screens (`OpenAperture`); streaming keeps its waiting room (press play in the named app, first-audio detection and the 90 s timeout unchanged) plus a bordered **"Begin now"**; local files get a **3-2-1 countdown** (`LocalFileCountdownView`) with no app named and no timeout, and `handleLocalFileReady()` moves from the `.ready` observer to the countdown's end so the count runs over silence. "Start now" always lands on `.ready`. On entry to `.playing` one camera push runs for both sources — `ArrivalPushScene`: the real aperture under a 100-streak parallax burst, whiteout, hold, fade to the live render — after a redrawn approximation and a uniform zoom were both rejected live; it is a `Canvas` construction, not a GPU pass, correcting the design doc's forecast. Flash maxΔ/frame 0.0174 (gate 0.05, D-157). Plan preview deleted outright (views, VM, sheet, `P` shortcut, strings), executing D-238's ruling; `ReadyPulsingBorder` retired. M7 (same day): Ready self-advanced with no audio — the tap was only ever installed after `.playing`, so the detector had always watched a default `.active` (BUG-112); the tap now comes up at `.ready` with the surface reset to `.silent`. Copy contrast: a scrim under the words, not a halo. §Rationale below. |
 | D-239 | Accepted | **The preparation-view toggle is a destination-labeled button, not a segmented control (DS.4a, 2026-09-02, Matt's live feedback).** DS.4 shipped with Settings unreachable while `.preparing` (the gear lives in playback chrome, which doesn't exist yet) and only a one-way, failure-gated tap to switch views. Three label shapes for a segmented control were tried and rejected — `Mysterious`/`Detailed` (undecodable without context), `Simple`/`Detailed` (still a bare word carrying a whole mode), `Ambient`/`Tracks` (still metaphor-adjacent, and most listeners don't know the brand story) — because the *component* was wrong: a segmented control names both states at once, and these two views aren't opposite settings of one axis. The fix is a single bottom-bar button reading **"Show track info"** / **"Hide track info"**, named for the destination rather than the current mode, so it only ever has to describe one thing. |
@@ -6582,3 +6583,62 @@ Matt's look.
 
 **References.** D-267; `prompts/VQ.2-prompt.md` §Consumers; Ferrofluid README; RUNBOOK §VQ.2.
 
+## D-269: Display-referred scenes into the cinematic finish; light above white eases; Energetic Flyby's rods shine on HDR (VQ.2b)
+
+**Date:** 2026-11-09 · **Increment:** VQ.2b (Phase VQ) · **Status:** Accepted; Matt on the LG side-by-side
+2026-11-06: "the rod line clearly reads"; live on build 9021, 2026-11-09: "The rods look right in motion" ·
+**Builds on:** D-267 (HDR output, the cap), D-268 (the HDR ramp; unchanged).
+
+**Matt's decisions.** What shines: **"B: rods only"** (not the sphere cluster, not everything). Flash gate:
+**"Gate at 4×"** (the app's own cap; 16× reported, not gated). After uneased rod light added flashes on real music:
+**"Shine eases in."** After the first side-by-side — "Looks the same", with HDR on — he asked: *"Give each rod a thin,
+very bright line down its centre on HDR only, with SDR unchanged."* Live, HDR on and off: the rods look right.
+
+**Why a new route.** Energetic Flyby is Kali's colour, approved as is (EFB.1): its shader writes display colour and
+the legacy path clamps it. Before the clamp, 7.6–8.4 % of pixels sit above white (p99.9 2.8–2.9×; three real-audio
+tracks): rods, the sphere cluster, rim glow, lit surfaces. The cinematic finish would grade and tone-map it, which
+changes the certified picture. `finish.display_referred` instead keeps the scene's own colour: the frame target holds
+it linear and unclamped; `finish_clamp_fragment` stores it clamped into an 8-bit sRGB target — the legacy codes, by
+the same hardware store — and the tier-1 stretch samples that as the legacy present did. The composite adds the D-268
+ramp per texel, then interpolates. No grade, curve, bloom or dither. **SDR oracle: 0 codes moved** at 1920×1080 and
+2560×1440 → 4K. Traps found: a `.rgba16Float` frame target moved 1.1 % of channels a code (2 at 4K) — the target is
+`.rgba32Float`; interpolating unclamped float on the stretch bled hot texels into their neighbours (144 codes on 9 %
+of 4K channels); exact sRGB rounding in the shader differs from the GPU's store. Decode guard: cinematic, `[.direct]`,
+render scale 1 only.
+
+**Easing.** Uneased, the rods' HDR light passed the worst-case train but added flashes on real music at the SDR-white
+anchor (so_what regional 4.00/s, love_rehab 0.50 / 4.00 / 2.00 against baselines 3.00 and 3.50). Each 6×6 cell's mean
+light above white now moves at most `overRisePerSecond` = 0.5 × SDR white per second, both ways (a gain on that cell's
+light, capped at 2, interpolated across cells), before the per-ninth cap. Rise-only easing did not fix so_what at any
+rate. With two-way 0.5/s, all three tracks sit at their SDR baselines.
+
+**The rod line.** "Looks the same" was right, not a display fault: the rods' light above white was mostly one colour
+channel. On the side-by-side frame only 0.39 % of pixels had *luminance* above white (median 1.15×), against 5.85 %
+by brightest channel. The line is a thin core along each rod's axis (`kEFBLineRadius` .004, soft profile) where the
+rod is already near white, weighted by the rods-only mask. It travels in the frame target's **alpha** as white light, a
+share of the headroom, added with the ramp per channel. The clamp into the SDR part never reads alpha, so SDR cannot
+change. Only rods past the camera fade count, so a rod at the lens cannot become a whole-frame line (anti-reference
+05). A solid-centre profile added a flash on love_rehab (0.50 / 4.00 / 1.00) — rejected.
+
+**Evidence** (`SessionDrivenMultiPassReplay`, `REPLAY_HDR=4`, Release, 1920×1080, 600 frames, cinematic):
+
+| Track | luminance above white, mean / max | p99.9 luminance, mean / max | largest ninth | flash SDR picture | SDR-white anchor | peak anchor |
+|---|---|---|---|---|---|---|
+| so_what | 0.99 / 1.83 % | 2.08 / 2.85× | 0.91 | 0 / 3.00 / 1.00 | 0 / 3.00 / 1.00 | 0 / 0 / 0.50 |
+| there_there | 1.02 / 2.35 % | 2.06 / 2.93× | 0.88 | 0 / 4.00 / 1.00 | 0 / 4.00 / 1.00 | 0 / 0 / 1.00 |
+| love_rehab | 1.07 / 2.43 % | 2.03 / 3.00× | 0.96 | 0 / 3.50 / 1.00 | 0 / 3.50 / 1.00 | 0 / 0.50 / 1.00 |
+
+Flash is whole / regional / red per second; the HDR arms equal the SDR picture on every track. Dark interiors
+unchanged; mean linear luma +7.6–8.4 %. Worst-case train: headroom 1, 4 and 16 at the shipped baseline (0 / 3.00 / 1.00)
+against SDR white, 0 / 0 / 0 against the peak.
+
+**Cost** (Release `-c release --enable-testable-imports`, M2 Pro). The scene, `EFB_TIMING` (There There, 290 frames), VQ.2b vs the base shader + sidecar, two runs each: 2560×1440 p50 20.50–20.56 vs 19.62–19.77 ms, p95 27.43–27.53 vs 26.21–26.23 (+0.8 / +1.3 ms, ~4–5 %); 1080p 12.0 vs 11.5. The finish to a 4K drawable (`HDR_TIMING`, `.private`, saturated, measured before the line, which adds one `max`): canvas → SDR p50 0.29 / p95 0.30 ms, → HDR at headroom 4 with the cap 1.32 / 3.16; legacy present 0.10.
+
+**Live** (Developer ID build 9021, LG, fullscreen, drawable 3840×2160, `RENDER_TARGET` 2560×1440, Award Tour, 45 s+ clean windows): HDR on 29.8 fps, longest frame gap 45 ms; HDR off 29.9 fps, one gap of 57 ms; GPU memory flat at 452 MB (ceiling 858). Frames with GPU time past 33 ms: 24.3 % on, 22.8 % off, vs EFB.2's 3.0 % on another track. They come in ~8 s bursts every ~19 s of flight with clean stretches between (median ~24 ms); scaling the live times by the A/B ratio gives 21–23 % without VQ.2b, so the bursts are the scene's content and VQ.2b adds ~1.5–2 points.
+
+**Not caused here, found here.** On real music the SDR picture itself is regional 3.50/s (love_rehab) and 4.00/s
+(there_there), above the 3/s limit; the shipped gate (`energeticFlybyIsFlashSafe`) measures a synthetic train. It is
+the certified look, untouched by VQ.2b, and needs its own follow-up.
+
+**References.** D-267, D-268; `prompts/VQ.2b-prompt.md`; ENERGETIC_FLYBY_DESIGN §11; ARCHITECTURE §HDR Output;
+SHADER_CRAFT §17 (`finish.display_referred`); RUNBOOK §VQ.2.

@@ -140,7 +140,7 @@ struct SessionDrivenMultiPassReplay {
                     try? hdr.writeSideBySide(sdr: bgra, width: width, height: height, to: url)
                 }
             }
-            hdr?.receiveSDR(bgra)
+            hdr?.receiveSDR(bgra, width: width, height: height)
             return Self.stats(bgra)
         }
         if let outDir { print("[multipass-replay] frames → \(outDir.path)") }
@@ -217,7 +217,13 @@ final class HDRReplay {
     private var sdrRegions: [[FlashRegionSample]] = [], peakRegions: [[FlashRegionSample]] = []
     private var maxRegionMean = 0.0
     private var hdrAbove: [Double] = [], hdrP999: [Double] = [], hdrDark: [Double] = [], hdrLuma: [Double] = []
+    private var lumaAbove: [Double] = [], lumaP999: [Double] = []   // VQ.2b: what the eye reads, not one channel
     private var sdrDark: [Double] = [], sdrLuma: [Double] = []
+    /// VQ.2b: the SDR picture's own flash series (the baseline), and below SDR white — every pixel the HDR
+    /// frame keeps at or under white — how far HDR's codes stray from SDR's and both pictures' mean luma there.
+    private var sdrPictureWhole: [Double] = [], sdrPictureRegions: [[FlashRegionSample]] = []
+    private var belowWorst = 0, belowDiffering = 0, belowChannels = 0
+    private var belowLumaSDR = 0.0, belowLumaHDR = 0.0
 
     init(headroom: Float) { self.headroom = headroom }
 
@@ -231,28 +237,42 @@ final class HDRReplay {
         let whole = sdr.prefix(9).map(\.luminance).reduce(0, +) / 9
         sdrWhole.append(whole)
         peakWhole.append(whole / Double(headroom))
-        var maxes = [Float](), dark = 0, luma = 0.0
+        var maxes = [Float](), lumas = [Double](), dark = 0, luma = 0.0
         maxes.reserveCapacity(px.count / 4)
         for i in stride(from: 0, to: px.count, by: 4) {
             maxes.append(max(px[i], px[i + 1], px[i + 2]))
             let y = 0.2126 * Double(px[i]) + 0.7152 * Double(px[i + 1]) + 0.0722 * Double(px[i + 2])
             luma += y
+            lumas.append(y)
             if y < 0.01 { dark += 1 }
         }
         let n = Double(maxes.count)
+        lumaAbove.append(Double(lumas.filter { $0 > 1 }.count) / n)
+        lumaP999.append(lumas.sorted()[Int(n * 0.999)])
         hdrAbove.append(Double(maxes.filter { $0 > 1 }.count) / n)
         hdrP999.append(Double(maxes.sorted()[Int(n * 0.999)]))
         hdrDark.append(Double(dark) / n)
         hdrLuma.append(luma / n)
     }
 
-    func receiveSDR(_ bgra: [UInt8]) {
+    func receiveSDR(_ bgra: [UInt8], width: Int, height: Int) {
         var dark = 0, luma = 0.0
+        sdrPictureWhole.append(FlashHarnessSupport.meanRelativeLuminance(bgra))
+        sdrPictureRegions.append(FlashAnalyzer.regions(bgra: bgra, width: width, height: height))
         for i in stride(from: 0, to: bgra.count, by: 4) {
             let y = 0.2126 * Self.decode(bgra[i + 2]) + 0.7152 * Self.decode(bgra[i + 1])
                 + 0.0722 * Self.decode(bgra[i])
             luma += y
             if y < 0.01 { dark += 1 }
+            guard latest.count == bgra.count, max(latest[i], latest[i + 1], latest[i + 2]) <= 1 else { continue }
+            for (h, s) in [(latest[i], bgra[i + 2]), (latest[i + 1], bgra[i + 1]), (latest[i + 2], bgra[i])] {
+                let d = abs(Self.encode(h) - Int(s))
+                belowWorst = max(belowWorst, d)
+                if d > 1 { belowDiffering += 1 }
+                belowChannels += 1
+            }
+            belowLumaSDR += y
+            belowLumaHDR += 0.2126 * Double(latest[i]) + 0.7152 * Double(latest[i + 1]) + 0.0722 * Double(latest[i + 2])
         }
         let n = Double(bgra.count / 4)
         sdrDark.append(Double(dark) / n)
@@ -262,6 +282,12 @@ final class HDRReplay {
     func report() {
         func mean(_ a: [Double]) -> Double { a.isEmpty ? 0 : a.reduce(0, +) / Double(a.count) }
         func f(_ v: Double) -> String { String(format: "%.4f", v) }
+        func rates(_ whole: [Double], _ regions: [[FlashRegionSample]]) -> String {
+            String(format: "whole %.2f, regional %.2f, red %.2f /s",
+                   FlashAnalyzer.analyze(relativeLuminance: whole, fps: 60).peakFlashesPerSecond,
+                   FlashAnalyzer.analyzeRegional(regions, fps: 60).peakFlashesPerSecond,
+                   FlashAnalyzer.analyzeRed(regions, fps: 60).peakFlashesPerSecond)
+        }
         func flashes(_ whole: [Double], _ regions: [[FlashRegionSample]]) -> String {
             let r = [FlashAnalyzer.analyze(relativeLuminance: whole, fps: 60),
                      FlashAnalyzer.analyzeRegional(regions, fps: 60),
@@ -273,11 +299,17 @@ final class HDRReplay {
         [multipass-replay] HDR at headroom \(headroom) over \(hdrAbove.count) frames:
           share of pixels above SDR white  mean \(f(mean(hdrAbove)))  max \(f(hdrAbove.max() ?? 0))
           p99.9 brightest channel          mean \(f(mean(hdrP999)))  max \(f(hdrP999.max() ?? 0))  (× SDR white)
+          share with luminance above white mean \(f(mean(lumaAbove)))  max \(f(lumaAbove.max() ?? 0))
+          p99.9 luminance                  mean \(f(mean(lumaP999)))  max \(f(lumaP999.max() ?? 0))  (× SDR white)
           largest ninth-of-screen mean      \(f(maxRegionMean))  (cap holds ≤ 1)
           dark troughs (luma < 0.01)        SDR \(f(mean(sdrDark)))  HDR \(f(mean(hdrDark)))
           mean luma (linear)                SDR \(f(mean(sdrLuma)))  HDR \(f(mean(hdrLuma)))
-          flash, SDR-white anchor:  \(flashes(sdrWhole, sdrRegions))
-          flash, peak anchor:       \(flashes(peakWhole, peakRegions))
+          below SDR white (VQ.2b)           max |Δ| \(belowWorst) code, \(f(Double(belowDiffering) / Double(max(belowChannels, 1))))
+                                            of channels > 1 code; mean luma SDR \(f(belowLumaSDR / Double(max(belowChannels / 3, 1)))) \
+        HDR \(f(belowLumaHDR / Double(max(belowChannels / 3, 1))))
+          flash, SDR picture (baseline): \(rates(sdrPictureWhole, sdrPictureRegions))
+          flash, SDR-white anchor:  \(flashes(sdrWhole, sdrRegions)) — \(rates(sdrWhole, sdrRegions))
+          flash, peak anchor:       \(flashes(peakWhole, peakRegions)) — \(rates(peakWhole, peakRegions))
         """)
     }
 
@@ -311,6 +343,11 @@ final class HDRReplay {
         }
         try SessionDrivenMultiPassReplay.writePNG(bgra: mask, width: width, height: height,
                                                   to: url.deletingPathExtension().appendingPathExtension("mask.png"))
+    }
+
+    private static func encode(_ linear: Float) -> Int {
+        let c = Double(min(max(linear, 0), 1))
+        return Int(((c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1 / 2.4) - 0.055) * 255).rounded())
     }
 
     private static func decode(_ code: UInt8) -> Double {

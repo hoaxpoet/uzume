@@ -14,6 +14,9 @@
 //                                   channel) below and above SDR white in a 6×6 grid of cells, so
 //                                   the composite caps every ninth of the screen (any 2×2 block of
 //                                   cells) at an average of SDR white — HDR highlights stay small.
+//   (VQ.2b) finish_clamp_fragment — a display-referred scene only (a legacy scene's own colour, written
+//                                   unclamped): its SDR part, clamped into an 8-bit target at the legacy
+//                                   codes; the composite stretches that and adds the HDR ramp of the rest.
 //
 // Sources ported:
 //   - Bloom chain: J. Jimenez, "Next Generation Post Processing in Call of Duty: Advanced
@@ -58,6 +61,8 @@ struct FinishUniforms {
     uint  frame;             // temporal dither index
     uint  useLUT;            // 1 = sample the 3D LUT at texture(2)
     uint  hdrOutput;         // 1 = linear float output: light above SDR white kept, region-capped (VQ.2); 2 = uncapped (tests' negative control)
+    uint  displayReferred;   // 1 = the scene's light is already display-referred (VQ.2b): no grade, no curve below white
+    float overRise;          // most a cell's mean light above white may change this frame (VQ.2b); 0 = not eased
 };
 
 /// Region grid (VQ.2): 6×6 cells, so a ninth of the screen (FlashAnalyzer v2's 3×3 grid and its
@@ -72,6 +77,8 @@ static constant float kMidGrey = 0.18;
 /// light below the knee shows exactly as on SDR; from it to the curve's max it ramps to the peak.
 static constant float kHDRKneeIn = 1.0;
 static constant float kLottesHDRMax = 8.0;
+/// Most the eased light (VQ.2b) may lift what is left above white when the scene's own dips.
+static constant float kOverEaseMaxGain = 2.0;
 
 // MARK: - Helpers
 
@@ -106,6 +113,7 @@ static inline float finish_tpdf(float u) {
 /// transform, per channel: linear scene light → linear display light in [0, headroom]. On HDR the
 /// SDR curve is kept and only light above the knee gains the extra headroom (VQ.2a: scaling the
 /// whole curve lifted every upper midtone — Ferrofluid's spike sides doubled, not its glints).
+/// (A display-referred scene, VQ.2b, skips it: `finish_display_referred_over`.)
 static inline float3 finish_tone(float3 c, constant FinishUniforms& u) {
     c = max(c * u.exposure, 0.0);
     c = kMidGrey * pow(c / kMidGrey, u.contrast);
@@ -128,21 +136,57 @@ static inline float3 finish_scene(texture2d<float> scene, texture2d<float> bloom
     return c;
 }
 
+/// The light above SDR white of a display-referred scene (VQ.2b) at `uv`: the HDR ramp per texel of the
+/// float frame target, THEN interpolated. Interpolating its unclamped light first would let a texel at 10×
+/// white bleed into its dark neighbours on a stretch (tier-1: the scene at 2560×1440 into 4K). 0 on SDR.
+static inline float3 finish_display_referred_over(texture2d<float> scene, float2 uv, constant FinishUniforms& u) {
+    if (u.headroom <= 1.0) { return 0.0; }
+    int2 hi = int2(scene.get_width(), scene.get_height()) - 1;
+    float2 p = uv * float2(hi + 1) - 0.5;
+    float2 f = fract(p);
+    int2 i = int2(floor(p));
+    float3 t[4];
+    for (int k = 0; k < 4; k++) {
+        float4 c = scene.read(uint2(clamp(i + int2(k & 1, k >> 1), int2(0), hi)));
+        // Alpha: light the scene adds on HDR only, as a share of the headroom (Energetic Flyby's rod line).
+        t[k] = (u.headroom - 1.0) * max(smoothstep(log2(kHDRKneeIn), log2(kLottesHDRMax), log2(max(c.rgb, 1e-6))), c.a);
+    }
+    return mix(mix(t[0], t[1], f.x), mix(t[2], t[3], f.x), f.y);
+}
+
 /// The share of a pixel's light above SDR white that may stay (VQ.2): for every ninth of the
 /// screen (2×2 block of cells) containing the pixel's cell, the largest k with
 /// mean(min(c,1)) + k · mean(max(c−1,0)) ≤ 1 (brightest channel; it bounds every channel's mean),
-/// then the smallest of those. 1 when nothing is capped.
-static inline float finish_region_keep(float2 uv, constant float2* cells) {
+/// then the smallest of those. 1 when nothing is capped. The light above white is the cell's eased mean,
+/// which is the measured one for every scene but a display-referred one (VQ.2b).
+static inline float finish_region_keep(float2 uv, constant float3* cells) {
     int2 cell = min(int2(uv * float(kRegionCells)), int2(kRegionCells - 1));
     float keep = 1.0;
     for (int wy = max(cell.y - 1, 0); wy <= min(cell.y, kRegionCells - 2); wy++) {
         for (int wx = max(cell.x - 1, 0); wx <= min(cell.x, kRegionCells - 2); wx++) {
-            float2 m = (cells[wy * kRegionCells + wx] + cells[wy * kRegionCells + wx + 1]
+            float3 m = (cells[wy * kRegionCells + wx] + cells[wy * kRegionCells + wx + 1]
                       + cells[(wy + 1) * kRegionCells + wx] + cells[(wy + 1) * kRegionCells + wx + 1]) * 0.25;
-            if (m.y > 1e-6) { keep = min(keep, saturate((1.0 - m.x) / m.y)); }
+            if (m.z > 1e-6) { keep = min(keep, saturate((1.0 - m.x) / m.z)); }
         }
     }
     return keep;
+}
+
+/// How much of a display-referred scene's light above white shows this frame (VQ.2b, Matt: "Shine eases
+/// in"): the eased mean over the measured mean, each interpolated between cell centres. The ratio of the
+/// interpolated means, not the interpolated ratios: an empty cell beside a bright one would otherwise let
+/// the bright cell's light through near their edge at full strength.
+static inline float finish_over_ease(float2 uv, constant float3* cells) {
+    float2 p = uv * float(kRegionCells) - 0.5;
+    float2 f = fract(p);
+    int2 i = int2(floor(p));
+    float3 c[4];
+    for (int k = 0; k < 4; k++) {
+        int2 cell = clamp(i + int2(k & 1, k >> 1), int2(0), int2(kRegionCells - 1));
+        c[k] = cells[cell.y * kRegionCells + cell.x];
+    }
+    float3 m = mix(mix(c[0], c[1], f.x), mix(c[2], c[3], f.x), f.y);
+    return m.y > 1e-6 ? min(m.z / m.y, kOverEaseMaxGain) : 1.0;
 }
 
 // MARK: - Bloom chain (compute — one encoder for all eleven steps; as render passes each small
@@ -254,12 +298,15 @@ kernel void finish_upsample_kernel(
 /// BRIGHTEST channel (so a saturated-red flash is capped like a white one, not let through by red's
 /// small share of luminance), from a 64×64 grid of bilinear samples (each a 2×2 average) — the cap
 /// concerns a ninth of the screen, so a sampled mean is enough.
-/// `cells[i]` = (mean max-channel of min(c,1), mean max-channel of max(c−1,0)).
+/// `cells[i]` = (mean max-channel of min(c,1), mean max-channel of max(c−1,0), eased over-white mean).
+/// The eased mean (VQ.2b) moves by at most `overRise` a frame, either way: a ninth's light above white
+/// cannot swing fast, so it cannot turn a swing of the SDR picture's into a flash.
 kernel void finish_region_kernel(
     constant FinishUniforms& u                  [[buffer(0)]],
-    device float2* cells                        [[buffer(1)]],
+    device float3* cells                        [[buffer(1)]],
     texture2d<float> scene                      [[texture(0)]],
     texture2d<float> bloom                      [[texture(1)]],
+    texture2d<float> sdr                        [[texture(3)]],
     sampler samp                                [[sampler(0)]],
     uint2 group                                 [[threadgroup_position_in_grid]],
     uint2 tid                                   [[thread_position_in_threadgroup]],
@@ -271,7 +318,10 @@ kernel void finish_region_kernel(
         for (int x = 0; x < 4; x++) {
             float2 s = float2(tid * 4 + uint2(x, y)) + 0.5;
             float2 uv = (float2(group) + s / float(kRegionSamples)) / float(kRegionCells);
-            float3 c = min(finish_tone(finish_scene(scene, bloom, samp, uv, u), u), u.headroom);
+            float3 c = u.displayReferred != 0
+                ? sdr.sample(samp, uv, level(0)).rgb + finish_display_referred_over(scene, uv, u)
+                : finish_tone(finish_scene(scene, bloom, samp, uv, u), u);
+            c = min(c, u.headroom);
             sum += float2(finish_max3(min(c, 1.0)), finish_max3(max(c - 1.0, 0.0)));
         }
     }
@@ -282,7 +332,10 @@ kernel void finish_region_kernel(
     if (tid.x == 0 && tid.y == 0) {
         float2 total = 0.0;
         for (int i = 0; i < 8; i++) { total += partial[i]; }
-        cells[group.y * kRegionCells + group.x] = total / float(kRegionSamples * kRegionSamples);
+        total /= float(kRegionSamples * kRegionSamples);
+        int cell = group.y * kRegionCells + group.x;
+        float eased = cells[cell].z;
+        cells[cell] = float3(total, u.overRise > 0.0 ? eased + clamp(total.y - eased, -u.overRise, u.overRise) : total.y);
     }
 }
 
@@ -297,13 +350,19 @@ kernel void finish_region_kernel(
 fragment float4 finish_composite_fragment(
     VertexOut in                    [[stage_in]],
     constant FinishUniforms& u      [[buffer(0)]],
-    constant float2* cells          [[buffer(1)]],
+    constant float3* cells          [[buffer(1)]],
     texture2d<float> scene          [[texture(0)]],
     texture2d<float> bloom          [[texture(1)]],
     texture3d<float> lut            [[texture(2)]],
+    texture2d<float> sdr            [[texture(3)]],
     sampler samp                    [[sampler(0)]]
 ) {
-    float3 c = finish_tone(finish_scene(scene, bloom, samp, in.uv, u), u);
+    // VQ.2b: a display-referred scene's SDR part is its clamped light at the legacy frame target's own
+    // 8-bit codes (finish_clamp_fragment), stretched by the sampler as the legacy present step does — the
+    // legacy picture, codes and all; only the light above white comes from the float target.
+    bool displayReferred = u.displayReferred != 0;
+    float3 c = displayReferred ? sdr.sample(samp, in.uv, level(0)).rgb
+                               : finish_tone(finish_scene(scene, bloom, samp, in.uv, u), u);
 
     // Optional creative LUT, indexed by the encoded colour (the .cube convention).
     float3 encoded = finish_srgb_encode(min(c, 1.0));
@@ -325,7 +384,18 @@ fragment float4 finish_composite_fragment(
     float3 decoded = finish_srgb_decode(encoded);
     if (u.hdrOutput == 0) { return float4(decoded, 1.0); }
     // Per pixel at most the headroom (the curve rises slightly past hdrMax); per ninth, the cap.
-    float3 over = min(max(c - 1.0, 0.0), u.headroom - 1.0);
+    float3 over = displayReferred ? finish_display_referred_over(scene, in.uv, u) : max(c - 1.0, 0.0);
+    if (u.overRise > 0.0) { over *= finish_over_ease(in.uv, cells); }
+    over = min(over, u.headroom - 1.0);
     if (u.hdrOutput == 1) { over *= finish_region_keep(in.uv, cells); }
     return float4(decoded + over, 1.0);
+}
+
+// MARK: - Display-referred SDR part (VQ.2b)
+
+/// A display-referred scene's frame target, clamped to SDR white into an 8-bit sRGB target: the hardware
+/// store gives each pixel the code the legacy frame target stored (exact rounding does not — it missed the
+/// legacy oracle by 2 codes, measured).
+fragment float4 finish_clamp_fragment(VertexOut in [[stage_in]], texture2d<float> scene [[texture(0)]]) {
+    return float4(saturate(scene.read(uint2(in.position.xy)).rgb), 1.0);
 }

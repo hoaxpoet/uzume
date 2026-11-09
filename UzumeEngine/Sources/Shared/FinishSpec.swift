@@ -88,15 +88,26 @@ public struct FinishSpec: Codable, Sendable, Equatable {
     /// white up to the display's headroom (capped, `HDROutput`). Absent = false: headroom 1.0,
     /// the scene looks as it does on SDR.
     public var hdr: Bool
+    /// The scene's light is already display-referred (VQ.2b, cinematic only; sidecar
+    /// `display_referred`): a legacy scene's own colour, written linear and NOT clamped. Below SDR
+    /// white the finish shows it exactly as the legacy path did — no display transform, no grade, no
+    /// dither; above it only the HDR ramp (D-268) shows the light the clamp removed. Absent = false.
+    public var displayReferred: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case mode, bloom, grade, lut, hdr
+        case displayReferred = "display_referred"
+    }
 
     /// Creates a finish.
     public init(mode: Mode = .legacy, bloom: Bloom = Bloom(), grade: Grade = Grade(), lut: String? = nil,
-                hdr: Bool = false) {
+                hdr: Bool = false, displayReferred: Bool = false) {
         self.mode = mode
         self.bloom = bloom
         self.grade = grade
         self.lut = lut
         self.hdr = hdr
+        self.displayReferred = displayReferred
     }
 
     public init(from decoder: Decoder) throws {
@@ -106,6 +117,7 @@ public struct FinishSpec: Codable, Sendable, Equatable {
         grade = try container.decodeIfPresent(Grade.self, forKey: .grade) ?? Grade()
         lut = try container.decodeIfPresent(String.self, forKey: .lut)
         hdr = try container.decodeIfPresent(Bool.self, forKey: .hdr) ?? false
+        displayReferred = try container.decodeIfPresent(Bool.self, forKey: .displayReferred) ?? false
     }
 
     /// The default finish: the scene's own pixels.
@@ -119,10 +131,15 @@ public struct FinishSpec: Codable, Sendable, Equatable {
     public static let legacyFrameTargetFormat: MTLPixelFormat = .bgra8Unorm_srgb
     /// The cinematic frame target: linear HDR.
     public static let cinematicFrameTargetFormat: MTLPixelFormat = .rgba16Float
+    /// A display-referred scene's frame target (VQ.2b): 32-bit float, so its SDR part reaches the 8-bit
+    /// store with the exact value the legacy frame target got. At 16-bit, 1.1 % of channels moved a code
+    /// (up to 2 on the tier-1 stretch); at 32-bit the SDR picture is byte-identical (measured).
+    public static let displayReferredFrameTargetFormat: MTLPixelFormat = .rgba32Float
 
     /// The format of every pipeline that draws this scene's frame target.
     public var frameTargetFormat: MTLPixelFormat {
-        mode == .cinematic ? Self.cinematicFrameTargetFormat : Self.legacyFrameTargetFormat
+        guard mode == .cinematic else { return Self.legacyFrameTargetFormat }
+        return displayReferred ? Self.displayReferredFrameTargetFormat : Self.cinematicFrameTargetFormat
     }
 }
 

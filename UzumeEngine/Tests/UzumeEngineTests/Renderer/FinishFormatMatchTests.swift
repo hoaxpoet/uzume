@@ -46,7 +46,9 @@ struct FinishFormatMatchTests {
                 let preset = fixture.presets.first { $0.descriptor.name == name }
                 #expect(preset != nil, "\(name) failed to load in \(mode) mode")
                 #expect(preset?.descriptor.finish.mode == mode)
-                #expect(preset?.descriptor.finish.frameTargetFormat == FinishSpec(mode: mode).frameTargetFormat)
+                // VQ.2b: a display-referred scene's cinematic target is 32-bit float.
+                let expected = FinishSpec(mode: mode, displayReferred: preset?.descriptor.finish.displayReferred ?? false)
+                #expect(preset?.descriptor.finish.frameTargetFormat == expected.frameTargetFormat)
             }
         }
     }

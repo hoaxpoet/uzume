@@ -1360,7 +1360,7 @@ finishes the frame target into the drawable. Contract for any new pass or path:
 - Obtain the target from `instrumentedRenderPassDescriptor` / `instrumentedDrawable` (a `FrameTarget`) and hand it
   to `instrumentedPresent`. Touching the drawable anywhere else fails `onlyTheSeamTouchesTheDrawable`.
 - A pipeline that draws the frame target compiles against the scene's `finish.frameTargetFormat` — legacy
-  `.bgra8Unorm_srgb`, cinematic `.rgba16Float` — from `PresetLoader.frameTargetFormat(_:)` / `(forPreset:)`, or picks
+  `.bgra8Unorm_srgb`, cinematic `.rgba16Float`, display-referred `.rgba32Float` (VQ.2b) — from `PresetLoader.frameTargetFormat(_:)` / `(forPreset:)`, or picks
   at draw time by the target texture's `pixelFormat` (`frameBlitPipeline(for:)`). Never compile one for
   the drawable's format (`RenderPipeline.drawableFormat`, which VQ.2 switches to `.rgba16Float` on HDR).
   `context.pixelFormat` is the **legacy frame format** — a constant `.bgra8Unorm_srgb`, never the drawable's.
@@ -1417,7 +1417,16 @@ change, logging `HDR_STATE`). On HDR:
 - **Display curve on HDR (VQ.2a, D-268):** the SDR Lottes curve exactly, plus `(headroom − 1) · smoothstep` in
   log2 from graded scene 1.0 (`FinishingStage.hdrKneeIn`) to 8 (`lottesHDRMax`), per channel. Below 1.0, HDR ==
   SDR; only highlights brighten. (Scaling the whole curve, as VQ.2 first did, lifted upper midtones ~1.5×.)
-  Adopters: Ferrofluid Ocean (razor glints).
+  Adopters: Ferrofluid Ocean (razor glints), Energetic Flyby (display-referred, below).
+- **Display-referred scenes (VQ.2b, D-269):** `finish.display_referred` is for a scene that already writes display
+  colour (Energetic Flyby: Kali's colour, approved as is). It writes linear, unclamped colour into an
+  `.rgba32Float` frame target (16F moved 1 % of channels a code). The SDR part is that colour clamped into an 8-bit
+  sRGB target (`finish_clamp_fragment`), so SDR shows the legacy codes exactly — no grade, curve, bloom or dither.
+  On HDR the composite adds the D-268 ramp per texel. The frame target's **alpha** carries extra light for HDR only:
+  white, as a share of the headroom (Energetic Flyby's rod line). The clamp never reads alpha, so SDR can't change.
+  Light above white is **eased** per 6×6 cell, both ways, at most `overRisePerSecond` (0.5 × SDR white per second),
+  before the per-ninth cap: sudden rod light added flashes on real music. Allowed only with cinematic + `[.direct]` +
+  render scale 1 (a decode error otherwise).
 - **Flash cap:** light above SDR white is added after the SDR part (graded, LUT-mapped, dithered as before) and
   scaled so no ninth of the screen (any 2×2 block of a 6×6 cell grid — FlashAnalyzer v2's regions) averages above
   SDR white in its brightest channel (`finish_region_kernel`). A full-screen flash is never brighter than on SDR.
