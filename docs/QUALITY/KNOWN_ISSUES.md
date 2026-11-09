@@ -25,7 +25,6 @@ belongs in the second table, not the first.
 
 | ID | Sev | Domain | What happens | Next step |
 |---|---|---|---|---|
-| BUG-182 | P3 | test.harness / preset.energetic_flyby | The real-audio replay read Energetic Flyby at 3.50–4.00 flashes/s (limit 3), but it counted 43 Hz captures as 60 fps. At the real rate all three songs are 3.00/s: at the limit, not over. Nothing is unsafe. | Matt's call on the options (2026-11-09). Then fix the replay's frame rate and add the three songs to the scene's flash gate. |
 | BUG-181 | P2 | renderer.perf / dsp.stem | On Spotify, Energetic Flyby dropped 15.9 % of frames past 33 ms vs 7.4 % on local files: live stem separation shares the GPU. The scene reads no stems. Fixed: separation pauses for `reads_stems: false` scenes. | Matt's live Spotify pass: frames past 33 ms near the offline 4.7 %. |
 | BUG-180 | P3 | preset.understory / scene-fidelity | A clear vertical seam down the middle of Understory's forest backdrop, live. Uncertified preset. | Diagnose in UND.8 (design §12, 2026-10-05). |
 | BUG-085 | P1 | renderer / app.hang | The app freezes and needs a force-quit, minutes into a session. The cause is unknown. The 08-05 capture came from a Debug build under Xcode, and it shows the whole process stopping, not only the renderer (audit D2). | A long Release session launched from Finder. On a freeze, note whether the music kept playing. From testers: BR.5's Report a Problem. |
@@ -79,58 +78,6 @@ passes, the entry moves to §Resolved (recent).
 ---
 
 ## Open
-
-### BUG-182 — the real-audio replay overcounted Energetic Flyby's flashes; the scene is at the limit, not over (2026-11-09)
-
-**Severity:** P3 (a measurement error; no unsafe picture) · **Domain:** `test.harness` / `preset.energetic_flyby`
-(`SessionDrivenMultiPassReplay`, `HDRReplay`, `FlashAnalyzer`) · **Failure class:** `sample-rate` · **Status:** Open,
-diagnosed, waiting on Matt's call · **Found by:** VQ.2b real-audio replays, 2026-11-05
-
-**Expected.** Energetic Flyby's certified SDR picture is ≤ 3 regional flashes/s on real music, as the worst-case
-train gate (`energeticFlybyIsFlashSafe`, 3.00/s) says.
-
-**Actual (as reported).** VQ.2b's replay read the SDR picture at regional 3.50/s on love_rehab and 4.00/s on
-there_there (3.00 on so_what).
-
-**Root cause.** The `route_coverage` captures step 23.2 ms (43.1 Hz; 1,287 rows over 29.9 s). The replay hands
-`FlashAnalyzer` `fps: 60`, so every "one-second" window holds 1.39 s of music. Main's `HDRReplay` (VQ.2a) carries
-the same constant. The scene's state ticks on the capture's real `deltaTime`, so only the count is wrong.
-
-**Evidence** (branch `efb-flash-diag`; the replay now prints the SDR picture at both rates and can pin one driver).
-Legacy finish (what main ships; byte-identical to VQ.2b's SDR picture), full 30 s clip, regional flashes/s:
-
-| track | read as 60 fps | real 43.1 fps | resampled to 30 fps (live rate) |
-|---|---|---|---|
-| so_what | 3.00 | 3.00 | 2.50 |
-| there_there | 4.00 | 3.00 | 3.00 |
-| love_rehab | 3.50 | 3.00 | 3.00 |
-
-Same at 640×360 and 1920×1080. Whole-frame 0.00 throughout. The 60 fps column reproduces VQ.2b exactly.
-
-*What fills the at-limit windows* (one change per arm, the recorded flight replayed; the unchanged control
-reproduces the shipped numbers exactly): colour turn pinned 3.50 / 3.00 / 3.50, bank pinned 3.00 everywhere, glow
-held steady 3.00 everywhere. So no music route causes them. The windows are corner and edge ninths swinging
-0.10–0.37 in luminance every 115–350 ms, spread evenly across the bar. A contact strip (love_rehab frames 295–333,
-top-left ninth) shows bright orange shell rims and light rods sweeping through the corner as the camera flies past.
-That is Kali's tunnel at Kali's brightness, as EFB.1 found on the train.
-
-*Margin levers measured:* glow 15 % dimmer 3.00 / 3.00 / 3.00; the whole flight at the slowest speed
-2.50 / 3.00 / 3.00. Neither buys headroom.
-
-*Not a shipped picture:* forcing the cinematic defaults (bloom on), as `REPLAY_FINISH=cinematic` does on main,
-reads so_what 4.00/s at the real rate. Bloom on this scene would cross. VQ.2b's cinematic sets bloom 0.
-
-**Second risk in the same constant.** A capture faster than 60 Hz (a 120 Hz display) would be *under*counted. The
-replay should take its rate from the capture's `deltaTime`.
-
-**Options for Matt (2026-11-09).** (A) Keep the look. Fix the replay's frame rate, and add the three songs to
-the scene's flash gate so a future change that tips it over fails. (B) Change the look to earn headroom. A
-15 % dimmer glow and the slowest flight both still reach 3/s, so it would take a visibly larger change to
-Kali's colour or tunnel. **Recommendation: A.**
-
-**Verification (written before any fix).** Automated: the corrected replay reads ≤ 3.00/s regional on all three
-songs at the real rate, and a negative control fails it (the same songs read as 60 fps, there_there 4.00). Manual:
-none needed for A (no change on screen).
 
 ### BUG-181 — on Spotify, live stem separation makes Energetic Flyby drop twice the frames (2026-10-20)
 
@@ -1761,4 +1708,62 @@ These test failures are pre-existing, environment-dependent, and do not indicate
 ---
 
 ## Resolved (recent)
+
+### BUG-182 — the real-audio replay overcounted Energetic Flyby's flashes; the scene is at the limit, not over (2026-11-09)
+
+**Severity:** P3 (a measurement error; no unsafe picture) · **Domain:** `test.harness` / `preset.energetic_flyby`
+(`SessionDrivenMultiPassReplay`, `HDRReplay`, `FlashAnalyzer`) · **Failure class:** `sample-rate` · **Status:** Fixed 2026-11-09 (fed919f7, gate 49943c27), Matt chose A; no live check (nothing on screen changed) · **Found by:** VQ.2b real-audio replays, 2026-11-05
+
+**Expected.** Energetic Flyby's certified SDR picture is ≤ 3 regional flashes/s on real music, as the worst-case
+train gate (`energeticFlybyIsFlashSafe`, 3.00/s) says.
+
+**Actual (as reported).** VQ.2b's replay read the SDR picture at regional 3.50/s on love_rehab and 4.00/s on
+there_there (3.00 on so_what).
+
+**Root cause.** The `route_coverage` captures step 23.2 ms (43.1 Hz; 1,287 rows over 29.9 s). The replay hands
+`FlashAnalyzer` `fps: 60`, so every "one-second" window holds 1.39 s of music. Main's `HDRReplay` (VQ.2a) carries
+the same constant. The scene's state ticks on the capture's real `deltaTime`, so only the count is wrong.
+
+**Evidence** (branch `efb-flash-diag`; the replay now prints the SDR picture at both rates and can pin one driver).
+Legacy finish (what main ships; byte-identical to VQ.2b's SDR picture), full 30 s clip, regional flashes/s:
+
+| track | read as 60 fps | real 43.1 fps | resampled to 30 fps (live rate) |
+|---|---|---|---|
+| so_what | 3.00 | 3.00 | 2.50 |
+| there_there | 4.00 | 3.00 | 3.00 |
+| love_rehab | 3.50 | 3.00 | 3.00 |
+
+Same at 640×360 and 1920×1080. Whole-frame 0.00 throughout. The 60 fps column reproduces VQ.2b exactly.
+
+*What fills the at-limit windows* (one change per arm, the recorded flight replayed; the unchanged control
+reproduces the shipped numbers exactly): colour turn pinned 3.50 / 3.00 / 3.50, bank pinned 3.00 everywhere, glow
+held steady 3.00 everywhere. So no music route causes them. The windows are corner and edge ninths swinging
+0.10–0.37 in luminance every 115–350 ms, spread evenly across the bar. A contact strip (love_rehab frames 295–333,
+top-left ninth) shows bright orange shell rims and light rods sweeping through the corner as the camera flies past.
+That is Kali's tunnel at Kali's brightness, as EFB.1 found on the train.
+
+*Margin levers measured:* glow 15 % dimmer 3.00 / 3.00 / 3.00; the whole flight at the slowest speed
+2.50 / 3.00 / 3.00. Neither buys headroom.
+
+*Not a shipped picture:* forcing the cinematic defaults (bloom on), as `REPLAY_FINISH=cinematic` does on main,
+reads so_what 4.00/s at the real rate. Bloom on this scene would cross. VQ.2b's cinematic sets bloom 0.
+
+**Second risk in the same constant.** A capture faster than 60 Hz (a 120 Hz display) would be *under*counted. The
+replay should take its rate from the capture's `deltaTime`.
+
+**Options for Matt (2026-11-09).** (A) Keep the look. Fix the replay's frame rate, and add the three songs to
+the scene's flash gate so a future change that tips it over fails. (B) Change the look to earn headroom. A
+15 % dimmer glow and the slowest flight both still reach 3/s, so it would take a visibly larger change to
+Kali's colour or tunnel. **Recommendation: A.** **Matt chose A (2026-11-09).**
+
+**Fix.** `FlashHarnessSupport.captureFPS` reads a recorded drive's rate from its `deltaTime`;
+`assertFlashSafe` takes an `fps` (default the train's 60). The replay's SDR-picture and HDR flash reports use the
+capture's rate. New gate `MultiPassFlashHarnessTests.energeticFlybyIsFlashSafeOnRealMusic` replays all three
+songs through the real render (320×180, legacy): regional 3.00 / 3.00 / 3.00, red 2.00 each, whole 0.00 —
+**passes**. Negative control (the same gate reading 60 fps): there_there 4.00, love_rehab 4.00 — **fails**. That a
+look change trips it is shown by the bloom-on arm above (so_what 4.00 at the real rate).
+
+**Verification (written before any fix).** Automated: the corrected replay reads ≤ 3.00/s regional on all three
+songs at the real rate, and a negative control fails it (the same songs read as 60 fps, there_there 4.00). Manual:
+none needed for A (no change on screen).
 
