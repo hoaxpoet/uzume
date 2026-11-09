@@ -19,6 +19,10 @@
 //   REPLAY_PRESET="Dragon Bloom" \
 //   REPLAY_MULTIPASS=1 \
 //   [REPLAY_FROM=0 REPLAY_COUNT=90 REPLAY_OUT=/tmp/replay REPLAY_FINISH=cinematic] \
+//   [REPLAY_FLASH_CSV=/tmp/x.csv — the SDR picture's 13 flash-region luminances per frame (plus the
+//    Energetic Flyby state the shader read), for attributing flashes to moments] \
+//   [REPLAY_EFB_FREEZE=none|hue|roll|glow|dim|slow — Energetic Flyby only: render once, then re-render the same flight
+//    with that one driver pinned (hue/roll at 0, glow at its mean), for one-change flash attribution] \
 //   [REPLAY_HDR=4  — VQ.2a: also finish every frame for an HDR display at this headroom; prints
 //    SDR-vs-HDR light and the flash reports, and REPLAY_OUT gets SDR|HDR side-by-side .heic] \
 //   swift test --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
@@ -127,6 +131,36 @@ struct SessionDrivenMultiPassReplay {
         let outDir = (env["REPLAY_OUT"].map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) })
         if let outDir { try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true) }
         let every = Int(env["REPLAY_EVERY"] ?? "") ?? 20
+        // EFB-FLASH: the SDR picture's flash regions, analysed at the capture's REAL frame rate.
+        // The route-coverage captures step 23.2 ms (43 Hz), not 1/60 s; analysing them as 60 fps
+        // squeezes 1.39 s of music into each 1 s window.
+        var sdrRegions: [[FlashRegionSample]] = []
+        var trace = EnergeticFlybyTraceLog()
+        if presetName == "Energetic Flyby" { harness.energeticFlybyTrace = trace }
+        if presetName == "Energetic Flyby", let freeze = env["REPLAY_EFB_FREEZE"] {
+            _ = try harness.render(preset: presetName, features: features, stems: stemSlice) { _ in 0 }
+            var states = trace.states
+            let meanGlow = states.map(\.glowBase).reduce(0, +) / Float(max(states.count, 1))
+            for i in states.indices {
+                switch freeze {
+                case "hue": states[i].hue = 0; states[i].prevHue = 0
+                case "roll": states[i].roll = 0; states[i].prevRoll = 0
+                case "glow": states[i].glowBase = meanGlow
+                case "dim": states[i].glowBase *= 0.85
+                case "slow":   // the whole flight at the speed floor (0.65), the quietest passage's pace
+                    let travel = states[0].travel + EnergeticFlybyState.speedFloor * (states[i].time - states[0].time)
+                    states[i].prevTravel = i > 0 ? states[i - 1].travel : travel
+                    states[i].prevCamT = states[i].prevTravel
+                    states[i].travel = travel; states[i].camT = travel
+                case "none": break   // the control: forcing the recorded states must reproduce the shipped numbers
+                default: Issue.record("REPLAY_EFB_FREEZE=\(freeze): none, hue, roll, glow, dim or slow"); return
+                }
+            }
+            harness.energeticFlybyForced = states
+            trace = EnergeticFlybyTraceLog()
+            harness.energeticFlybyTrace = trace
+            print("[multipass-replay] Energetic Flyby: \(freeze) pinned, everything else as recorded")
+        }
         var frameIndex = 0
         let measured = try harness.render(
             preset: presetName, features: features, stems: stemSlice, settle: 8
@@ -141,6 +175,7 @@ struct SessionDrivenMultiPassReplay {
                 }
             }
             hdr?.receiveSDR(bgra)
+            sdrRegions.append(FlashAnalyzer.regions(bgra: bgra, width: width, height: height))
             return Self.stats(bgra)
         }
         if let outDir { print("[multipass-replay] frames → \(outDir.path)") }
@@ -158,6 +193,8 @@ struct SessionDrivenMultiPassReplay {
           nearWhite  mean \(String(format: "%.3f", mean(measured.map(\.nearWhite))))  (= EMPTY accumulator; oracle holds 0.000)
         """)
         hdr?.report()
+        Self.reportSDRFlash(sdrRegions, features: features, trace: trace.states,
+                            csv: env["REPLAY_FLASH_CSV"])
         // PR.5: the TRAJECTORY, not just the mean. Dragon Bloom's fill is documented as a
         // feedback attractor that develops over ~20 s (DRAGON_BLOOM_PLAN.md L4 item 3), so
         // a single mean cannot tell "converged and wrong" apart from "still filling".
@@ -179,6 +216,38 @@ struct SessionDrivenMultiPassReplay {
         #expect(lum.max()! > 0.0, "every frame is pure black — the replay drove nothing")
         #expect(Set(lum.map { Int($0 * 1000) }).count > 1,
                 "meanLuma is constant across \(measured.count) frames — the preset is not moving")
+    }
+
+    /// The SDR picture's flash reports at 60 fps (what VQ.2b's replay assumed) and at the capture's
+    /// real frame rate, and optionally a per-frame CSV of the 13 region luminances.
+    static func reportSDRFlash(_ regions: [[FlashRegionSample]], features: [FeatureVector],
+                               trace: [EnergeticFlybyStateGPU], csv: String?) {
+        let dts = features.map { Double($0.deltaTime) }.sorted()
+        let realFPS = 1 / dts[dts.count / 2]
+        for fps in [60, realFPS] {
+            let r = FlashAnalyzer.analyzeRegional(regions, fps: fps)
+            let w = FlashAnalyzer.analyze(relativeLuminance: regions.map {
+                $0.prefix(9).map(\.luminance).reduce(0, +) / 9 }, fps: fps)
+            print(String(format: "[multipass-replay] flash, SDR picture at %.2f fps: whole %.2f, regional %.2f/s "
+                         + "(window at frame %d)", fps, w.peakFlashesPerSecond, r.peakFlashesPerSecond,
+                         Int((r.peakWindowStartSeconds * fps).rounded())))
+        }
+        guard let csv else { return }
+        var out = "frame,time,deltaTime,barPhase01,spectralFlux,bassDev"
+            + (0..<FlashAnalyzer.regionRects.count).map { ",r\($0)" }.joined()
+            + ",efb_glowBase,efb_hue,efb_roll,efb_spin,efb_travel\n"
+        for (i, frame) in regions.enumerated() {
+            let f = features[i]
+            out += "\(i),\(f.time),\(f.deltaTime),\(f.barPhase01),\(f.spectralFlux),\(f.bassDev)"
+            out += frame.map { String(format: ",%.5f", $0.luminance) }.joined()
+            if i < trace.count {
+                let t = trace[i]
+                out += ",\(t.glowBase),\(t.hue),\(t.roll),\(t.spin),\(t.travel)"
+            } else { out += ",,,,," }
+            out += "\n"
+        }
+        try? out.write(toFile: (csv as NSString).expandingTildeInPath, atomically: true, encoding: .utf8)
+        print("[multipass-replay] flash regions → \(csv)")
     }
 
     /// BGRA8 bytes → an sRGB PNG. Same recipe as the sketch render tests.
