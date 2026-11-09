@@ -131,9 +131,9 @@ struct SessionDrivenMultiPassReplay {
         let outDir = (env["REPLAY_OUT"].map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) })
         if let outDir { try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true) }
         let every = Int(env["REPLAY_EVERY"] ?? "") ?? 20
-        // EFB-FLASH: the SDR picture's flash regions, analysed at the capture's REAL frame rate.
+        // BUG-182: the SDR picture's flash regions, analysed at the capture's REAL frame rate.
         // The route-coverage captures step 23.2 ms (43 Hz), not 1/60 s; analysing them as 60 fps
-        // squeezes 1.39 s of music into each 1 s window.
+        // squeezed 1.39 s of music into each 1 s window.
         var sdrRegions: [[FlashRegionSample]] = []
         var trace = EnergeticFlybyTraceLog()
         if presetName == "Energetic Flyby" { harness.energeticFlybyTrace = trace }
@@ -192,8 +192,9 @@ struct SessionDrivenMultiPassReplay {
           meanLuma   mean \(String(format: "%.3f", mean(lum)))  max \(String(format: "%.3f", lum.max() ?? 0))
           nearWhite  mean \(String(format: "%.3f", mean(measured.map(\.nearWhite))))  (= EMPTY accumulator; oracle holds 0.000)
         """)
-        hdr?.report()
-        Self.reportSDRFlash(sdrRegions, features: features, trace: trace.states,
+        let fps = FlashHarnessSupport.captureFPS(features)
+        hdr?.report(fps: fps)
+        Self.reportSDRFlash(sdrRegions, fps: fps, features: features, trace: trace.states,
                             csv: env["REPLAY_FLASH_CSV"])
         // PR.5: the TRAJECTORY, not just the mean. Dragon Bloom's fill is documented as a
         // feedback attractor that develops over ~20 s (DRAGON_BLOOM_PLAN.md L4 item 3), so
@@ -218,20 +219,16 @@ struct SessionDrivenMultiPassReplay {
                 "meanLuma is constant across \(measured.count) frames — the preset is not moving")
     }
 
-    /// The SDR picture's flash reports at 60 fps (what VQ.2b's replay assumed) and at the capture's
-    /// real frame rate, and optionally a per-frame CSV of the 13 region luminances.
-    static func reportSDRFlash(_ regions: [[FlashRegionSample]], features: [FeatureVector],
+    /// The SDR picture's flash report at the capture's real frame rate, and optionally a per-frame CSV
+    /// of the 13 region luminances.
+    static func reportSDRFlash(_ regions: [[FlashRegionSample]], fps: Double, features: [FeatureVector],
                                trace: [EnergeticFlybyStateGPU], csv: String?) {
-        let dts = features.map { Double($0.deltaTime) }.sorted()
-        let realFPS = 1 / dts[dts.count / 2]
-        for fps in [60, realFPS] {
-            let r = FlashAnalyzer.analyzeRegional(regions, fps: fps)
-            let w = FlashAnalyzer.analyze(relativeLuminance: regions.map {
-                $0.prefix(9).map(\.luminance).reduce(0, +) / 9 }, fps: fps)
-            print(String(format: "[multipass-replay] flash, SDR picture at %.2f fps: whole %.2f, regional %.2f/s "
-                         + "(window at frame %d)", fps, w.peakFlashesPerSecond, r.peakFlashesPerSecond,
-                         Int((r.peakWindowStartSeconds * fps).rounded())))
-        }
+        let r = FlashAnalyzer.analyzeRegional(regions, fps: fps)
+        let w = FlashAnalyzer.analyze(relativeLuminance: regions.map {
+            $0.prefix(9).map(\.luminance).reduce(0, +) / 9 }, fps: fps)
+        print(String(format: "[multipass-replay] flash, SDR picture at %.2f fps: whole %.2f, regional %.2f/s "
+                     + "(window at frame %d)", fps, w.peakFlashesPerSecond, r.peakFlashesPerSecond,
+                     Int((r.peakWindowStartSeconds * fps).rounded())))
         guard let csv else { return }
         var out = "frame,time,deltaTime,barPhase01,spectralFlux,bassDev"
             + (0..<FlashAnalyzer.regionRects.count).map { ",r\($0)" }.joined()
@@ -328,13 +325,14 @@ final class HDRReplay {
         sdrLuma.append(luma / n)
     }
 
-    func report() {
+    /// `fps`: the capture's real frame rate (BUG-182 — never assume 60).
+    func report(fps: Double) {
         func mean(_ a: [Double]) -> Double { a.isEmpty ? 0 : a.reduce(0, +) / Double(a.count) }
         func f(_ v: Double) -> String { String(format: "%.4f", v) }
         func flashes(_ whole: [Double], _ regions: [[FlashRegionSample]]) -> String {
-            let r = [FlashAnalyzer.analyze(relativeLuminance: whole, fps: 60),
-                     FlashAnalyzer.analyzeRegional(regions, fps: 60),
-                     FlashAnalyzer.analyzeRed(regions, fps: 60)]
+            let r = [FlashAnalyzer.analyze(relativeLuminance: whole, fps: fps),
+                     FlashAnalyzer.analyzeRegional(regions, fps: fps),
+                     FlashAnalyzer.analyzeRed(regions, fps: fps)]
             return zip(["whole", "regional", "red"], r).map { "\($0) \($1.isSafe ? "safe" : "FLASH")" }
                 .joined(separator: ", ")
         }
