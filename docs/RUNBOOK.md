@@ -1020,7 +1020,7 @@ and HDR at the given headroom — and reports what HDR adds; per sampled frame i
 magenta where HDR > SDR white):
 
 ```bash
-REPLAY_SESSION=UzumeEngine/Tests/UzumeEngineTests/Fixtures/route_coverage/so_what REPLAY_PRESET="Ferrofluid Ocean" REPLAY_MULTIPASS=1 REPLAY_FINISH=cinematic REPLAY_HDR=4 REPLAY_OUT=/tmp/vq2a swift test --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
+REPLAY_SESSION="$PWD/UzumeEngine/Tests/UzumeEngineTests/Fixtures/route_coverage/so_what" REPLAY_PRESET="Ferrofluid Ocean" REPLAY_MULTIPASS=1 REPLAY_FINISH=cinematic REPLAY_HDR=4 REPLAY_OUT=/tmp/vq2a swift test --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
 ```
 
 (the other variables — frame range, size, `REPLAY_EVERY` — are in the replay's header). Read: share of
@@ -1029,6 +1029,14 @@ luma, and flash against both anchors. Flash counts use the capture's own frame r
 are 43.1 Hz; BUG-182). The replay also prints `flash, SDR picture` (today's picture) and takes
 `REPLAY_FLASH_CSV=<path>` (the 13 flash-region luminances per frame) and, for Energetic Flyby,
 `REPLAY_EFB_FREEZE=none|hue|roll|glow|dim|slow` (the recorded flight re-rendered with one driver changed).
+
+Paths must be absolute (`$PWD/…`): the test runs from the package directory, so a relative `REPLAY_SESSION` is not found. Debug is slow at 1080p; Release takes ~215 s per 600-frame track on an M2 Pro. A display-referred scene (VQ.2b, Energetic Flyby) replays the same way:
+
+```bash
+REPLAY_SESSION="$PWD/UzumeEngine/Tests/UzumeEngineTests/Fixtures/route_coverage/love_rehab" REPLAY_PRESET="Energetic Flyby" REPLAY_MULTIPASS=1 REPLAY_FINISH=cinematic REPLAY_HDR=4 REPLAY_OUT=/tmp/vq2b swift test -c release --enable-testable-imports --package-path UzumeEngine --filter SessionDrivenMultiPassReplay
+```
+
+**Judge visibility by luminance, not the brightest channel (VQ.2b).** The report also prints the share of pixels with *luminance* above white and its p99.9. Saturated light above white in one channel inflates the brightest-channel numbers: Energetic Flyby's rods showed 5.85 % above white by channel and 0.39 % by luminance, and Matt saw no difference. The "below SDR white" line compares the HDR frame's SDR range to the SDR picture; a display-referred scene's alpha light (the rod line's soft edge) shows there, HDR only.
 
 ## Recording the quality reel
 

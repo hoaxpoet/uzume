@@ -299,6 +299,49 @@ struct MultiPassFlashHarnessTests {
                                             fps: FlashHarnessSupport.captureFPS(drive))
     }
 
+    /// The certified scene's worst-case train before VQ.2b (75cbf97c, legacy finish): whole, regional, red
+    /// flashes/s. HDR may not add one; the regional margin is zero (EFB.1).
+    static let energeticFlybyBaseline = (whole: 0.0, regional: 3.0, red: 1.0)
+
+    @Test("Energetic Flyby on HDR adds no flash: shipped display-referred finish, both anchors (VQ.2b)",
+          arguments: [Float(1), 4, 16])
+    func energeticFlybyHDRIsFlashSafe(headroom: Float) async throws {
+        // VQ.2b — the shipped path (cinematic, display-referred) on the same 900-frame train, finished
+        // at `headroom`. Measured in SDR-white units and against the display's peak: WCAG's darker-state
+        // rule (< 0.8) hides a 1 → 4× swing in SDR-white units, so only the peak anchor sees it (D-267).
+        //
+        // The gate is the app's own ceiling (Matt, 2026-11-05: "Gate at 4×"): the finish never runs above
+        // `HDROutput.peakCap` (pinned at 4 in HDROutputTests). 16× is measured and reported, not gated —
+        // there every option tried (rods, cluster, all) put red at 4.00/s against SDR white.
+        let beat = tile(FlashHarnessSupport.worstCaseBeatTrain(), 900)
+        let stem = tile(FlashHarnessSupport.worstCaseStemTrain(), 900)
+        var hdrHarness = MultiPassRenderHarness(width: 320, height: 180, finishMode: .cinematic)
+        let log = HDRFlashLog()
+        if headroom > 1 {
+            hdrHarness.hdrFrames = HDRFrameLog(headroom: headroom) { log.add($0, headroom: headroom) }
+        }
+        let sdr = try await hdrHarness.renderOffMain(preset: "Energetic Flyby", features: beat, stems: stem) {
+            FlashHarnessSupport.sample($0, width: 320, height: 180)
+        }
+        let fps = FlashHarnessSupport.fps
+        let arms: [(String, [Double], [[FlashRegionSample]])] = headroom > 1
+            ? [("SDR white", log.whole(1), log.sdr), ("peak", log.whole(Double(headroom)), log.peak)]
+            : [("SDR white = peak", sdr.map(\.luma), sdr.map(\.regions))]
+        let base = Self.energeticFlybyBaseline
+        for (anchor, whole, regions) in arms {
+            let w = FlashAnalyzer.analyze(relativeLuminance: whole, fps: fps).peakFlashesPerSecond
+            let r = FlashAnalyzer.analyzeRegional(regions, fps: fps).peakFlashesPerSecond
+            let red = FlashAnalyzer.analyzeRed(regions, fps: fps).peakFlashesPerSecond
+            print(String(format: "[efb-hdr-flash] headroom %g, %@ anchor: whole %.2f, regional %.2f, red %.2f flashes/s "
+                         + "(baseline %.2f / %.2f / %.2f)", headroom, anchor, w, r, red, base.whole, base.regional, base.red))
+            guard headroom <= HDROutput.peakCap else { continue }   // reported above, not reachable in the app
+            #expect(w <= base.whole && r <= base.regional && red <= base.red,
+                    "headroom \(headroom), \(anchor): HDR added a flash — stop and report (VQ.2b task 5)")
+            #expect(r <= 3)
+        }
+        #expect(headroom == 1 || log.frames == 900, "the HDR log saw \(log.frames) of 900 frames")
+    }
+
     @Test("Alfvén is flash-safe (worst-case beat train, real headless solver render)")
     func alfvenIsFlashSafe() async throws {
         // ALFVEN.CERT — Alfvén reaches this harness because the single-pass gate correctly
@@ -464,5 +507,25 @@ struct MultiPassFlashHarnessTests {
     /// `FlashHarnessSupport.assertFlashSafe`: the evidence line, and a LOUD failure on a static render.
     private func assertFlashSafe(name: String, samples: [FlashHarnessSupport.FlashSample]) {
         FlashHarnessSupport.assertFlashSafe(name: name, samples: samples)
+    }
+}
+
+// MARK: - HDRFlashLog
+
+/// Per-frame flash regions of the HDR finish at both anchors (VQ.2b). Locked: the harness renders off main.
+final class HDRFlashLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var sdr: [[FlashRegionSample]] = [], peak: [[FlashRegionSample]] = []
+    var frames: Int { lock.withLock { sdr.count } }
+
+    func add(_ px: [Float], headroom: Float) {
+        let s = FlashAnalyzer.regions(linearRGBA: px, width: 320, height: 180)
+        let p = FlashAnalyzer.regions(linearRGBA: px, width: 320, height: 180, anchor: Double(headroom))
+        lock.withLock { sdr.append(s); peak.append(p) }
+    }
+
+    /// Whole-frame relative luminance (the 3×3 grid's mean), divided by `anchor`.
+    func whole(_ anchor: Double) -> [Double] {
+        lock.withLock { sdr.map { $0.prefix(9).map(\.luminance).reduce(0, +) / 9 / anchor } }
     }
 }

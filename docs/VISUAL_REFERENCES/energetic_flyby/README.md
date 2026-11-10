@@ -34,6 +34,9 @@ in-engine-equivalent captures of the working reference, not photographs, and not
 - [ ] **Continuous camera:** no holds, no cuts, no resets (Matt, 2026-10-19).
 - [ ] **Performance ceiling:** set from EFB.1's Release measurement at 1080p (design doc §7).
 - [ ] **Hero reference image:** `01_macro_shell_tunnel.jpg`.
+- [ ] **HDR (VQ.2b, D-269):** SDR is the certified picture to the code. On an HDR display only the rods shine above
+      white, with a thin, very bright line down each rod's centre (Matt, 2026-11-06); the sphere cluster, shells and
+      dark interiors stay as on SDR. That HDR-only light eases in and out, so it never flashes.
 
 ## Anti-references (failure modes specific to this scene)
 

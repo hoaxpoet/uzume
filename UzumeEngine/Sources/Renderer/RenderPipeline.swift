@@ -915,6 +915,7 @@ public final class RenderPipeline: NSObject, Rendering, @unchecked Sendable {
         let elapsed = Float(now - startTime)
         let deltaTime = Float(now - lastFrameTime)
         lastFrameTime = now
+        finishingStage?.frameDeltaTime = deltaTime   // VQ.2b
 
         applyFrameRateCap(to: view)
         updateCanvas(drawableSize: allocationDrawableSize ?? view.drawableSize)

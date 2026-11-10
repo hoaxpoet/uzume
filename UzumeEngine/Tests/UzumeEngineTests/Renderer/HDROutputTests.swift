@@ -91,8 +91,9 @@ struct HDROutputRuleTests {
         let loader = PresetLoader(device: try #require(MTLCreateSystemDefaultDevice()), pixelFormat: .bgra8Unorm_srgb,
                                   loadBuiltIn: true)
         let adopters = loader.presets.filter { $0.descriptor.finish.hdr }.map(\.descriptor.name)
-        // VQ.2a: Ferrofluid Ocean (razor glints). A new adopter lands in its own consumer increment, with Matt's look.
-        #expect(adopters.sorted() == ["Ferrofluid Ocean"], "HDR adopters: \(adopters)")
+        // VQ.2a: Ferrofluid Ocean (razor glints); VQ.2b: Energetic Flyby (its light rods). A new adopter lands in
+        // its own consumer increment, with Matt's look.
+        #expect(adopters.sorted() == ["Energetic Flyby", "Ferrofluid Ocean"], "HDR adopters: \(adopters)")
     }
 }
 
@@ -385,6 +386,91 @@ struct HDRFlashCapTests {
     }
 }
 
+// MARK: - Eased light above white
+
+@Suite("HDR eased light (VQ.2b)")
+struct HDREasedLightTests {
+
+    static let (width, height) = (384, 216)   // 6×6 cells of 64×36
+
+    /// The mean light above SDR white over the centre ninth, per frame, of a display-referred stage shown
+    /// every 4th column at each frame's scene value (the rest dark).
+    static func overSeries(_ values: [Float], eased: Bool, line: Float = 0) throws -> [Double] {
+        let ctx = try MetalContext()
+        let library = try ShaderLibrary(context: ctx).library
+        let spec = FinishSpec(mode: .cinematic, hdr: true, displayReferred: true)
+        let stage = try FinishingStage(device: ctx.device, library: library, outputFormat: HDROutput.drawableFormat,
+                                       spec: spec, budget: nil)
+        stage.headroom = HDROutput.peakCap
+        stage.regionCapEnabled = eased   // off: hdrOutput 2, no cap and no easing
+        let src = try HDRTestSupport.texture(ctx, spec.frameTargetFormat, width, height)
+        let out = try HDRTestSupport.texture(ctx, HDROutput.drawableFormat, width, height)
+        return try values.map { value in
+            var px = [Float](repeating: 0, count: width * height * 4)
+            for y in 0..<height {
+                for x in stride(from: 0, to: width, by: 4) {
+                    let p = (y * width + x) * 4
+                    px[p] = value; px[p + 1] = value; px[p + 2] = value; px[p + 3] = line
+                }
+            }
+            src.replace(region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0, withBytes: px,
+                        bytesPerRow: width * 16)
+            try HDRTestSupport.run(ctx) { stage.encode(source: src, output: out, commandBuffer: $0) }
+            let shown = HDRTestSupport.floats(out)
+            var sum = 0.0, count = 0
+            for y in (height / 3)..<(2 * height / 3) {
+                for x in (width / 3)..<(2 * width / 3) {
+                    let p = (y * width + x) * 4
+                    sum += Double(max(max(shown[p], shown[p + 1], shown[p + 2]) - 1, 0))
+                    count += 1
+                }
+            }
+            return sum / Double(count)
+        }
+    }
+
+    @Test("Display-referred light above white moves at the eased rate, both ways; uneased it jumps")
+    func easedRate() throws {
+        // Over a quarter of the pixels: 8× white is 3 above it at headroom 4, a mean of 0.75; 2^1.5 is half that.
+        let values = [Float](repeating: 8, count: 120) + [Float](repeating: pow(2, 1.5), count: 60)
+        let eased = try Self.overSeries(values, eased: true)
+        let step = Double(FinishingStage.overRisePerSecond) / 60
+        let worst = zip(eased, eased.dropFirst()).map { abs($1 - $0) }.max() ?? 0
+        print(String(format: "[vq2b-ease] worst step %.5f of %.5f a frame; rises to %.3f, eases down to %.3f",
+                     worst, step, eased[119], eased[179]))
+        #expect(eased[0] <= step * 1.1)
+        #expect(worst <= step * 1.1)
+        #expect(abs(eased[119] - 0.75) < 0.01, "the eased light arrives")
+        #expect(abs(eased[179] - 0.375) < 0.01, "and follows the scene down")
+        // Negative control: the same step without the easing is a jump.
+        let uneased = try Self.overSeries(Array(values.prefix(2)), eased: false)
+        #expect(uneased[0] > 0.7)
+    }
+
+    @Test("A display-referred scene's alpha adds white light above SDR white on HDR (Energetic Flyby's rod line)")
+    func lineFromAlpha() throws {
+        // Mid-grey is nowhere near the ramp. A full line takes a quarter of the pixels to peak: (0.5 + 3 − 1) / 4.
+        let plain = try Self.overSeries([0.5], eased: false)
+        let lined = try Self.overSeries([0.5], eased: false, line: 1)
+        print(String(format: "[vq2b-line] mean above white: no line %.4f, line %.4f", plain[0], lined[0]))
+        #expect(plain[0] == 0, "negative control: no line, no light above white")
+        #expect(abs(lined[0] - 0.625) < 0.02)
+    }
+
+    @Test("Only a display-referred scene is eased")
+    func onlyDisplayReferred() throws {
+        let ctx = try MetalContext()
+        let library = try ShaderLibrary(context: ctx).library
+        for referred in [false, true] {
+            let stage = try FinishingStage(device: ctx.device, library: library, outputFormat: HDROutput.drawableFormat,
+                                           spec: FinishSpec(mode: .cinematic, hdr: true, displayReferred: referred),
+                                           budget: nil)
+            stage.headroom = HDROutput.peakCap
+            #expect((stage.makeUniforms().overRise > 0) == referred)
+        }
+    }
+}
+
 // MARK: - Memory
 
 @Suite("HDR drawable memory (VQ.2)", .serialized)
@@ -525,6 +611,20 @@ struct HDRCostTests {
             try HDRTestSupport.run(ctx) { rig.scene.encode(into: target, params: rig.params(), commandBuffer: $0) }
             let (p50, p95) = Self.spacing(ctx) { stage.encode(source: target, output: out, commandBuffer: $0) }
             print(String(format: "[vq2-timing] %@ (3840×2160), %@: p50 %.3f ms, p95 %.3f ms", label, ctx.device.name, p50, p95))
+        }
+        // VQ.2b: Energetic Flyby's display-referred finish from the tier-1 canvas (its render size on the M2 Pro)
+        // into the 4K drawable — the clamp pass, then the composite (+ the HDR ramp's taps and the cap on HDR).
+        for (label, format, hdr) in [("display-referred finish, tier-1 canvas → SDR drawable", MTLPixelFormat.bgra8Unorm_srgb, false),
+                                     ("display-referred finish, tier-1 canvas → HDR drawable, headroom 4 + cap",
+                                      HDROutput.drawableFormat, true)] {
+            let spec = FinishSpec(mode: .cinematic, bloom: FinishSpec.Bloom(strength: 0), hdr: hdr, displayReferred: true)
+            let stage = try FinishingStage(device: ctx.device, library: try ShaderLibrary(context: ctx).library,
+                                           outputFormat: format, spec: spec, budget: nil)
+            stage.headroom = hdr ? HDROutput.peakCap : 1
+            let source = try Self.privateTexture(ctx, FinishSpec.displayReferredFrameTargetFormat, 2560, 1440)
+            let out = try Self.privateTexture(ctx, format, 3840, 2160)
+            let (p50, p95) = Self.spacing(ctx) { stage.encode(source: source, output: out, commandBuffer: $0) }
+            print(String(format: "[vq2-timing] %@: p50 %.3f ms, p95 %.3f ms", label, p50, p95))
         }
         let present = try OraclePresentRig.shared()
         for (label, w, h, format) in [("legacy present, tier-1 canvas → SDR drawable", 2560, 1440, MTLPixelFormat.bgra8Unorm_srgb),

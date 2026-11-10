@@ -206,6 +206,7 @@ the second NC-SA scene after Aurora Veil, inside D-252's cap of about three. Obl
 | EFB.2 | M7 rounds (two maximum, the PHYS escalation rule) | Matt's M7 |
 | EFB.3 | Certification: `audio_routes` green, flash-safe measured, frame budget, soak, NEW_PRESET_CHECKLIST §4 | Matt's sign-off |
 | EFB.4 | Temporal reconstruction (MFX.2): jitter, depth, analytic motion, reactive mask, Release evidence (§7) | ✅ Matt's side-by-side, 2026-10-23: **keep the stretch** (option B); motion vectors kept for VQ.4a/4b |
+| VQ.2b | HDR (D-269): display-referred finish, rods shine above white, a thin line down each rod's centre on HDR only (§11) | ✅ Matt's side-by-side 2026-11-06 and live look 2026-11-09 |
 
 ## 10. Decisions taken in the design seat (defaults; Matt may override)
 
@@ -215,3 +216,30 @@ the second NC-SA scene after Aurora Veil, inside D-252's cap of about three. Obl
 - **Family:** `fractal`. The scene is a ray-marched fold-domain flythrough, not a feedback warp, so it does not
   belong in `hypnotic` (already 8 scenes). The fractal family has one certified scene, Fractal Tree.
 - **Rubric profile:** `full`.
+
+## 11. VQ.2b — the scene on HDR (D-269)
+
+**Matt's choices.** Rods only shine ("B: rods only"); flash gated at the app's 4× cap; "Shine eases in"; then,
+after the first side-by-side looked the same, a thin, very bright line down each rod's centre on HDR only, SDR
+unchanged. SDR is the certified picture to the code (0 codes moved at 1080p and 2560×1440 → 4K).
+
+**How it works.** Sidecar `finish`: cinematic, `display_referred`, `hdr`, bloom 0. The shader writes `sdr + (lin −
+sdr) · shine`, where `lin` is Kali's colour before the clamp and `shine` is 1 on rods outside the sphere cluster
+(`kEFBShine`, `kEFBCoreRadius`), 0 elsewhere. Alpha is the rod line: `1 − smoothstep(0, kEFBLineRadius, nearest −
+kEFBRodAxis)` times "already near white" times `shine`, where `nearest` is the ray's closest pass to a rod axis beyond
+the camera fade. The finish adds both above white, eases them per region (0.5 × SDR white per second, both ways) and
+applies the per-ninth cap.
+
+**What it measures** (Release, 1080p, three tracks, headroom 4): about 1 % of pixels with luminance above white,
+p99.9 luminance ~2×, line centres typically 2–3× white (max 3.5× on the side-by-side frame); flash equal to the SDR
+picture on every track and anchor. Brightest-channel stats overstated the rods before the line (5.85 % vs 0.39 % by
+luminance) — the rods' over-white was mostly one channel, which is why the first side-by-side looked the same.
+
+**Live** (build 9021, LG, fullscreen, 2560×1440 → 4K, Award Tour): 29.8 fps with HDR on, 29.9 off, GPU memory 452 MB. GPU time past 33 ms on 24.3 % / 22.8 % of frames (EFB.2: 3.0 % on another track), in ~8 s bursts every ~19 s of flight; ~21–23 % of that is the scene without VQ.2b (Release A/B: VQ.2b costs +0.8 ms p50, +1.3 ms p95 at 2560×1440). Matt: *"The rods look right in motion."*
+
+**Open.** The SDR picture is regional 3.5–4.0 flashes/s on two real tracks, over the limit, before VQ.2b; the
+certification gate uses a synthetic train. A follow-up, not this increment.
+
+**Correction (BUG-182, 2026-11-09).** A miscount: the captures are 43.1 Hz and were analysed as 60 fps. At the real
+rate the SDR picture is 3.00/s on all three tracks — at the limit, not over — and `energeticFlybyIsFlashSafeOnRealMusic`
+now gates it. VQ.2b's HDR flash figures were read at 60 fps too; its HDR-vs-SDR comparisons hold, its absolute values do not.
