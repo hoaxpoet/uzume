@@ -239,3 +239,7 @@ luminance) — the rods' over-white was mostly one channel, which is why the fir
 
 **Open.** The SDR picture is regional 3.5–4.0 flashes/s on two real tracks, over the limit, before VQ.2b; the
 certification gate uses a synthetic train. A follow-up, not this increment.
+
+**Correction (BUG-182, 2026-11-09).** A miscount: the captures are 43.1 Hz and were analysed as 60 fps. At the real
+rate the SDR picture is 3.00/s on all three tracks — at the limit, not over — and `energeticFlybyIsFlashSafeOnRealMusic`
+now gates it. VQ.2b's HDR flash figures were read at 60 fps too; its HDR-vs-SDR comparisons hold, its absolute values do not.

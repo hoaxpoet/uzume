@@ -6640,5 +6640,9 @@ against SDR white, 0 / 0 / 0 against the peak.
 (there_there), above the 3/s limit; the shipped gate (`energeticFlybyIsFlashSafe`) measures a synthetic train. It is
 the certified look, untouched by VQ.2b, and needs its own follow-up.
 
+**Correction (BUG-182, 2026-11-09).** A miscount: the captures are 43.1 Hz and were analysed as 60 fps. At the real
+rate the SDR picture is 3.00/s on all three tracks — at the limit, not over — and `energeticFlybyIsFlashSafeOnRealMusic`
+now gates it. VQ.2b's HDR flash figures were read at 60 fps too; its HDR-vs-SDR comparisons hold, its absolute values do not.
+
 **References.** D-267, D-268; `prompts/VQ.2b-prompt.md`; ENERGETIC_FLYBY_DESIGN §11; ARCHITECTURE §HDR Output;
 SHADER_CRAFT §17 (`finish.display_referred`); RUNBOOK §VQ.2.

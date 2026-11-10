@@ -1025,7 +1025,10 @@ REPLAY_SESSION="$PWD/UzumeEngine/Tests/UzumeEngineTests/Fixtures/route_coverage/
 
 (the other variables — frame range, size, `REPLAY_EVERY` — are in the replay's header). Read: share of
 pixels above SDR white, p99.9 brightest channel, largest ninth (≤ 1), dark troughs SDR vs HDR (must match), mean
-luma, and flash against both anchors.
+luma, and flash against both anchors. Flash counts use the capture's own frame rate (the route-coverage captures
+are 43.1 Hz; BUG-182). The replay also prints `flash, SDR picture` (today's picture) and takes
+`REPLAY_FLASH_CSV=<path>` (the 13 flash-region luminances per frame) and, for Energetic Flyby,
+`REPLAY_EFB_FREEZE=none|hue|roll|glow|dim|slow` (the recorded flight re-rendered with one driver changed).
 
 Paths must be absolute (`$PWD/…`): the test runs from the package directory, so a relative `REPLAY_SESSION` is not found. Debug is slow at 1080p; Release takes ~215 s per 600-frame track on an M2 Pro. A display-referred scene (VQ.2b, Energetic Flyby) replays the same way:
 

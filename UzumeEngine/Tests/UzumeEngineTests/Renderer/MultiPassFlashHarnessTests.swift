@@ -275,6 +275,30 @@ struct MultiPassFlashHarnessTests {
         assertFlashSafe(name: "Energetic Flyby", samples: try await flashLuma("Energetic Flyby", settle: 60, frames: 900))
     }
 
+    @Test("Energetic Flyby is flash-safe on real music (three recorded songs, each at its own frame rate)",
+          arguments: ["so_what", "there_there", "love_rehab"])
+    func energeticFlybyIsFlashSafeOnRealMusic(capture: String) async throws {
+        // BUG-182 — the train above cannot see the flight itself: on real music Kali's tunnel passing the camera
+        // (shell rims and light rods sweeping through a corner every 115–350 ms) fills a ninth of the screen to
+        // exactly 3.00/s on all three songs, with no music route involved. Zero margin, so any change to the look
+        // that tips it over must fail here. The captures are 43.1 Hz: analysed as 60 fps they read 3.00 / 4.00 /
+        // 3.50 (the false alarm), so the rate comes from the capture.
+        let base = try #require(Bundle.module.url(forResource: "route_coverage", withExtension: nil))
+        let dir = base.appendingPathComponent(capture)
+        // The loaders are main-actor; only the parse runs there (the suite is deliberately not, FLASHOFF.1).
+        let (drive, stemDrive) = try await MainActor.run {
+            let rows = try SessionReplayHarness.loadRowsForReplay(dir.appendingPathComponent("features.csv"))
+            let stems = SessionReplayHarness.loadStemsForReplay(dir.appendingPathComponent("stems.csv"))
+            let drive = rows.map { SessionReplayHarness.featureForReplay(from: $0, aspect: 16 / 9) }
+            return (drive, drive.indices.map { stems.isEmpty ? StemFeatures.zero : stems[min($0, stems.count - 1)] })
+        }
+        let samples = try await harness.renderOffMain(preset: "Energetic Flyby", features: drive, stems: stemDrive) {
+            FlashHarnessSupport.sample($0, width: 320, height: 180)
+        }
+        FlashHarnessSupport.assertFlashSafe(name: "Energetic Flyby on \(capture)", samples: samples,
+                                            fps: FlashHarnessSupport.captureFPS(drive))
+    }
+
     /// The certified scene's worst-case train before VQ.2b (75cbf97c, legacy finish): whole, regional, red
     /// flashes/s. HDR may not add one; the regional margin is zero (EFB.1).
     static let energeticFlybyBaseline = (whole: 0.0, regional: 3.0, red: 1.0)

@@ -10,6 +10,17 @@ Older entries: `RELEASE_NOTES_DEV_YYYY-MM.md` (one file per month).
 
 ---
 
+### [dev-2026-11-09-220217] BUG-182 — Energetic Flyby is at the flash limit on real music, not over it; its gate now replays three songs
+
+VQ.2b's real-audio replays read Energetic Flyby at 3.50–4.00 flashes/s in one ninth of the screen (the limit is 3).
+The replay counted its 43 Hz recordings as 60 fps, squeezing 1.39 s of music into every counted second. At the real
+rate all three songs read 3.00/s: at the limit, as the certification found on the synthetic train. What fills those
+seconds is Kali's tunnel passing the camera (shell rims and light rods sweeping through a corner), not any music
+route; a 15 % dimmer glow or the slowest flight does not change it. Matt kept the look (option A). Flash counts on
+recorded captures now use the capture's own rate, and Energetic Flyby's flash gate replays so_what, there_there and
+love_rehab (`energeticFlybyIsFlashSafeOnRealMusic`, 3.00 / 3.00 / 3.00); read as 60 fps it fails, as it should.
+Nothing on screen changed.
+
 ### [dev-2026-10-20-153840] EFB.3 — Energetic Flyby certified (the 29th)
 
 Energetic Flyby — Kali's Shadertoy flythrough down a twisting tunnel of glassy, perforated shells, led by a spiked

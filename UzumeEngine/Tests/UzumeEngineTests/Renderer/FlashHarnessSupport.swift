@@ -183,6 +183,13 @@ enum FlashHarnessSupport {
                     regions: FlashAnalyzer.regions(bgra: bgra, width: width, height: height))
     }
 
+    /// A recorded drive's real frame rate: 1 / its median `deltaTime`. The route-coverage captures are
+    /// 43.1 Hz (23.2 ms hops), not 60 (BUG-182).
+    static func captureFPS(_ drive: [FeatureVector]) -> Double {
+        let dts = drive.map { Double($0.deltaTime) }.filter { $0 > 0 }.sorted()
+        return dts.isEmpty ? fps : 1 / dts[dts.count / 2]
+    }
+
     // MARK: - WCAG relative luminance
 
     /// Mean WCAG relative luminance (linear-light, Rec. 709) of a BGRA8 buffer.
@@ -223,7 +230,9 @@ enum FlashHarnessSupport {
         preset.rayMarchPipelineState.map { $0 === state } ?? false
     }
 
-    static func assertFlashSafe(name: String, samples: [FlashSample]) {
+    /// `fps`: the rate the samples were rendered at — the train's 60, or a recorded capture's own rate
+    /// (`captureFPS`). BUG-182: counting a 43 Hz capture as 60 fps overstates its flashes 1.39×.
+    static func assertFlashSafe(name: String, samples: [FlashSample], fps: Double = fps) {
         let luma = samples.map(\.luma)
         let report = FlashAnalyzer.analyze(relativeLuminance: luma, fps: fps)
         let lo = luma.min() ?? 0, hi = luma.max() ?? 0
@@ -251,11 +260,11 @@ enum FlashHarnessSupport {
             \(String(format: "%.1f", accentHz)) Hz worst-case beat train — exceeds Harding/WCAG 2.3.1. \
             P1 safety finding: bring to Matt, do NOT tune away (the certified motion was hand-built safe, D-157/D-158).
             """)
-        assertRegionalAndRedSafe(name: name, samples: samples)
+        assertRegionalAndRedSafe(name: name, samples: samples, fps: fps)
     }
 
     /// BR.20 / I8: the same rule per ninth of the frame, and the saturated-red channel.
-    static func assertRegionalAndRedSafe(name: String, samples: [FlashSample]) {
+    static func assertRegionalAndRedSafe(name: String, samples: [FlashSample], fps: Double = fps) {
         let regions = samples.map(\.regions)
         let regional = FlashAnalyzer.analyzeRegional(regions, fps: fps)
         let red = FlashAnalyzer.analyzeRed(regions, fps: fps)
