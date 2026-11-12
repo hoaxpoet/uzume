@@ -136,7 +136,7 @@ finished frame.
 
 Prompts are written for VQ.0, VQ.1, VQ.3 and VQ.2 (`prompts/VQ.2-prompt.md`, agreed with Matt 2026-10-29). VQ.2a
 (Ferrofluid Ocean on HDR, razor glints, D-268) ran from that prompt's consumer list, 2026-10-30. VQ.2b (Energetic
-Flyby on HDR): `prompts/VQ.2b-prompt.md`, 2026-11-04. Later prompts are written from what those increments measure
+Flyby on HDR): `prompts/VQ.2b-prompt.md`, 2026-11-04. VQ.4a (frame pacing): `prompts/VQ.4a-prompt.md`, 2026-11-12. Later prompts are written from what those increments measure
 (CLAUDE.md: commit decisions when the work has produced evidence).
 
 ## 7. What this phase will not do
